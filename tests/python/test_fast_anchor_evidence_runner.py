@@ -528,6 +528,20 @@ def test_warm_failure_preserves_cold_result_and_closes_owner(
     assert "warm execute failure" in record["error"]
 
 
+@pytest.mark.parametrize("changed", [False, True])
+def test_endpoint_records_declared_production_default_change(
+    monkeypatch: pytest.MonkeyPatch,
+    endpoint: tuple[Any, Path, dict[str, Any]],
+    changed: bool,
+) -> None:
+    """A promotion candidate must not inherit a hardcoded unchanged-default claim."""
+    module, output, _ = endpoint
+    if changed:
+        monkeypatch.setattr(sys, "argv", [*sys.argv, "--production-defaults-changed"])
+    module.main()
+    assert json.loads(output.read_text())["production_defaults_changed"] is changed
+
+
 def test_cold_component_timing_excludes_intervening_warm_work(
     monkeypatch: pytest.MonkeyPatch, endpoint: tuple[Any, Path, dict[str, Any]]
 ) -> None:

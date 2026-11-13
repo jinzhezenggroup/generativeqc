@@ -189,7 +189,7 @@ inline bool admit_application_df_xc_budget(const std::array<double, 3>& allowanc
 }
 
 /** Share fixed FP64 linear-operator anchors independently of the public profile.
- * Strict owners require opt-in; qualified budget outer solves retain their default.
+ * Strict and budget-qualified owners share the same optional reuse policy.
  * Neither route admits new mixed arithmetic.
  * Complete targets still rebuild physical operators, and ledger/chunk owners
  * retain their bounded incumbent storage plan. */
@@ -202,15 +202,22 @@ inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool bu
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
 
-/** Preserve the qualified budget-outer default without promoting strict owners.
- * Explicit selection remains shared. Validate it even for an ineligible owner,
- * so a typo cannot silently select a different execution policy. */
-inline bool select_fixed_anchor_delta(bool eligible, bool budget_fock, bool budget_stationarity,
+/** Select automatic reuse by actual solver targets, never a frontend profile.
+ * The measured relaxed endpoint uses energy/density/screening targets of
+ * 1e-6/1e-4/1e-10. Tighter targets retain explicit opt-in: arithmetic eligibility
+ * does not establish profitability. Neither budget presence nor dtype replaces
+ * these targets. Scientific/resource admission remains independent, including
+ * for forced reuse; malformed controls reject even an ineligible owner. */
+inline bool select_fixed_anchor_delta(bool eligible, const std::array<double, 3>& targets,
                                       std::size_t aos, const char* selection) {
   if (selection && std::strcmp(selection, "0") != 0 && std::strcmp(selection, "1") != 0)
     throw std::invalid_argument("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA accepts 0 or 1");
-  return eligible && (selection ? std::strcmp(selection, "1") == 0
-                                : budget_fock && budget_stationarity && aos >= 192);
+  if (!eligible) return false;
+  if (selection) return std::strcmp(selection, "1") == 0;
+  constexpr std::array<double, 3> relaxed_floor{1e-6, 1e-4, 1e-10};
+  for (std::size_t index = 0; index < targets.size(); ++index)
+    if (!std::isfinite(targets[index]) || targets[index] < relaxed_floor[index]) return false;
+  return aos >= 192;
 }
 
 /** Independently qualified stationary RKS candidate at a strict final

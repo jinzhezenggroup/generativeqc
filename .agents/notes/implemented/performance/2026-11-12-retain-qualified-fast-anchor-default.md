@@ -3,6 +3,13 @@
 Status: implemented
 Date: 2026-11-12
 
+The [shared-default follow-up](../../rejected/2026-11-13-shared-fp64-anchor-default.md) evaluates
+extending the same default to strict FP64 owners without withdrawing Fast reuse.
+
+The subsequent [target-selected policy](../architecture/2026-11-13-target-selected-precision-presets.md)
+keeps the relaxed-target default but removes frontend-profile privilege: equal
+resolved budgets and solver goals select equal execution in Standard and Fast.
+
 This repair supersedes only the default-withdrawal proposal in
 [common construction](../architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md).
 Constructor reuse and selected-force resource admission remain unchanged.

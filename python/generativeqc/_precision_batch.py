@@ -588,7 +588,7 @@ class PreparedPrecisionBatch:
                 # Invalid input and exhausted resources must keep their native
                 # failure semantics instead of allocating another owner.
                 retry = (
-                    self._facade._fast_fock
+                    self._facade._budget_fock
                     and original.status == _native.STATUS_NUMERICAL_FAILURE
                 )
                 if not original.succeeded and not retry:

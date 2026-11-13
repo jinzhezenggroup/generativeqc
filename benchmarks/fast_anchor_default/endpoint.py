@@ -133,6 +133,7 @@ def main() -> None:
     parser.add_argument("--policy", choices=("fp64", "fast"), required=True)
     parser.add_argument("--delta", choices=("0", "1", "auto"), required=True)
     parser.add_argument("--warm-repeats", type=int, default=0)
+    parser.add_argument("--production-defaults-changed", action="store_true")
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not 0 <= args.warm_repeats <= 16:
@@ -157,7 +158,7 @@ def main() -> None:
             for key, value in os.environ.items()
             if key.startswith("GENERATIVEQC_")
         },
-        "production_defaults_changed": False,
+        "production_defaults_changed": args.production_defaults_changed,
     }
     calculator = None
     started = None

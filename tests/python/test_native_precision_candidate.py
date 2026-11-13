@@ -52,7 +52,7 @@ def query(policy_library: Any) -> Any:
 
 def facts(name: str | None = None, schema: int = 2, owner: int = 0) -> Any:
     value = transport._Context(ct.sizeof(transport._Context), _native.ABI_VERSION)
-    value.fast_profile = value.fast_native = value.forces_requested = 1
+    value.budget_requested = value.budget_native = value.forces_requested = 1
     value.gradient_present = value.gradient_complete = 1
     value.gradient_schema_version, value.gradient_owner = schema, owner
     value.gradient_returned_mode = 1
@@ -156,7 +156,7 @@ def test_unknown_or_wrong_owner_never_gains_qualification(
         ("geometry_points", 0),
         ("gradient_returned_mode", 0),
         ("forces_requested", 0),
-        ("fast_native", 0),
+        ("budget_native", 0),
     ),
 )
 def test_gradient_shortcut_requires_complete_actual_work(
@@ -280,7 +280,7 @@ def test_strict_xc_requires_present_counts_and_not_a_corrected_graph(
     "field,value,status",
     (
         ("reserved", 1, 1),
-        ("fast_profile", 2, 1),
+        ("budget_requested", 2, 1),
         ("gradient_owner", 3, 1),
         ("gradient_returned_mode", 3, 1),
         ("correction_result_flags", 64, 1),
@@ -398,10 +398,9 @@ def test_missing_refused_and_forged_selected_owner_never_falls_back(
     calculator = SimpleNamespace(_library=policy_library)
     result = SimpleNamespace(precision={})
     options = {
-        "profile": "fp64",
         "target": object(),
-        "fast_native": False,
-        "fast_fock": False,
+        "budget_native": False,
+        "budget_fock": False,
         "forces": False,
         "precision": "fp64",
         "budget": None,
@@ -429,10 +428,13 @@ def test_missing_refused_and_forged_selected_owner_never_falls_back(
             return 0
 
     calculator._library = SimpleNamespace(
-        generativeqc_precision_candidate_query_v1=Forged()
+        generativeqc_precision_candidate_query_v1=Forged(),
+        generativeqc_scf_defaults_query_v1=policy_library.generativeqc_scf_defaults_query_v1,
     )
     with pytest.raises(RuntimeError, match="invalid receipt"):
         transport.classify_candidate(calculator, result, **options)
-    options.update(profile="fast", target=None)
+    from generativeqc.force_aware_numerics import TargetErrorBudget
+
+    options.update(budget=TargetErrorBudget(1e-5, 1e-4), target=None)
     with pytest.raises(RuntimeError, match="invalid receipt"):
         transport.classify_candidate(calculator, result, **options)

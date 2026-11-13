@@ -1,0 +1,12 @@
+{
+  "base_revision": "e41c546c40c1fa04db5e319506aac1f9ed330d50",
+  "dirty": true,
+  "native_source_identity": "3b31877336dd65af68a072e89d993f244138aa6e53dc455b8d33b3cb954697cc",
+  "native_input_count": 2137,
+  "library_sha256": "ddfd3e5e3835687da83f011e948acb4250e6ded50213c821ff13dd5e251c1834",
+  "build": "Release SM120, fast-compile off, test hooks off",
+  "compiler_cache": "ccache 4.5.1",
+  "measured_source_patch_sha256": "83e37a833203b52168dc5801e4bc5150d61dc544d59d8659f16f6df7aa70fa4f",
+  "hook_library_sha256": "ce4cef4ebe1a11087487f2d50612a904e16b2f96abef7f3c0a28a92c48147ac4",
+  "native_fixture_sha256": "e315a87d9e92a5e6299d3ad47ad0d49f628890e33db874dee230bf745d8eacb9"
+}

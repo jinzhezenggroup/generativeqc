@@ -3,7 +3,12 @@
 Status: construction implemented; original anchor-default withdrawal superseded
 Date: 2026-11-13
 
-## Current default-selection decision
+The later [target-selected policy](2026-11-13-target-selected-precision-presets.md)
+supersedes the mode-specific default described next. Standard/Fast now supply
+allowance defaults, while actual budgets and solver goals select execution.
+Shared construction and scientific/resource admission remain in force.
+
+## Prior default-selection decision (superseded)
 
 The [superseding Fast-default decision](../performance/2026-11-12-retain-qualified-fast-anchor-default.md)
 retains automatic fixed-anchor reuse for eligible budget-Fock/budget-stationarity

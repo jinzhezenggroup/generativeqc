@@ -19,6 +19,7 @@ from generativeqc import _warm_seed_native as native_seeds
 from generativeqc._precision_batch import _SeedLease
 from generativeqc._warm_state import WarmStartState
 from generativeqc.batch import BatchItemResult, BatchResult
+from generativeqc.force_aware_numerics import TargetErrorBudget
 from generativeqc.ks_diagnostics import KsTransportDiagnostic
 from test_precision_policy import (
     ATOMS,
@@ -392,13 +393,19 @@ def test_native_fleet_reuse_without_item_timing_or_seed_exports(
     assert fleet.live is None
 
 
-def test_fast_standard_fallback_reuses_owner_and_frozen_density(fleet: Any) -> None:
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_budget_standard_fallback_reuses_owner_and_frozen_density(
+    fleet: Any, profile: str
+) -> None:
     """A strict fallback never suspends the expensive native prepared owner."""
     fleet.block_auto = True
     evidence = strict_native_result().precision
     observed = item(precision=evidence, executed_backend="cuda")
     fleet.fleet_outputs = [[observed], [observed]]
-    calculator = PrecisionCalculator(policy="fast", device="cuda")
+    calculator = PrecisionCalculator(
+        policy=PrecisionPolicy(profile, budget=TargetErrorBudget(1e-5, 1e-4, 3e-5)),
+        device="cuda",
+    )
     with calculator.prepare_batch([ATOMS]) as prepared:
         first = prepared.execute(strict=True)
         prepared.set_warm_start_updates(False)
@@ -440,7 +447,7 @@ def test_fast_failed_proposal_retries_only_numerics_and_retains_work(
     fleet.block_auto = True
     fleet.fleet_outputs = [[failed], [strict]]
     calculator = PrecisionCalculator(policy="fast", device="cuda")
-    calculator._fast_fock = True
+    calculator._budget_fock = True
     with calculator.prepare_batch([ATOMS]) as prepared:
         output = prepared.execute()
         observed = output.items[0]

@@ -76,6 +76,7 @@ def backend(
         block_auto=False,
         auto_properties=None,
         transport_v2=False,
+        fock_precision=False,
         standard_convergence=False,
         missing_admission=False,
         missing_execution=False,
@@ -113,6 +114,10 @@ def backend(
             )
             if state.transport_v2:
                 self._library.generativeqc_application_precision_version_v2 = lambda: 2
+            if state.fock_precision:
+                self._library.generativeqc_application_fock_precision_version_v2 = (
+                    lambda: 2
+                )
             if options.get("method") == "pbe0-rks" and self._ks_options is None:
                 from generativeqc import KsOptions
 
@@ -593,13 +598,16 @@ def test_shared_scalar_lifetime_releases_classification_failures(
     calculator.clear_cache()
 
 
-def test_fast_strict_fallback_retains_standard_without_repeating_endpoint(
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_budget_strict_fallback_is_independent_of_profile(
     backend: SimpleNamespace,
+    profile: str,
 ) -> None:
     """A speed profile must not recreate an already strict owner for an audit."""
     backend.block_auto = True
     backend.outputs = [strict_native_result()]
-    output = PrecisionCalculator(policy="fast", device="cuda").singlepoint(ATOMS)
+    policy = PrecisionPolicy(profile, budget=TargetErrorBudget(1e-5, 1e-4, 3e-5))
+    output = PrecisionCalculator(policy=policy, device="cuda").singlepoint(ATOMS)
     report = output.precision_validation
     assert len(backend.calls) == report.solve_count == 1
     assert report.status == "strict_standard_fallback"
@@ -884,7 +892,7 @@ def test_budget_fock_requires_actual_fp32_exchange_work(
     if missing:
         backend.outputs.append(result(executed_backend="cuda"))
     calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
-    calculator._fast_fock = True
+    calculator._budget_fock = True
     from generativeqc.ks import resolve_ks_options
 
     calculator._candidate._ks_options = resolve_ks_options(
@@ -905,7 +913,7 @@ def test_budget_fock_failure_keeps_attempt_and_bounded_strict_fallback(
         result(executed_backend="cuda"),
     ]
     calculator = PrecisionCalculator(method="pbe0-rks", device="cuda", policy="fast")
-    calculator._fast_fock = True
+    calculator._budget_fock = True
     report = calculator.singlepoint(ATOMS).precision_validation
     assert report.status == "observed_met" and report.solve_count == 3
     assert "budget_fock_failed_fp64_fallback" in report.fallback_reasons
@@ -999,8 +1007,8 @@ def test_fast_strict_warm_requires_complete_state_bound_evidence(
     backend.outputs = [candidate, result(executed_backend="cuda")]
     policy = PrecisionPolicy("fast", target=ENERGY if explicit_target else None)
     calculator = PrecisionCalculator(method=method, device="cuda", policy=policy)
-    calculator._fast_native = True
-    calculator._fast_fock = True
+    calculator._budget_native = True
+    calculator._budget_fock = True
     from generativeqc.ks import resolve_ks_options
 
     calculator._candidate._ks_options = resolve_ks_options(method, KsOptions())
@@ -1079,8 +1087,10 @@ def test_budget_fock_evidence_follows_the_exchange_graph(
     assert not select(calculator, work)
 
 
-def test_fast_budget_selects_native_arithmetic_without_an_extra_solve(
+@pytest.mark.parametrize("profile", ("standard", "fast", "fp64"))
+def test_budget_selects_native_arithmetic_without_a_profile_privilege(
     backend: SimpleNamespace,
+    profile: str,
 ) -> None:
     work = {
         "operator_work_counters_valid": True,
@@ -1104,7 +1114,7 @@ def test_fast_budget_selects_native_arithmetic_without_an_extra_solve(
     backend.outputs = [result(executed_backend="cuda", precision=work)]
     budget = TargetErrorBudget(2e-5, 4e-4)
     calculator = PrecisionCalculator(
-        method="pbe0-rks", device="cuda", policy=PrecisionPolicy("fast", budget=budget)
+        method="pbe0-rks", device="cuda", policy=PrecisionPolicy(profile, budget=budget)
     )
     output = calculator.singlepoint(ATOMS)
     report = output.precision_validation
@@ -1199,10 +1209,79 @@ def test_fast_explicit_target_is_still_an_observable_evidence_request(
 
 
 def test_arithmetic_budget_is_not_a_target_accuracy_audit() -> None:
-    with pytest.raises(TypeError, match="TargetErrorBudget"):
-        PrecisionPolicy("fast", budget=ENERGY)
-    with pytest.raises(ValueError, match="require Fast"):
-        PrecisionPolicy("balanced", budget=TargetErrorBudget(1e-5, 1e-4))
+    for profile in ("standard", "fast", "fp64", "tight", "balanced", "audit_auto"):
+        with pytest.raises(TypeError, match="TargetErrorBudget"):
+            PrecisionPolicy(profile, budget=ENERGY)
+        budget = TargetErrorBudget(1e-5, 1e-4)
+        assert PrecisionPolicy(profile, budget=budget).budget == budget
+
+
+@pytest.mark.parametrize("transport_v2", (False, True))
+@pytest.mark.parametrize("tight_controls", (False, True))
+@pytest.mark.parametrize("tight_budget", (False, True))
+def test_equal_targets_select_equal_execution_across_presets(
+    backend: SimpleNamespace,
+    transport_v2: bool,
+    tight_controls: bool,
+    tight_budget: bool,
+) -> None:
+    """The target contract, not its preset spelling, selects the native route.
+
+    Exercise both current and KS transports, actual native budget selection,
+    and independently tighter SCF ceilings. A scalar SCF tolerance is not an
+    authorization to infer a force-error allowance.
+    """
+    backend.transport_v2 = transport_v2
+    backend.fock_precision = True
+    budget = (
+        TargetErrorBudget(1e-9, 1e-7, 3e-8)
+        if tight_budget
+        else TargetErrorBudget(1e-5, 1e-4, 3e-5)
+    )
+    requested = (
+        {
+            "energy_tolerance": 1e-12,
+            "density_tolerance": 1e-10,
+            "screening_tolerance": 1e-14,
+        }
+        if tight_controls
+        else {}
+    )
+    selected = []
+    for profile in ("standard", "fast", "fp64"):
+        policy = PrecisionPolicy(profile, budget=budget)
+        calculator = PrecisionCalculator(
+            method="pbe0-rks", device="cuda", policy=policy, **requested
+        )
+        owner = calculator._candidate
+        controls = tuple(
+            getattr(owner, "_" + name)
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "screening_tolerance",
+            )
+        )
+        selected.append(
+            (
+                owner.options["precision"],
+                controls,
+                owner._application_precision_budget,
+                owner._ks_options._precision_budget,
+                calculator._budget_fock,
+            )
+        )
+        if tight_controls:
+            assert controls == (1e-12, 1e-10, 1e-14)
+        assert calculator._budget_fock is not tight_budget
+        calculator.clear_cache()
+    assert selected[1:] == selected[:-1]
+    assert (
+        PrecisionPolicy("fast").budget
+        == PrecisionPolicy(
+            "standard", budget=TargetErrorBudget(1e-5, 1e-4, 3e-5)
+        ).budget
+    )
 
 
 def test_target_scope_and_precision_ownership() -> None:
@@ -1830,10 +1909,9 @@ def test_composite_gradient_admission_requires_all_canonical_correction_sources(
         _, reasons, name = classify_candidate(
             calculator,
             replace(observed, precision=precision),
-            profile="fp64",
             target=ENERGY,
-            fast_native=False,
-            fast_fock=False,
+            budget_native=False,
+            budget_fock=False,
             forces=True,
             precision="fp64",
             budget=None,

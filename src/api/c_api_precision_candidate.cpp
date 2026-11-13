@@ -29,7 +29,7 @@ extern "C" generativeqc_status generativeqc_precision_candidate_query_v1(
                 '\0') == std::end(copied.correction_model_identity))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   for (const auto flag :
-       {copied.fast_profile, copied.explicit_target, copied.fast_native, copied.fast_fock,
+       {copied.budget_requested, copied.explicit_target, copied.budget_native, copied.budget_fock,
         copied.forces_requested, copied.gradient_present, copied.gradient_complete,
         copied.qualification_present, copied.gradient_capability_fallback,
         copied.weighted_task_counters_collected, copied.correction_present,
