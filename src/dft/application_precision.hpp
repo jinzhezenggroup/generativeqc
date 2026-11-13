@@ -202,14 +202,22 @@ inline bool admit_fixed_anchor_delta(bool strict_fp64, bool budget_fock, bool bu
          spins == 1 && vv10 && !resource_ledger && chunk_width == 1;
 }
 
-/** Select optional linear reuse by workload size, never by accuracy profile.
- * Keep the existing amortization floor and explicit rollback. Scientific and
- * resource eligibility are established separately, including for forced reuse.
- * Validate malformed controls even when that independent admission refused. */
-inline bool select_fixed_anchor_delta(bool eligible, std::size_t aos, const char* selection) {
+/** Select automatic reuse by actual solver targets, never a frontend profile.
+ * The measured relaxed endpoint uses energy/density/screening targets of
+ * 1e-6/1e-4/1e-10. Tighter targets retain explicit opt-in: arithmetic eligibility
+ * does not establish profitability. Neither budget presence nor dtype replaces
+ * these targets. Scientific/resource admission remains independent, including
+ * for forced reuse; malformed controls reject even an ineligible owner. */
+inline bool select_fixed_anchor_delta(bool eligible, const std::array<double, 3>& targets,
+                                      std::size_t aos, const char* selection) {
   if (selection && std::strcmp(selection, "0") != 0 && std::strcmp(selection, "1") != 0)
     throw std::invalid_argument("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA accepts 0 or 1");
-  return eligible && (selection ? std::strcmp(selection, "1") == 0 : aos >= 192);
+  if (!eligible) return false;
+  if (selection) return std::strcmp(selection, "1") == 0;
+  constexpr std::array<double, 3> relaxed_floor{1e-6, 1e-4, 1e-10};
+  for (std::size_t index = 0; index < targets.size(); ++index)
+    if (!std::isfinite(targets[index]) || targets[index] < relaxed_floor[index]) return false;
+  return aos >= 192;
 }
 
 /** Independently qualified stationary RKS candidate at a strict final

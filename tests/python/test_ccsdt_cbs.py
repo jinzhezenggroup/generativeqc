@@ -870,13 +870,15 @@ def test_preserves_tighter_explicit_controls(
         assert all(event["options"][name] == value for event in fake_native)
 
 
-def test_fast_tight_budget_retains_strict_controls(
+@pytest.mark.parametrize("profile", ("standard", "fast"))
+def test_explicit_tight_budget_retains_strict_controls(
     bases: tuple[CBSBasis, CBSBasis],
     fake_native: list[dict],
+    profile: str,
 ) -> None:
     from generativeqc import PrecisionPolicy, TargetErrorBudget
 
-    policy = PrecisionPolicy("fast", budget=TargetErrorBudget(1e-12, 1e-11))
+    policy = PrecisionPolicy(profile, budget=TargetErrorBudget(1e-12, 1e-11))
     result = CCSDTCBSCalculator(bases, policy=policy).singlepoint(ATOMS)
     assert result.convergence["selected"] == "strict_fp64"
     assert result.convergence["reason"] == "component_budget_requires_strict"

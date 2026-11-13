@@ -79,7 +79,7 @@ def test_default_cold_warm_reset_and_explicit_off(
                 else native_calculator("pbe0", arm, mode, tmp_path)
             )
             if strict_budget:
-                assert not calculator._fast_fock
+                assert not calculator._budget_fock
             records = []
             try:
                 with calculator.prepare_batch([atoms], warm_start=True) as owner:
@@ -101,7 +101,7 @@ def test_default_cold_warm_reset_and_explicit_off(
                         requested, active = incremental_expectation(
                             selector=choice,
                             mode=mode,
-                            budget_fock=calculator._fast_fock,
+                            budget_fock=calculator._budget_fock,
                             phase=phase,
                         )
                         assert result.incremental_direct_jk["requested"] == requested

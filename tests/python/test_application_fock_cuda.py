@@ -9,7 +9,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import GridSpec, KsOptions, PrecisionCalculator
+from generativeqc import (
+    GridSpec,
+    KsOptions,
+    PrecisionCalculator,
+    PrecisionPolicy,
+    TargetErrorBudget,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.pbe0_precision import reference
@@ -30,6 +36,56 @@ def _oracle(functional: str, case_name: str = CASE) -> dict[str, Any]:
     pytest.importorskip("pyscf")
     pytest.importorskip("gpu4pyscf")
     return reference(case_name, GRID, 4, functional=functional, backend="gpu4pyscf")
+
+
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize("relaxed", (False, True))
+def test_target_budget_selects_same_endpoint_across_profiles(
+    policy: str, relaxed: bool
+) -> None:
+    """Both presets admit the same qualified work for the same actual target.
+
+    Independent E/F gates follow the requested allowance, not the profile name.
+    A strict Fast target must not inherit its preset's loose allowance; an
+    equally loose Standard target can execute the qualified mixed Direct path.
+    """
+    budget = (
+        TargetErrorBudget(1e-5, 1e-4, 3e-5)
+        if relaxed
+        else TargetErrorBudget(1e-9, 1e-7, 3e-8)
+    )
+    oracle = _oracle("PBE0")
+    case = benchmark_cases()[CASE]
+    calculator = PrecisionCalculator(
+        method="pbe0-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        policy=PrecisionPolicy(policy, budget=budget),
+        max_iterations=180,
+    )
+    try:
+        with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+            for replay in range(2):
+                result = owner.execute(
+                    strict=True, properties=("energy", "forces")
+                ).items[0]
+                assert result.succeeded and result.converged
+                assert result.executed_backend == "cuda"
+                assert abs(result.energy - oracle["energy"]) < (
+                    1e-5 if relaxed else 1e-8
+                )
+                difference = np.asarray(result.forces) - oracle["forces"]
+                assert np.max(np.abs(difference)) < budget.force_max_abs
+                assert np.sqrt(np.mean(difference * difference)) < budget.force_rms
+                assert result.precision["complete"]
+                if not relaxed:
+                    assert result.precision["mixed_stage_fock_builds"] == 0
+                elif replay == 0:
+                    assert result.precision["mixed_stage_fock_builds"] > 0
+    finally:
+        calculator.clear_cache()
 
 
 @pytest.mark.parametrize("policy", ("standard", "fast"))

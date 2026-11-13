@@ -13,6 +13,26 @@ from an application error budget: supported routes can use FP32 arithmetic,
 relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
+Standard and Fast are **precision presets, not separate optimization paths**.
+An explicit `PrecisionPolicy(..., budget=TargetErrorBudget(...))` is accepted
+with either preset. After defaults resolve, native admission uses the actual
+energy/force allowances, explicit SCF convergence and screening ceilings, model,
+provider and resource capabilities—not the profile name. Equal resolved targets
+select the same arithmetic, provisional operators, fallback and publication
+policy. Fast supplies a default relaxed budget; Standard without a budget keeps
+its optimized FP64 default. A tighter explicit Fast budget cannot borrow the
+default relaxed allowance, and a Standard request with that relaxed budget can
+use every route admitted for the equivalent Fast request.
+
+References to Fast-qualified routes below describe that preset's default
+allowance, not a profile-only eligibility rule.
+
+Application error allowances and SCF stopping tolerances remain distinct.
+Explicit solver tolerances are never silently loosened; a loose scalar SCF
+tolerance alone does not authorize an inferred force-error allowance or FP32
+gradient. Explicit `target` continues to request a complete independent audit,
+regardless of preset or budget.
+
 Both profiles use the same candidate execution, native scheduling and publication
 pipeline. Construction resolves the model, basis snapshots and native library
 once. Arithmetic selection reuses that snapshot and reruns the ordinary
@@ -33,9 +53,9 @@ budget. These decisions use the selected force qualification, not the mere
 presence of a budget. Mixed derivative scratch remains outside the strict fleet
 reservation; existing bounded admission, explicit tile overrides, complete-model
 checks and resource-constrained tile fallbacks still apply. VV10 fixed-anchor
-reuse shares implementation and explicit selection in both profiles. Qualified
-relaxed budget outer solves retain their automatic AO floor; strict owners stay
-opt-in. Budget presence alone is not sufficient admission.
+reuse shares implementation and the automatic AO floor in both profiles.
+Scientific/precision/resource admission still applies independently; budget
+presence alone is not sufficient admission.
 Equal FP64 arithmetic alone therefore does not establish identical
 internal schedules, work counts, memory requirements or endpoint cost.
 
@@ -72,7 +92,7 @@ CBS Standard uses routine budget-scaled convergence, while its `tight` preset
 retains the original strict controls. The CBS `fast` name remains a compatibility
 alias for its routine allowance; this does not change HF/DFT Fast.
 
-## Module-selected Fast Fock
+## Budget-selected Fock
 
 Every supported native CUDA XC composition uses the same shared Direct-Fock precision
 policy. Admission depends on executable operator capabilities, not a functional
@@ -176,16 +196,18 @@ counted once; replay reports mixed-source J/K work but no new recurrence work.
 For eligible Standard and Fast WB97M-V restricted exact-Direct solves,
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` explicitly selects fixed FP64 J/K/range-K
 anchors in the cold nonlocal outer schedule. Explicit `0` disables reuse.
-Unset selects automatic reuse for eligible strict FP64 and relaxed Fast budget
-outer solves at 192 or more AOs, with no fixed upper AO ceiling. Smaller eligible
-owners remain opt-in. Selection follows the admitted operator and workload size,
-not the public accuracy profile or the presence of a budget. The floor is not a
+Unset selects automatic reuse for eligible outer solves at 192 or more AOs whose
+actual energy/density/screening targets are at least `1e-6`/`1e-4`/`1e-10`.
+There is no fixed upper AO ceiling. Smaller owners and tighter targets remain
+opt-in. The same target predicate applies to strict FP64 and budget arithmetic;
+it never reads a public profile or uses budget presence as a profitability test.
+The size and target floors are not a
 measured-size whitelist or a claim of profitability for every larger shape.
 Provisional initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
 XC and VV10 still consume total density. Delta iterations do not advance the
-anchor. Final physical checks and Fast's selected convergence tolerances are
+anchor. Final physical checks and the selected convergence tolerances are
 unchanged: this does not promise FP64-mode observable accuracy.
 
 The anchor lease is optional, allocated after mandatory preparation and included
@@ -196,15 +218,15 @@ force handoff the idle anchor is retired before optional ERIs; density, stationa
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use the incumbent route without reallocating anchors.
 Both policies use the same FP64 anchor implementation and complete-model/provider
-guards. Strict FP64 WB97M-V single-spin exact-Direct VV10 owners use provisional
-anchor reuse without relaxing their tolerances, narrowing arithmetic or changing
+guards. When selected, strict FP64 WB97M-V single-spin exact-Direct VV10 owners
+use provisional anchor reuse without relaxing their tolerances, narrowing arithmetic or changing
 final physical closure.
 Strict AUTO requests alone are not admission. Other models, DF/UKS, public
 resource-ledger owners, device chunks and same-owner warm replays retain their
 incumbent path. The selector replaces `GENERATIVEQC_KS_FAST_ANCHOR_DELTA`; no
 compatibility alias is retained.
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset uses the same 192-AO automatic floor for both eligible precision routes.
+unset uses the same target and 192-AO automatic floors for both eligible precision routes.
 Explicit `1` never forces unsupported domains. The selector is part of new
 checkpoint execution identities.
 The native C++ transfer diagnostics retain their `fast_anchor_builds` and
@@ -396,14 +418,16 @@ calculator = PrecisionCalculator(
     method="pbe0-rks", basis="def2-svp", device="cuda",
     ks_options=KsOptions(grid=GridSpec(48, 16, 32)),
     initial_guess=None,
-    policy=PrecisionPolicy("fast", budget=TargetErrorBudget(
+    policy=PrecisionPolicy("standard", budget=TargetErrorBudget(
         energy_abs=1e-5, force_max_abs=1e-4, force_rms=3e-5,
     )),
 )
 ```
 
-`budget` reuses the adaptive numerical policy's energy/force allowances; users
-do not select kernels. The native admission floors are `1e-6` Eh energy,
+The explicit budget above selects the same execution with `"standard"` or
+`"fast"`; it is not a Fast-only capability. `budget` reuses the adaptive
+numerical policy's energy/force allowances; users do not select kernels. The
+native admission floors are `1e-6` Eh energy,
 `1e-5` Eh/bohr maximum force component, and `3e-6` Eh/bohr RMS if requested.
 Tighter allowances or unsupported domains do not silently inherit ordinary
 AUTO: they select FP64 and a measured fallback audit. Fast uses the published
@@ -482,7 +506,7 @@ calculations retain their faster phased executor. Fast comparisons must use this
 already-optimized strict baseline, not withhold scheduling improvements from it.
 It does not imply FP32 execution or promise a speedup for every workload.
 
-Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
+Standard (or `fp64`) without `budget` or `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
 observable-budget audit is claimed**. Shared public SCF defaults are `1e-9`
 energy change, `1e-5` density change and `1e-12` screening, independent of backend,

@@ -142,8 +142,8 @@ class CCSDTCBSCalculator:
     budgets remain native endpoint budgets, not a total process-RSS bound.
     ``policy="standard"`` selects budget-scaled convergence, including force
     response. ``tight`` retains the original strict stopping limits; ``fp64``
-    additionally keeps FP64 preconvergence. ``fast`` remains a compatible name
-    for Standard's default allowance and accepts custom budgets.
+    additionally keeps FP64 preconvergence. ``fast`` supplies Standard's default
+    allowance; either preset accepts an explicit target budget.
     ``preconvergence`` independently selects bounded auxiliary
     warmup for CUDA DF-CCSD/Lambda. Final residual checks and response remain
     FP64. It preserves explicit tighter SCF/CC controls. The returned
@@ -337,12 +337,11 @@ class CCSDTCBSCalculator:
         amplification = math.fsum(abs(value) for value in coefficients.values())
         # CBS owns its routine convergence contract. Do not change the shared
         # HF/DFT Standard preset when promoting the previously explicit allowance.
-        # Keep Fast's custom-budget transport and the strict Tight/FP64 escapes.
-        budget = (
-            TargetErrorBudget(1e-5, 1e-4, 3e-5)
-            if policy.profile == "standard"
-            else policy.budget
-        )
+        # Explicit targets override presets; only an omitted Standard allowance
+        # receives this workflow's relaxed default. Tight/FP64 stay strict by default.
+        budget = policy.budget
+        if budget is None and policy.profile == "standard":
+            budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
         component_budget = (
             TargetErrorBudget(
                 budget.energy_abs / amplification,

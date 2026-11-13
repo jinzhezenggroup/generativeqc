@@ -31,10 +31,10 @@ class _Context(ct.Structure):
             for name in (
                 "struct_size",
                 "abi_version",
-                "fast_profile",
+                "budget_requested",
                 "explicit_target",
-                "fast_native",
-                "fast_fock",
+                "budget_native",
+                "budget_fock",
                 "forces_requested",
                 "gradient_present",
                 "gradient_schema_version",
@@ -118,15 +118,18 @@ def classify_candidate(
     calculator: Any,
     result: Any,
     *,
-    profile: str,
     target: Any,
-    fast_native: bool,
-    fast_fock: bool,
+    budget_native: bool,
+    budget_fock: bool,
     forces: bool,
     precision: str,
     budget: Any,
 ) -> tuple[Disposition, int, str]:
-    """Translate facts, never qualification tables or audit-shortcut predicates."""
+    """Translate target/work facts without transmitting a frontend preset name.
+
+    Budget presence requests admission, not permission to approximate: the native
+    owner still checks actual work, physical closure and budget qualification.
+    """
     from .dispersion import R2SCAN3CCorrectionResult
 
     library = calculator._library
@@ -134,11 +137,9 @@ def classify_candidate(
     work = result.precision or {}
     gradient = work.get("gradient") or {}
     context = _Context(ct.sizeof(_Context), _native.ABI_VERSION)
-    context.fast_profile, context.explicit_target = (
-        profile == "fast",
-        target is not None,
-    )
-    context.fast_native, context.fast_fock = fast_native, fast_fock
+    context.budget_requested = budget is not None
+    context.explicit_target = target is not None
+    context.budget_native, context.budget_fock = budget_native, budget_fock
     context.forces_requested, context.gradient_present = forces, bool(gradient)
     context.gradient_schema_version = _uint(gradient.get("schema_version") or 0, 32)
     context.gradient_complete = gradient.get("complete") is True
@@ -187,9 +188,9 @@ def classify_candidate(
         budget=budget,
     )
     output = _Decision(ct.sizeof(_Decision), _native.ABI_VERSION)
-    explicit_target, fast_profile = (
+    explicit_target, budget_requested = (
         bool(context.explicit_target),
-        bool(context.fast_profile),
+        bool(context.budget_requested),
     )
     query.argtypes = [
         ct.POINTER(_Context),
@@ -223,12 +224,12 @@ def classify_candidate(
         or bool(output.reasons & 1) != bool(output.qualified_gradient)
         or (explicit_target and output.disposition != Disposition.AUDIT)
         or (
-            not fast_profile
+            not budget_requested
             and not explicit_target
             and output.disposition != Disposition.STRICT
         )
         or (
-            fast_profile
+            budget_requested
             and not explicit_target
             and output.disposition == Disposition.STRICT
         )

@@ -1,7 +1,13 @@
 # Decision: share Fast's optional FP64 anchor default with strict owners
 
-Status: proposed; draft implementation, Standard default promotion rejected
+Status: rejected; uniform automatic reuse across strict and relaxed targets
 Date: 2026-11-13
+
+The [target-selected policy](../implemented/architecture/2026-11-13-target-selected-precision-presets.md)
+supersedes this candidate. The user's clarification is that optimization follows
+actual convergence/error targets, not mode labels. Preserve this source-matched
+trial as the rejected always-on-at-192 proposal; do not relabel its measurements
+as qualification of the later target-selected implementation.
 
 ## Problem and scope
 

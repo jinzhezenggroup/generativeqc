@@ -180,7 +180,7 @@ def main() -> None:
                 requested, active = incremental_expectation(
                     selector=args.selector,
                     mode=args.mode,
-                    budget_fock=calculator._fast_fock,
+                    budget_fock=calculator._budget_fock,
                     phase=phase,
                 )
                 record["samples"].append(
