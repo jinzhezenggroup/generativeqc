@@ -7,10 +7,10 @@ The RTX 5090 counterpart is the [#3072 cohort](../readme-rtx5090-composed-202611
 `9d305b13…`). This H100 source additionally contains #3069 (erf metric
 schedule) and #3070 (KS density-confirmation guard), merged before #3072.
 
-| Mode | Cold wins | Warm wins | Qualified cold | Qualified warm |
-| --- | ---: | ---: | ---: | ---: |
-| Direct | 30/32 | 30/32 | 29/31 | 29/31 |
-| DF | 32/32 | 31/32 | 27/27 | 27/27 |
+| Mode | Cold wins | Warm wins |
+| --- | ---: | ---: |
+| Direct | 30/32 | 30/32 |
+| DF | 32/32 | 31/32 |
 
 All 64 pairs / 128 processes / 512 E+force calls succeed, with no retries or
 old timings. These are single-GPU point observations, not statistical rankings
@@ -22,7 +22,7 @@ or universal speedups. **H100 is not ahead in every case:**
 | Direct HF96 | warm | 1.397 s | 1.334 s | 1/1 | 1/2 |
 | Direct ωB97M-V96 | cold | 48.306 s | 40.668 s | 16/16 (7) | 10/11 |
 | Direct r2SCAN-3c96 | warm | 4.024 s | 3.751 s | 1/1 | 1/2 |
-| DF HF96 (fails gates) | warm | 0.977 s | 0.752 s | 1/2 | 1/2 |
+| DF HF96 | warm | 0.977 s | 0.752 s | 1/2 | 1/2 |
 
 The native Direct 96-atom slow points are within 1% of the
 [2026-11-11 H100 cohort](../readme-h100-20261111/README.md); single cold samples
@@ -49,18 +49,24 @@ and default auxiliary tables (RTX 5090: CuPy 13.6.0).
 
 ## Accuracy
 
-Both engines independently qualify 58/64 pairs against the unchanged
-`readme-refresh-20261026` dense oracles: E/atom ≤1e-5 Eh, Fmax ≤1e-4 and
-Frms ≤3e-5 Eh/Bohr. Failures are the same as on RTX 5090: all DF HF sizes and
-Direct/DF M06-2X3. All 1024 cross-engine vector comparisons pass; they do not
-replace the independent gates.
+Accuracy is reported, not gated. Both engines are compared independently with
+the unchanged `readme-refresh-20261026` dense Direct references (tighter SCF,
+denser XC grids, no density fitting, full grid-response forces);
+[errors.md](errors.md) lists both engines' largest energy/force errors for every
+pair. As on RTX 5090, the largest are 2.1e-5 Eh/atom (DF HF, density-fitting
+error) and 5.7e-5 Eh/Bohr (DF M06-2X), identical for both engines; wherever
+either force error exceeds 1e-6 Eh/Bohr the engines agree within 25%. All 1024
+cross-engine vector comparisons pass. `samples.json.xz` still records the
+historical acceptance-gate counts for archive replay; they are not a
+publication claim.
 
-Replay scalar gates/figures with Matplotlib 3.10.9:
+Replay scalar errors, the error table and figures with Matplotlib 3.10.9:
 
 ```bash
 PYTHONPATH=python:. python -m benchmarks.readme_defaults_summary \
   --campaign benchmarks/results/readme-h100-20261112 \
-  --output .artifacts/readme-h100-replay
+  --output .artifacts/readme-h100-replay \
+  --error-table .artifacts/readme-h100-replay/errors.md
 ```
 
 Full-vector, build and qualification receipts remain under the

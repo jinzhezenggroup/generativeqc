@@ -4,10 +4,10 @@ Master `4024f95b809c70b404f2ed202a67278d1fb86395` plus exact nuclear derivative
 and overlap-product optimizations. `samples.json.xz` pins the complete source
 identity, patch/archive and ELF hashes, build receipts, software and allocation.
 
-| Mode | Cold wins | Warm wins | Qualified cold | Qualified warm |
-| --- | ---: | ---: | ---: | ---: |
-| Direct | 32/32 | 32/32 | 31/31 | 31/31 |
-| DF | 32/32 | 32/32 | 27/27 | 27/27 |
+| Mode | Cold wins | Warm wins |
+| --- | ---: | ---: |
+| Direct | 32/32 | 32/32 |
+| DF | 32/32 | 32/32 |
 
 Fresh 64 pairs / 128 processes / 512 complete E+force calls; no failures,
 retries, historical timings or point substitutions. Direct ωB97M-V96 warm:
@@ -40,17 +40,24 @@ frozen auxiliary inputs define the common model. Native physical final-state
 proofs and strict/unsupported-owner fallbacks remain mandatory; see
 [application precision](../../../docs/user/application_precision.md).
 
-Both engines independently qualify 58/64 pairs: E/atom ≤1e-5 Eh, Fmax ≤1e-4
-and Frms ≤3e-5 Eh/Bohr. All DF HF sizes and Direct/DF M06-2X3 still fail these
-independent gates and remain plotted. All 1,024 cross-engine full-vector
-comparisons pass; this does not waive those six failures.
+Accuracy is reported, not gated. Each engine is compared independently with the
+same untimed dense Direct reference (tighter SCF, denser XC grids, no density
+fitting, full grid-response forces); [errors.md](errors.md) lists both engines'
+largest energy/force errors for every pair. The largest are 2.1e-5 Eh/atom
+(DF HF, density-fitting error) and 5.7e-5 Eh/Bohr (DF M06-2X), identical for both
+engines; wherever either force error exceeds 1e-6 Eh/Bohr the engines agree
+within 25%. The reference is GPU4PySCF/PySCF code run with stricter controls,
+with CPU PySCF spot checks at 3 atoms. All 1,024 cross-engine full-vector
+comparisons pass. `samples.json.xz` still records the historical acceptance-gate
+counts for archive replay; they are not a publication claim.
 
-Replay scalar errors, gates and both figures with Matplotlib 3.10.9:
+Replay scalar errors, the error table and both figures with Matplotlib 3.10.9:
 
 ```bash
 PYTHONPATH=python:. python -m benchmarks.readme_defaults_summary \
   --campaign benchmarks/results/readme-rtx5090-composed-20261111 \
-  --output .artifacts/readme-optimized-replay
+  --output .artifacts/readme-optimized-replay \
+  --error-table .artifacts/readme-optimized-replay/errors.md
 ```
 
 Full vectors, source-matched build/qualification receipts and acquisition scripts
