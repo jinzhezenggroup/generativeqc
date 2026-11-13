@@ -157,3 +157,31 @@ def test_superseded_attempts_are_retained_but_not_selected_for_speed(
     previous["samples"][0][0] = float("nan")
     with pytest.raises(ValueError):
         replay.audit(populations)
+
+
+def test_error_table_reports_largest_call_error_for_both_engines(
+    replay: ModuleType, populations: dict
+) -> None:
+    """Published errors are values per engine, taken over cold and warm calls."""
+    populations["populations"][0]["samples"][2][5] = 7.5e-5
+    table = replay.error_table(populations)
+    rows = [line for line in table.splitlines() if line.startswith("| Direct |")]
+    assert len(rows) == len(METHODS) * len(SIZES) + 1
+    first = [cell.strip() for cell in rows[0].strip("|").split("|")]
+    assert first[2] == str(SIZES[0])
+    assert first[4] == "7.5e-05"
+    assert first[7] == "0.0e+00"
+    largest = [cell.strip() for cell in rows[-1].strip("|").split("|")]
+    assert largest[4] == "7.5e-05"
+
+
+@pytest.mark.parametrize(
+    "campaign", ["readme-rtx5090-composed-20261111", "readme-h100-20261112"]
+)
+def test_published_error_table_matches_retained_samples(
+    replay: ModuleType, campaign: str
+) -> None:
+    """The README-linked error table is regenerated from the hashed samples."""
+    directory = RESULTS / campaign
+    data = json.loads(lzma.decompress((directory / "samples.json.xz").read_bytes()))
+    assert (directory / "errors.md").read_text() == replay.error_table(data)

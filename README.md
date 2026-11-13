@@ -147,9 +147,11 @@ solver/scheduling controls without benchmark-only overrides.
 The source-matched Release build uses default XC/VV10 grids, native SCF policies
 and full grid-response forces. Cold includes setup; warm is the median of three
 frozen-density calls, with min–max bars. These are single-process observations,
-not statistical rankings. Independent accuracy gates qualify **58/64 pairs**:
-**58/58 cold** and **58/58 warm** are faster. The six failing pairs remain plotted
-(DF HF at all sizes; Direct/DF M06-2X at 3 atoms).
+not statistical rankings. Both engines' energy and force errors against the same
+untimed dense reference are [reported for every pair](benchmarks/results/readme-rtx5090-composed-20261111/errors.md)
+rather than gated. The largest are 2.1e-5 Eh/atom (DF HF, fitting error) and
+5.7e-5 Eh/Bohr (DF M06-2X) for both engines; wherever either force error exceeds
+1e-6 Eh/Bohr, the two engines agree within 25%.
 See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-composed-20261111/README.md)
 for all 512 endpoints, the default convergence contract and reproducible
 timing/error summaries and exact source/image identities. Cold DF HF96 now takes
@@ -161,11 +163,11 @@ universal speedup guarantee.
 
 The same 64 pairs on master `a7241b4fd` (after #3072) on one H100 80GB,
 against GPU4PySCF 1.9.0 defaults, show GenerativeQC faster in **62/64 cold**
-and **61/64 warm** cases. Independent gates qualify **58/64 pairs**, with the
-same six failures; **56/58 cold** and **56/58 warm** qualified pairs are faster.
-**H100 is not ahead everywhere:** qualified slow points are Direct HF96
-(cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
-(48.3 vs 40.7 s) and Direct r2SCAN-3c96 warm (4.02 vs 3.75 s).
+and **61/64 warm** cases. **H100 is not ahead everywhere:** the slow points are
+Direct HF96 (cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
+(48.3 vs 40.7 s), Direct r2SCAN-3c96 warm (4.02 vs 3.75 s) and DF HF96 warm
+(0.98 vs 0.75 s). [Per-pair errors](benchmarks/results/readme-h100-20261112/errors.md)
+match the RTX 5090 cohort: largest 2.1e-5 Eh/atom and 5.7e-5 Eh/Bohr for both engines.
 
 ![Direct cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-direct-defaults-h100.svg)
 
