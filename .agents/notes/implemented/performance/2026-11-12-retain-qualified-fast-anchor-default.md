@@ -3,6 +3,9 @@
 Status: implemented
 Date: 2026-11-12
 
+The [shared-default follow-up](../../proposed/2026-11-13-shared-fp64-anchor-default.md) evaluates
+extending the same default to strict FP64 owners without withdrawing Fast reuse.
+
 This repair supersedes only the default-withdrawal proposal in
 [common construction](../architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md).
 Constructor reuse and selected-force resource admission remain unchanged.

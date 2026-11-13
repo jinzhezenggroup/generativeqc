@@ -176,12 +176,12 @@ counted once; replay reports mixed-source J/K work but no new recurrence work.
 For eligible Standard and Fast WB97M-V restricted exact-Direct solves,
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` explicitly selects fixed FP64 J/K/range-K
 anchors in the cold nonlocal outer schedule. Explicit `0` disables reuse.
-Unset preserves automatic reuse for eligible relaxed Fast budget outer solves
-at 192 or more AOs, with no fixed upper AO ceiling. Smaller eligible owners
-and strict Standard owners remain opt-in. The floor is not a measured-size
-whitelist or a claim of profitability for every larger shape. A common automatic
-policy still requires separate complete-endpoint qualification. Provisional
-initializer and frozen-VV10 iterations evaluate linear operators on the total
+Unset selects automatic reuse for eligible strict FP64 and relaxed Fast budget
+outer solves at 192 or more AOs, with no fixed upper AO ceiling. Smaller eligible
+owners remain opt-in. Selection follows the admitted operator and workload size,
+not the public accuracy profile or the presence of a budget. The floor is not a
+measured-size whitelist or a claim of profitability for every larger shape.
+Provisional initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
 XC and VV10 still consume total density. Delta iterations do not advance the
@@ -196,16 +196,15 @@ force handoff the idle anchor is retired before optional ERIs; density, stationa
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use the incumbent route without reallocating anchors.
 Both policies use the same FP64 anchor implementation and complete-model/provider
-guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` opts strict FP64 WB97M-V
-single-spin exact-Direct VV10 owners into provisional anchor reuse, without
-relaxing their tolerances, narrowing arithmetic or changing final physical closure.
+guards. Strict FP64 WB97M-V single-spin exact-Direct VV10 owners use provisional
+anchor reuse without relaxing their tolerances, narrowing arithmetic or changing
+final physical closure.
 Strict AUTO requests alone are not admission. Other models, DF/UKS, public
 resource-ledger owners, device chunks and same-owner warm replays retain their
 incumbent path. The selector replaces `GENERATIVEQC_KS_FAST_ANCHOR_DELTA`; no
 compatibility alias is retained.
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset retains automatic admission only for the budget-qualified Fast domain at
-192 or more AOs. Strict owners remain default-off pending endpoint qualification.
+unset uses the same 192-AO automatic floor for both eligible precision routes.
 Explicit `1` never forces unsupported domains. The selector is part of new
 checkpoint execution identities.
 The native C++ transfer diagnostics retain their `fast_anchor_builds` and

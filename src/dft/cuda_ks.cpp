@@ -2093,8 +2093,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         strict_anchor_fp64, budget_fock, budget_stationarity, functional, exact_anchor_direct,
         spins, vv10_anchor, runtime::active_device_resource_ledger != nullptr,
         configured_chunk_width());
-    fast_anchor_eligible = select_fixed_anchor_delta(fast_anchor_eligible, budget_fock,
-                                                     budget_stationarity, n, anchor_selection);
+    fast_anchor_eligible = select_fixed_anchor_delta(fast_anchor_eligible, n, anchor_selection);
     if (anchor_selection) {
       runtime::df_progress::Scope trace("cuda_ks_anchor_admission", "host_decision");
       if (trace.enabled()) {

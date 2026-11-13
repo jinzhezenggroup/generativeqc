@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fixed_anchor_admission(required_native_cxx: NativeCxx, tmp_path: Path) -> None:
-    """Preserve the qualified budget default without promoting strict owners."""
+    """Share size-based reuse without weakening independent scientific admission."""
     source = tmp_path / "admission.cpp"
     source.write_text(r"""
 #include <cassert>
@@ -26,24 +26,18 @@ int main() {
   using generativeqc::dft::semilocal_family_code;
   const auto wb = semilocal_family_code(SemilocalFamily::Wb97mv);
   for (const bool eligible : {false, true}) {
-    for (const bool budget_fock : {false, true}) {
-      for (const bool budget_stationarity : {false, true}) {
-        for (const std::size_t aos : {0U, 24U, 96U, 191U, 192U, 193U, 512U, 8192U}) {
-          const auto selected = [&](const char* value) {
-            return select_fixed_anchor_delta(eligible, budget_fock, budget_stationarity,
-                                             aos, value);
-          };
-          assert(selected(nullptr) ==
-                 (eligible && budget_fock && budget_stationarity && aos >= 192));
-          assert(!selected("0"));
-          assert(selected("1") == eligible);
-          for (const auto invalid : {"", "auto", "yes", "2"}) {
-            bool rejected = false;
-            try { (void)selected(invalid); }
-            catch (const std::invalid_argument&) { rejected = true; }
-            assert(rejected);
-          }
-        }
+    for (const std::size_t aos : {0U, 24U, 96U, 191U, 192U, 193U, 512U, 8192U}) {
+      const auto selected = [&](const char* value) {
+        return select_fixed_anchor_delta(eligible, aos, value);
+      };
+      assert(selected(nullptr) == (eligible && aos >= 192));
+      assert(!selected("0"));
+      assert(selected("1") == eligible);
+      for (const auto invalid : {"", "auto", "yes", "2"}) {
+        bool rejected = false;
+        try { (void)selected(invalid); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        assert(rejected);
       }
     }
   }
@@ -59,6 +53,7 @@ int main() {
         const bool eligible = strict_fp64 || (budget_fock && budget_stationarity);
         assert(admit_fixed_anchor_delta(strict_fp64, budget_fock, budget_stationarity,
                                          wb, true, 1, true, false, 1) == eligible);
+        assert(select_fixed_anchor_delta(eligible, 192, nullptr) == eligible);
       }
     }
     for (unsigned guard = 0; guard < 5; ++guard)
