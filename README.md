@@ -50,6 +50,9 @@ independent scientific references—not replaced by a learned surrogate.
 Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+.
 CUDA builds also require a supported CUDA toolkit.
 
+From the repository root (see the [installation guide](docs/user/installation.md)
+for obtaining the source and setting up an environment):
+
 ```bash
 python -m pip install .
 ```
@@ -100,11 +103,15 @@ calc = Calculator(method="rhf", basis="sto-3g", device="cuda")
 result = calc.singlepoint([
     ("H", (0.0, 0.0, -0.7)),
     ("H", (0.0, 0.0, 0.7)),
-])
+], properties=("energy", "forces"))
 
 print(result.energy)
 print(result.forces)
 ```
+
+For energy-only requests, use `properties=("energy",)`; `result.forces` is then
+`None`. The [quick start](docs/user/quickstart.md) explains input units, charge,
+spin and failure behavior.
 
 Prepared batches reuse system topology and converged density state:
 
