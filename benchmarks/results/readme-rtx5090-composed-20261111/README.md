@@ -45,10 +45,9 @@ same untimed dense Direct reference (tighter SCF, denser XC grids, no density
 fitting, full grid-response forces); [errors.md](errors.md) lists both engines'
 largest energy/force errors for every pair. The largest are 2.1e-5 Eh/atom
 (DF HF, density-fitting error) and 5.7e-5 Eh/Bohr (DF M06-2X), identical for both
-engines; wherever either force error exceeds 1e-6 Eh/Bohr the engines agree
-within 25%. The reference is GPU4PySCF/PySCF code run with stricter controls,
-with CPU PySCF spot checks at 3 atoms. All 1,024 cross-engine full-vector
-comparisons pass. `samples.json.xz` still records the historical acceptance-gate
+engines; call by call (cold with cold, warm with warm), the two engines' errors differ by at most 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr (largest maximum-component
+difference: Direct r2SCAN-3c3 cold). The reference is GPU4PySCF/PySCF code run
+with stricter controls, with CPU PySCF spot checks at 3 atoms. `samples.json.xz` still records the historical acceptance-gate
 counts for archive replay; they are not a publication claim.
 
 Replay scalar errors, the error table and both figures with Matplotlib 3.10.9:

@@ -54,9 +54,8 @@ the unchanged `readme-refresh-20261026` dense Direct references (tighter SCF,
 denser XC grids, no density fitting, full grid-response forces);
 [errors.md](errors.md) lists both engines' largest energy/force errors for every
 pair. As on RTX 5090, the largest are 2.1e-5 Eh/atom (DF HF, density-fitting
-error) and 5.7e-5 Eh/Bohr (DF M06-2X), identical for both engines; wherever
-either force error exceeds 1e-6 Eh/Bohr the engines agree within 25%. All 1024
-cross-engine vector comparisons pass. `samples.json.xz` still records the
+error) and 5.7e-5 Eh/Bohr (DF M06-2X), identical for both engines; call by call (cold with cold, warm with warm), the two engines' errors differ by at most 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
+`samples.json.xz` still records the
 historical acceptance-gate counts for archive replay; they are not a
 publication claim.
 

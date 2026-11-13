@@ -150,8 +150,7 @@ frozen-density calls, with min–max bars. These are single-process observations
 not statistical rankings. Both engines' energy and force errors against the same
 untimed dense reference are [reported for every pair](benchmarks/results/readme-rtx5090-composed-20261111/errors.md)
 rather than gated. The largest are 2.1e-5 Eh/atom (DF HF, fitting error) and
-5.7e-5 Eh/Bohr (DF M06-2X) for both engines; wherever either force error exceeds
-1e-6 Eh/Bohr, the two engines agree within 25%.
+5.7e-5 Eh/Bohr (DF M06-2X) for both engines; call by call (cold with cold, warm with warm), the two engines' errors differ by at most 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
 See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-composed-20261111/README.md)
 for all 512 endpoints, the default convergence contract and reproducible
 timing/error summaries and exact source/image identities. Cold DF HF96 now takes
@@ -167,7 +166,8 @@ and **61/64 warm** cases. **H100 is not ahead everywhere:** the slow points are
 Direct HF96 (cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
 (48.3 vs 40.7 s), Direct r2SCAN-3c96 warm (4.02 vs 3.75 s) and DF HF96 warm
 (0.98 vs 0.75 s). [Per-pair errors](benchmarks/results/readme-h100-20261112/errors.md)
-match the RTX 5090 cohort: largest 2.1e-5 Eh/atom and 5.7e-5 Eh/Bohr for both engines.
+match the RTX 5090 cohort: largest 2.1e-5 Eh/atom and 5.7e-5 Eh/Bohr for both engines,
+with the same call-by-call bounds of 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
 
 ![Direct cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-direct-defaults-h100.svg)
 

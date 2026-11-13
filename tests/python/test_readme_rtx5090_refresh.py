@@ -185,3 +185,24 @@ def test_published_error_table_matches_retained_samples(
     directory = RESULTS / campaign
     data = json.loads(lzma.decompress((directory / "samples.json.xz").read_bytes()))
     assert (directory / "errors.md").read_text() == replay.error_table(data)
+
+
+@pytest.mark.parametrize(
+    "campaign", ["readme-rtx5090-composed-20261111", "readme-h100-20261112"]
+)
+def test_published_call_by_call_error_bounds_hold(campaign: str) -> None:
+    """README states absolute cold-with-cold / warm-with-warm error differences."""
+    data = json.loads(
+        lzma.decompress((RESULTS / campaign / "samples.json.xz").read_bytes())
+    )
+    indexed = {tuple(row["key"]): row["samples"] for row in data["populations"]}
+    largest = [0.0, 0.0]
+    for key, native in indexed.items():
+        if key[0] != "standard":
+            continue
+        reference = indexed[("gpu4pyscf", *key[1:])]
+        for left, right in zip(native, reference, strict=True):
+            for slot, column in enumerate((4, 5)):
+                largest[slot] = max(largest[slot], abs(left[column] - right[column]))
+    assert largest[0] <= 1.6e-9
+    assert largest[1] <= 3.5e-6
