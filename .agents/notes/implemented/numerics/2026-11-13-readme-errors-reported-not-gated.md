@@ -13,10 +13,16 @@ that an implementation was wrong.
 
 The retained samples show otherwise. In both the RTX 5090 #3072 cohort and the
 H100 `a7241b4fd` cohort, the six "failing" pairs (DF HF at all sizes,
-Direct/DF M06-2X3) have the same errors in both engines to two significant
-figures. These errors come from the shared default settings (JKFIT fitting
-error, default XC grid), not from either implementation. Wherever either
-engine's force error exceeds 1e-6 Eh/Bohr, the two engines agree within 25%.
+Direct/DF M06-2X3) have nearly the same errors in both engines. Call by call
+(cold with cold, warm with warm), the two engines' errors differ by at most
+1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr (maximum force component), far below the
+1e-5 / 1e-4 gate scales. These errors come from the shared default settings
+(JKFIT fitting error, default XC grid), not from either implementation.
+Relative agreement is not uniform: Direct ωB97M-V12 RMS force errors are
+2.6e-6 versus 1.9e-6 (37%), and Direct r2SCAN-3c3 cold maximum-component
+errors 1.34e-5 versus 0.99e-5 (35%), so absolute bounds are the published
+statement. The unthresholded "1,024 cross-engine vector comparisons pass"
+claim was dropped as an implicit gate.
 The GPU4PySCF publication likewise reports errors without pass/fail gates.
 
 ## Decision
