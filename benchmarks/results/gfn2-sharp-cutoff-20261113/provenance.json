@@ -1,0 +1,66 @@
+{
+  "scope": "historical CUDA campaign reconciliation; not current-source product completion",
+  "production_commit": "dc68eb0b2b496de18fd765bda577d836487b2883",
+  "integration_snapshot": "12d709e461301a6b65caa66108582a6a9804d9b7",
+  "historical_slurm_job": "2432",
+  "corrected_oracle_date": "2026-11-13",
+  "oracle_library_sha256": "ac1bdfea4cbae656b374608e92e4fdaaab9446d5a991365b41efba539d2a0ae9",
+  "python": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+  "numpy": "2.5.1",
+  "oracle": "tblite 0.6.0",
+  "xtb_config": {
+    "smooth_cutoff": 0.0
+  },
+  "max_iterations": 300,
+  "mixer_damping": 0.4,
+  "accuracy": 0.0001,
+  "temperature_hartree": 0.000950042573563535,
+  "current_cpu_validation": {
+    "source_commit": "95c3e547f96848e2fc3392d85fdfa1a68dff688b",
+    "library_sha256": "76a6199a5eca44a6bf513aa17b71cd56cfb746e2a8aa1e0ade7cf63e25046d1d",
+    "build_type": "Release",
+    "cuda": false,
+    "compiler": "GNU C++ 11.4.0",
+    "compiler_launcher": "sccache 0.16.0; generated commands verified",
+    "python_tests_passed": 225,
+    "python_tests_skipped": 11,
+    "d4_native_ctests_passed": 4,
+    "water128_history8_max300": "SCC_NOT_CONVERGED; no passing energy/force result",
+    "water128_history32_max300": {
+      "original": "converged in 131 iterations; one diagnostic observation only",
+      "original_energy_error": 1.263060767087154e-10,
+      "original_force_error": 1.0612201735427096e-8,
+      "moved": "SCC_NOT_CONVERGED; incomplete original/moved protocol"
+    }
+  },
+  "current_cuda_validation": {
+    "status": "NOT_QUALIFIED",
+    "reason": "full current-source rebuild interrupted; no passing current-source CUDA result claimed",
+    "retained_build_logs": "n2:/data/jzzeng/gqc-issue-560-20261113/",
+    "independent_frozen_replay": "separately qualified by Slurm 4456"
+  },
+  "archive_sha256": {
+    "inputs.json.xz": "0d04da74a44c856d20ad2cea4dc607ce603c8d48a1adbcb79cb80dabed212f9f",
+    "matched-oracle.json.xz": "c85823395491e7dcd9a1b1f7dd56b845e6ce937d15e541399ba4bb329163abf1",
+    "native-energy.json.xz": "6c149773cdecdbfa1ec26329674734e5d3bb0181da6d8f2c7418d2371f77f6cc",
+    "native-fixtures.json.xz": "c61fccea8788da818345936586b91d0f08537eb456a3db5f33996d4ea613d441",
+    "native-force.json.xz": "5a18116eca41d8d74f448d7b27a8fd0b81f39db348edcdd57624ecd9784930db",
+    "original-oracle.json.xz": "232582caaa24943ac209ac4a1ff385ea386e851d726f88938aab2ea6ed61600b",
+    "xtbloom-force.json.xz": "5b7ce8af211f4fa662eae2537d36e285b8ecf1293331007ff3018826b7a94d6b",
+    "replay-native-energy.json.xz": "d922aade4a82693f3cd3c78edf5935353daa027f58bbda011cf79ca9c0fbe685",
+    "replay-native-force.json.xz": "68dbfc0c08fe551b85785d887e1f46abb355a9eeb06b32df3f24db99e32d880a"
+  },
+  "replay": {
+    "slurm_job": "4456",
+    "node": "node2",
+    "partition": "main",
+    "gres": "gpu:pro6000:1",
+    "time_limit": "00:10:00",
+    "exit_code": 0,
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "device_uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "driver": "595.99.02",
+    "script_sha256": "e0e2ee16a1291cae354abeb63757b89c5aa533cff1cba9ebe03102573b527d08",
+    "scope": "fresh execution of frozen b73d8767 library; not current source"
+  }
+}

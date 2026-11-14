@@ -1,5 +1,12 @@
+from __future__ import annotations
+
 import re
+from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -231,16 +238,12 @@ def test_retired_feature_owners_are_absent() -> None:
     assert "Gfn2SccLoopCudaGraphOwner" in source
 
 
-def test_retired_descriptors_fail_before_staging(tmp_path: Path) -> None:
+def test_retired_descriptors_fail_before_staging(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
     """Exercise rejection using deliberately unreadable retired input buffers."""
-    import shutil
     import subprocess
 
-    import pytest
-
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler is required for the private admission contract")
     source = tmp_path / "admission.cpp"
     source.write_text(r"""
 #include "runtime/molecular_request.hpp"
@@ -295,17 +298,13 @@ int main() {
   assert(validate() == GENERATIVEQC_XTB_STATUS_NOT_SUPPORTED);
 }
 """)
-    executable = tmp_path / "admission"
-    subprocess.run(
-        [
-            compiler,
+    executable = replace(required_native_cxx, base_dir=ROOT).build_executable(
+        [source],
+        tmp_path / "admission",
+        compile_args=[
             "-std=c++17",
             "-I",
             str(ROOT / "src/xtb/native/src"),
-            str(source),
-            "-o",
-            str(executable),
         ],
-        check=True,
     )
     subprocess.run([str(executable)], check=True)
