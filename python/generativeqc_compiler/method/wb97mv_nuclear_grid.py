@@ -14,8 +14,8 @@ from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.method.nonlocal_pair import vv10_grid_local_expression
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import (
-    _mixed_program,
     _pair_program,
+    feature_mixed_program,
     feature_programs,
 )
 from generativeqc_compiler.method.wb97mv_grid_response import grid_maps
@@ -29,10 +29,13 @@ from generativeqc_compiler.tensor import (
     input_tensor,
     linearize,
     reduce_sum,
+    rewrite,
 )
 
 
-def nuclear_grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
+def nuclear_grid_maps(
+    points: int = 3, nao: int = 2, *, shared_contractions: bool = False
+) -> dict[str, Program]:
     """First/mixed AO-feature maps and the moving physical density cotangent.
 
     Both the AO bilinear and its density VJP are differentiated with TensorIR.
@@ -40,9 +43,11 @@ def nuclear_grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
     density leaves at execution, as required by the stationary nuclear partial.
     No point-by-AO-pair nuclear Jacobian or handwritten product rule is used.
     """
-    _, first = feature_programs(points, nao)
-    mixed = _mixed_program(points, nao)
-    potential = grid_maps(points, nao)["potential"]
+    _, first = feature_programs(points, nao, shared_contractions=shared_contractions)
+    mixed = feature_mixed_program(points, nao, shared_contractions=shared_contractions)
+    potential = grid_maps(points, nao, shared_contractions=shared_contractions)[
+        "potential"
+    ]
     replacements = {}
     for node in potential.nodes:
         replacements[node] = replace(
@@ -64,7 +69,7 @@ def nuclear_grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
         for name in ("left", "mixed", "base_partial", "right_partial")
     ]
     left, second, base, right = vectors
-    return {
+    result = {
         "feature_direction": Program(
             {name: first.outputs[f"d_{name}"] for name in labels}
         ),
@@ -82,6 +87,11 @@ def nuclear_grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
             }
         ),
     }
+    return (
+        {name: rewrite(program, "exact_cse") for name, program in result.items()}
+        if shared_contractions
+        else result
+    )
 
 
 @cache

@@ -22,8 +22,12 @@ namespace generativeqc::integrals {
  * This binder uses the explicit radial operator and never screens. It does
  * not replace the established full-Coulomb native/HF geometry path. Derived
  * overflow is reported to the caller; there is no fallback to another kernel.
+ * PositiveFullRangeMoments opts qualified CPU consumers into the shared
+ * positive Full-moment evaluator. The default and all LR/SR calls retain their
+ * existing schedule, and the opt-in does not widen the geometry input domain.
  */
-template <typename Geometry, unsigned MaximumOrder = 13, unsigned UnitGaussianSlots = 0>
+template <typename Geometry, unsigned MaximumOrder = 13, unsigned UnitGaussianSlots = 0,
+          bool PositiveFullRangeMoments = false>
 GENERATIVEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double* centers,
                                            unsigned maximum_order, CoulombRange range, double omega,
                                            Geometry& geometry) {
@@ -74,8 +78,15 @@ GENERATIVEQC_ERI_HD bool make_eri_geometry(const double* exponents, const double
   constexpr double pi = 0x1.921fb54442d18p+1;
   geometry.prefactor =
       (2 * std::pow(pi, 2.5) / p / q / std::sqrt(p + q)) * std::exp(-decay_argument);
-  return std::isfinite(geometry.prefactor) &&
-         bounded_range_moments<MaximumOrder>(maximum_order, geometry.rho * distance, geometry.rho,
+  if (!std::isfinite(geometry.prefactor)) return false;
+  if constexpr (PositiveFullRangeMoments) {
+    if (range == CoulombRange::Full && omega == 0 && std::isfinite(geometry.rho) &&
+        geometry.rho > 0 &&
+        bounded_full_range_moments<MaximumOrder>(maximum_order, geometry.rho * distance,
+                                                 geometry.boys))
+      return true;
+  }
+  return bounded_range_moments<MaximumOrder>(maximum_order, geometry.rho * distance, geometry.rho,
                                              range, omega, geometry.boys);
 }
 }  // namespace generativeqc::integrals

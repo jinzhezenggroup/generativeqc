@@ -15,9 +15,13 @@ from generativeqc_compiler.integral.ecp_grid import (
     radial_map_roots,
 )
 from generativeqc_compiler.integral.ecp_projector import (
+    column_roots,
+    direction_roots,
     emit_ecp_quadrature_cpp,
     pair_roots,
+    physical_second_roots,
     radial_roots,
+    second_pair_roots,
 )
 from generativeqc_compiler.integral.ir import EcpRadialTerm, OperatorSpec
 from generativeqc_compiler.integral.ir_serialization import (
@@ -26,6 +30,32 @@ from generativeqc_compiler.integral.ir_serialization import (
 )
 from generativeqc_compiler.integral.quadrature import legendre_step_roots
 from generativeqc_compiler.integral.shell_spec import cartesian_components
+
+
+def test_frozen_ecp_direction_keeps_independent_relative_slots() -> None:
+    """Project the canonical center gradients only after independent-slot AD."""
+    graph, (root,) = direction_roots()
+    for seed in range(7):
+        gradient = [math.sin(0.3 + seed + index) for index in range(6)]
+        first = [math.cos(0.2 + seed + axis) for axis in range(3)]
+        second = [math.sin(0.4 - seed + axis) for axis in range(3)]
+        center = [math.cos(0.7 - seed + axis) for axis in range(3)]
+        values = {f"gradient{index}": value for index, value in enumerate(gradient)}
+        values.update({f"u0_{axis}": value for axis, value in enumerate(first)})
+        values.update({f"u1_{axis}": value for axis, value in enumerate(second)})
+        values.update({f"center{axis}": value for axis, value in enumerate(center)})
+        expected = sum(
+            gradient[axis] * first[axis]
+            + gradient[3 + axis] * second[axis]
+            - (gradient[axis] + gradient[3 + axis]) * center[axis]
+            for axis in range(3)
+        )
+        assert graph.evaluate(root, values) == pytest.approx(
+            expected, abs=3e-15, rel=3e-15
+        )
+        for axis in range(3):
+            values[f"u0_{axis}"] = values[f"u1_{axis}"] = center[axis]
+        assert graph.evaluate(root, values) == 0
 
 
 def test_ecp_codegen_without_site_packages(tmp_path: typing.Any) -> None:
@@ -165,6 +195,156 @@ def test_generated_center_derivatives_independent_finite_difference() -> None:
                     # A-center derivative is minus the electronic-coordinate derivative.
                     expected = (reference(xyz - delta) - reference(xyz + delta)) / 2e-5
                     assert actual[axis + 1] == pytest.approx(expected, abs=2e-9)
+
+
+def test_second_ao_roots_against_independent_polynomial_products() -> None:
+    """All twenty Cartesian components retain exact center Hessians at nodes."""
+    from numpy.polynomial import Polynomial
+
+    rng = np.random.default_rng(2671)
+    alpha = 0.67
+    for angular in range(4):
+        for component in cartesian_components(angular):
+            graph, roots = gaussian_roots(component, order=2)
+            for coordinates in (np.zeros(3), rng.normal(size=3)):
+                actual = np.array(
+                    [
+                        graph.evaluate(
+                            root,
+                            dict(zip("xyz", coordinates, strict=True), alpha=alpha),
+                        )
+                        for root in roots
+                    ]
+                )
+                axis_values = []
+                for label, coordinate in zip("xyz", coordinates, strict=True):
+                    polynomial = Polynomial([0] * component.count(label) + [1])
+                    primal = polynomial(coordinate)
+                    first = (
+                        polynomial.deriv()(coordinate) - 2 * alpha * coordinate * primal
+                    )
+                    second = (
+                        polynomial.deriv(2)(coordinate)
+                        - 4 * alpha * coordinate * polynomial.deriv()(coordinate)
+                        + (4 * alpha**2 * coordinate**2 - 2 * alpha) * primal
+                    )
+                    axis_values.append((primal, -first, second))
+                exponential = np.exp(-alpha * (coordinates @ coordinates))
+                expected = [
+                    exponential * np.prod([values[0] for values in axis_values])
+                ]
+                for axis in range(3):
+                    expected.append(
+                        exponential
+                        * np.prod(
+                            [
+                                values[int(index == axis)]
+                                for index, values in enumerate(axis_values)
+                            ]
+                        )
+                    )
+                for row in range(3):
+                    for column in range(row, 3):
+                        expected.append(
+                            exponential
+                            * np.prod(
+                                [
+                                    values[int(index == row) + int(index == column)]
+                                    for index, values in enumerate(axis_values)
+                                ]
+                            )
+                        )
+                np.testing.assert_allclose(actual, expected, atol=3e-14, rtol=3e-13)
+    for order in (0, 3):
+        with pytest.raises(ValueError):
+            gaussian_roots("", order=order)
+
+
+def test_second_pair_roots_and_column_projection_against_independent_blocks() -> None:
+    """Canonical bilinear products and right actions have no occupancy factor."""
+    rng = np.random.default_rng(2627)
+    pair_graph, pair = second_pair_roots()
+    column_graph, column = column_roots()
+    physical_graph, physical = physical_second_roots()
+    for weight in (1.0, -0.31, 0.0):
+        first, second = rng.normal(size=(2, 10))
+        values = {
+            f"{slot}{index}": value
+            for slot, array in (("a", first), ("b", second))
+            for index, value in enumerate(array)
+        }
+        values["weight"] = weight
+        actual = np.array([pair_graph.evaluate(root, values) for root in pair])
+        gradient = (
+            np.concatenate((first[1:4] * second[0], second[1:4] * first[0])) * weight
+        )
+        hessian = np.empty((6, 6))
+        for row in range(3):
+            for other in range(3):
+                field = 4 + next(
+                    index
+                    for index, pair in enumerate(
+                        (row, column) for row in range(3) for column in range(row, 3)
+                    )
+                    if pair == (min(row, other), max(row, other))
+                )
+                hessian[row, other] = weight * first[field] * second[0]
+                hessian[3 + row, 3 + other] = weight * second[field] * first[0]
+                hessian[row, 3 + other] = hessian[3 + other, row] = (
+                    weight * first[1 + row] * second[1 + other]
+                )
+        np.testing.assert_allclose(
+            actual,
+            np.concatenate(
+                ([weight * first[0] * second[0]], gradient, hessian.ravel())
+            ),
+            atol=2e-15,
+        )
+        right = rng.normal(size=(3, 3))
+        relative = (right[:2] - right[2]).ravel()
+        fields = {f"jet{index}": value for index, value in enumerate(actual)}
+        fields.update(
+            weight=1.0,
+            weight_right=0.0,
+            **{
+                f"right{slot}_{axis}": right[slot, axis]
+                for slot in range(2)
+                for axis in range(3)
+            },
+            **{f"center{axis}": right[2, axis] for axis in range(3)},
+        )
+        projected = [column_graph.evaluate(root, fields) for root in column]
+        np.testing.assert_allclose(
+            projected,
+            np.concatenate(
+                (actual[:1], [gradient @ relative], gradient, hessian @ relative)
+            ),
+            atol=3e-15,
+        )
+        for weight_right in (0.23, -0.11):
+            fields["weight_right"] = weight_right
+            expected = np.asarray(projected).copy()
+            expected[1] += weight_right * actual[0]
+            expected[8:] += weight_right * gradient
+            np.testing.assert_allclose(
+                [column_graph.evaluate(root, fields) for root in column],
+                expected,
+                atol=3e-15,
+            )
+        fields["weight_right"] = 0.0
+        incidence = rng.integers(-1, 2, size=(2, 6)).astype(float)
+        fields.update(
+            {
+                f"{slot}{axis}": incidence[index, axis]
+                for index, slot in enumerate(("first", "second"))
+                for axis in range(6)
+            }
+        )
+        np.testing.assert_allclose(
+            [physical_graph.evaluate(root, fields) for root in physical],
+            [gradient @ incidence[0], incidence[0] @ hessian @ incidence[1]],
+            atol=5e-15,
+        )
 
 
 def test_invalid_ecp_lowerings_fail_closed() -> None:

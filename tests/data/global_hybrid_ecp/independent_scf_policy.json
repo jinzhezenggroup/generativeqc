@@ -1,0 +1,19 @@
+{
+  "schema": "generativeqc.canonical-heavy-independent-scf/v1",
+  "defaults": {"final_diagonalization": true, "orbital_gradient_tolerance": 1e-10, "gradient_stencil_order": 2},
+  "cases": {
+    "ni-uks": {"final_diagonalization": false, "orbital_gradient_tolerance": 1e-11, "gradient_stencil_order": 4},
+    "ni-i-stationary-rks": {
+      "final_diagonalization": false,
+      "orbital_gradient_tolerance": 1e-11,
+      "gradient_stencil_order": 4,
+      "max_iterations": 240,
+      "diis": "common-gram-normalization"
+    }
+  },
+  "energy_tolerance": 1e-13,
+  "iteration_allowance": "native_scf_max_iterations from native_curvature_manifest.json",
+  "initial_state": "cold default independent guess at every geometry; no native or neighbor seeding",
+  "acceptance": "converged flag plus unchanged state/root/gradient/matrix gates in native_curvature_manifest.json",
+  "no_final_diagonalization": "fresh cold SCF only; independently recompute actual physical orbital-gradient norm below the declared SCF tolerance; never mark a failed state converged"
+}

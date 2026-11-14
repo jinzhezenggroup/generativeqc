@@ -6,6 +6,7 @@
 
 #include "generated_ecp_ao.cuh"
 #include "integrals/ecp_gaussian.hpp"
+#include "integrals/ecp_grid_cpu.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -13,19 +14,6 @@
 namespace generativeqc::integrals {
 namespace {
 constexpr int projector_count = generated::ecp_projector_count;
-struct Component {
-  unsigned x, y, z;
-  double coefficient;
-};
-struct AO {
-  const core::Shell* shell;
-  int primitive_offset{}, primitive_count{}, term_count{};
-  double x, y, z;
-  Component components[3];
-};
-struct Jet {
-  double v[4];
-};
 }  // namespace
 
 void ecp_quadrature(unsigned radial, unsigned angular, std::vector<EcpRadialPoint>& radii,
@@ -43,34 +31,7 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
   const auto size = runtime::size_mul(n, n);
   const auto ncoord = derivatives ? runtime::size_mul(3, system.atoms.size()) : 0;
   const auto derivative_elements = runtime::size_mul(ncoord, size);
-  std::vector<AO> aos;
-  for (const auto& shell : system.shells) {
-    if (shell.primitives.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-      throw std::overflow_error("ECP primitive count exceeds the generated index type");
-    const auto& position = system.atoms[shell.atom_index].position;
-    const auto expansions =
-        molecule::ao_expansions(shell.angular_momentum, system.basis_representation);
-    if (std::any_of(expansions.begin(), expansions.end(),
-                    [](const auto& expansion) { return expansion.size() > 3; }))
-      throw std::invalid_argument("ECP AO expansion exceeds validated domain");
-    for (const auto& expansion : expansions) {
-      AO ao{&shell,
-            0,
-            static_cast<int>(shell.primitives.size()),
-            static_cast<int>(expansion.size()),
-            position[0],
-            position[1],
-            position[2],
-            {}};
-      for (unsigned t = 0; t < expansion.size(); ++t) {
-        const auto& v = expansion[t];
-        ao.components[t] = {v.component[0], v.component[1], v.component[2],
-                            generated::ecp_component_coefficient(v.component[0], v.component[1],
-                                                                 v.component[2], v.coefficient)};
-      }
-      aos.push_back(ao);
-    }
-  }
+  const auto aos = ecp_grid_cpu::orbitals(system);
   EcpData out{n, ncoord, std::vector<double>(size), std::vector<double>(size), {}, {}};
   out.local_derivative.resize(derivative_elements);
   out.nonlocal_derivative.resize(derivative_elements);
@@ -80,53 +41,34 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
   ecp_quadrature(radial, angular, radii, sphere);
   // A radial layer is still the lifetime boundary. Share its potentials and
   // projected AO jets across every pair, independently of radial grid length.
-  std::vector<Jet> values(runtime::size_mul(n, sphere.size())),
-      projections(runtime::size_mul(n, projector_count));
-  runtime::sample_cpu_capacity(
-      runtime::vector_capacities(out.local, out.nonlocal, out.local_derivative,
-                                 out.nonlocal_derivative, aos, radii, sphere, values, projections));
+  ecp_grid_cpu::Scratch scratch{
+      std::vector<ecp_grid_cpu::Jet>(runtime::size_mul(n, sphere.size())),
+      std::vector<ecp_grid_cpu::Jet>(runtime::size_mul(n, projector_count))};
+  runtime::sample_cpu_capacity(runtime::vector_capacities(
+      out.local, out.nonlocal, out.local_derivative, out.nonlocal_derivative, aos, radii, sphere,
+      scratch.values, scratch.projections));
   for (std::size_t center = 0; center < system.atoms.size(); ++center) {
     if (!system.atoms[center].ecp_core) continue;
-    const auto& c = system.atoms[center].position;
     for (const auto& radial_point : radii) {
-      double potentials[generated::ecp_max_projector_angular + 2];
-      generated::ecp_potentials(system.ecp_terms.data(), system.ecp_terms.size(), radial_point,
-                                center, potentials);
-      if (std::all_of(std::begin(potentials), std::end(potentials),
-                      [](double v) { return v == 0; }))
-        continue;
-      for (std::size_t a = 0; a < n; ++a) {
-        for (std::size_t q = 0; q < sphere.size(); ++q)
-          values[a * sphere.size() + q] =
-              generated::ecp_evaluate_ao<Jet>(aos[a], aos[a].shell->primitives.data(), sphere[q],
-                                              radial_point.r, c[0], c[1], c[2], derivatives);
-        for (int m = 0; m < projector_count; ++m)
-          projections[a * projector_count + m] = generated::ecp_project(
-              values.data() + a * sphere.size(), sphere.data(), sphere.size(), m, derivatives);
-      }
-      for (std::size_t a = 0; a < n; ++a)
-        for (std::size_t b = 0; b <= a; ++b) {
-          double parts[2][10];
-          generated::ecp_contract_potentials(
-              potentials, sphere.data(), sphere.size(), values.data() + a * sphere.size(),
-              values.data() + b * sphere.size(), projections.data() + a * projector_count,
-              projections.data() + b * projector_count, derivatives, parts);
-          for (unsigned part = 0; part < 2; ++part) {
-            const auto& v = parts[part];
-            auto& matrix = part == 0 ? out.local : out.nonlocal;
-            auto& gradient = part == 0 ? out.local_derivative : out.nonlocal_derivative;
-            for (unsigned transpose = 0; transpose < (a == b ? 1U : 2U); ++transpose) {
-              const auto item = transpose ? b * n + a : a * n + b;
-              matrix[item] += v[0];
-              if (derivatives)
-                for (unsigned d = 0; d < 3; ++d) {
-                  gradient[(aos[a].shell->atom_index * 3 + d) * size + item] += v[d + 1];
-                  gradient[(aos[b].shell->atom_index * 3 + d) * size + item] += v[d + 4];
-                  gradient[(center * 3 + d) * size + item] += v[d + 7];
-                }
+      ecp_grid_cpu::layer(
+          system, aos, radial_point, sphere, center, derivatives, scratch,
+          [&](std::size_t a, std::size_t b, const double (&parts)[2][10]) {
+            for (unsigned part = 0; part < 2; ++part) {
+              const auto& v = parts[part];
+              auto& matrix = part == 0 ? out.local : out.nonlocal;
+              auto& gradient = part == 0 ? out.local_derivative : out.nonlocal_derivative;
+              for (unsigned transpose = 0; transpose < (a == b ? 1U : 2U); ++transpose) {
+                const auto item = transpose ? b * n + a : a * n + b;
+                matrix[item] += v[0];
+                if (derivatives)
+                  for (unsigned d = 0; d < 3; ++d) {
+                    gradient[(aos[a].shell->atom_index * 3 + d) * size + item] += v[d + 1];
+                    gradient[(aos[b].shell->atom_index * 3 + d) * size + item] += v[d + 4];
+                    gradient[(center * 3 + d) * size + item] += v[d + 7];
+                  }
+              }
             }
-          }
-        }
+          });
     }
   }
   return out;

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <span>
+#include <vector>
 
 #include "response/linear_problem.hpp"
 #include "runtime/tracked_allocator.hpp"
@@ -74,6 +75,16 @@ struct GmresPlan {
   GmresOptions options;
 };
 
+/** Perturbation-specific borrowed inputs. Preconditioners act independently;
+ * their callable/setup storage and workspace remain caller-owned.
+ */
+struct ResponseSolveRequest {
+  std::span<const double> rhs;
+  std::span<const double> initial_guess{};
+  std::span<const double> diagonal_preconditioner{};
+  LinearOperator right_preconditioner{};
+};
+
 struct GmresResult {
   /** Empty on workspace refusal; no dimension-sized output is allocated. */
   runtime::TrackedVector<double> solution;
@@ -116,5 +127,22 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess = {},
                         std::span<const double> diagonal_preconditioner = {},
                         const LinearOperator& right_preconditioner = {});
+
+/** Conservative simultaneous numeric payload, including all retained results.
+ * One to four independent states use exactly the single-RHS numerical owner.
+ * No threads, coupled Krylov equations or residual-replay shortcuts are used.
+ * Scalar/controller/allocator metadata and physical-action storage are excluded,
+ * as for prepare_gmres; enclosing endpoint owners must admit them separately.
+ */
+std::size_t gmres_batch_workspace_bytes(const GmresPlan& plan, std::size_t request_count,
+                                        std::size_t concurrent_requests);
+/** Empty on aggregate/per-solve workspace refusal, before numeric allocation or
+ * callbacks. Callback exceptions unwind every live state; no partial batch is
+ * returned. Per-RHS operator timing includes wall time shared with other RHSs.
+ */
+std::vector<GmresResult> solve_gmres_batch(const GmresPlan& plan, const BatchLinearOperator& apply,
+                                           std::span<const ResponseSolveRequest> requests,
+                                           std::size_t concurrent_requests,
+                                           std::size_t max_numeric_bytes);
 
 }  // namespace generativeqc::response

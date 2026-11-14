@@ -137,8 +137,23 @@ def build_ks_cpks_maps(
     weights_motion = _rebuild(weights_jvp, replacements)
     metric_density = density_motion(metric)
     final_density = density_motion(moving)
+    rhs = add(
+        ov(total_fock),
+        multiply(ov(overlap), energy_sum),
+        coefficients=(-1, Fraction(1, 2)),
+    )
     return {
         "reference_weights": weights,
+        "nuclear_fock": Program(
+            {
+                "frozen_fock": add(
+                    tensor("integral", "ao", "ao"),
+                    tensor("ecp_local", "ao", "ao"),
+                    tensor("ecp_nonlocal", "ao", "ao"),
+                    tensor("xc", "ao", "ao"),
+                )
+            }
+        ),
         "metric": Program(
             {
                 "gap": gap,
@@ -149,14 +164,9 @@ def build_ks_cpks_maps(
         ),
         "rotation": density_motion(rotating),
         "action": Program({"action": add(multiply(gap, rotation), ov(induced))}),
-        "rhs": Program(
-            {
-                "rhs": add(
-                    ov(total_fock),
-                    multiply(ov(overlap), energy_sum),
-                    coefficients=(-1, Fraction(1, 2)),
-                )
-            }
+        "rhs": Program({"rhs": rhs}),
+        "physical_residual": Program(
+            {"residual": add(rhs, multiply(gap, rotation), coefficients=(1, -1))}
         ),
         "density": Program(
             {"orbital_motion": moving, "density": final_density.outputs["d_density"]},

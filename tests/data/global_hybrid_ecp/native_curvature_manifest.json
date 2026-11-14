@@ -1,0 +1,74 @@
+{
+  "schema": "generativeqc.native-canonical-heavy-curvature/v2",
+  "method": "B3LYP-D3(BJ)",
+  "electronic_definition": "Gaussian/VWN-RPA",
+  "dispersion": "uncut two-body BJ; ATM off",
+  "basis": "canonical external real-spherical def2-SVP",
+  "grid": "native-default-v4-level3",
+  "difference_steps_bohr": [0.003, 0.001, 0.0003],
+  "gates": {
+    "energy": 2e-8,
+    "density": 2e-7,
+    "gradient": 1e-5,
+    "independent_orbital_gradient": 2e-9,
+    "independent_electron_count": 1e-8,
+    "minimum_occupied_root_overlap": 0.99,
+    "response_residual": 2e-10,
+    "raw_hessian": 1e-5,
+    "raw_hvp": 1e-5,
+    "raw_symmetry": 2e-8,
+    "translation": 2e-8,
+    "hessian_hvp": 2e-8,
+    "bilinear": 2e-8,
+    "partition_ao_envelope": 1e-12
+  },
+  "cases": {
+    "cs-rks": {
+      "atoms_bohr": [["Cs", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.4]]],
+      "charge": 0, "multiplicity": 1, "ecp_core": 46, "max_eri_primitives": 100000000,
+      "native_scf_max_iterations": 240
+    },
+    "cs-uks": {
+      "atoms_bohr": [["Cs", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.4]]],
+      "charge": 1, "multiplicity": 2, "ecp_core": 46, "max_eri_primitives": 100000000,
+      "native_scf_max_iterations": 240
+    },
+    "i-rks": {
+      "atoms_bohr": [["I", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.1]]],
+      "charge": 0, "multiplicity": 1, "ecp_core": 28, "max_eri_primitives": 300000000,
+      "native_scf_max_iterations": 240
+    },
+    "i-uks": {
+      "atoms_bohr": [["I", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.1]], ["H", [2.8, -0.7, -0.3]]],
+      "charge": 0, "multiplicity": 2, "ecp_core": 28, "max_eri_primitives": 300000000,
+      "native_scf_max_iterations": 240
+    },
+    "ni-uks": {
+      "atoms_bohr": [["Ni", [0.01, -0.02, 0.03]], ["H", [1.8, 0.1, 0.03]], ["H", [-0.5, 2.4, 0.3]], ["H", [-1.7, -0.8, 1.1]]],
+      "charge": 0, "multiplicity": 2, "ecp_core": 0, "max_eri_primitives": 1000000000,
+      "native_scf_max_iterations": 600
+    },
+    "ni-i-stationary-rks": {
+      "atoms_bohr": [
+        ["Ni", [0.0, 0.0, 0.0]],
+        ["H", [2.606514003323138, 0.0, -0.6828240964774086]],
+        ["I", [0.2422408747592803, 0.0, 4.46344979762224]]
+      ],
+      "charge": 0, "multiplicity": 1, "ecp_core": 28,
+      "max_eri_primitives": 1000000000,
+      "native_scf_max_iterations": 600,
+      "stationary": {
+        "gradient_maximum": 2e-7,
+        "masses_dalton": [57.93534241, 1.00782503223, 126.9044719],
+        "mass_convention": "Ni-58, H-1, I-127 physical isotope masses; no ECP core subtraction",
+        "negative_modes": 0,
+        "rigid_modes": 6,
+        "frequency_absolute_tolerance_cm1": 0.2,
+        "frequency_relative_tolerance": 1e-5,
+        "minimum_mode_overlap": 0.99,
+        "rotation_convention": "explicit supplied-H geometric projection only; raw grid rotational residuals are retained, not repaired or exact-continuum invariance certified",
+        "scope": "small mixed all-electron Ni/iodine28core stationary control, not a reaction TS or complete-scale qualification"
+      }
+    }
+  }
+}

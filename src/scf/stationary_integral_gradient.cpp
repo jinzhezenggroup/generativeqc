@@ -10,6 +10,7 @@
 #include "generated_native_range_force.hpp"
 #include "generated_stationary_integral_weights.hpp"
 #include "integrals/ecp.hpp"
+#include "integrals/eri_symmetry.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -147,10 +148,16 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
                              source_density.data(), source_weighted_density.data(), nbf, indices);
     }
   const std::vector<double> zeros(matrix, 0.0);
-  const auto hcore =
-      integrals::contract_weighted_one_electron_derivative(system, zeros, hcore_weights, false);
-  const auto pulay =
-      integrals::contract_weighted_one_electron_derivative(system, pulay_weights, zeros, false);
+  const auto hcore = [&] {
+    runtime::host_trace::Region phase("cpu_stationary_hcore", nbf);
+    return integrals::contract_weighted_one_electron_derivative(system, zeros, hcore_weights,
+                                                                false);
+  }();
+  const auto pulay = [&] {
+    runtime::host_trace::Region phase("cpu_stationary_pulay", nbf);
+    return integrals::contract_weighted_one_electron_derivative(system, pulay_weights, zeros,
+                                                                false);
+  }();
   std::copy(hcore.begin(), hcore.end(), result.sources.begin());
   std::copy(pulay.begin(), pulay.end(), result.sources.begin() + ncoord);
   std::vector<double> coulomb_weights, exchange_weights;
@@ -163,69 +170,88 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       result.numeric_capacity,
       runtime::size_add(retained_capacity, runtime::size_mul(hybrid ? 24 : 12, sizeof(double))));
   if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
-  for (std::size_t first = 0; first < system.shells.size(); ++first)
-    for (std::size_t second = 0; second < system.shells.size(); ++second)
-      for (std::size_t third = 0; third < system.shells.size(); ++third)
-        for (std::size_t fourth = 0; fourth < system.shells.size(); ++fourth) {
-          const std::array<std::size_t, 4> shells{first, second, third, fourth};
-          // Moving every slot together is a translation, even for distinct
-          // shells on one center. Keep independent-slot jets in the integral
-          // provider; only this physical nuclear contraction may elide them.
-          const auto atom = system.shells[first].atom_index;
-          if (system.shells[second].atom_index == atom && system.shells[third].atom_index == atom &&
-              system.shells[fourth].atom_index == atom)
-            continue;
-          coulomb_weights.clear();
-          exchange_weights.clear();
-          for (std::size_t ao_first = offsets[first]; ao_first < offsets[first + 1]; ++ao_first)
-            for (std::size_t ao_second = offsets[second]; ao_second < offsets[second + 1];
-                 ++ao_second)
-              for (std::size_t ao_third = offsets[third]; ao_third < offsets[third + 1]; ++ao_third)
-                for (std::size_t ao_fourth = offsets[fourth]; ao_fourth < offsets[fourth + 1];
-                     ++ao_fourth) {
-                  const std::int64_t indices[]{
-                      static_cast<std::int64_t>(ao_first), static_cast<std::int64_t>(ao_second),
-                      static_cast<std::int64_t>(ao_third), static_cast<std::int64_t>(ao_fourth)};
-                  coulomb_weights.push_back(
-                      unrestricted
-                          ? generated::pbe_uks::coulomb(
-                                source_density.data(), source_weighted_density.data(), nbf, indices)
-                          : generated::pbe::coulomb(source_density.data(),
-                                                    source_weighted_density.data(), nbf, indices));
-                  if (hybrid) {
-                    // TensorIR cotangent for ordered (ab|cd): Fock K coefficient
-                    // / 2 * sum_spin D[a,c] D[b,d]. No named hybrid fractions.
-                    const auto ac = ao_first * nbf + ao_third;
-                    const auto bd = ao_second * nbf + ao_fourth;
-                    double pairing = source_density[ac] * source_density[bd];
-                    if (unrestricted)
-                      pairing += source_density[matrix + ac] * source_density[matrix + bd];
-                    exchange_weights.push_back(0.5 * strategy.spec.exchange.coefficient * pairing);
-                  }
-                }
-          const std::array<std::span<const double>, 2> channels{coulomb_weights, exchange_weights};
-          std::uint64_t evaluations = 0;
-          const auto derivatives = integrals::contract_weighted_eri_shell_derivatives(
-              system, shells, std::span(channels).first(hybrid ? 2 : 1), &evaluations,
-              integrals::WeightedEriDerivativeExecution::PackagedCpu);
-          if (evaluations >
-              std::numeric_limits<std::uint64_t>::max() - result.primitive_evaluations)
-            throw std::overflow_error("stationary Direct primitive work count overflow");
-          result.primitive_evaluations += evaluations;
-          if (result.shell_quartets == std::numeric_limits<std::uint64_t>::max())
-            throw std::overflow_error("stationary Direct shell work count overflow");
-          ++result.shell_quartets;
-          const auto live_capacity =
-              runtime::size_add(retained_capacity, runtime::vector_bytes(derivatives));
-          result.numeric_capacity = std::max(result.numeric_capacity, live_capacity);
-          if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
-          runtime::sample_cpu_capacity(live_capacity);
-          for (std::size_t channel = 0; channel < derivatives.size(); ++channel)
-            for (std::size_t slot = 0; slot < shells.size(); ++slot)
-              for (std::size_t axis = 0; axis < 3; ++axis)
-                result.sources[(2 + channel) * ncoord + 3 * system.shells[shells[slot]].atom_index +
-                               axis] += derivatives[channel][3 * slot + axis];
-        }
+  // Fold ordered cotangents, not integral values or density assumptions. Each
+  // distinct shell permutation appears once; repeated shells already enumerate
+  // their full AO component block and must not acquire an extra multiplicity.
+  const auto eri_permutations = integrals::eri_permutations({0, 1, 2, 3});
+  runtime::host_trace::Region two_electron_phase("cpu_stationary_two_electron", nbf);
+  integrals::for_each_unique_eri_quartet(system.shells.size(), [&](const auto& shells) {
+    const auto [first, second, third, fourth] = shells;
+    // Moving every slot together is a translation, even for distinct
+    // shells on one center. Keep independent-slot jets in the integral
+    // provider; only this physical nuclear contraction may elide them.
+    const auto atom = system.shells[first].atom_index;
+    if (system.shells[second].atom_index == atom && system.shells[third].atom_index == atom &&
+        system.shells[fourth].atom_index == atom)
+      return;
+    std::array<std::array<std::size_t, 4>, 8> orbit{};
+    std::size_t orbit_size = 0;
+    for (const auto& candidate : eri_permutations) {
+      const auto same_shells = [&](const auto& retained) {
+        for (std::size_t slot = 0; slot < shells.size(); ++slot)
+          if (shells[candidate[slot]] != shells[retained[slot]]) return false;
+        return true;
+      };
+      if (std::none_of(orbit.begin(), orbit.begin() + orbit_size, same_shells))
+        orbit[orbit_size++] = candidate;
+    }
+    coulomb_weights.clear();
+    exchange_weights.clear();
+    for (std::size_t ao_first = offsets[first]; ao_first < offsets[first + 1]; ++ao_first)
+      for (std::size_t ao_second = offsets[second]; ao_second < offsets[second + 1]; ++ao_second)
+        for (std::size_t ao_third = offsets[third]; ao_third < offsets[third + 1]; ++ao_third)
+          for (std::size_t ao_fourth = offsets[fourth]; ao_fourth < offsets[fourth + 1];
+               ++ao_fourth) {
+            const std::array<std::size_t, 4> aos{ao_first, ao_second, ao_third, ao_fourth};
+            double coulomb = 0.0, exchange = 0.0;
+            for (std::size_t permutation = 0; permutation < orbit_size; ++permutation) {
+              const auto& slots = orbit[permutation];
+              const std::int64_t indices[]{static_cast<std::int64_t>(aos[slots[0]]),
+                                           static_cast<std::int64_t>(aos[slots[1]]),
+                                           static_cast<std::int64_t>(aos[slots[2]]),
+                                           static_cast<std::int64_t>(aos[slots[3]])};
+              coulomb +=
+                  unrestricted
+                      ? generated::pbe_uks::coulomb(source_density.data(),
+                                                    source_weighted_density.data(), nbf, indices)
+                      : generated::pbe::coulomb(source_density.data(),
+                                                source_weighted_density.data(), nbf, indices);
+              if (hybrid) {
+                // TensorIR ordered cotangent, including asymmetric D:
+                // K coefficient / 2 * sum_spin D[a,c] D[b,d].
+                const auto ac = aos[slots[0]] * nbf + aos[slots[2]];
+                const auto bd = aos[slots[1]] * nbf + aos[slots[3]];
+                double pairing = source_density[ac] * source_density[bd];
+                if (unrestricted)
+                  pairing += source_density[matrix + ac] * source_density[matrix + bd];
+                exchange += 0.5 * strategy.spec.exchange.coefficient * pairing;
+              }
+            }
+            coulomb_weights.push_back(coulomb);
+            if (hybrid) exchange_weights.push_back(exchange);
+          }
+    const std::array<std::span<const double>, 2> channels{coulomb_weights, exchange_weights};
+    std::uint64_t evaluations = 0;
+    const auto derivatives = integrals::contract_weighted_eri_shell_derivatives(
+        system, shells, std::span(channels).first(hybrid ? 2 : 1), &evaluations,
+        integrals::WeightedEriDerivativeExecution::PackagedCpu);
+    if (evaluations > std::numeric_limits<std::uint64_t>::max() - result.primitive_evaluations)
+      throw std::overflow_error("stationary Direct primitive work count overflow");
+    result.primitive_evaluations += evaluations;
+    if (result.shell_quartets == std::numeric_limits<std::uint64_t>::max())
+      throw std::overflow_error("stationary Direct shell work count overflow");
+    ++result.shell_quartets;
+    const auto live_capacity =
+        runtime::size_add(retained_capacity, runtime::vector_bytes(derivatives));
+    result.numeric_capacity = std::max(result.numeric_capacity, live_capacity);
+    if (result.numeric_capacity > maximum_numeric_bytes) throw std::bad_alloc();
+    runtime::sample_cpu_capacity(live_capacity);
+    for (std::size_t channel = 0; channel < derivatives.size(); ++channel)
+      for (std::size_t slot = 0; slot < shells.size(); ++slot)
+        for (std::size_t axis = 0; axis < 3; ++axis)
+          result.sources[(2 + channel) * ncoord + 3 * system.shells[shells[slot]].atom_index +
+                         axis] += derivatives[channel][3 * slot + axis];
+  });
   if (!std::all_of(result.sources.begin(), result.sources.end(),
                    [](double value) { return std::isfinite(value); }))
     throw std::runtime_error("stationary Direct integral sources are nonfinite");

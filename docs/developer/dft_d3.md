@@ -19,11 +19,18 @@ parameter-catalog availability never implies executable capability. Invalid
 coefficients and mismatched table identities are likewise rejected rather than
 silently approximated.
 
-The audited method catalog includes `PBE-D3(BJ)` and `PBE0-D3(BJ)`. Their
+The audited method catalog includes `PBE-D3(BJ)`, `PBE0-D3(BJ)` and
+`B3LYP-D3(BJ)`. Their
 `MethodIR` graphs contain the normal semilocal/exact-exchange primitives followed
 by one `DispersionCorrectionPrimitive`. The correction identity is independent
 of a descriptive manifest name and is checked against the compiled table hashes
 when a production owner is prepared.
+The dispersion primitive declares second nuclear Hessian/HVP requests only
+for uncut, two-body BJ with ATM off. D4, zero damping, ATM and finite cutoffs do
+not inherit this declaration. This changes the full corrected MethodIR identity,
+not its electronic projection or pinned parameter/data identities. Native
+second-order electronic admission remains separate; see the
+[linked CPU composition contract](dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
 
 Energy is in Hartree; coordinates are in bohr. The correction returns
 **gradient = dE/dR**, including explicit pair-distance and coordination-number
@@ -324,9 +331,13 @@ Its independently qualified domain is uncut BJ with ATM off. Correction-only
 HVP/full-matrix requests have separate work, generation, workspace and output
 admission. Finite cutoffs, zero damping, ATM and D4 do not inherit that domain.
 
-The installed `Calculator` composes this source with already-qualified CPU
-direct all-electron full-range PBE0/B3LYP RKS curvature. Electronic response
-owners are closed before correction execution; detached electronic outputs,
+The `Calculator` admits this correction only with an already-qualified
+electronic curvature domain. Exact canonical B3LYP RKS/UKS, including the
+qualified scalar-ECP exception, uses the linked native CPU aggregate owner and
+native D3 source rather than frontend composition or runtime compilation; see
+[the native Hessian contract](dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+Other admitted CPU full-range compositions retain the detached-source path.
+There, electronic response owners are closed before correction execution; detached electronic outputs,
 private totals and immutable publication still count against simultaneous
 correction storage. Full matrices stream D3 actions into a private electronic
 copy. The total is never symmetrized, projected or published after a correction
@@ -342,7 +353,8 @@ Independent acceptance gates and the exact small molecular fixture are frozen
 in `tests/data/d3_second_order/manifest.json`. The public tests compare all raw
 total-method columns against multistep independently reconverged PySCF moving-grid
 gradients plus simple-dftd3 gradients, with the Gaussian/VWN-RPA definition
-supplied explicitly. These tests do not qualify UKS, ECP or native TS tasks.
+supplied explicitly. These RKS fixture tests alone do not qualify UKS, ECP or
+native TS tasks; those require their separate complete electronic endpoints.
 
 ## Parameter catalog availability
 

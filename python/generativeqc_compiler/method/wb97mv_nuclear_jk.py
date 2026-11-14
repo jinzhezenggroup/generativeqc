@@ -7,9 +7,9 @@ used by native exact/fitted Fock response; no density positivity is assumed.
 
 from __future__ import annotations
 
-from dataclasses import replace
 from functools import lru_cache
 
+from generativeqc_compiler.method.ordered_quartet import density_incidence
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
@@ -17,7 +17,6 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.tensor import (
-    Node,
     Program,
     add,
     linearize,
@@ -28,22 +27,6 @@ from generativeqc_compiler.tensor import (
 
 PARTS = ("primary", "correction", "coulomb", "short", "long")
 SLOTS = ("coulomb_left", "coulomb_right", "exchange_left", "exchange_right")
-
-
-def _rename_density(program: Program, exchange: bool) -> Node:
-    """Rebind SSA density leaves to their distinct ordered quartet incidences."""
-    prefix = "exchange" if exchange else "coulomb"
-    mapped = {}
-    for node in program.nodes:
-        attrs = dict(node.attrs)
-        if node.op == "input" and attrs["name"] in ("density_left", "density_right"):
-            attrs["name"] = attrs["name"].replace("density", prefix)
-        mapped[node] = replace(
-            node,
-            inputs=tuple(mapped[value] for value in node.inputs),
-            attributes=tuple(attrs.items()),
-        )
-    return mapped[program.outputs["energy"]]
 
 
 @lru_cache(maxsize=None, typed=True)
@@ -65,11 +48,11 @@ def quartet_program(spins: int, part: str) -> Program:
     roots = []
     if part in ("primary", "coulomb"):
         roots.append(
-            _rename_density(
+            density_incidence(
                 plan.integral_block(
                     "coulomb", terms=1, differentiate_densities=True
                 ).objective,
-                False,
+                exchange=False,
             )
         )
     if part != "coulomb":
@@ -84,7 +67,7 @@ def quartet_program(spins: int, part: str) -> Program:
             differentiate_densities=True,
             mixed_density_fitted_correction=part == "correction",
         )
-        roots.append(_rename_density(block.objective, True))
+        roots.append(density_incidence(block.objective, exchange=True))
     objective = Program({"energy": add(*roots) if len(roots) > 1 else roots[0]})
     density_names = tuple(
         name

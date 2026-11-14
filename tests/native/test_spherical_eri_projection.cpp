@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -11,6 +13,21 @@
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
+
+namespace {
+thread_local std::size_t allocation_limit = std::numeric_limits<std::size_t>::max();
+}
+
+void* operator new(std::size_t bytes) {
+  if (bytes > allocation_limit) throw std::bad_alloc();
+  if (auto* result = std::malloc(std::max(bytes, std::size_t{1}))) return result;
+  throw std::bad_alloc();
+}
+void* operator new[](std::size_t bytes) { return ::operator new(bytes); }
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete[](void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -227,7 +244,16 @@ void exercise_distinct_f_shells() {
   require(
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "four-f fixture normalization failed");
-  const auto actual = build_integrals(system, false);
+  // Public 28^4 storage fits this per-allocation limit; the old Cartesian
+  // 40^4 intermediate does not. This is an executable capacity contract.
+  const auto actual = [&] {
+    struct Limit {
+      std::size_t previous = allocation_limit;
+      Limit() { allocation_limit = 8U << 20; }
+      ~Limit() { allocation_limit = previous; }
+    } limit;
+    return build_integrals(system, false);
+  }();
   RawSource source(system);
   std::vector<double> raw(7 * 7 * 7 * 7);
   source.read(RawSource::Operator::eri, {0, 7, 14, 21}, {7, 7, 7, 7}, raw.data(), raw.size());

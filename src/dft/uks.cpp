@@ -15,6 +15,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -129,6 +130,7 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
                         const Matrix& alpha, const Matrix& beta, SpinXcEvaluator evaluate_xc,
                         const ScfOptions& options, dft::nlc::Vv10Plan* nonlocal_correlation,
                         dft::nlc::Vv10DensityDomain nonlocal_domain) {
+  runtime::df_progress::Scope trace("uks_physical_evaluation");
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(alpha, beta);
   SpinEvaluation out;
@@ -205,6 +207,9 @@ ScfResult run_uks_impl(
     dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
   using namespace reference;
+  runtime::df_progress::Scope trace("uks_scf");
+  runtime::df_progress::number("basis_dimension", basis.nao);
+  runtime::df_progress::number("grid_points", grid.point_count());
   const auto& strategy = plan.strategy();
   validate_resolved_fock_build(strategy);
   if (options.compute_forces)
@@ -411,6 +416,8 @@ ScfResult run_uks_impl(
                                         history_energy_change, progress.state_rms,
                                         progress.residual_rms, diagnostic.electrons,
                                         evaluation.stabilized});
+          runtime::df_progress::number("completed_iteration", result.iterations);
+          runtime::df_progress::number("completed_fock_builds", result.fock_builds);
         },
         [&](const ::generativeqc::solver::SelfConsistentProgress&,
             const UksLoopEvaluation& evaluation) {
@@ -428,6 +435,9 @@ ScfResult run_uks_impl(
 
     if (!result.converged) {
       result.density = concatenate(alpha, beta);
+      runtime::df_progress::number("terminal_iterations", result.iterations);
+      runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+      runtime::df_progress::number("terminal_converged", result.converged);
       return result;
     }
 
@@ -523,6 +533,9 @@ ScfResult run_uks_impl(
     diis.clear();
   }
   result.density = concatenate(alpha, beta);
+  runtime::df_progress::number("terminal_iterations", result.iterations);
+  runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+  runtime::df_progress::number("terminal_converged", result.converged);
   return result;
 }
 // The registered CPU slice and the extended CPU/CUDA adapter share one UKS

@@ -109,7 +109,11 @@ macro(generativeqc_add_native_tests)
                              "${CMAKE_CURRENT_SOURCE_DIR}/include")
   generativeqc_native_test(generativeqc_saddle_optimizer_tests
                        tests/native/test_saddle_optimizer.cpp NO_GENERATIVEQC)
+  generativeqc_native_test(generativeqc_harmonic_modes_tests
+                       tests/native/test_harmonic_modes.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_saddle_api_tests tests/native/test_saddle_api.cpp)
+  generativeqc_native_test(generativeqc_cli_molecular_system_tests
+                       tests/native/test_cli_molecular_system.cpp)
   generativeqc_native_test(generativeqc_ks_mixed_warmup_tests
                        tests/native/test_ks_mixed_warmup.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_cuda_value_work_tests
@@ -236,6 +240,7 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_ecp_cpu_tests tests/native/test_ecp_cpu.cpp)
   target_sources(generativeqc_ecp_cpu_tests PRIVATE tests/native/ecp_reference.cpp)
   generativeqc_native_test(generativeqc_ecp_gaussian_tests tests/native/test_ecp_gaussian.cpp)
+  generativeqc_native_test(generativeqc_ecp_direction_tests tests/native/test_ecp_direction.cpp)
   target_sources(generativeqc_ecp_gaussian_tests PRIVATE tests/native/ecp_reference.cpp)
   add_dependencies(generativeqc_ecp_projector_tests generativeqc_ecp_codegen)
   target_include_directories(generativeqc_ecp_projector_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -672,6 +677,21 @@ macro(generativeqc_add_native_tests)
                        tests/native/test_range_exchange_runtime.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
+  generativeqc_native_test(generativeqc_ks_host_source_binding_tests
+                       tests/native/test_ks_host_source_binding.cpp)
+  if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
+    if(GENERATIVEQC_BUILD_CLI)
+      generativeqc_native_test(generativeqc_cli_molecular_evaluator_tests
+                           tests/native/test_cli_molecular_evaluator.cpp
+                           LIBRARIES nlohmann_json::nlohmann_json)
+      set_tests_properties(generativeqc_cli_molecular_evaluator_tests PROPERTIES
+        ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1" TIMEOUT 120)
+    endif()
+    generativeqc_native_test(generativeqc_ks_host_hessian_tests
+                         tests/native/test_ks_host_hessian.cpp)
+    set_tests_properties(generativeqc_ks_host_hessian_tests PROPERTIES
+      ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1" TIMEOUT 240)
+  endif()
   generativeqc_native_test(generativeqc_dft_restricted_point_tests
                        tests/native/test_dft_restricted_point.cpp)
   add_dependencies(generativeqc_dft_restricted_point_tests generativeqc_libxc_semilocal_cpu_codegen)

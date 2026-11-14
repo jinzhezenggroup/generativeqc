@@ -19,7 +19,8 @@ def test_cpu_aot_inventory_is_complete_and_link_safe(
     schedule.derivative_cpu_aot_sources.cache_clear()
     calls = []
 
-    def emit(requests: typing.Any, *, symbol: str) -> str:
+    def emit(requests: typing.Any, *, symbol: str, positive_full_moments: bool) -> str:
+        assert positive_full_moments is True
         calls.append((tuple(requests), symbol))
         return f"// {symbol} {len(requests)}\n"
 

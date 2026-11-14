@@ -23,7 +23,9 @@ class AoBasis {
 
   /** Ordinary spatial derivatives, with no factorial scaling. Jet order is
    * total degree then CCA powers: 1,x,y,z,xx,xy,xz,yy,yz,zz,xxx,...,zzz.
-   * Output is [jet, point, selected_ao]. Public basis l stays <=3 even when
+   * Output is [jet, point, selected_ao]. Evaluation reuses shell factors with
+   * fixed-size scratch and preserves each AO's primitive/term summation order.
+   * Public basis l stays <=3 even when
    * differentiation temporarily raises polynomial powers to six.
    * Optional sorted unique ao_ids select records directly instead of the
    * contiguous slice. No omitted AO is evaluated or temporarily stored.

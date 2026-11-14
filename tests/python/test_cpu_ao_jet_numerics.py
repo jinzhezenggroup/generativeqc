@@ -112,23 +112,50 @@ int main(int argc,char** argv) {
   auto b=fixture(expanded);
   std::vector<double> points={0,0,0, .1,-.2,.3, 1.1,.7,-.9, -2.1,.5,1.7};
   std::vector<std::size_t> ids;
+  const std::size_t begin=mode==6 ? 2 : 0;
+  const std::size_t end=mode==6 ? b.nao-2 : b.nao;
   if(mode==1) ids={0,3,8,b.nao-1};
-  else for(std::size_t i=0;i<b.nao;++i) ids.push_back(i);
-  const auto* selected=mode==1 ? ids.data() : nullptr;
+  else if(mode==7) ids={2,3,4,6,7,9,10,11,13,14,15,16,18,19,b.nao-3,b.nao-1};
+  else if(mode==8) ids={4,5,6,9,12,19,b.nao-1};
+  else for(std::size_t index=begin;index<end;++index) ids.push_back(index);
+  const auto* selected=(mode==1 || mode==7 || mode==8) ? ids.data() : nullptr;
   if(mode==2) points.assign(3,1e150);
   if(mode==3) points.clear();
   if(mode==4) points[0]=std::numeric_limits<double>::quiet_NaN();
   if(mode==5) { ids={1,1}; selected=ids.data(); }
+  if(mode==8) {
+    // A selected span must not evaluate a poisoned, omitted shell component.
+    b.packed[3*b.natom+2*b.nprimitive+16*3+7]=std::numeric_limits<double>::quiet_NaN();
+  }
+  if(mode==9) {
+    // Adjacent records need not have identical primitive ranges even at one center.
+    for(std::size_t index=0;index<b.nao;++index) {
+      auto* record=b.packed.data()+3*b.natom+2*b.nprimitive+16*index;
+      record[1]+=index%2;
+      record[2]-=std::max(index%2,index%3);
+    }
+  }
+  if(mode==12) {
+    b.packed[3*b.natom+1]=std::numeric_limits<double>::max();
+    b.packed[3*b.natom+2*b.nprimitive+7]=std::numeric_limits<double>::max();
+  }
+  if(mode==13) ids.clear();
+  if(mode==14) { ids={3,1}; selected=ids.data(); }
+  if(mode==15) { ids={b.nao}; selected=ids.data(); }
   const std::size_t npoint=points.size()/3, jets=(order+1)*(order+2)*(order+3)/6;
   std::vector<double> guarded(jets*npoint*ids.size()+2,12345.0);
   bool rejected=false;
+  bool nonfinite=false;
   try {
-    b.evaluate(points.data(),npoint,order,0,ids.size(),guarded.data()+1,
-               guarded.size()-2,selected);
+    b.evaluate(points.data(),npoint,mode==17 ? 4 : order,mode==11 ? b.nao : begin,
+               ids.size(),mode==16 ? nullptr : guarded.data()+1,
+               guarded.size()-(mode==10 ? 3 : 2),selected);
   } catch(const std::invalid_argument&) {rejected=true;}
-  assert(rejected==(mode>=4));
+    catch(const std::runtime_error&) {nonfinite=true;}
+  assert(rejected==(mode==4 || mode==5 || mode==10 || mode==11 || mode>=14));
+  assert(nonfinite==(mode==12));
   assert(guarded.front()==12345.0 && guarded.back()==12345.0);
-  if(rejected || mode==3) return 0;
+  if(rejected || nonfinite || mode==3) return 0;
   if(mode==2) {
     assert(std::all_of(guarded.begin()+1,guarded.end()-1,[](double x){return x==0;}));
     return 0;

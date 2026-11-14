@@ -206,6 +206,26 @@ GENERATIVEQC_RANGE_HD inline bool bounded_range_moments(unsigned maximum_order, 
   return true;
 }
 
+/** Full Boys moments for explicitly qualified positive-recurrence consumers.
+ * At boundary one, the existing LR evaluator is exactly F_n(T), independent
+ * of rho or omega. Reuse that numerical owner without changing the generic
+ * Full quadrature schedule or differentiating through an evaluation branch:
+ * geometry derivatives still consume dF_n/dT = -F_(n+1). A bounded series
+ * failure retains the positive quadrature fallback. Its unit rho is only a
+ * valid unused Full-operator parameter, not a replacement for physical rho.
+ * Invalid arguments fail before touching the caller's maximum_order+1 doubles.
+ */
+template <unsigned MaximumOrder>
+GENERATIVEQC_RANGE_HD inline bool bounded_full_range_moments(unsigned maximum_order,
+                                                             double argument, double* output) {
+  static_assert(MaximumOrder <= 14, "the validated full-moment domain ends at order 14");
+  if (!output || maximum_order > MaximumOrder || !range_isfinite(argument) || argument < 0)
+    return false;
+  if (range_detail::long_moments(maximum_order, argument, 1.0, output)) return true;
+  return bounded_range_moments<MaximumOrder>(maximum_order, argument, 1.0, CoulombRange::Full, 0,
+                                             output);
+}
+
 /** Preserve the first-derivative moment boundary and caller storage contract.
  * Second-order geometry must opt into bounded_range_moments<14> with fifteen
  * owned doubles. Calling the established API with order fourteen still fails

@@ -8,6 +8,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
+#include "api/ks_batch_capabilities.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/ks_dispersion.hpp"
 #include "api/named_ks_inputs.hpp"

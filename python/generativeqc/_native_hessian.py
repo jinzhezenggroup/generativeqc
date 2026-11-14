@@ -85,7 +85,7 @@ class _Receipt(ct.Structure):
 
 @dataclass(frozen=True, eq=False)
 class NativeKsHVPResult:
-    """Immutable aggregate HVP; native intermediates/source splits stay on device."""
+    """Immutable aggregate HVP; intermediates stay with their native owner."""
 
     direction: np.ndarray
     value: np.ndarray
