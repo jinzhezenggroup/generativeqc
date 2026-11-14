@@ -1,0 +1,82 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Complete descriptive paired cold-repeat evidence; retained legacy numerical gate failures; user figure decision and independent exact-head review pending; no promotion.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 7494,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c079f2cd858de76db53f439b794b5eb883c8480afbbdaf437ab020f9b37ff8ce"
+    },
+    {
+      "bytes": 23777,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "4ea3a3d6ec41054611fc73a5c09028bfc8da2452d8362495c76100029bd392f4"
+    },
+    {
+      "bytes": 3414,
+      "path": "build-contracts.json",
+      "role": "input",
+      "sha256": "394730b42588a9c8c0ccf5c923c82596efb80e039506b15eca39b34b37e349e9"
+    },
+    {
+      "bytes": 1775,
+      "path": "platform-receipts.json",
+      "role": "input",
+      "sha256": "c60a26a5494eded85ffb1b391db2fcc36fa26dd1ebf2a3d8227683aa1cb67e05"
+    },
+    {
+      "bytes": 3133,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "9ec965f87684b0ff2cc533252174b64830a9e766ffaa2f0395f91f0077f97cbb"
+    },
+    {
+      "bytes": 14086,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "365b91c8f3814e44303f2ead1c300140712e336e49d95e2b43fb1f8d02b36a53"
+    },
+    {
+      "bytes": 985236,
+      "path": "h100.json.xz",
+      "role": "samples",
+      "sha256": "8af888e17695b94b641125b02a2675d545bfe5be8d0e0ff84f1e4e616066057c"
+    },
+    {
+      "bytes": 981052,
+      "path": "rtx5090.json.xz",
+      "role": "samples",
+      "sha256": "740fc79a9af63de53ceab73a089f160c2d801791355d6c04b8b6270304f516fa"
+    },
+    {
+      "bytes": 15674,
+      "path": "measured-h100.patch",
+      "role": "source-patch",
+      "sha256": "878b78426c3c50fffe057fea937283696722a5dc5d6a40a13b5ff18b71862587"
+    },
+    {
+      "bytes": 15490,
+      "path": "measured-rtx5090.patch",
+      "role": "source-patch",
+      "sha256": "79906390a87eef1968f629eb9c3633add495fbbb4b81fd2881771afb3ac65007"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/paper-cold3-20261114/reproduce.py",
+      "--verify-only"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "efeaa3c7107a759e95c088d366e990d66c551c27"
+  }
+}

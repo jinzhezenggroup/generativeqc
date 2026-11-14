@@ -1,4 +1,10 @@
 # Keep reproducible data available while making implementation diffs reviewable.
+# Byte-bound cold-repeat manifests use LF; recorder patches retain their measured
+# mixed line endings so they reconstruct both exported CRLF and added LF files.
+benchmarks/results/paper-cold3-20261114/*.json text eol=lf
+benchmarks/results/paper-cold3-20261114/*.md text eol=lf
+benchmarks/results/paper-cold3-20261114/*.py text eol=lf
+benchmarks/results/paper-cold3-20261114/*.patch -text -whitespace
 # Keep this near-limit CUDA translation unit within the existing 1 MiB file
 # gate on Windows as well as Linux; new reference helpers live separately.
 src/scf/cuda_rhf.cu text eol=lf

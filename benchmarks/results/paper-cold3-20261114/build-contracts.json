@@ -1,0 +1,86 @@
+{
+  "h100": {
+    "configuration_flags_without_machine_paths": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas",
+      "-DCMAKE_CUDA_ARCHITECTURES=90",
+      "-DGENERATIVEQC_CUDA_ARCHITECTURES=90",
+      "-DGENERATIVEQC_ENABLE_CUDA=ON",
+      "-DGENERATIVEQC_ENABLE_AOT_SHELLS=ON",
+      "-DGENERATIVEQC_AOT_PROFILE=portable_cuda",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=ON",
+      "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON",
+      "-DGENERATIVEQC_STATIONARY_AOT_PROFILES=b3lyp_rks;m06_2x_rks;pbe0_rks;pbe_rks;r2scan_rks;wb97mv_rks",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF",
+      "-DGENERATIVEQC_BUILD_TESTS=OFF",
+      "-DGENERATIVEQC_BUILD_CLI=OFF",
+      "-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON",
+      "-DGENERATIVEQC_CUDA_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_SHARDS=8"
+    ],
+    "native_source_identity": "20d337f7ffdb1c75eb89a3ba6b0c307518e21388a4d4fda7df6b54248b4337e7",
+    "native_library_sha256": "949b1b6004e1bba5bb0771c715208ce856ec28517355ec674420942f8d08238c",
+    "compiler_cache_version": "sccache 0.16.0",
+    "aot_audit_sha256": "59ba21d6312f8ba2619c5a234a6322b848a61f1a1a3c7fd9e598bdb08efef7ab",
+    "actual_process_timeout_seconds": 600,
+    "parent_monotonic_deadline_seconds": 46800,
+    "reference_imports_are_not_native_production_dependencies": true
+  },
+  "rtx5090": {
+    "configuration_flags_without_machine_paths": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas",
+      "-DCMAKE_CUDA_ARCHITECTURES=120",
+      "-DGENERATIVEQC_CUDA_ARCHITECTURES=120",
+      "-DGENERATIVEQC_ENABLE_CUDA=ON",
+      "-DGENERATIVEQC_ENABLE_AOT_SHELLS=ON",
+      "-DGENERATIVEQC_AOT_PROFILE=portable_cuda",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=ON",
+      "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON",
+      "-DGENERATIVEQC_STATIONARY_AOT_PROFILES=b3lyp_rks;m06_2x_rks;pbe0_rks;pbe_rks;r2scan_rks;wb97mv_rks",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF",
+      "-DGENERATIVEQC_BUILD_TESTS=OFF",
+      "-DGENERATIVEQC_BUILD_CLI=OFF",
+      "-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON",
+      "-DGENERATIVEQC_CUDA_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_SHARDS=8"
+    ],
+    "native_source_identity": "20d337f7ffdb1c75eb89a3ba6b0c307518e21388a4d4fda7df6b54248b4337e7",
+    "native_library_sha256": "8a6e21ce7d100987c678622cb4b4866011cee57a7add0ceda21b8ec71256f0ef",
+    "compiler_cache_version": "sccache 0.16.0",
+    "aot_audit_sha256": "44a51fb5f27babec014937f1a49eb70665a31b2f8b0c81be8d4049893f9d549c",
+    "actual_process_timeout_seconds": 1800,
+    "parent_monotonic_deadline_seconds": 46800,
+    "reference_imports_are_not_native_production_dependencies": true,
+    "post_run_host_topology": {
+      "pci_bus_id": "0000:81:00.0",
+      "gpu_numa_node": 1,
+      "node_cpu_lists": {
+        "node0": "0-31,64-95",
+        "node1": "32-63,96-127"
+      },
+      "observed_utc": "2026-11-14T14:20:42.516917+00:00",
+      "granted_execution_affinity": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103
+      ],
+      "scope": "post-run read-only host sysfs topology; no causal timing attribution"
+    }
+  }
+}
