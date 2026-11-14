@@ -28,6 +28,9 @@ from generativeqc.autotune import _source_identity_paths
         "tools/generate_wb97mv_df_response.py",
         "tools/generate_wb97mv_stationary_assembly.py",
         "tools/generate_ecp_response.py",
+        "tools/generate_native_stationary_cuda.py",
+        "tools/generate_libxc_semilocal_cpu_registry.py",
+        "tools/generate_libxc_semilocal_cuda_registry.py",
     ],
 )
 def test_hessian_build_inputs_participate_in_source_identity(relative: str) -> None:

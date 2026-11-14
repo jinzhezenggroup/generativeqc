@@ -113,6 +113,10 @@ Its scopes include the executed binary, precision, quadrature, geometries,
 independent reference gates and cold/replay/moved lifecycle. These are optional
 qualification claims, separate from structural selector admission. A compiled
 registration without a molecular receipt is not counted as molecule-qualified.
+Unrelated changes do not expire these claims: the catalog tracks dependencies
+per registration/backend/product and lists targeted revalidation requirements.
+Historical GPU measurements remain evidence for their original binary; inherited
+qualification is not a new measurement of a later binary or environment.
 
 Recheck the retained evidence against the current checkout without running a
 calculation:

@@ -177,7 +177,12 @@ def _finite_differences(
     }
 
 
-def _endpoint_matches(endpoint: Mapping[str, Any], resolution: Any) -> bool:
+def _endpoint_matches(
+    endpoint: Mapping[str, Any],
+    resolution: Any,
+    *,
+    functional_identity: str | None = None,
+) -> bool:
     """Require the same spin, ingredient, and functional source in every solve."""
     identity = endpoint.get("state_identity")
     if not isinstance(identity, Mapping):
@@ -187,7 +192,8 @@ def _endpoint_matches(endpoint: Mapping[str, Any], resolution: Any) -> bool:
         identity.get("schema") != "generativeqc.stationary-ks-state/v2"
         or identity.get("spin") != resolution.method.spin
         or tuple(identity.get("ingredients", ())) != resolution.required_ingredients
-        or identity.get("functional_identity") != functional.identity
+        or identity.get("functional_identity")
+        != (functional_identity or functional.identity)
     ):
         return False
     for field in (
@@ -224,14 +230,67 @@ def _endpoint_matches(endpoint: Mapping[str, Any], resolution: Any) -> bool:
     )
 
 
-def _row_passes(name: str, row: Mapping[str, Any]) -> bool:
+def _recorded_contract(
+    resolution: Any, measured_subject: str, measured_catalog_hash: str | None
+) -> tuple[dict[str, Any], str]:
+    """Verify historical digest preimages, without changing compiler/cache keys.
+
+    Aggregate inventory metadata appears recursively in functional, MethodIR and
+    plan digests. Recompute their historical preimages with authenticated old
+    metadata and otherwise exact current scientific payloads. Only the offline
+    catalog may transport this metadata after checking emitted point bytes and
+    endpoint dependencies; execution objects and original receipts stay intact.
+    """
+
+    def recorded(payload: Any) -> Any:
+        if isinstance(payload, dict):
+            result = {key: recorded(value) for key, value in payload.items()}
+            provenance = result.get("expression_provenance", {})
+            if provenance.get("kind") == "libxc-bulk-pointwise":
+                for component in provenance["components"].values():
+                    component["identity"] = measured_subject
+                if measured_catalog_hash is not None:
+                    result["source_manifest_sha256"] = measured_catalog_hash
+            return result
+        if isinstance(payload, (list, tuple)):
+            return [recorded(value) for value in payload]
+        return payload
+
+    functional_identity = canonical_hash(
+        recorded(resolution.plan.semilocal.functional.to_payload())
+    )
+    method_identity = canonical_hash(recorded(resolution.method.semantic_payload()))
+    plan = recorded(resolution.plan.semantic_payload())
+    plan["method_identity"] = method_identity
+    expected = resolution.to_payload()
+    expected["capability"]["identity"] = measured_subject
+    expected["method_identity"] = method_identity
+    expected["plan_identity"] = canonical_hash(plan)
+    return expected, functional_identity
+
+
+def _row_passes(
+    name: str,
+    row: Mapping[str, Any],
+    *,
+    measured_subject: str | None = None,
+    measured_catalog_hash: str | None = None,
+) -> bool:
     """Recompute numerical gates; a caller-supplied pass flag is not evidence."""
     try:
         if row.get("backend") != "cpu" or row.get("spin") not in SPINS:
             return False
         resolution = resolve_bulk_ks(name, backend="cpu", spin=row["spin"])
-        if row.get("resolution") != resolution.to_payload() or not _endpoint_matches(
-            row, resolution
+        expected = resolution.to_payload()
+        if measured_subject is not None:
+            expected["capability"]["identity"] = measured_subject
+        functional_identity = None
+        if row.get("resolution") != expected and measured_subject is not None:
+            expected, functional_identity = _recorded_contract(
+                resolution, measured_subject, measured_catalog_hash
+            )
+        if row.get("resolution") != expected or not _endpoint_matches(
+            row, resolution, functional_identity=functional_identity
         ):
             return False
         coordinates = np.asarray(row["coordinates"], dtype=float)
@@ -258,7 +317,9 @@ def _row_passes(name: str, row: Mapping[str, Any]) -> bool:
                 endpoint = entry[key]
                 expected_coordinates = coordinates.copy()
                 expected_coordinates[atom, axis] += direction * FD_STEP
-                if not _endpoint_matches(endpoint, resolution) or not np.array_equal(
+                if not _endpoint_matches(
+                    endpoint, resolution, functional_identity=functional_identity
+                ) or not np.array_equal(
                     endpoint.get("coordinates"), expected_coordinates
                 ):
                     return False
@@ -291,9 +352,21 @@ def _row_passes(name: str, row: Mapping[str, Any]) -> bool:
 
 
 def force_stage_evidence(
-    name: str, result: Mapping[str, Any], *, evidence: str
+    name: str,
+    result: Mapping[str, Any],
+    *,
+    evidence: str,
+    measured_subject: str | None = None,
+    measured_catalog_hash: str | None = None,
 ) -> dict[str, Any]:
-    """Bind a complete measured CPU force campaign to the capability identity."""
+    """Validate force receipts, retaining their original scientific subject.
+
+    The offline catalog may supply ``measured_subject`` only after authenticating
+    measured source dependencies and proving the current emitted point contract
+    unchanged. Only aggregate capability/catalog metadata is transported;
+    scientific payloads, recorded state identities and numerical gates stay exact.
+    Standalone producers require the current subject by default.
+    """
     if not isinstance(evidence, str) or not evidence.strip():
         raise ValueError("force evidence requires a non-empty artifact reference")
     capability = functional_capability(name)
@@ -301,7 +374,7 @@ def force_stage_evidence(
     if (
         payload.get("schema") != RESULT_SCHEMA
         or payload.get("name") != capability.name
-        or payload.get("subject_identity") != capability.identity
+        or payload.get("subject_identity") != (measured_subject or capability.identity)
         or payload.get("point_domain") != LIBXC_WORK_DOMAIN
         or payload.get("gates") != GATES
         or payload.get("fd_step") != FD_STEP
@@ -319,7 +392,15 @@ def force_stage_evidence(
     passed = (
         len(observed) == len(expected)
         and set(observed) == expected
-        and all(_row_passes(name, row) for row in rows)
+        and all(
+            _row_passes(
+                name,
+                row,
+                measured_subject=measured_subject,
+                measured_catalog_hash=measured_catalog_hash,
+            )
+            for row in rows
+        )
     )
     if passed:
         by_endpoint = {(row["spin"], row["phase"]): row for row in rows}
