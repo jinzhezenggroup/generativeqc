@@ -1,0 +1,810 @@
+{
+  "schema": "generativeqc.paper-cold3-summary.v1",
+  "production_source_revision": "efeaa3c7107a759e95c088d366e990d66c551c27",
+  "source_archive_sha256": "e2b4ddbb22ec2aa81dc111471537a869690f44648899e0429a0581f5d9fa411e",
+  "native_source_identity": "20d337f7ffdb1c75eb89a3ba6b0c307518e21388a4d4fda7df6b54248b4337e7",
+  "devices": {
+    "h100": {
+      "label": "H100",
+      "processes": 384,
+      "full_EF_calls": 1536,
+      "populations": 128,
+      "process_gate_counts": {
+        "qualified": 348,
+        "failed": 36
+      },
+      "failed_population_keys": [
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          3
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          12
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          48
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          96
+        ],
+        [
+          "gpu4pyscf",
+          "m06-2x",
+          "df",
+          3
+        ],
+        [
+          "gpu4pyscf",
+          "m06-2x",
+          "direct",
+          3
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          3
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          12
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          48
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          96
+        ],
+        [
+          "standard",
+          "m06-2x",
+          "df",
+          3
+        ],
+        [
+          "standard",
+          "m06-2x",
+          "direct",
+          3
+        ]
+      ],
+      "cold_median_decreases": [],
+      "individual_round_cold_decreases": {
+        "0": [],
+        "1": [
+          {
+            "arm": "gpu4pyscf",
+            "method": "hf",
+            "mode": "direct",
+            "atoms": [
+              48,
+              96
+            ],
+            "seconds": [
+              7.392846552655101,
+              7.085404295474291
+            ],
+            "relative_drop": 0.04158645184788717
+          }
+        ],
+        "2": []
+      },
+      "median_wins": {
+        "cold": 63,
+        "warm": 62
+      },
+      "nonwinning_median_comparisons": [
+        {
+          "method": "r2scan-3c",
+          "mode": "direct",
+          "atoms": 96,
+          "cold_reference_over_native": 1.2310245795804067,
+          "warm_reference_over_native": 0.9388309933535096
+        },
+        {
+          "method": "wb97m-v",
+          "mode": "direct",
+          "atoms": 96,
+          "cold_reference_over_native": 0.8840471404279403,
+          "warm_reference_over_native": 1.3239506593161197
+        },
+        {
+          "method": "hf",
+          "mode": "df",
+          "atoms": 96,
+          "cold_reference_over_native": 1.2788524152715157,
+          "warm_reference_over_native": 0.7976351313113815
+        }
+      ],
+      "cold_variability": {
+        "median_relative_cold_range": 0.017878626748244243,
+        "largest_relative_cold_range": {
+          "key": [
+            "standard",
+            "hf",
+            "df",
+            12
+          ],
+          "relative_range": 0.11849094104974615,
+          "iterations_vary": false,
+          "fock_or_veff_count_varies": false
+        },
+        "varying_cold_iteration_or_build_count_keys": [],
+        "interpretation": "Descriptive process variability. Equal SCF/Fock counts do not establish equal total work or identify a causal runtime component."
+      }
+    },
+    "rtx5090": {
+      "label": "RTX 5090",
+      "processes": 384,
+      "full_EF_calls": 1536,
+      "populations": 128,
+      "process_gate_counts": {
+        "qualified": 348,
+        "failed": 36
+      },
+      "failed_population_keys": [
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          3
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          12
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          48
+        ],
+        [
+          "gpu4pyscf",
+          "hf",
+          "df",
+          96
+        ],
+        [
+          "gpu4pyscf",
+          "m06-2x",
+          "df",
+          3
+        ],
+        [
+          "gpu4pyscf",
+          "m06-2x",
+          "direct",
+          3
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          3
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          12
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          48
+        ],
+        [
+          "standard",
+          "hf",
+          "df",
+          96
+        ],
+        [
+          "standard",
+          "m06-2x",
+          "df",
+          3
+        ],
+        [
+          "standard",
+          "m06-2x",
+          "direct",
+          3
+        ]
+      ],
+      "cold_median_decreases": [],
+      "individual_round_cold_decreases": {
+        "0": [],
+        "1": [],
+        "2": []
+      },
+      "median_wins": {
+        "cold": 60,
+        "warm": 64
+      },
+      "nonwinning_median_comparisons": [
+        {
+          "method": "hf",
+          "mode": "direct",
+          "atoms": 96,
+          "cold_reference_over_native": 0.9329183431137774,
+          "warm_reference_over_native": 1.1830541913952948
+        },
+        {
+          "method": "pbe0",
+          "mode": "direct",
+          "atoms": 96,
+          "cold_reference_over_native": 0.996183447593235,
+          "warm_reference_over_native": 1.1840665715943017
+        },
+        {
+          "method": "hf",
+          "mode": "df",
+          "atoms": 96,
+          "cold_reference_over_native": 0.9545934744456697,
+          "warm_reference_over_native": 1.8081214166071895
+        },
+        {
+          "method": "r2scan-3c",
+          "mode": "df",
+          "atoms": 96,
+          "cold_reference_over_native": 0.9647405772720117,
+          "warm_reference_over_native": 1.489685634473553
+        }
+      ],
+      "cold_variability": {
+        "median_relative_cold_range": 0.03132281412535909,
+        "largest_relative_cold_range": {
+          "key": [
+            "standard",
+            "hf",
+            "df",
+            12
+          ],
+          "relative_range": 0.2367209182751755,
+          "iterations_vary": false,
+          "fock_or_veff_count_varies": false
+        },
+        "varying_cold_iteration_or_build_count_keys": [],
+        "interpretation": "Descriptive process variability. Equal SCF/Fock counts do not establish equal total work or identify a causal runtime component."
+      }
+    }
+  },
+  "historical_baseline_separate_source_and_device": {
+    "h100": {
+      "cohort": "readme-h100-20261112",
+      "samples_sha256": "7e27726eb4b9521089116b48447423dfce46b1bfbb799642113f56e2319b00e0",
+      "source_revision": "a7241b4fdaf586fef25da59913e4d267aca67461",
+      "old_protocol": "one cold + median of3 within-process warm calls; exact paper results_gpu.py lines164-172",
+      "native_faster_medians": {
+        "cold": 62,
+        "warm": 61
+      },
+      "exceptions": [
+        {
+          "key": [
+            "hf",
+            "df",
+            96
+          ],
+          "phase": "warm",
+          "native_seconds": 0.9765060469508171,
+          "reference_seconds": 0.7523848656564951
+        },
+        {
+          "key": [
+            "hf",
+            "direct",
+            96
+          ],
+          "phase": "cold",
+          "native_seconds": 6.740931756794453,
+          "reference_seconds": 5.985751618631184
+        },
+        {
+          "key": [
+            "hf",
+            "direct",
+            96
+          ],
+          "phase": "warm",
+          "native_seconds": 1.3971695136278868,
+          "reference_seconds": 1.3338788151741028
+        },
+        {
+          "key": [
+            "r2scan-3c",
+            "direct",
+            96
+          ],
+          "phase": "warm",
+          "native_seconds": 4.024042513221502,
+          "reference_seconds": 3.750961035490036
+        },
+        {
+          "key": [
+            "wb97m-v",
+            "direct",
+            96
+          ],
+          "phase": "cold",
+          "native_seconds": 48.30615393444896,
+          "reference_seconds": 40.66785361804068
+        }
+      ],
+      "interpretation": "Historical descriptive baseline only; never pooled into new source/device/3-process results."
+    },
+    "rtx5090": {
+      "cohort": "readme-rtx5090-composed-20261111",
+      "samples_sha256": "4c1571031d24f0ace8b8c01f2d47a1f803787bd57a953a0bfdd51e3b43d61383",
+      "source_revision": "4024f95b809c70b404f2ed202a67278d1fb86395",
+      "old_protocol": "one cold + median of3 within-process warm calls; exact paper results_gpu.py lines164-172",
+      "native_faster_medians": {
+        "cold": 64,
+        "warm": 64
+      },
+      "exceptions": [],
+      "interpretation": "Historical descriptive baseline only; never pooled into new source/device/3-process results."
+    }
+  },
+  "rtx5090_cold_nonwins_original_comparison": [
+    {
+      "method": "hf",
+      "mode": "direct",
+      "atoms": 96,
+      "old": {
+        "standard": {
+          "seconds": 11.138853944838047,
+          "scf_iterations": 11,
+          "fock_or_effective_potential_builds": 11,
+          "preliminary_guess_focks": 7,
+          "energy_abs_per_atom_hartree": 5.163277213190062e-13,
+          "force_max_abs_hartree_per_bohr": 3.008104160970304e-07,
+          "force_rms_hartree_per_bohr": 1.29651755164552e-07
+        },
+        "gpu4pyscf": {
+          "seconds": 11.666973445098847,
+          "scf_iterations": 10,
+          "fock_or_effective_potential_builds": 11,
+          "preliminary_guess_focks": 0,
+          "energy_abs_per_atom_hartree": 2.2547889481453845e-12,
+          "force_max_abs_hartree_per_bohr": 1.516468444151542e-07,
+          "force_rms_hartree_per_bohr": 6.823420866306478e-08
+        }
+      },
+      "new": {
+        "standard": [
+          {
+            "seconds": 12.874090407043695,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.341615285
+            }
+          },
+          {
+            "seconds": 13.022859539836645,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.338408543
+            }
+          },
+          {
+            "seconds": 12.850381094962358,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.338488922
+            }
+          }
+        ],
+        "gpu4pyscf": [
+          {
+            "seconds": 12.242497812956572,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          },
+          {
+            "seconds": 12.01047509163618,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          },
+          {
+            "seconds": 11.993085782974958,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          }
+        ]
+      },
+      "new_paired_reference_over_native": [
+        0.9509407986026286,
+        0.9222609715551641,
+        0.9332863900570638
+      ]
+    },
+    {
+      "method": "hf",
+      "mode": "df",
+      "atoms": 96,
+      "old": {
+        "standard": {
+          "seconds": 16.258816848043352,
+          "scf_iterations": 11,
+          "fock_or_effective_potential_builds": 12,
+          "preliminary_guess_focks": 7,
+          "energy_abs_per_atom_hartree": 2.1047935722625272e-05,
+          "force_max_abs_hartree_per_bohr": 1.9653212919301666e-05,
+          "force_rms_hartree_per_bohr": 8.173643279781213e-06
+        },
+        "gpu4pyscf": {
+          "seconds": 16.558978310786188,
+          "scf_iterations": 10,
+          "fock_or_effective_potential_builds": 11,
+          "preliminary_guess_focks": 0,
+          "energy_abs_per_atom_hartree": 2.1047940303257445e-05,
+          "force_max_abs_hartree_per_bohr": 1.959134760021186e-05,
+          "force_rms_hartree_per_bohr": 8.162975186454247e-06
+        }
+      },
+      "new": {
+        "standard": [
+          {
+            "seconds": 18.076944809406996,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.389832383
+            }
+          },
+          {
+            "seconds": 17.947414249181747,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.453275181
+            }
+          },
+          {
+            "seconds": 17.810188926756382,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.453821975
+            }
+          }
+        ],
+        "gpu4pyscf": [
+          {
+            "seconds": 17.018228497356176,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          },
+          {
+            "seconds": 17.520551592111588,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          },
+          {
+            "seconds": 17.132484525442123,
+            "iterations": 10,
+            "fock_or_veff": 11,
+            "initial_guess": null
+          }
+        ]
+      },
+      "new_paired_reference_over_native": [
+        0.9414327850633323,
+        0.9762159244143138,
+        0.9619485001477924
+      ]
+    },
+    {
+      "method": "pbe0",
+      "mode": "direct",
+      "atoms": 96,
+      "old": {
+        "standard": {
+          "seconds": 15.884147292003036,
+          "scf_iterations": 9,
+          "fock_or_effective_potential_builds": 9,
+          "preliminary_guess_focks": 7,
+          "energy_abs_per_atom_hartree": 2.9740748175299814e-07,
+          "force_max_abs_hartree_per_bohr": 2.2573646379225876e-05,
+          "force_rms_hartree_per_bohr": 1.0888572196013019e-05
+        },
+        "gpu4pyscf": {
+          "seconds": 19.719394240062684,
+          "scf_iterations": 9,
+          "fock_or_effective_potential_builds": 10,
+          "preliminary_guess_focks": 0,
+          "energy_abs_per_atom_hartree": 2.9740688963405165e-07,
+          "force_max_abs_hartree_per_bohr": 2.251022968735583e-05,
+          "force_rms_hartree_per_bohr": 1.09100658650074e-05
+        }
+      },
+      "new": {
+        "standard": [
+          {
+            "seconds": 20.49263471364975,
+            "iterations": 9,
+            "fock_or_veff": 9,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.333606141
+            }
+          },
+          {
+            "seconds": 20.573126833885908,
+            "iterations": 9,
+            "fock_or_veff": 9,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.327565057
+            }
+          },
+          {
+            "seconds": 20.736539732664824,
+            "iterations": 9,
+            "fock_or_veff": 9,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 7,
+              "preliminary_fock_builds": 7,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 93104600,
+              "preparation_seconds": 0.329372637
+            }
+          }
+        ],
+        "gpu4pyscf": [
+          {
+            "seconds": 20.653398860245943,
+            "iterations": 9,
+            "fock_or_veff": 10,
+            "initial_guess": null
+          },
+          {
+            "seconds": 20.49460841715336,
+            "iterations": 9,
+            "fock_or_veff": 10,
+            "initial_guess": null
+          },
+          {
+            "seconds": 20.36908085271716,
+            "iterations": 9,
+            "fock_or_veff": 10,
+            "initial_guess": null
+          }
+        ]
+      },
+      "new_paired_reference_over_native": [
+        1.0078449720517935,
+        0.996183447593235,
+        0.9822796433404543
+      ]
+    },
+    {
+      "method": "r2scan-3c",
+      "mode": "df",
+      "atoms": 96,
+      "old": {
+        "standard": {
+          "seconds": 23.01235515298322,
+          "scf_iterations": 11,
+          "fock_or_effective_potential_builds": 11,
+          "preliminary_guess_focks": 10,
+          "energy_abs_per_atom_hartree": 2.0400348053802495e-06,
+          "force_max_abs_hartree_per_bohr": 5.603000501119815e-05,
+          "force_rms_hartree_per_bohr": 2.474437209634662e-05
+        },
+        "gpu4pyscf": {
+          "seconds": 23.140154289081693,
+          "scf_iterations": 11,
+          "fock_or_effective_potential_builds": 12,
+          "preliminary_guess_focks": 0,
+          "energy_abs_per_atom_hartree": 2.0400349474887967e-06,
+          "force_max_abs_hartree_per_bohr": 5.6300769747608115e-05,
+          "force_rms_hartree_per_bohr": 2.477082013976234e-05
+        }
+      },
+      "new": {
+        "standard": [
+          {
+            "seconds": 24.779660742729902,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 10,
+              "preliminary_fock_builds": 10,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 170282112,
+              "preparation_seconds": 0.414879692
+            }
+          },
+          {
+            "seconds": 24.972453337162733,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 10,
+              "preliminary_fock_builds": 10,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 170282112,
+              "preparation_seconds": 0.41738167
+            }
+          },
+          {
+            "seconds": 24.724766995757818,
+            "iterations": 11,
+            "fock_or_veff": 11,
+            "initial_guess": {
+              "kind": "huckel",
+              "outcome": "used",
+              "work_counters_complete": true,
+              "preliminary_iterations": 10,
+              "preliminary_fock_builds": 10,
+              "target_attempts": 1,
+              "discarded_target_iterations": 0,
+              "discarded_target_fock_builds": 0,
+              "preparation_numeric_capacity": 170282112,
+              "preparation_seconds": 0.416001402
+            }
+          }
+        ],
+        "gpu4pyscf": [
+          {
+            "seconds": 23.90594420954585,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": null
+          },
+          {
+            "seconds": 23.632018722593784,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": null
+          },
+          {
+            "seconds": 24.06644042953849,
+            "iterations": 11,
+            "fock_or_veff": 12,
+            "initial_guess": null
+          }
+        ]
+      },
+      "new_paired_reference_over_native": [
+        0.9647405772720117,
+        0.9463234710474288,
+        0.9733738010015511
+      ]
+    }
+  ],
+  "decision": "descriptive timing evidence; retained numerical failures; user figure review pending; no default promotion or merge authorization",
+  "cancelled_attempt": {
+    "ustc_job": "17383",
+    "phase": "prewarm",
+    "formal_samples": 0,
+    "complete_prewarm_processes": 54,
+    "returned_EF_samples": 108,
+    "interrupted_processes": 1,
+    "unreturned_work": "unknown, never zero-filled",
+    "reason": "operator cancellation to correct insufficient whole-process timeout before formal acquisition",
+    "original_archive_sha256": "f0fec186810cbf4e06cb1bd0623ae300772137cca3a8f4ae3c18bcfbda1685d6",
+    "original_archive_bytes": 556485
+  },
+  "qz_other_candidates": "initial v1 job cancelled before allocation/science; atomic assets staged but no second GPU Job submitted because CQ became usable first",
+  "raw_archive_retention": "Original full archives and per-member manifests remain in task-local ignored evidence and their original remote task roots; no external mirror or Release is required for numeric replay."
+}

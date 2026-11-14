@@ -15,6 +15,8 @@ import hashlib
 import json
 import math
 import os
+import re
+import socket
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -46,6 +48,37 @@ ARMS = ("standard", "fast", "gpu4pyscf", "gpu4pyscf-fast")
 MEASUREMENT_ARMS = ("standard", "fast", "gpu4pyscf")
 SIZES = (3, 12, 48, 96)
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def allocation_metadata(qz_job_name: str | None = None) -> dict:
+    """Retain the real scheduler owner without inventing a Slurm allocation.
+
+    Qz launchers retain the platform job name/project on a worker pod. Batch
+    Jobs use UUID-based pod names; Notebook names are not batch Job identities.
+    The campaign must additionally retain the platform's live status receipt;
+    environment metadata alone is not independent allocation verification.
+    """
+    if os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID"):
+        if qz_job_name is not None:
+            raise ValueError("cannot combine qz and Slurm/LSF allocation owners")
+        return {"kind": "slurm" if os.environ.get("SLURM_JOB_ID") else "lsf"}
+    if (
+        qz_job_name
+        and os.environ.get("GQC_QZ_JOB_NAME") == qz_job_name
+        and os.environ.get("GQC_QZ_PROJECT")
+        and re.fullmatch(
+            r"job-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-worker-[0-9]+",
+            socket.gethostname(),
+        )
+    ):
+        return {
+            "kind": "qz",
+            "job_name": qz_job_name,
+            "project": os.environ["GQC_QZ_PROJECT"],
+            "hostname": socket.gethostname(),
+            "platform_receipt_required": True,
+        }
+    raise ValueError("real GPU work requires a Slurm/LSF allocation or bound qz job")
 
 
 def digest(path: Path) -> str:
@@ -525,6 +558,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--source-revision", required=False)
+    parser.add_argument(
+        "--qz-job-name", help="actual qz job; retain live platform receipt"
+    )
     parser.add_argument("--output", type=raw_output_path)
     args = parser.parse_args(argv)
     if args.arm == "inputs":
@@ -540,8 +576,10 @@ def main(argv: list[str] | None = None) -> None:
         or args.method == "hf"
     ):
         parser.error("force tiles require native KS and a point count in [1,4096]")
-    if not (os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")):
-        parser.error("real GPU work requires a finite Slurm or LSF GPU allocation")
+    try:
+        allocation = allocation_metadata(args.qz_job_name)
+    except ValueError as error:
+        parser.error(str(error))
     if args.output.exists():
         raise FileExistsError(args.output)
     import cupy as cp
@@ -568,6 +606,7 @@ def main(argv: list[str] | None = None) -> None:
         # Preserve absence as null: explicit 1 is not default-path evidence.
         "occupied_xc_env": os.environ.get("GENERATIVEQC_CUDA_KS_OCCUPIED_XC"),
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "allocation": allocation,
         # Preserve the actual allocation and visibility on both schedulers.
         "scheduler": {
             name: os.environ.get(name)

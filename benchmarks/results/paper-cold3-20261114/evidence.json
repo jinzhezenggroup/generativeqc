@@ -1,0 +1,335 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Independent-process cold timing for paired paper HF/DFT figures",
+  "inputs_hash": "4dbd2b6fb7752db978cae011b992d699212efe029dfc9cfe50fd1b38236dcfad",
+  "revision": "efeaa3c7107a759e95c088d366e990d66c551c27",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "20d337f7ffdb1c75eb89a3ba6b0c307518e21388a4d4fda7df6b54248b4337e7",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Multiple existing HF/KS methods; no new common equation artifact claimed.",
+    "ir": "No IR serialization was captured by the endpoint recorder.",
+    "schedule": "Complete process-order/acquisition source is retained in the measured source patches, not a kernel-schedule promotion."
+  },
+  "device": {
+    "h100": {
+      "backend": "cuda",
+      "device_id": 0,
+      "pci_bus_id": "0000:18:00.0",
+      "name": "NVIDIA H100 80GB HBM3",
+      "compute_capability": [
+        9,
+        0
+      ],
+      "total_global_memory_bytes": 85019590656,
+      "multiprocessor_count": 132,
+      "clock_rate_khz": 1980000,
+      "driver_version": 13020,
+      "runtime_version": 12090,
+      "nvidia_smi": {
+        "performance_state": "P0",
+        "power_draw_watts": 99.69,
+        "power_limit_watts": 700.0,
+        "sm_clock_mhz": 360.0,
+        "memory_clock_mhz": 2619.0,
+        "temperature_celsius": 35.0,
+        "uuid": "GPU-c9f9a12d-1e55-cf7c-13b9-f1a6457f06a2",
+        "sampling_point": "before benchmark measurements",
+        "timestamp_utc": "2026-11-14T10:05:28.265990+00:00"
+      }
+    },
+    "rtx5090": {
+      "backend": "cuda",
+      "device_id": 0,
+      "pci_bus_id": "0000:81:00.0",
+      "name": "NVIDIA GeForce RTX 5090",
+      "compute_capability": [
+        12,
+        0
+      ],
+      "total_global_memory_bytes": 33668988928,
+      "multiprocessor_count": 170,
+      "clock_rate_khz": 2550000,
+      "driver_version": 13000,
+      "runtime_version": 12090,
+      "nvidia_smi": {
+        "performance_state": "P0",
+        "power_draw_watts": 86.19,
+        "power_limit_watts": 600.0,
+        "sm_clock_mhz": 2827.0,
+        "memory_clock_mhz": 14001.0,
+        "temperature_celsius": 44.0,
+        "uuid": "GPU-d79031c2-173e-535f-3563-5520bab0293b",
+        "sampling_point": "before benchmark measurements",
+        "timestamp_utc": "2026-11-14T10:08:52.361966+00:00"
+      }
+    }
+  },
+  "toolchain": {
+    "h100": {
+      "standard": {
+        "timestamp_utc": "2026-11-14T10:05:28.277647+00:00",
+        "git": {
+          "commit": null,
+          "dirty": null,
+          "pending_generated_benchmark_artifacts": null
+        },
+        "host": {
+          "node": "job-7e31447c-9ca6-4059-bb7f-a3fb74358770-worker-0",
+          "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+          "machine": "x86_64",
+          "processor": "x86_64"
+        },
+        "python": {
+          "version": "3.11.16",
+          "executable": "<acquisition filesystem path omitted>"
+        },
+        "packages": {
+          "pyscf": "2.14.0",
+          "gpu4pyscf": "1.8.1",
+          "cupy": "13.6.0",
+          "numpy": "2.2.6"
+        },
+        "runtime": {
+          "generativeqc_library": "<acquisition filesystem path omitted>",
+          "cuda_visible_devices": null
+        },
+        "toolchain": {
+          "nvcc": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "ptxas": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "cuobjdump": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+          },
+          "host_cxx": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+          }
+        },
+        "accelerator": null
+      },
+      "gpu4pyscf": {
+        "timestamp_utc": "2026-11-14T10:05:33.032101+00:00",
+        "git": {
+          "commit": null,
+          "dirty": null,
+          "pending_generated_benchmark_artifacts": null
+        },
+        "host": {
+          "node": "job-7e31447c-9ca6-4059-bb7f-a3fb74358770-worker-0",
+          "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.35",
+          "machine": "x86_64",
+          "processor": "x86_64"
+        },
+        "python": {
+          "version": "3.11.16",
+          "executable": "<acquisition filesystem path omitted>"
+        },
+        "packages": {
+          "pyscf": "2.14.0",
+          "gpu4pyscf": "1.9.0",
+          "cupy": "13.4.1",
+          "numpy": "2.2.6"
+        },
+        "runtime": {
+          "generativeqc_library": null,
+          "cuda_visible_devices": null
+        },
+        "toolchain": {
+          "nvcc": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "ptxas": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "cuobjdump": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+          },
+          "host_cxx": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+          }
+        },
+        "accelerator": null
+      }
+    },
+    "rtx5090": {
+      "standard": {
+        "timestamp_utc": "2026-11-14T10:08:52.370648+00:00",
+        "git": {
+          "commit": null,
+          "dirty": null,
+          "pending_generated_benchmark_artifacts": null
+        },
+        "host": {
+          "node": "node1",
+          "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+          "machine": "x86_64",
+          "processor": "x86_64"
+        },
+        "python": {
+          "version": "3.12.3",
+          "executable": "<acquisition filesystem path omitted>"
+        },
+        "packages": {
+          "pyscf": "2.14.0",
+          "gpu4pyscf": "1.8.1",
+          "cupy": "13.6.0",
+          "numpy": "2.4.6"
+        },
+        "runtime": {
+          "generativeqc_library": "<acquisition filesystem path omitted>",
+          "cuda_visible_devices": "4"
+        },
+        "toolchain": {
+          "nvcc": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "ptxas": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "cuobjdump": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+          },
+          "host_cxx": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+          }
+        },
+        "accelerator": null
+      },
+      "gpu4pyscf": {
+        "timestamp_utc": "2026-11-14T10:08:57.553530+00:00",
+        "git": {
+          "commit": null,
+          "dirty": null,
+          "pending_generated_benchmark_artifacts": null
+        },
+        "host": {
+          "node": "node1",
+          "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+          "machine": "x86_64",
+          "processor": "x86_64"
+        },
+        "python": {
+          "version": "3.12.12",
+          "executable": "<acquisition filesystem path omitted>"
+        },
+        "packages": {
+          "pyscf": "2.14.0",
+          "gpu4pyscf": "1.9.0",
+          "cupy": "13.6.0",
+          "numpy": "2.5.4"
+        },
+        "runtime": {
+          "generativeqc_library": null,
+          "cuda_visible_devices": "4"
+        },
+        "toolchain": {
+          "nvcc": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "ptxas": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+          },
+          "cuobjdump": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+          },
+          "host_cxx": {
+            "path": "<acquisition filesystem path omitted>",
+            "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+          }
+        },
+        "accelerator": null
+      }
+    }
+  },
+  "settings": {
+    "device": "cuda",
+    "independent_cold_processes": 3,
+    "warm_calls_per_process": 3,
+    "warm_line": "median of three process medians",
+    "range": "descriptive min-max, not confidence intervals",
+    "timing_filtering": false,
+    "scientific_gate_filtering": false
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Actual qz/Slurm allocation and terminal records retained separately from worker declarations."
+  },
+  "stages": {
+    "representation": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Authenticated original byte manifests, loaded native identity and actual recorder source patches."
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "Both source-matched Release builds and native-cubin AOT audits completed; actual compiler-cache versions retained."
+    },
+    "numerical": {
+      "status": "fail",
+      "reason": "Retained dense-Direct common-gate failures: both engines DF-HF at3/12/48/96 and M06-2X Direct3/DF3. Full-vector replay and exact counts are in each numeric projection."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Both cohorts completed384 fresh formal processes and1536 converged full E+F endpoints without replacement."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "No production-default change; figure/protocol acceptance remains pending."
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "No complete peak-memory measurement was acquired; device capacity and sampled pre-call telemetry are not peak allocation."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Configure/build wall stages are retained, but total endpoint/JIT compilation cost was not separately measured."
+  },
+  "residuals": {},
+  "block_errors": {},
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "attachments": [
+    {
+      "path": "h100.json.xz",
+      "sha256": "8af888e17695b94b641125b02a2675d545bfe5be8d0e0ff84f1e4e616066057c"
+    },
+    {
+      "path": "rtx5090.json.xz",
+      "sha256": "740fc79a9af63de53ceab73a089f160c2d801791355d6c04b8b6270304f516fa"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "n=3 descriptive timing/ranges; no formal statistical promotion or hardware-only attribution."
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "paper-cold3-20261114",
+  "owner": "Paper cold-repeat acquisition and offline replay",
+  "reason": "Exact full-precision scientific sample fields for384 real processes/1536 full E+F calls per GPU are required by the offline figure and real-cohort corruption regressions. All timing/work/force values and legacy failed gates remain; private acquisition paths and routine logs are excluded. This implementer storage review is not independent PR approval, numerical acceptance or performance promotion. Existing1MiB file/2MiB incoming limits remain unchanged.",
+  "review_document": "benchmarks/results/paper-cold3-20261114/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/paper-cold3-20261114/h100.json.xz",
+      "bytes": 985236,
+      "sha256": "8af888e17695b94b641125b02a2675d545bfe5be8d0e0ff84f1e4e616066057c",
+      "family": "paper-cold3-20261114",
+      "classification": "test-reference-input",
+      "role": "Full-precision completed GPU cohort, force/timing/work replay and scientific corruption regression input"
+    },
+    {
+      "path": "benchmarks/results/paper-cold3-20261114/rtx5090.json.xz",
+      "bytes": 981052,
+      "sha256": "740fc79a9af63de53ceab73a089f160c2d801791355d6c04b8b6270304f516fa",
+      "family": "paper-cold3-20261114",
+      "classification": "test-reference-input",
+      "role": "Full-precision completed GPU cohort, force/timing/work replay and scientific corruption regression input"
+    }
+  ]
+}

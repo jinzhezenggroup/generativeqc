@@ -1,0 +1,69 @@
+{
+  "qz_status": {
+    "success": true,
+    "data": {
+      "name": "gqc-paper-cold3-1114-v2",
+      "status": "SUCCEEDED",
+      "project": "CQ-NexChem",
+      "compute_group": "开发区-H100-cuda13.2版本-183核",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 0,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "priority": 20,
+      "priority_level": "NORMAL",
+      "created_at": "1794643489000",
+      "finished_at": "1794656289000"
+    }
+  },
+  "qz_instances": {
+    "success": true,
+    "data": {
+      "name": "gqc-paper-cold3-1114-v2",
+      "items": [
+        {
+          "status": "instance_success",
+          "type": "instance_type_worker",
+          "node": "qb-prod-gpu163",
+          "rank": 0
+        }
+      ]
+    }
+  },
+  "ustc_status": {
+    "schema": "generativeqc.paper-cold3-slurm-terminal.v1",
+    "job_id": "17384",
+    "job_state": "COMPLETED",
+    "exit_code": "0:0",
+    "observed_utc": "2026-11-14T14:07:04.660699+00:00",
+    "command": [
+      "scontrol",
+      "show",
+      "job",
+      "-o",
+      "17384"
+    ],
+    "raw_scontrol_sha256": "082d0d78cd4569f68a970a868290095fedc9930c69a98fa69250da15df1656bf",
+    "selected_scheduler_fields": {
+      "JobId": "17384",
+      "JobName": "gqc-cold3-fixed-1114",
+      "UserId": "srxu(1006)",
+      "JobState": "COMPLETED",
+      "ExitCode": "0:0",
+      "RunTime": "04:55:35",
+      "TimeLimit": "14:00:00",
+      "SubmitTime": "2026-11-14T17:11:01",
+      "StartTime": "2026-11-14T17:11:15",
+      "EndTime": "2026-11-14T22:06:50",
+      "NodeList": "node1",
+      "BatchHost": "node1",
+      "NumNodes": "1",
+      "NumCPUs": "16",
+      "AllocTRES": "cpu=16,mem=64G,node=1,billing=16"
+    }
+  }
+}
