@@ -1,0 +1,54 @@
+{
+  "cuda_visible_devices": "5",
+  "driver_sha256": "cf76c36fd4fea2b4b6aa4ae92cd046b50b29cb87ef6ce8479c94fd251d11f3f7",
+  "environment": {
+    "cuda_visible_devices": "5",
+    "gpu": "NVIDIA GeForce RTX 5090, GPU-9af5c15a-a02d-fa3e-fe5c-ceb8a0a80c68, 580.95.05",
+    "host": "node1",
+    "libxc": "7.0.0",
+    "numpy": "2.3.5",
+    "pyscf": "2.14.0",
+    "python": "3.13.9",
+    "slurm_job_id": "17388"
+  },
+  "host": "node1",
+  "junit_sha256": "a9b2d2c9ca4ac37c19278c44ef8ee47b9616b2caedac2e7d6f5b73a371e5eb3f",
+  "native_dynamic_dependencies": [
+    "libcudart.so.12",
+    "libcublas.so.12",
+    "libcusolver.so.11",
+    "libstdc++.so.6",
+    "libm.so.6",
+    "libgcc_s.so.1",
+    "libc.so.6",
+    "ld-linux-x86-64.so.2"
+  ],
+  "native_library_sha256": "de2c01a15769c7942338ec9158e0fc0a517f5f447ae23c84475b0a6f5289121e",
+  "nonconvergence": {
+    "attempts": 2,
+    "max_iterations": 1,
+    "name": "MGGA_X_GVT4",
+    "no_force_receipt": true,
+    "no_forces": true,
+    "no_warm_seed": true,
+    "spins": 1
+  },
+  "pytest_command": [
+    "/home/jzzeng/miniconda3/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/python/test_libxc_native_cuda_forces.py::test_native_automatic_force_minimum_and_below_budget",
+    "tests/python/test_libxc_native_cuda_forces.py::test_native_automatic_force_ragged_failure_and_recovery",
+    "--junitxml=/home/jzzeng/generativeqc-qualification/issue1118-scoped-20261114-2210/run/safety-tests.xml"
+  ],
+  "pytest_log_sha256": "972ef3324280c83466096b3336ace2a7d3f3837030dc0585b7e0856dd48d06bb",
+  "pytest_passed": [
+    "test_native_automatic_force_minimum_and_below_budget[1]",
+    "test_native_automatic_force_minimum_and_below_budget[2]",
+    "test_native_automatic_force_ragged_failure_and_recovery"
+  ],
+  "schema": "generativeqc.libxc-scoped-safety.v1",
+  "slurm_job_id": "17388",
+  "test_source_sha256": "d7d245ac88abef4cf6e654ced55031ce6596efa33e09e265fde6e189b3f7cf95"
+}

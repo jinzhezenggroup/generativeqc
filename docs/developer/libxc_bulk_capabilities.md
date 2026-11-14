@@ -454,12 +454,41 @@ Hamiltonian context. Missing prerequisites cannot be borrowed from another
 backend/product/spin. `resolve_context` is an offline evidence lookup; it never
 participates in `Calculator` or native runtime admission.
 
-CI runs the checker directly on retained real receipts and current source
-inputs. Modified importer/Graph/domain/native ABI inputs demote stale evidence;
-missing stages remove dependent claims. Changed build/toolchain or loaded-object
-identity and changed endpoint coverage cannot preserve a stored report. Tests
-also corrupt actual retained numerical rows and execution receipts. Public
-structural default-allow selection is unchanged by these evidence counters.
+CI runs the checker directly on retained real receipts and current dependencies.
+Whole-tree source, embedded build and ELF hashes authenticate **historical
+execution**, not a global expiration switch. An authenticated per-file census
+binds both the original frontend/compiler inputs and the native generators and
+assets. New producers embed it as `dependency_inputs`; legacy campaigns can use
+a hash-pinned manifest sidecar only if its inventories reproduce both original
+receipt digests. Missing inventories fail closed for changed source.
+The legacy sidecar also records the three registry/stationary generator hashes
+from its declared measured Git revision that the older build manifest omitted;
+its hash-pinned supplemental inputs cannot replace either original digest.
+Current native identities include these generators directly, so changing them
+requires rebuilding before a fresh producer can attest that binary.
+
+Invalidation intersects registration, backend and product dependencies. A changed
+CUDA kernel does not erase CPU evidence; force-only changes preserve energy;
+SCF/J/K changes require endpoint regression without discarding unchanged scalar
+compilation or point-domain proof. Explicitly disjoint consumers do not expire
+semilocal evidence. Unknown/shared ABI or build inputs stay conservative and
+require compatibility review and appropriate regression. The snapshot's
+`revalidation_plan` lists the affected products and changed inputs.
+
+Per-registration point checks compare exact emitted bytes, spin/derivative ABI,
+work policy, domain/profile and independent numerical gates. Aggregate inventory
+metadata can change without changing those bytes. Such equivalence is recorded
+in `identity_transitions`, while original source, object, binary, mathematical
+and receipt identities remain intact. Historical functional/MethodIR/plan digest
+preimages must still match the exact current scientific payloads. This does not
+change compiler artifact keys, waive generated-asset integrity, or certify a new
+compiler, binary or execution environment. Those remain bounded by the original
+build/toolchain/environment receipts until independently qualified.
+
+Tests corrupt retained numerical rows, emitted contracts, input inventories and
+execution receipts. Public structural default-allow selection is unchanged by
+these evidence counters; `0/222` stronger `public-method` receipts never means
+222 registrations cannot run or have no scientific validation.
 
 To publish a deliberate qualification change, retain the previous exact summary,
 regenerate measurements or preserve explicit demotions, and put the exact
@@ -469,6 +498,20 @@ unknown and stale acknowledgements fail. An acknowledgement documents a lost
 claim; it cannot restore one or manufacture public/response capability. Retain
 only compressed acceptance receipts; build objects and full logs remain local.
 
+For incremental qualification, use repeated `--name` and `--backend` selections
+to measure only the required scope. Add the resulting campaign path and SHA-256
+to the manifest's `incremental_campaigns` array, rather than replacing the base
+campaign. The checker authenticates and ingests each batch independently,
+retains all current contexts and execution identities, and deduplicates counts
+by registration. A rerun clears pending requirements only for its exact measured
+spin, geometry, basis, grid, precision, Hamiltonian and point domain; resolved
+requests remain as `superseded_revalidation` history. Incomplete products from
+different receipts are never combined
+into an invented paired endpoint. Stale older batches remain explicitly visible;
+an incremental campaign is not a relabeling of their measurements.
+Checkpoint-local missing-backend blockers are superseded only by complete paired
+receipts in both spin layouts; the original gaps remain in campaign metadata.
+
 An ordinary checker success establishes archival consistency, not current-source
 scientific acceptance. For an end-to-end acceptance gate, run:
 
@@ -476,12 +519,27 @@ scientific acceptance. For an end-to-end acceptance gate, run:
 python tools/check_libxc_native_catalog.py --require-current
 ```
 
-This additionally rejects stale source/native identities and requires paired
+This requires dependency-current paired
 admitted energy/force products in the same exact context for each LDA/GGA/tau-MGGA
 family, CPU/CUDA backend and RKS/UKS spin layout. Representative registrations
 suffice, with at least one common registration per family across both backends
 and spin layouts; it does not require every imported registration to run every
 molecule, count merely observed or blocked measurements, or require the optional
 stronger `public-method` receipt. Missing and unsupported domains remain explicit in the
-generated report. The default archival check deliberately continues to permit
+generated report. Stale rows outside this representative matrix do not veto
+acceptance. Inherited evidence proves unchanged dependencies, not a fresh run of
+the latest whole-tree binary. The gate also requires a hash-pinned scheduled
+resource/lifetime receipt in `resource_acceptance`, bound to an admitted CUDA
+force library. This receipt is separate from numerical E/F promotion; the default
+checker preserves its archival validity even when endpoint dependencies change.
+The default archival check deliberately permits
 truthfully recorded stale campaigns without relabeling them as current evidence.
+
+The current retained campaigns do not authenticate every transitive native
+source-generator input now included in the build identity. Endpoint inheritance
+therefore remains pending: the normal archival check passes, while
+`--require-current` must fail until an authentic measured-source supplement or
+appropriate new qualification supplies that missing binding. Existing
+production-domain proofs and historical numerical observations remain retained;
+missing generator authentication is not a measured numerical failure. Consult
+the generated report for exact current counts and scoped requests.

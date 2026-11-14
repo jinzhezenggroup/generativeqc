@@ -185,20 +185,27 @@ def qualify_native_domain(name: str, root: Path, output: Path) -> dict[str, Any]
     return result
 
 
-def native_domain_stage(name: str, result: dict[str, Any]) -> dict[str, Any]:
-    """Recompute named case outcomes and exact current worker/source bindings."""
+def native_domain_stage(
+    name: str, result: dict[str, Any], *, measured_subject: str | None = None
+) -> dict[str, Any]:
+    """Check exact current emitted mathematics, ABI, domain and numerical gates.
+
+    An authenticated offline source census can transport the aggregate subject
+    identity; it cannot waive any emitted-source or scientific contract check.
+    """
     capability = functional_capability(name)
     profile = capability.production_domain_profile
     if (
         result.get("schema") != SCHEMA
-        or result.get("subject_identity") != capability.identity
-        or result.get("profile") != profile.to_payload()
+        or result.get("subject_identity") != (measured_subject or capability.identity)
         or result.get("gates") != GATES
         or result.get("oracle") != "PySCF-2.14.0/Libxc-7.0.0"
         or result.get("identity")
         != canonical_hash({k: v for k, v in result.items() if k != "identity"})
     ):
         raise ValueError("native production-domain identity/profile mismatch")
+    if result.get("profile") != profile.to_payload():
+        raise ValueError("native production-domain profile changed")
     if [r["spin"] for r in result["records"]] != list(profile.spin_layouts):
         raise ValueError("native production-domain missing spin coverage")
     failures = []
@@ -206,9 +213,45 @@ def native_domain_stage(name: str, result: dict[str, Any]) -> dict[str, Any]:
         spin = row["spin"]
         point = _point(name, capability.family, spin)
         # Normalize tuple/list differences introduced by JSON persistence.
-        if row["point_source_identity"] != point.source_identity or canonical_hash(
+        exact = row[
+            "point_source_identity"
+        ] == point.source_identity and canonical_hash(
             row["mathematics"]
-        ) != canonical_hash(point.mathematical_contract):
+        ) == canonical_hash(point.mathematical_contract)
+        equivalent = False
+        if not exact and measured_subject is not None and hasattr(point, "source"):
+            current_math = point.mathematical_contract
+            historical_math = row["mathematics"]
+            # The runtime expression digest includes aggregate inventory
+            # provenance. Prove identical emitted bytes with the original
+            # immutable metadata instead of rewriting any artifact identity.
+            current_payload = {
+                "schema": "generativeqc.automatic-libxc-point-source.v2",
+                "backend": point.backend,
+                "mathematics": current_math,
+                "source": point.source,
+                **({"parameters": point.parameters} if point.parameters else {}),
+            }
+            equivalent = (
+                canonical_hash(current_payload) == point.source_identity
+                and canonical_hash(
+                    {
+                        key: value
+                        for key, value in current_math.items()
+                        if key != "expression_identity"
+                    }
+                )
+                == canonical_hash(
+                    {
+                        key: value
+                        for key, value in historical_math.items()
+                        if key != "expression_identity"
+                    }
+                )
+                and canonical_hash({**current_payload, "mathematics": historical_math})
+                == row["point_source_identity"]
+            )
+        if not exact and not equivalent:
             raise ValueError(
                 "native production-domain worker/domain/derivative ABI changed"
             )
