@@ -1103,7 +1103,11 @@ class Calculator:
         This construction-only phase allocates no molecular workspace; failed
         optional arithmetic can therefore retry the immutable resolved model.
         """
-        from generativeqc_compiler.method import D4Spec, DispersionCorrectionPrimitive
+        from generativeqc_compiler.method import (
+            D4Spec,
+            DispersionCorrectionPrimitive,
+            resolve_method,
+        )
 
         if self._application_precision_budget is not None:
             from .force_aware_numerics import TargetErrorBudget
@@ -1408,11 +1412,17 @@ class Calculator:
             full_range_stationary_second_order_eligible,
         )
 
+        native_cpu_b3lyp = (
+            self._device_name == "cpu"
+            and self._ks_options is not None
+            and self._ks_options.method_ir.identity
+            == resolve_method("B3LYP", spin=self._ks_options.method_ir.spin).identity
+        )
         self._composite_rks_second_order = self._ks_options is not None and (
             composite_stationary_second_order_eligible(self._ks_options.method_ir)
             or (
                 self._device_name == "cpu"
-                and not basis_has_ecp
+                and (not basis_has_ecp or native_cpu_b3lyp)
                 and density_fitting_mode == _native.DENSITY_FITTING_NONE
                 and full_range_stationary_second_order_eligible(
                     self._ks_options.method_ir
@@ -1458,6 +1468,11 @@ class Calculator:
                 self._capabilities,
                 supported_second_order=frozenset(("hvp", "hessian")),
             )
+        # Canonical B3LYP uses the exact linked CPU closure, never a silent JIT
+        # substitute when the installed native package omits that closure.
+        self._native_cpu_second_order = (
+            self._composite_rks_second_order and native_cpu_b3lyp
+        )
         if (
             self._method in _COUPLED_CLUSTER_METHODS
             and not intrinsic_df_rccsdt
@@ -3147,7 +3162,8 @@ class Calculator:
                 "closed-shell LDA/PBE; CPU direct all-electron FP64 "
                 "Cartesian/spherical PBE0 RKS or B3LYP RKS/UKS compositions with "
                 "full-range exchange in (0, 1], optionally with uncut two-body "
-                "D3(BJ); or canonical FP64 WB97M-V RKS/UKS with "
+                "D3(BJ); canonical linked CPU B3LYP RKS/UKS also admits scalar "
+                "ECPs; or canonical FP64 WB97M-V RKS/UKS with "
                 "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
             )
         if multiplicity != 1 and not (
@@ -3295,6 +3311,7 @@ class Calculator:
         solver_options: typing.Any = None,
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
+        max_eri_primitives: int | None = None,
     ) -> typing.Any:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
@@ -3304,15 +3321,27 @@ class Calculator:
         Their uncut two-body D3(BJ) correction is added exactly once, without
         another electronic response solve. Its simultaneous workspace uses
         ``dispersion_memory_budget_bytes`` from construction.
+        Canonical B3LYP uses a linked native CPU owner for response, moving-grid
+        assembly and native D3 composition, without runtime compilation. Missing
+        linked closure fails before SCF. Only this exact B3LYP graph also admits
+        scalar ECPs, subject to the native operator and resource bounds; other
+        full-range compositions retain their all-electron restriction.
+        With ``solver_options=None`` its physical
+        response gates are rtol=1e-10 and atol=1e-12; explicit solver options are
+        honored without weakening their gates. ``cache`` is unused by this path.
         Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
         and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
         AD and coupled response, remain in linked native C++/CUDA code. A
         build-time Hessian AOT package is required; Python, CuPy and runtime
         compilation are not numerical dependencies. ``cache`` is retained for
-        CPU/development compatibility and is unused by this CUDA AOT path.
+        other CPU/development implementations and is unused by CUDA AOT.
         Unsupported resources never select host AD.
         The integral budget bounds generated second-order integral work;
         response/provider diagnostics remain separately reported.
+        ``max_eri_primitives`` optionally replaces the native CPU default of
+        100,000,000 first-plus-curvature nuclear ERI primitive visits for the
+        whole request. It is a work cap, not a byte/time or induced-Fock bound,
+        and is rejected for other execution paths rather than ignored.
 
         ``direction`` must be finite real with shape ``(natoms, 3)``.
         Return a detached response record whose ``value`` has that shape;
@@ -3325,6 +3354,26 @@ class Calculator:
             atoms, multiplicity=multiplicity, endpoint="hvp"
         )
         vector = checked_direction(direction, len(native_atoms))
+        if max_eri_primitives is not None and not getattr(
+            self, "_native_cpu_second_order", False
+        ):
+            raise NotImplementedError(
+                "max_eri_primitives requires the linked native CPU Hessian owner"
+            )
+        if getattr(self, "_native_cpu_second_order", False):
+            from ._native_cpu_hessian import run_native_cpu
+
+            return run_native_cpu(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                direction=vector,
+                max_eri_primitives=max_eri_primitives,
+                integral_budget_bytes=integral_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                solver_options=solver_options,
+            )
         if self._composite_rks_second_order and self._device_name == "cuda":
             from ._native_hessian import run_native_cuda
 
@@ -3387,6 +3436,7 @@ class Calculator:
         solver_options: typing.Any = None,
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
+        max_eri_primitives: int | None = None,
     ) -> typing.Any:
         """Assemble a bounded raw analytic semilocal or hybrid Cartesian Hessian.
 
@@ -3400,6 +3450,18 @@ class Calculator:
         Corrected output budgets must hold three dense matrices (the detached
         electronic matrix, private sum and immutable publication); simultaneous
         correction workspace uses ``dispersion_memory_budget_bytes``.
+        Canonical B3LYP instead uses the linked native CPU aggregate owner and
+        also admits scalar ECPs within the native operator and resource bounds.
+        Other full-range compositions remain all-electron. It uses the scalar
+        response strategy (``strategy=None`` or ``"scalar"``). Its output
+        reservation includes two matrix panels plus one direction and one native
+        column; the common corrected-output gate remains conservative. Native
+        CPU defaults use physical response rtol=1e-10 and atol=1e-12; an explicitly
+        supplied solver retains its original gates, including atol=0.
+        ``max_eri_primitives`` optionally replaces the native CPU default of
+        100,000,000 first-plus-curvature nuclear ERI primitive visits across all
+        requested columns. It bounds work, not bytes/time or induced-Fock work;
+        other execution paths reject this control rather than ignoring it.
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
@@ -3419,6 +3481,12 @@ class Calculator:
         native_atoms = self._checked_rks_second_order_atoms(
             atoms, multiplicity=multiplicity, endpoint="hessian"
         )
+        if max_eri_primitives is not None and not getattr(
+            self, "_native_cpu_second_order", False
+        ):
+            raise NotImplementedError(
+                "max_eri_primitives requires the linked native CPU Hessian owner"
+            )
         if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
             raise ValueError("output_budget_bytes must be a positive int64 byte count")
         coordinates = 3 * len(native_atoms)
@@ -3432,6 +3500,28 @@ class Calculator:
             raise ValueError(
                 "full RKS Hessian output and immutable publication exceed "
                 "output_budget_bytes"
+            )
+        if getattr(self, "_native_cpu_second_order", False):
+            from ._native_cpu_hessian import run_native_cpu
+
+            if block_size is not None and (
+                type(block_size) is not int or block_size != 1
+            ):
+                raise ValueError("native CPU Hessian requires block_size=None or 1")
+            if strategy not in (None, "scalar"):
+                raise NotImplementedError(
+                    "native CPU Hessian supports only strategy='scalar'"
+                )
+            return run_native_cpu(
+                self,
+                native_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                integral_budget_bytes=integral_budget_bytes,
+                grid_budget_bytes=grid_budget_bytes,
+                output_budget_bytes=output_budget_bytes,
+                solver_options=solver_options,
+                max_eri_primitives=max_eri_primitives,
             )
         if self._composite_rks_second_order and self._device_name == "cuda":
             from ._native_hessian import run_native_cuda

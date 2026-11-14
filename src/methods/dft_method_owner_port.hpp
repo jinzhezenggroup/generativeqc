@@ -140,6 +140,15 @@ class KsBatchOwnerPort {
                                                       KsDerivativeSnapshot& output,
                                                       std::string& detail) = 0;
 
+  virtual generativeqc_status borrow_host_derivative_sources(std::size_t,
+                                                             const dft::CudaKsFinalStateToken&,
+                                                             KsHostDerivativeSources& output,
+                                                             std::string& detail) {
+    output = {};
+    detail = "prepared KS owner has no native CPU derivative-source binding";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
   /** Borrow only immutable integral geometry under the caller's context lock.
    * No grid, density or final-state arrays are copied/exported. */
   virtual generativeqc_status borrow_integral_system(std::size_t index,

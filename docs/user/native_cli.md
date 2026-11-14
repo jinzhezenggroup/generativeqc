@@ -53,6 +53,59 @@ package CI checks, see [build and CUDA configuration](../developer/build.md).
 Tagged releases, when published, are listed on
 [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
 
+## Native CPU B3LYP Hessian and HVP
+
+The default `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` build links canonical
+Gaussian/VWN-RPA B3LYP RKS/UKS and its canonical uncut two-body D3(BJ), ATM-off
+composition into the native CPU executable. Both commands use the same native
+batch/response owner as the Python API, with no interpreter or runtime compiler:
+
+```bash
+generativeqc hessian molecule.xyz --method 'b3lyp-d3(bj)-rks' \
+  --basis sto-3g --representation spherical --backend cpu --json
+generativeqc hvp radical.xyz --method 'b3lyp-d3(bj)-uks' --multiplicity 2 \
+  --basis sto-3g --representation spherical --backend cpu \
+  --direction direction.json --json
+```
+
+Charge, multiplicity, basis and native grid are forwarded, not replaced with
+a cheaper calculation. These examples are interface examples, not chemistry
+or grid-convergence recommendations. CPU execution requires direct FP64.
+The exact linked canonical B3LYP RKS/UKS programs also accept scalar ECPs
+within the native operator and resource bounds, with or without uncut two-body
+D3(BJ). Fitted second-order endpoints remain excluded. This does not admit
+ECPs to the separate molecular saddle command.
+The raw matrix or HVP and scalar energy/work receipt publish only after the
+complete request succeeds. Missing closure or a failed source never publishes
+an electronic-only matrix for the corrected method.
+CPU diagnostics separate nuclear ERI and one-electron primitive visits, source,
+curvature and induced-response XC visits, ECP block/radial/primitive/contraction
+work, and D3 pair/reference work. Nuclear ERI counts do not include the
+integrals inside induced Fock actions; those actions are reported separately.
+Analytic Gaussian ECP work is reported in kernel blocks; its quadrature-only
+radial-layer, AO-point and contraction counters remain zero, not missing work.
+
+In addition to integral/grid/output/response limits, CPU controls include
+`--numeric-budget-bytes` (512 MiB), `--dispersion-budget-bytes` (64 MiB),
+`--ecp-budget-bytes` (128 MiB), `--max-eri-primitives` (100,000,000 nuclear
+primitive visits) and `--max-d3-pairs` (16,777,216 pair visits). Work ceilings
+cover the whole requested matrix or HVP. CPU response defaults are
+`--response-rtol 1e-10` and `--response-atol 1e-12`; an explicit absolute
+tolerance is honored unchanged. CUDA device/nonlocal budget flags refuse on
+CPU, rather than being silently ignored. These derivative reservations exclude
+primal SCF/provider storage, export scratch, caller request storage and process
+RSS. Ordered nuclear integral work is still quartic; passing a small CPU
+control does not qualify heavy-element or 25--40-atom transition-state work.
+
+## Native molecular transition-state task
+
+`generativeqc saddle INPUT.xyz --masses FILE.json --json` executes the native
+local first-order-saddle task, with no Python/JIT or implicit preoptimization.
+See {ref}`the saddle command contract <native-saddle-cli>` for exact B3LYP
+RKS/UKS chemistry, ordered isotope masses, the 100-attempt bound, independent
+convergence controls, failure-state retention and unscaled harmonic publication.
+`generativeqc optimize` remains a separate minimum-only task.
+
 ## Compiler-AD WB97M-V Hessian and HVP
 
 The C++ executable exposes native `hessian` and `hvp` commands for canonical
@@ -66,8 +119,8 @@ closure is an explicit error, never a request to compile or fall back at runtime
 This opt-in path replaces the old Python/CuPy CLI worker, including the response
 solver and stationary assembly, rather than merely precompiling isolated leaves.
 `--compiler-python`, `--compiler-library`, `--cache` and `--timeout-seconds` are
-obsolete and rejected. CPU CLI Hessians are not offered by this native endpoint;
-the separate Python API retains its existing CPU contract.
+obsolete and rejected. WB97M-V CUDA and the CPU B3LYP route above have separate
+linked inventories and resource semantics; neither substitutes for the other.
 
 For an independently retained inventory, the equivalent complete selection can
 also be generated before configuring CMake:

@@ -15,6 +15,13 @@
 #include "dft/grid.hpp"
 #include "methods/method.hpp"
 
+namespace generativeqc::dft {
+class AoBasis;
+}
+namespace generativeqc::scf {
+class PreparedFockPlan;
+}
+
 namespace generativeqc::methods::detail {
 
 /** Model-level capability upper bound without a molecule or CUDA operation.
@@ -72,6 +79,29 @@ struct KsDerivativeSnapshot {
   dft::CudaMolecularGridView nonlocal_resident_grid;
   std::uint64_t export_d2h_bytes{}, export_reads{}, export_synchronizations{};
 };
+
+/** Borrowed native CPU sources from the exact current KS geometry owner.
+ * The caller must hold its context lock throughout this synchronous lifetime;
+ * replay, destruction or releasing that lock invalidates the binding. This
+ * neither exports a stationary frame nor grants any derivative capability.
+ * Dispersion describes only the native owner's correction, not an additional
+ * total-method correction composed independently by a frontend.
+ */
+struct KsHostDerivativeSources {
+  const core::System* system{};
+  const scf::PreparedFockPlan* fock{};
+  const dft::AoBasis* basis{};
+  const dft::MolecularGrid* grid{};
+  const named_ks::Dispersion* dispersion{};
+};
+
+/** Authenticate the exact token before borrowing; every failure clears output.
+ * No numerical buffers, reconstructed sources or evaluations are created.
+ */
+generativeqc_status borrow_dft_host_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                       const dft::CudaKsFinalStateToken& expected,
+                                                       KsHostDerivativeSources& output,
+                                                       std::string& detail);
 
 generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t index,
                                               const dft::CudaKsFinalStateToken& expected,

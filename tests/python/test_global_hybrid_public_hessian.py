@@ -158,11 +158,13 @@ def test_public_uks_raw_matrix_and_failure_recovery(
     )
     assert calculator.second_order_capabilities == {"hvp", "hessian"}
     options = {"multiplicity": 2, "cache": tmp_path, "solver_options": SOLVER}
-    with pytest.raises(MemoryError, match="grid_budget_bytes"):
+    with pytest.raises(
+        (RuntimeError, MemoryError), match="grid_budget_bytes|geometry cap"
+    ):
         calculator.hessian_vector_product(
             atoms, direction, grid_budget_bytes=1, **options
         )
-    with pytest.raises(ResponseSolveError):
+    with pytest.raises((RuntimeError, MemoryError), match="response/GMRES workspace"):
         calculator.hessian_vector_product(
             atoms,
             direction,
@@ -184,12 +186,15 @@ def test_public_uks_raw_matrix_and_failure_recovery(
         assert result.diagnostics["spin"] == "polarized"
         assert result.diagnostics["displaced_scf_evaluations"] == 0
         assert result.diagnostics["scf_fock_builds"] > 0
-        assert result.diagnostics["scf_occupied_orbitals"] == (2, 1)
-        assert result.diagnostics["scf_density_shape"] == (2, 3, 3)
-        assert result.diagnostics["scf_physical_residual"] < 2e-10
+        assert result.diagnostics["numerical_runtime"] == "native-cpp-cpu"
+        assert result.diagnostics["response_residual_norm"] < 2e-10
+        assert result.diagnostics["source_energy_error"] < 2e-8
         assert (
-            result.diagnostics["scf_density_sha256"]
-            == matrix.diagnostics["scf_density_sha256"]
+            result.diagnostics["electronic_method_identity"]
+            == calculator.ks_options.method_ir.identity
+        )
+        assert (
+            result.diagnostics["total_method_identity"] == calculator.method_ir.identity
         )
     calculator.clear_cache()
     assert np.isfinite(matrix.matrix).all() and not matrix.matrix.flags.writeable
@@ -237,10 +242,10 @@ def test_semantic_admission_does_not_trust_an_identifier(
 
 @pytest.mark.parametrize("method", ("b3lyp-rks", "pbe0-rks"))
 @pytest.mark.parametrize("domain", ("ecp", "g_shell", "auto_precision"))
-def test_unqualified_basis_and_precision_domains_remain_closed(
+def test_basis_and_precision_admission_preserves_the_exact_native_ecp_exception(
     method: str, domain: str
 ) -> None:
-    """Angular, core and precision qualification cannot leak from WB97M-V."""
+    """Only exact B3LYP inherits its own native ECP qualification, not WB97M-V's."""
     from generativeqc import Primitive, Shell
     from test_wb97mv_ecp_hessian import synthetic_basis
 
@@ -257,6 +262,9 @@ def test_unqualified_basis_and_precision_domains_remain_closed(
             Calculator(method=method, device="cpu", **options)
         return
     public = Calculator(method=method, device="cpu", **options)
+    if domain == "ecp" and method == "b3lyp-rks":
+        assert public.second_order_capabilities == {"hessian", "hvp"}
+        return
     assert not public.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
         public.hessian(ATOMS)

@@ -793,6 +793,91 @@ void generated_f_shell_derivative_channels() {
     }
 }
 
+/** Contracted signed channels retain the independent Jet recurrence control,
+ * including coincident slots and diffuse/tight exponents through f shells. */
+void contracted_packaged_derivative_channels() {
+  using namespace generativeqc;
+  if (!integrals::has_packaged_cpu_eri_shell_derivatives()) return;
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL})
+    for (const auto angular : {std::array<unsigned, 4>{2, 1, 0, 0}, {3, 1, 0, 0}})
+      for (unsigned geometry = 0; geometry < 3; ++geometry) {
+        core::System system;
+        system.atoms = {{1, {0.13, -0.31, 0.24}},
+                        {1, {-0.43, 0.27, 0.51}},
+                        {1, {0.68, -0.14, -0.22}},
+                        {1, {-0.21, 0.48, -0.63}}};
+        system.basis_representation = representation;
+        if (geometry == 1) {
+          system.atoms[1].position = system.atoms[0].position;
+          system.atoms[3].position = system.atoms[2].position;
+        }
+        if (geometry == 2)
+          for (auto& atom : system.atoms)
+            for (auto& coordinate : atom.position) coordinate *= 17;
+        std::size_t count = 1;
+        constexpr std::array<double, 4> diffuse_tight{0.02, 0.7, 15.0, 0.03};
+        for (std::size_t slot = 0; slot < angular.size(); ++slot) {
+          const auto exponent = geometry == 2 ? diffuse_tight[slot] : 0.6 + 0.1 * slot;
+          system.shells.push_back({static_cast<unsigned>(slot),
+                                   angular[slot],
+                                   {{exponent, 0.85}, {1.7 * exponent, -0.18}}});
+          count *= molecule::ao_expansions(angular[slot], representation).size();
+        }
+        std::string detail;
+        require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                "contracted derivative fixture normalization failed");
+        std::vector<double> first(count), second(count), zeros(count);
+        first.front() = 0.37;
+        first.back() = -0.21;
+        first[count / 2] = 0.08;
+        second.front() = -0.13;
+        second[count / 3] = 0.11;
+        const std::array<std::span<const double>, 3> channels{first, second, zeros};
+        constexpr std::array<std::size_t, 4> shells{0, 1, 2, 3};
+        std::uint64_t reference_visits = 0, packaged_visits = 0;
+        const auto reference = integrals::contract_weighted_eri_shell_derivatives(
+            system, shells, channels, &reference_visits);
+        const auto actual = integrals::contract_weighted_eri_shell_derivatives(
+            system, shells, channels, &packaged_visits,
+            integrals::WeightedEriDerivativeExecution::PackagedCpu);
+        require(reference_visits > 0 && packaged_visits >= reference_visits &&
+                    packaged_visits <= 3 * reference_visits,
+                "contracted derivative changed semantic primitive work");
+        for (std::size_t channel = 0; channel < channels.size(); ++channel)
+          for (std::size_t coordinate = 0; coordinate < 12; ++coordinate)
+            require(std::abs(actual[channel][coordinate] - reference[channel][coordinate]) <
+                        2e-10 * (1 + std::abs(reference[channel][coordinate])),
+                    "contracted packaged derivative differs from independent recurrence");
+        require(actual.back() == std::array<double, 12>{},
+                "zero channel acquired a derivative from another channel");
+      }
+}
+
+/** The packaged callable exposes no primal. Its zero primal must still reject
+ * overflow in external coefficient products, even at an all-zero gradient. */
+void packaged_zero_primal_overflow_is_transactional() {
+  using namespace generativeqc;
+  if (!integrals::has_packaged_cpu_eri_shell_derivatives()) return;
+  core::System system;
+  system.atoms = {{1, {0.0, 0.0, 0.0}}};
+  for (unsigned shell = 0; shell < 4; ++shell)
+    system.shells.push_back({0, 0, {{0.6, std::numeric_limits<double>::max()}}});
+  constexpr std::array<std::size_t, 4> shells{0, 1, 2, 3};
+  const std::array<double, 1> weight{1.0};
+  const std::array<std::span<const double>, 1> channels{weight};
+  std::uint64_t evaluations = 123;
+  bool rejected = false;
+  try {
+    (void)integrals::contract_weighted_eri_shell_derivatives(
+        system, shells, channels, &evaluations,
+        integrals::WeightedEriDerivativeExecution::PackagedCpu);
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected && evaluations == 123,
+          "nonfinite coefficient contraction published a partial result or count");
+}
+
 /** Unsupported artifacts remain explicit errors, while the MP2 consumer keeps
  * its bounded reference route. This is a cotangent contract, not an SCF oracle. */
 void unsupported_packaged_derivative_preserves_reference_consumer() {
@@ -1161,6 +1246,8 @@ int main() {
     shell_local_weighted_eri_derivative();
     shared_shell_derivative_channels();
     generated_f_shell_derivative_channels();
+    contracted_packaged_derivative_channels();
+    packaged_zero_primal_overflow_is_transactional();
     unsupported_packaged_derivative_preserves_reference_consumer();
     cuda_shell_derivative_budget_failure_is_transactional();
     streamed_one_electron_derivative();

@@ -145,7 +145,9 @@ def derivative_cpu_aot_sources() -> tuple[
     units, total = [], 0
     for shard, begin in enumerate(range(0, len(requests), REQUESTS_PER_UNIT)):
         selected = requests[begin : begin + REQUESTS_PER_UNIT]
-        source = emit_first_derivative_cpu(selected, symbol=cpu_aot_symbol(shard))
+        source = emit_first_derivative_cpu(
+            selected, symbol=cpu_aot_symbol(shard), positive_full_moments=True
+        )
         size = len(source.encode("utf-8"))
         total += size
         if size > MAX_UNIT_BYTES or total > MAX_PROGRAM_BYTES:

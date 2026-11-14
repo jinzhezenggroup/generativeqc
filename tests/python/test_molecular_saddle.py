@@ -38,6 +38,8 @@ def calculator(monkeypatch: pytest.MonkeyPatch) -> Calculator:
     "changes",
     [
         {"multiplicity": 3},
+        {"multiplicity": 0},
+        {"multiplicity": -1},
         {"charge": True},
         {"masses": (1, 1)},
         {"masses": (16, 1, 0)},
@@ -46,6 +48,9 @@ def calculator(monkeypatch: pytest.MonkeyPatch) -> Calculator:
         {"root_overlap_budget_bytes": 0},
         {"output_budget_bytes": 1},
         {"grid_budget_bytes": -1},
+        {"max_eri_primitives": 0},
+        {"max_eri_primitives": True},
+        {"max_eri_primitives": 1 << 63},
         {"options": SaddleOptions()},
         {"evaluation_progress": 1},
     ],
@@ -129,6 +134,34 @@ def test_cancel_before_preparation(calculator: Calculator) -> None:
     assert result.harmonics is None
     assert not result.diagnostics["evaluations"]
     assert result.diagnostics["scf_iterations"] == 0
+
+
+@pytest.mark.parametrize("functional", ("B3LYP", "PBE0"))
+def test_unrestricted_admission_preserves_public_hessian_boundary(
+    calculator: Calculator, monkeypatch: pytest.MonkeyPatch, functional: str
+) -> None:
+    """Cancellation tests admission without pretending to qualify a molecule."""
+    unrestricted = Calculator(
+        method=resolve_method(functional, spin="polarized"),
+        device="cpu",
+        basis="sto-3g",
+        basis_representation="spherical",
+    )
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("cancelled or unqualified UKS request started an SCF")
+
+    monkeypatch.setattr(unrestricted, "prepare_batch", forbidden)
+    if functional == "PBE0":
+        with pytest.raises(NotImplementedError, match="qualified|public hessian"):
+            optimize_saddle(unrestricted, ATOMS, masses=MASSES, cancelled=lambda: True)
+    else:
+        result = optimize_saddle(
+            unrestricted, ATOMS, masses=MASSES, cancelled=lambda: True
+        )
+        assert result.optimizer.receipt["status"] == "cancelled"
+        assert result.diagnostics["spin"] == "polarized"
+        assert not result.diagnostics["evaluations"]
 
 
 def test_preparation_failure_is_a_retained_result(
@@ -302,7 +335,7 @@ def test_near_linear_native_harmonic_rank_mismatch_fails_closed(
     assert "rigid-mode rank" in result.diagnostics["harmonic_failure"][1]
 
 
-def test_closed_owners_before_d3_publication(
+def test_native_total_publication_closes_batch_and_tracks_only_accepted_roots(
     calculator: Calculator, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An executable lifecycle test; synthetic derivatives are not molecular evidence."""
@@ -311,7 +344,6 @@ def test_closed_owners_before_d3_publication(
     from types import MappingProxyType
 
     from generativeqc import _molecular_saddle
-    from generativeqc.composite_rks_hessian import CompositeRKSResponse
     from generativeqc.saddle import SaddleProgress, SaddleResult
 
     live = set()
@@ -342,19 +374,23 @@ def test_closed_owners_before_d3_publication(
         )
         return owned(
             "batch",
-            SimpleNamespace(execute=lambda **kwargs: SimpleNamespace(items=(primal,))),
+            SimpleNamespace(
+                execute=lambda **kwargs: SimpleNamespace(items=(primal,)),
+                _native_dft_force_eligible=lambda index: True,
+            ),
         )
 
-    def response(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+    def orbital_frame(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        assert live == {"batch"}
         occupied = next(orbital_sources)
         coefficients = np.column_stack((occupied, np.eye(3)[:, 2]))
         state = SimpleNamespace(
             identity=SimpleNamespace(spin="unpolarized", geometry_identity="geometry"),
             coefficients=coefficients[None],
             occupations=np.array([[2, 2, 0]]),
-            grid=SimpleNamespace(identity="grid"),
+            numeric_reservation_bytes=4096,
         )
-        return owned("response", SimpleNamespace(state=state))
+        return state
 
     @dataclass(frozen=True)
     class Electronic:
@@ -366,26 +402,27 @@ def test_closed_owners_before_d3_publication(
             return self._diagnostics
 
     def build(*args: typing.Any, **kwargs: typing.Any) -> Electronic:
-        assert live == {"batch", "ao", "response"}
+        assert live == {"batch"}
         return Electronic(
             np.eye(9),
             {
                 "nuclear_response_solves": 9,
-                "response_residual_norms": (1e-12,) * 9,
+                "response_residual_norm": 1e-12,
                 "raw_symmetry_error": 0.0,
+                "total_method_identity": calculator.method_ir.identity,
+                "response_iterations": 9,
+                "induced_fock_actions": 9,
+                "first_eri_primitives": 100,
+                "curvature_eri_primitives": 200,
+                "d3_pair_visits": 18,
             },
         )
-
-    def compose(
-        electronic: Electronic, *args: typing.Any, **kwargs: typing.Any
-    ) -> Electronic:
-        assert not live
-        return electronic
 
     def drive(coordinates: typing.Any, **callbacks: typing.Any) -> SaddleResult:
         initial = np.array(coordinates)
         _energy, gradient = callbacks["energy_gradient"](initial)
         matrix = callbacks["hessian"](initial)
+        assert not live
         receipt = MappingProxyType(
             {
                 "stationary_verified": False,
@@ -398,6 +435,7 @@ def test_closed_owners_before_d3_publication(
         displaced = initial + 0.01
         callbacks["energy_gradient"](displaced)
         callbacks["hessian"](displaced)
+        assert not live
         return SaddleResult(
             initial,
             gradient,
@@ -411,27 +449,42 @@ def test_closed_owners_before_d3_publication(
         )
 
     monkeypatch.setattr(calculator, "prepare_batch", prepare)
-    monkeypatch.setattr(calculator, "_d3_second_order_spec", object())
-    monkeypatch.setattr(
-        "generativeqc_compiler.dft.NativeAO", lambda *args, **kwargs: owned("ao", None)
-    )
-    monkeypatch.setattr(CompositeRKSResponse, "from_native", response)
-    monkeypatch.setattr(
-        "generativeqc.composite_rks_hessian.composite_rks_hessian", build
-    )
-    monkeypatch.setattr("generativeqc.d3_hessian.compose_second_order", compose)
-    monkeypatch.setattr(
-        "generativeqc.overlap.cross_overlap", lambda *args, **kwargs: np.eye(3)
-    )
+    monkeypatch.setattr("generativeqc._native_cpu_hessian.orbital_frame", orbital_frame)
+    monkeypatch.setattr("generativeqc._native_cpu_hessian.execute_batch", build)
+
+    def cross_overlap(
+        target: Calculator,
+        source: Calculator,
+        atoms: tuple[Atom, ...],
+        *,
+        source_atoms: tuple[Atom, ...],
+        **kwargs: typing.Any,
+    ) -> np.ndarray:
+        assert target is source is calculator
+        np.testing.assert_allclose(
+            [atom.position for atom in atoms],
+            [atom.position for atom in source_atoms],
+            atol=1e-15,
+        )
+        return np.eye(3)
+
+    monkeypatch.setattr("generativeqc.overlap.cross_overlap", cross_overlap)
     monkeypatch.setattr(_molecular_saddle, "correct_saddle", drive)
     result = optimize_saddle(calculator, ATOMS, masses=MASSES)
     assert not result.converged
     assert not live
     assert result.diagnostics["scf_iterations"] == 21
     assert result.diagnostics["nuclear_response_solves"] == 18
+    assert result.diagnostics["d3_pair_visits"] == 36
     overlaps = [
         event["minimum_occupied_overlap"]
         for event in result.diagnostics["evaluations"]
         if event["stage"] == "energy_gradient" and event["status"] == "complete"
     ]
     np.testing.assert_allclose(overlaps, [1, 0.95, 0.95])
+    registrations = [
+        event["root_registration_translation_bohr"]
+        for event in result.diagnostics["evaluations"]
+        if event["stage"] == "energy_gradient" and event["status"] == "complete"
+    ]
+    np.testing.assert_allclose(registrations, [[0, 0, 0], [-0.01] * 3, [0.01] * 3])

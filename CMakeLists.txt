@@ -8,6 +8,7 @@ include(GNUInstallDirs)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCGenerated.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCHessianAot.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCHostHessianAot.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCGeneratedSources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSources.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCCuda.cmake")
@@ -78,9 +79,22 @@ option(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES
 set(GENERATIVEQC_HESSIAN_AOT_INVENTORY
     "" CACHE FILEPATH
     "Optional explicit Hessian AOT inventory; empty selects complete factorized orbital-f/auxiliary-g closure")
+option(GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES
+       "Build CPU scalar AD leaves only, not a complete native Hessian endpoint" OFF)
+option(GENERATIVEQC_ENABLE_HOST_KS_RESPONSE
+       "Build native CPU fixed-geometry KS response, not a complete Hessian endpoint" OFF)
+set(GENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY
+    "${CMAKE_CURRENT_SOURCE_DIR}/manifests/host_hessian_aot_b3lyp.json" CACHE FILEPATH
+    "Explicit build-time physical-method inventory for CPU Hessian scalar leaves")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
+option(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN
+       "Link native CPU stationary full-range GGA-hybrid Hessian execution" ON)
+if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
+  set(GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES ON)
+  set(GENERATIVEQC_ENABLE_HOST_KS_RESPONSE ON)
+endif()
 option(GENERATIVEQC_BUILD_TESTS "Build native tests" ON)
 option(GENERATIVEQC_BUILD_CLI "Build the Python-free native command-line executable" ON)
 option(GENERATIVEQC_MONOLITHIC_CLI
@@ -374,6 +388,22 @@ generativeqc_add_gfn2_runtime(generativeqc)
 generativeqc_add_component_sources(generativeqc)
 generativeqc_register_host_generated_sources(generativeqc)
 
+# Keep prerequisite scalar leaves separate from complete-endpoint admission.
+# They do not change CLI capability macros or link a Python response owner.
+if(GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES)
+  generativeqc_add_host_hessian_aot(generativeqc_host_hessian_aot
+    "${GENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY}")
+endif()
+if(GENERATIVEQC_ENABLE_HOST_KS_RESPONSE)
+  if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
+    generativeqc_add_host_ks_response(generativeqc_host_ks_response
+      generativeqc_host_hessian_aot generativeqc LINK_INTO_CORE)
+  else()
+    generativeqc_add_host_ks_response(generativeqc_host_ks_response
+      generativeqc_host_hessian_aot generativeqc)
+  endif()
+endif()
+
 # A local tuned library may replace this build only when its scientific source
 # and generator are identical. Paths and Git metadata are deliberately excluded
 # so the same installed build can be reused across homogeneous cluster nodes.
@@ -501,7 +531,7 @@ if(GENERATIVEQC_BUILD_CLI)
   find_package(LibArchive REQUIRED)
   add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
                  src/cli/geometry_command.cpp src/cli/json.cpp src/cli/profiles.cpp
-                 src/cli/resources.cpp src/cli/hessian.cpp)
+                 src/cli/resources.cpp src/cli/hessian.cpp src/cli/saddle.cpp)
   generativeqc_link_cli_core(generativeqc_cli)
   if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
     target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)
@@ -590,8 +620,15 @@ if(GENERATIVEQC_BUILD_TESTS)
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_hessian.py"
                      $<TARGET_FILE:generativeqc_cli>)
     set_tests_properties(generativeqc_cli_hessian_contract PROPERTIES
-                         ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>"
+                         ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>;GENERATIVEQC_TEST_HOST_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HOST_KS_HESSIAN}>"
                          TIMEOUT 600)
+    add_test(NAME generativeqc_cli_saddle_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_saddle.py"
+                     $<TARGET_FILE:generativeqc_cli>)
+    set_tests_properties(generativeqc_cli_saddle_contract PROPERTIES
+                         ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_HOST_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HOST_KS_HESSIAN}>"
+                         TIMEOUT 300)
     add_test(NAME generativeqc_cli_rhf_cpu
              COMMAND generativeqc_cli run
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"

@@ -463,8 +463,9 @@ def reassociate_einsums(
     *,
     max_operands: int = 6,
     max_intermediate_axes: typing.Mapping[str, int] | None = None,
+    require_degree_reduction: bool = True,
 ) -> Program:
-    """Rewrite only n-ary contractions with a provably lower symbolic degree.
+    """Plan bounded n-ary contractions, requiring lower degree by default.
 
     This is explicit opt-in because the new binary tree changes floating-point
     reduction order.  The mathematical index contraction and exact rational
@@ -473,8 +474,12 @@ def reassociate_einsums(
     ``max_intermediate_axes`` optionally bounds the number of axes of each
     index-space kind in new intermediates. It changes only scheduling, never
     existing inputs or public output shapes. If no lower-degree allowed tree
-    exists, retain the direct contraction. This bounds representation rank,
-    not total live memory, which remains the execution planner's responsibility.
+    exists, retain the direct contraction. With ``require_degree_reduction=False``
+    the same planner may also select degree-neutral binary trees, enabling
+    explicit constant-work reduction and subsequent common-subexpression reuse.
+    This is not a universal speed guarantee, especially for runtime-sized
+    templates: consumers must price actual work and owned workspace at their
+    runtime extents. Axis limits bound representation rank, not total live memory.
     """
 
     if not isinstance(program, Program):
@@ -485,6 +490,8 @@ def reassociate_einsums(
         )
     if type(max_operands) is not int or not 3 <= max_operands <= 8:
         raise ValueError("max_operands must lie in [3, 8]")
+    if type(require_degree_reduction) is not bool:
+        raise TypeError("require_degree_reduction must be bool")
     from .types import SPACE_KINDS
 
     limits = dict(max_intermediate_axes or {})
@@ -504,7 +511,10 @@ def reassociate_einsums(
             spec = _infer(node.op, inputs, node.attrs, node.spec)
             updated = Node(node.op, inputs, spec, node.attributes)
         updated = _reassociate_node(
-            updated, max_operands=max_operands, max_intermediate_axes=limits
+            updated,
+            max_operands=max_operands,
+            max_intermediate_axes=limits,
+            require_degree_reduction=require_degree_reduction,
         )
         replacements[node] = updated
 

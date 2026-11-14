@@ -782,7 +782,9 @@ def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     """Recognize qualified full-range RKS and B3LYP UKS graphs by mathematics.
 
     This is only the mathematical admission rule. The caller must also require
-    CPU FP64, direct all-electron integrals and the qualified AO domain. Retain
+    CPU FP64, direct integrals and the qualified AO domain. Scalar ECPs require
+    the separately qualified exact linked B3LYP graph; coefficient-variable
+    compositions and PBE0 remain all-electron. Retain
     the independently checked PBE0/B3LYP semilocal compositions while allowing
     their full-range coefficient to vary within the physical hybrid interval.
     Other semilocal scales, spin layouts and additional primitives need their

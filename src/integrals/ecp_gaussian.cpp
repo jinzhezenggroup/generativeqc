@@ -10,6 +10,7 @@
 #include "core/work_budget.hpp"
 #include "generated_ecp_ao.cuh"
 #include "generated_ecp_gaussian.hpp"
+#include "integrals/ecp_curvature_cpu.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
@@ -75,6 +76,7 @@ std::vector<Powers> cartesian_pairs(unsigned first, unsigned second) {
 
 std::vector<Group> groups_for(const core::System& system) {
   std::vector<Group> groups;
+  groups.reserve(system.ecp_terms.size());
   for (const auto& term : system.ecp_terms) {
     auto found = std::find_if(groups.begin(), groups.end(), [&](const Group& group) {
       return group.center == term.atom_index && group.exponent == term.exponent;
@@ -110,19 +112,26 @@ std::vector<Shell> shells_for(const core::System& system) {
   return shells;
 }
 
-std::size_t output_elements(const core::System& system, unsigned order, bool weighted) {
+enum class Retention { MatrixJets, WeightedSecond, Direction, WeightedMixed, Column };
+
+std::size_t output_elements(const core::System& system, unsigned order, Retention retention) {
+  if (retention == Retention::WeightedMixed) return 8;
   const auto coordinates = runtime::size_mul(3, system.atoms.size());
-  if (weighted)
+  if (retention == Retention::Column)
+    return runtime::size_mul(2, runtime::size_add(2, runtime::size_mul(2, coordinates)));
+  if (retention == Retention::WeightedSecond)
     return runtime::size_mul(
         2, runtime::size_add(
                1, runtime::size_add(coordinates, runtime::size_mul(coordinates, coordinates))));
   const auto count = molecule::ao_count(system);
-  return runtime::size_mul(2, runtime::size_mul(runtime::size_mul(count, count),
-                                                order ? runtime::size_add(1, coordinates) : 1));
+  return runtime::size_mul(
+      2, runtime::size_mul(
+             runtime::size_mul(count, count),
+             order && retention != Retention::Direction ? runtime::size_add(1, coordinates) : 1));
 }
 
-std::size_t workspace_capacity(const core::System& system, unsigned order, bool weighted) {
-  auto bytes = runtime::size_mul(3 * sizeof(double), output_elements(system, order, weighted));
+std::size_t workspace_capacity(const core::System& system, unsigned order, Retention retention) {
+  auto bytes = runtime::size_mul(3 * sizeof(double), output_elements(system, order, retention));
   bytes = runtime::size_add(
       bytes, runtime::size_mul(sizeof(double), generated::ecp_gaussian_scratch_doubles));
   bytes = runtime::size_add(bytes, 144 * (sizeof(std::vector<double>) + 225 * sizeof(double)));
@@ -133,10 +142,10 @@ std::size_t workspace_capacity(const core::System& system, unsigned order, bool 
   return bytes;
 }
 
-EcpGaussianWork preflight(const core::System& system, unsigned order, bool weighted,
+EcpGaussianWork preflight(const core::System& system, unsigned order, Retention retention,
                           std::vector<Group>& groups, EcpGaussianLimits limits) {
   EcpGaussianWork work;
-  work.workspace_bound_bytes = workspace_capacity(system, order, weighted);
+  work.workspace_bound_bytes = workspace_capacity(system, order, retention);
   if (work.workspace_bound_bytes > limits.workspace_bytes)
     throw std::length_error("Gaussian ECP endpoint exceeds workspace_bytes");
   groups = groups_for(system);
@@ -245,7 +254,8 @@ std::array<Jet, 2> transform_pair(const Shell& first, const Shell& second, unsig
 
 template <class Consumer>
 void evaluate(const core::System& system, unsigned order, const std::vector<Group>& groups,
-              EcpGaussianWork& work, Consumer&& consume) {
+              EcpGaussianWork& work, Consumer&& consume,
+              const std::function<void()>& validate_current = {}) {
   const auto shells = shells_for(system);
   std::vector<double> scratch(generated::ecp_gaussian_scratch_doubles);
   const unsigned channels = order == 2 ? 43 : order == 1 ? 7 : 1;
@@ -270,6 +280,7 @@ void evaluate(const core::System& system, unsigned order, const std::vector<Grou
       // Reduce primitives before AO pullback; the consumer immediately scatters
       // raw first derivatives or contracts second derivatives with final weights.
       for (const auto& group : groups) {
+        if (validate_current) validate_current();
         std::array<Block, 2> blocks{};
         runtime::CpuRetainedCapacity block_storage(sizeof(blocks));
         double centers[6];
@@ -363,7 +374,7 @@ bool gaussian_ecp_supported(const core::System& system) {
 }
 
 std::size_t gaussian_ecp_workspace_capacity(const core::System& system, bool derivatives) {
-  return workspace_capacity(system, derivatives ? 1 : 0, false);
+  return workspace_capacity(system, derivatives ? 1 : 0, Retention::MatrixJets);
 }
 
 EcpData gaussian_ecp_integrals(const core::System& system, bool derivatives,
@@ -371,7 +382,7 @@ EcpData gaussian_ecp_integrals(const core::System& system, bool derivatives,
   if (!gaussian_ecp_supported(system))
     throw std::invalid_argument("operator outside Gaussian ECP specialization");
   std::vector<Group> groups;
-  auto work = preflight(system, derivatives ? 1 : 0, false, groups, limits);
+  auto work = preflight(system, derivatives ? 1 : 0, Retention::MatrixJets, groups, limits);
   const auto count = molecule::ao_count(system), size = runtime::size_mul(count, count);
   const auto coordinates = derivatives ? runtime::size_mul(3, system.atoms.size()) : 0;
   std::array<std::vector<Sum>, 2> values{std::vector<Sum>(size), std::vector<Sum>(size)};
@@ -418,7 +429,7 @@ EcpWeightedSecondOrder gaussian_ecp_weighted_second_order(const core::System& sy
                                              [](double value) { return std::isfinite(value); }))
     throw std::invalid_argument("Gaussian ECP weights require a finite ordered AO matrix");
   std::vector<Group> groups;
-  auto work = preflight(system, 2, true, groups, limits);
+  auto work = preflight(system, 2, Retention::WeightedSecond, groups, limits);
   const auto coordinates = runtime::size_mul(3, system.atoms.size());
   std::array<Sum, 2> values;
   std::array<std::vector<Sum>, 2> gradients{std::vector<Sum>(coordinates),
@@ -465,6 +476,181 @@ EcpWeightedSecondOrder gaussian_ecp_weighted_second_order(const core::System& sy
   runtime::sample_cpu_capacity(
       runtime::vector_capacities(result.parts[0].gradient, result.parts[1].gradient,
                                  result.parts[0].hessian, result.parts[1].hessian));
+  return result;
+}
+
+EcpGaussianLimits gaussian_ecp_weighted_mixed_plan(const core::System& system) {
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("operator outside Gaussian ECP specialization");
+  std::vector<Group> groups;
+  const auto work = preflight(
+      system, 2, Retention::WeightedMixed, groups,
+      {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::uint64_t>::max()});
+  return {work.workspace_bound_bytes, work.kernel_block_bound};
+}
+
+EcpWeightedMixed gaussian_ecp_weighted_mixed(const core::System& system,
+                                             std::span<const double> weights,
+                                             std::span<const double> left,
+                                             std::span<const double> right,
+                                             EcpGaussianLimits limits,
+                                             const std::function<void()>& validate_current) {
+  if (!validate_current)
+    throw std::invalid_argument("Gaussian ECP mixed source requires an owner validator");
+  validate_current();
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("operator outside Gaussian ECP specialization");
+  const auto count = molecule::ao_count(system), size = runtime::size_mul(count, count);
+  const auto coordinates = runtime::size_mul(3, system.atoms.size());
+  if (!weights.data() || weights.size() != size || !left.data() || !right.data() ||
+      left.size() != coordinates || right.size() != coordinates)
+    throw std::invalid_argument(
+        "Gaussian ECP mixed source requires ordered AO weights and atom/xyz legs");
+  for (const auto panel : {weights, left, right})
+    if (!std::all_of(panel.begin(), panel.end(), [](double value) { return std::isfinite(value); }))
+      throw std::invalid_argument("nonfinite Gaussian ECP mixed source input");
+  std::vector<Group> groups;
+  auto work = preflight(system, 2, Retention::WeightedMixed, groups, limits);
+  std::array<std::array<Sum, 4>, 2> values{};
+  runtime::CpuRetainedCapacity retained(sizeof(values));
+  evaluate(
+      system, 2, groups, work,
+      [&](const Shell& first, const Shell& second, unsigned center, std::size_t row,
+          std::size_t column, const std::array<Jet, 2>& jets) {
+        const auto weight =
+            weights[row * count + column] + (row == column ? 0 : weights[column * count + row]);
+        for (unsigned part = 0; part < 2; ++part) {
+          std::array<double, 4> projected{};
+          generated::ecp_weighted_mixed(
+              weight, jets[part].data(), left.data() + 3 * first.source->atom_index,
+              left.data() + 3 * second.source->atom_index, left.data() + 3 * center,
+              right.data() + 3 * first.source->atom_index,
+              right.data() + 3 * second.source->atom_index, right.data() + 3 * center,
+              projected.data());
+          for (std::size_t field = 0; field < projected.size(); ++field) {
+            if (!std::isfinite(projected[field]))
+              throw std::domain_error("nonfinite Gaussian ECP mixed projection");
+            values[part][field].add(projected[field]);
+          }
+        }
+      },
+      validate_current);
+  EcpWeightedMixed result;
+  result.work = work;
+  runtime::sample_cpu_capacity(sizeof(result.parts));
+  for (std::size_t part = 0; part < 2; ++part)
+    for (std::size_t field = 0; field < 4; ++field) {
+      result.parts[part][field] = values[part][field].value;
+      if (!std::isfinite(result.parts[part][field]))
+        throw std::domain_error("nonfinite weighted Gaussian ECP mixed result");
+    }
+  validate_current();
+  return result;
+}
+
+EcpDirectionPlan gaussian_ecp_curvature_plan(const core::System& system) {
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("unsupported analytic ECP column operator");
+  std::vector<Group> groups;
+  const auto work = preflight(
+      system, 2, Retention::Column, groups,
+      {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::uint64_t>::max()});
+  return {EcpDirectionBackend::Gaussian,
+          {work.workspace_bound_bytes, work.kernel_block_bound, 0, 0, 0}};
+}
+
+EcpCurvatureData gaussian_ecp_curvature(const core::System& system, std::span<const double> weights,
+                                        std::span<const double> weights_right,
+                                        std::span<const double> right, EcpDirectionLimits limits,
+                                        const std::function<void()>& validate_current) {
+  if (!validate_current) throw std::invalid_argument("ECP column requires an owner validator");
+  validate_current();
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("unsupported analytic ECP column operator");
+  const auto count = molecule::ao_count(system);
+  if (!weights.data() || weights.size() != runtime::size_mul(count, count) ||
+      (!weights_right.empty() &&
+       (!weights_right.data() || weights_right.size() != weights.size())) ||
+      !right.data() || right.size() != runtime::size_mul(3, system.atoms.size()))
+    throw std::invalid_argument("invalid analytic ECP column bindings");
+  for (const auto panel : {weights, weights_right, right})
+    if (!std::all_of(panel.begin(), panel.end(), [](double value) { return std::isfinite(value); }))
+      throw std::invalid_argument("nonfinite analytic ECP column input");
+  std::vector<Group> groups;
+  auto work = preflight(system, 2, Retention::Column, groups,
+                        {limits.workspace_bytes, limits.gaussian_kernel_blocks});
+  ecp_curvature_cpu::Column column(system.atoms.size());
+  evaluate(
+      system, 2, groups, work,
+      [&](const Shell& first, const Shell& second, unsigned center, std::size_t row,
+          std::size_t other, const std::array<Jet, 2>& jets) {
+        const auto weight =
+            weights[row * count + other] + (row == other ? 0 : weights[other * count + row]);
+        const auto moving_weight =
+            weights_right.empty() ? 0
+                                  : weights_right[row * count + other] +
+                                        (row == other ? 0 : weights_right[other * count + row]);
+        for (std::size_t part = 0; part < 2; ++part)
+          column.add(part, weight, moving_weight, jets[part].data(), first.source->atom_index,
+                     second.source->atom_index, center, right);
+      },
+      validate_current);
+  EcpDirectionWork census{
+      work.kernel_blocks,   0, 0, 0, work.shell_pairs, work.primitive_groups, work.radial_frontiers,
+      work.cartesian_values};
+  auto result = column.publish(count, census);
+  validate_current();
+  return result;
+}
+
+EcpDirectionPlan gaussian_ecp_direction_plan(const core::System& system) {
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("operator outside Gaussian ECP specialization");
+  std::vector<Group> groups;
+  const auto work = preflight(
+      system, 1, Retention::Direction, groups,
+      {std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::uint64_t>::max()});
+  return {EcpDirectionBackend::Gaussian,
+          {work.workspace_bound_bytes, work.kernel_block_bound, 0, 0, 0}};
+}
+
+EcpDirectionData gaussian_ecp_direction(const core::System& system,
+                                        std::span<const double> direction,
+                                        EcpDirectionLimits limits,
+                                        const std::function<void()>& validate_current) {
+  if (!validate_current || !direction.data() ||
+      direction.size() != runtime::size_mul(3, system.atoms.size()) ||
+      !std::all_of(direction.begin(), direction.end(),
+                   [](double value) { return std::isfinite(value); }))
+    throw std::invalid_argument("Gaussian ECP direction requires a finite atom/xyz owner binding");
+  validate_current();
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("operator outside Gaussian ECP specialization");
+  std::vector<Group> groups;
+  auto work = preflight(system, 1, Retention::Direction, groups,
+                        {limits.workspace_bytes, limits.gaussian_kernel_blocks});
+  const auto count = molecule::ao_count(system), size = runtime::size_mul(count, count);
+  std::array<std::vector<Sum>, 2> values{std::vector<Sum>(size), std::vector<Sum>(size)};
+  runtime::CpuRetainedCapacity retained(runtime::vector_capacities(values[0], values[1]));
+  evaluate(
+      system, 1, groups, work,
+      [&](const Shell& first, const Shell& second, unsigned center, std::size_t row,
+          std::size_t column, const std::array<Jet, 2>& jets) {
+        for (unsigned part = 0; part < 2; ++part) {
+          const auto value = generated::ecp_frozen_direction(
+              jets[part].data() + 1, direction.data() + 3 * first.source->atom_index,
+              direction.data() + 3 * second.source->atom_index, direction.data() + 3 * center);
+          values[part][row * count + column].add(value);
+          if (row != column) values[part][column * count + row].add(value);
+        }
+      },
+      validate_current);
+  EcpDirectionData result{count, publish(values[0]), publish(values[1]), {}};
+  result.work = {
+      work.kernel_blocks,   0, 0, 0, work.shell_pairs, work.primitive_groups, work.radial_frontiers,
+      work.cartesian_values};
+  runtime::sample_cpu_capacity(runtime::vector_capacities(result.local, result.nonlocal));
+  validate_current();
   return result;
 }
 

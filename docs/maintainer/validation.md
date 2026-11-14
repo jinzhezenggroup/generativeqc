@@ -153,6 +153,122 @@ This protocol never edits the production manifest or compiles the full f
 matrix in ordinary PR CI. The JSON table is a projection of the catalog, not a
 second independent matrix that needs manual maintenance.
 
+### Native CPU canonical-hybrid curvature controls
+
+The linked CPU execution contract and resource semantics are owned by
+[DFT Hessian architecture](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+The opt-in `tests/python/test_native_canonical_heavy_hessian.py` checks actual
+native RKS/UKS electronic curvature on the canonical external Ni/I/Cs/H records.
+Set `GENERATIVEQC_RUN_NATIVE_CANONICAL_HEAVY=1` and select an explicit case:
+`cs-rks`, `cs-uks`, `i-rks`, `i-uks`, `ni-uks`, or `ni-i-stationary-rks`.
+Use a fresh artifact directory
+and an explicit finite outer timeout; do not overwrite a previous attempt.
+Set `GENERATIVEQC_NATIVE_CANONICAL_ENDPOINT=public` to run fresh complete
+`Calculator.hessian` and `Calculator.hessian_vector_product` calls, including
+their own SCFs. The default `batch` mode measures retained-batch derivatives;
+it never claims public endpoint qualification. Installed-wheel qualification
+requires a separate isolated prefix and actual installed calls, not a source
+test with a wheel's shared library.
+The manifest `tests/data/global_hybrid_ecp/native_curvature_manifest.json` owns
+the geometry, charge/multiplicity, SCF/work allowances and numerical gates.
+Changing an allowance creates a new qualification attempt, not an amendment to
+a failed receipt or a relaxation of its numerical tolerances.
+The heavy harness passes that case's explicit SCF iteration allowance to the
+native solve and, unless the reference policy specifies its own finite allowance,
+each independently cold-converged reference. The frozen
+`tests/data/global_hybrid_ecp/independent_scf_policy.json` separately owns the
+reference solver policy: both Ni cases use cold independent DIIS SCF with an orbital
+gradient tolerance of `1e-11` and no extra nonlinear diagonalization. Its
+actual final physical orbital-gradient norm is explicitly recomputed and
+must be below `1e-11`; the solver's convergence flag is never overwritten.
+The mixed stationary case explicitly selects common error-Gram normalization
+and a 240-cycle independent allowance; its native allowance remains 600 cycles.
+This opt-in extrapolation does not alter physical Focks, occupations or actual
+convergence certification. Other cases retain upstream DIIS, and non-Ni cases
+retain the default extra diagonalization and `1e-10`. The energy
+tolerance and all physical acceptance gates remain unchanged. This is only an
+independent electronic-state solver, not a production or geometry optimizer.
+The same policy selects the independent gradient stencil: both Ni cases use the
+four-point fourth-order formula, while other cases retain two-point second
+order. The three displacement scales and raw-matrix acceptance threshold stay
+unchanged; improving reference truncation accuracy never relaxes that threshold.
+Every stencil point must independently converge and pass state/root checks.
+The mixed stationary case additionally checks the complete Cartesian gradient,
+physical Ni-58/H-1/I-127 masses, negative-mode count, and unscaled frequencies
+and individual mode characters against an independently implemented mass-weighted
+SVD null-space solve for every reference matrix. Its three internal frequencies
+are nondegenerate; degenerate future fixtures need subspace comparisons instead.
+Raw rotational residuals remain visible before the explicit supplied-H geometric
+projection. This convention does not repair a raw matrix or certify exact
+continuum rotational invariance. The case is a small mixed Ni/iodine stationary
+control, not a representative reaction TS, public ECP saddle admission or practical
+25--40-atom endpoint qualification. The retained rationale is in
+[the independent-DIIS note](../../.agents/notes/implemented/numerics/2026-11-14-independent-diis-common-gram-normalization.md).
+If a separate audit reuses retained cold point states, report reused and newly
+solved states separately; loading point data is not SCF warm-start seeding or
+acceptance of a previously failed full matrix.
+Oracle nonconvergence
+raises with the actual solver state available for a failed-state receipt;
+neither a converged central state nor more native iterations makes an
+unconverged displaced reference acceptable.
+
+The driver matches an independently cold-converged central state, evaluates the
+full raw native matrix and two fresh HVPs, and compares three independently
+displaced-gradient stencils. Each displaced oracle retains its density,
+occupations, coefficients, orbital energies, overlap, energy terms, gradients,
+SCF iterations and orbital-gradient norm. Occupied-subspace singular values
+use the cross-geometry AO metric separately for each spin; neither a convergence
+flag nor energy agreement alone establishes root continuity. Native failed SCFs
+retain their physical iteration diagnostics before the test raises.
+
+State matrices must first share an independently checked AO coordinate system.
+In particular, the SiH3 oracle groups interleaved native SP shells into PySCF's
+stable atom/angular order. Its test verifies mapped AO values/first jets and
+overlap matrices before permuting both density axes. This alignment does not
+change the production basis or relax the electronic-state density gate.
+
+When an isolated installed producer retains its full Hessian, two fresh HVPs
+and supplemental central orbitals while independent references are still
+running, keep its receipt unaccepted and explicitly pending. Once the matching
+source qualification is accepted, audit the retained outputs separately:
+
+```bash
+python tools/validate_installed_cpu_hessian.py \
+  --producer /path/to/installed-ni-uks.json \
+  --reference-directory /path/to/accepted-source-case \
+  --manifest tests/data/global_hybrid_ecp/native_curvature_manifest.json \
+  --case ni-uks --output /path/to/new-installed-validation.json
+```
+
+The validator checks the frozen manifest identity, physical inputs, independent
+root acceptance, installed central spin densities/occupations, raw symmetry and
+translation, both HVPs, all three independent matrices and native execution
+diagnostics. It records hashes of every consumed artifact and the actual
+installed library. It does not import production/oracle engines, run new SCFs,
+modify the producer, symmetrize outputs or qualify a TS/scale endpoint. Its
+output is exclusive: an existing receipt is never overwritten. Synthetic unit
+tests of this audit are not additional scientific endpoint evidence.
+
+Raw derivative covariance qualifications must respect the actual discrete
+molecular grid. A laboratory-oriented angular grid need not preserve arbitrary rotations;
+use an explicitly grid-preserving rotation and transform both Cartesian axes of
+the raw Hessian, together with atom ordering and HVP directions. Even for a
+continuum rotationally invariant energy, a nonstationary Hessian obeys
+`H (omega cross R) = omega cross gradient`, not a zero-rotation identity.
+`tests/python/test_native_cpu_hessian.py` includes mixed-element RKS/UKS
+discrete-grid covariance controls with and without two-body D3(BJ). These compact
+controls do not qualify heavy ECPs, molecular saddles or endpoint scaling.
+
+An internal retained-batch result is not a public Calculator endpoint. Source
+curvature acceptance alone does not qualify a different public/installed
+endpoint, an ECP TS or practical 25--40-atom complete electronic execution. Keep
+those receipts separate. Similarly, the explicitly selected `sto-3g` SiH3
+case in `test_molecular_saddle_sih3_reference.py` is a light-element UKS saddle
+control, not a def2-SVP result, a Ni TS, or a lower-level preoptimization for
+the requested chemistry. Both its basis choices are opt-in through
+`GENERATIVEQC_RUN_SIH3_UKS_SADDLE_ORACLE=1`; select the intended parameter
+explicitly rather than resuming an earlier timed-out attempt inadvertently.
+
 ## Numerical conventions and fixture layers
 
 `tools/generativeqc_validation/fixtures.py::CONVENTIONS` is the machine-checked

@@ -11,7 +11,7 @@ import math
 import typing
 from dataclasses import dataclass, replace
 from fractions import Fraction
-from functools import cache
+from functools import cache, lru_cache
 
 from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
@@ -33,6 +33,8 @@ from generativeqc_compiler.tensor import (
     execute,
     input_tensor,
     linearize,
+    reassociate_einsums,
+    rewrite,
 )
 from generativeqc_compiler.xc.coefficients import coefficient_program
 from generativeqc_compiler.xc.program import XCProgram, build_program, output_set
@@ -49,14 +51,23 @@ FIELD_LAYOUT = ("rho", "gx", "gy", "gz", "tau", "weight", "x", "y", "z")
 GRID_FIELD_WORKSPACE_PANELS = 32
 
 
-@cache
-def feature_programs(points: int, nao: int) -> tuple:
+@lru_cache(maxsize=None, typed=True)
+def feature_programs(
+    points: int, nao: int, *, shared_contractions: bool = False
+) -> tuple:
     """Generate primal/first/mixed rho, Cartesian gradient and tau programs.
 
     The second JVP differentiates the first tangent too, so moving AO bases and
     a right-hand density response are both present in a mixed nuclear partial.
     No point-by-AO-pair panel is materialized.
+
+    The explicit shared schedule reuses the generic binary contraction planner
+    before AD and exact CSE afterward. New intermediates have at most one point
+    and one AO axis; signed densities need no PSD factorization or new formula.
+    The default mathematical program and other consumers remain unchanged.
     """
+    if type(shared_contractions) is not bool:
+        raise TypeError("shared_contractions must be bool")
     point = Index("point", IndexSpace("point", "batch", points))
     orbital = Index("ao", IndexSpace("ao", "ao", nao))
     other = Index("other", orbital.space)
@@ -88,8 +99,19 @@ def feature_programs(points: int, nao: int) -> tuple:
             ),
         }
     )
+    if shared_contractions:
+        primal = rewrite(
+            reassociate_einsums(
+                primal,
+                max_intermediate_axes={"ao": 1, "batch": 1},
+                require_degree_reduction=False,
+            ),
+            "exact_cse",
+        )
     names = ("density", "ao0", "ao1", "ao2", "ao3")
     first = linearize(primal, names).program
+    if shared_contractions:
+        first = rewrite(first, "exact_cse")
     return primal, first
 
 
@@ -124,15 +146,22 @@ def features(
     return np.stack([result[label] for label in labels])
 
 
-@cache
-def _mixed_program(points: int, nao: int) -> Program:
-    """Differentiate a fixed-density left AO motion along the full right leg.
+@lru_cache(maxsize=None, typed=True)
+def feature_mixed_program(
+    points: int,
+    nao: int,
+    *,
+    density_response: bool = True,
+    shared_contractions: bool = False,
+) -> Program:
+    """Differentiate a fixed-density left AO motion along an explicit right leg.
 
     The left leg is a nuclear partial, never an independent density response.
-    The right leg still differentiates density, AOs and the left AO tangent,
-    preserving both AO legs and every right-density cross term.
+    The ordinary right leg differentiates density, AOs and the left AO tangent.
+    Frozen source consumers explicitly disable density response, retaining both
+    moving AO legs without adding a second copy of stationary relaxation.
     """
-    primal, _ = feature_programs(points, nao)
+    primal, _ = feature_programs(points, nao, shared_contractions=shared_contractions)
     first = linearize(primal, ("ao0", "ao1", "ao2", "ao3")).program
     replacements = {}
     for node in first.nodes:
@@ -148,8 +177,15 @@ def _mixed_program(points: int, nao: int) -> Program:
     renamed = Program(
         {name: replacements[value] for name, value in first.outputs.items()}
     )
-    inputs = tuple(node.attrs["name"] for node in renamed.nodes if node.op == "input")
-    return linearize(renamed, inputs).program
+    if type(density_response) is not bool:
+        raise TypeError("density_response must be bool")
+    inputs = tuple(
+        node.attrs["name"]
+        for node in renamed.nodes
+        if node.op == "input" and (density_response or node.attrs["name"] != "density")
+    )
+    mixed = linearize(renamed, inputs).program
+    return rewrite(mixed, "exact_cse") if shared_contractions else mixed
 
 
 def _mixed_features(
@@ -161,7 +197,7 @@ def _mixed_features(
     delta_density: np.ndarray,
     max_bytes: int,
 ) -> np.ndarray:
-    program = _mixed_program(jets.shape[1], jets.shape[2])
+    program = feature_mixed_program(jets.shape[1], jets.shape[2])
     feeds = {
         "density": density,
         "d_density": delta_density,
@@ -183,7 +219,7 @@ def _mixed_features(
 
 @cache
 def _density_mixed_program(points: int, nao: int) -> Program:
-    mixed = _mixed_program(points, nao)
+    mixed = feature_mixed_program(points, nao)
     return Program({"value": mixed.outputs["d_d_rho"]})
 
 

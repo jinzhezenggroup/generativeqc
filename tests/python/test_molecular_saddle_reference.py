@@ -149,9 +149,8 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
             initial,
             masses=manifest["masses_dalton"],
             options=options,
-            grid_budget_bytes=2 << 30,
+            grid_budget_bytes=128 << 20,
             solver_options=GMRESOptions(atol=1e-12, rtol=1e-11),
-            cache=tmp_path / "compiler-cache",
             evaluation_progress=observe,
         )
         native = result.optimizer
@@ -226,7 +225,7 @@ def test_native_molecular_saddle_reference(case: str, tmp_path: Path) -> None:
         ]
         assert len(hessian_events) == native.receipt["hessian_calls"]
         assert all(
-            max(event["response_residual_norms"]) < gates["response_residual_norm"]
+            event["maximum_response_residual_norm"] < gates["response_residual_norm"]
             for event in hessian_events
         )
         assert result.diagnostics["work_counters_complete"]

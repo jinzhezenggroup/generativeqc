@@ -29,10 +29,12 @@
 
 #include "cli/geometry_command.hpp"
 #include "cli/hessian.hpp"
+#include "cli/molecular_system.hpp"
 #include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 #include "cli/profiles.hpp"
 #include "cli/resources.hpp"
+#include "cli/saddle.hpp"
 #include "dft/grid.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
@@ -214,7 +216,8 @@ void print_usage(std::ostream& out) {
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc optimize INPUT.xyz [run and geometry options]\n"
-         "  generativeqc hessian|hvp INPUT.xyz --backend cuda [options]\n"
+         "  generativeqc saddle INPUT.xyz --masses FILE.json [fixed-model TS options]\n"
+         "  generativeqc hessian|hvp INPUT.xyz --backend cpu|cuda [options]\n"
          "  generativeqc profile show|clear\n"
          "  generativeqc resources INPUT.xyz [run and budget options]\n"
          "  generativeqc profile install ARCHIVE.zip\n"
@@ -268,12 +271,27 @@ void print_usage(std::ostream& out) {
          "  --opt-max-step F         Max per-atom displacement (Bohr; default: 0.35)\n"
          "  --plan-only              Print selected stages; do not initialize a device\n"
          "  --output FILE.xyz        Write final Angstrom XYZ, refusing to overwrite\n";
-  out << "Native compiler AD Hessian/HVP options (linked CUDA AOT; no Python/JIT):\n"
+  out << "Native compiler AD Hessian/HVP options (linked CPU/CUDA AOT; no Python/JIT):\n"
          "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
          "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
          "  --response-budget-bytes N --max-nonlocal-pairs N\n"
+         "  CPU: --numeric-budget-bytes N --ecp-budget-bytes N --dispersion-budget-bytes N\n"
+         "  CPU: --max-eri-primitives N --max-d3-pairs N (whole-request work caps)\n"
          "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
+  out << "Native saddle options (CPU B3LYP RKS/UKS; no Python/JIT or preoptimization):\n"
+         "  --masses FILE.json       Required ordered positive masses in dalton\n"
+         "  --initial-mode FILE.json Optional natoms-by-3 target direction\n"
+         "  --max-attempts N         Accepted + rejected steps, at most 100\n"
+         "  --energy-change F --gradient-rms F --gradient-max F (Hartree, Hartree/Bohr)\n"
+         "  --displacement-rms F --displacement-max F (Angstrom)\n"
+         "  --initial-radius F --minimum-radius F --maximum-radius F (Bohr)\n"
+         "  --curvature-tolerance F --raw-symmetry-tolerance F (Hartree/Bohr^2)\n"
+         "  --minimum-mode-overlap F --minimum-occupied-overlap F --acceptance-ratio F\n"
+         "  --max-coordinates N --saddle-budget-bytes N --root-budget-bytes N\n"
+         "  --progress-json          Stream derivative/accepted-state records to stderr\n"
+         "  Final JSON retains failure geometry/raw Hessian; verified frequencies are unscaled "
+         "cm^-1\n";
 }
 
 int basis_command(int argc, char** argv) {
@@ -454,8 +472,9 @@ RunOptions parse_run(int argc, char** argv) {
   RunOptions options;
   const bool resources = std::string_view(argv[1]) == "resources";
   const bool optimizing = std::string_view(argv[1]) == "optimize";
-  const bool compiler_second_order =
-      std::string_view(argv[1]) == "hessian" || std::string_view(argv[1]) == "hvp";
+  const bool compiler_second_order = std::string_view(argv[1]) == "hessian" ||
+                                     std::string_view(argv[1]) == "hvp" ||
+                                     std::string_view(argv[1]) == "saddle";
   if (resources) {
     options.method_name = "rhf";
     options.method = GENERATIVEQC_METHOD_RHF;
@@ -845,10 +864,9 @@ int run(RunOptions options) {
       options.multiplicity,
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system =
-      options.basis_program ? generativeqc::cli::create_method_basis_system(context, atoms, options)
-      : basis.ecp_terms.empty()
-          ? generativeqc::System(context, system_descriptor)
-          : generativeqc::System(context, system_descriptor, basis.core_electrons, basis.ecp_terms);
+      options.basis_program
+          ? generativeqc::cli::create_method_basis_system(context, atoms, options)
+          : generativeqc::cli::make_molecular_system(context, system_descriptor, basis);
 
   generativeqc::cli::NativeBasisData auxiliary_basis_data;
   std::optional<generativeqc::System> auxiliary_basis;
@@ -1294,6 +1312,19 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "basis") return basis_command(argc, argv);
+    if (command == "saddle") {
+      if (argc == 3 &&
+          (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
+        print_usage(std::cout);
+        return 0;
+      }
+      auto invocation = generativeqc::cli::parse_saddle_invocation(argc, argv);
+      std::vector<char*> arguments;
+      for (auto& argument : invocation.derivatives.run_arguments)
+        arguments.push_back(argument.data());
+      const auto options = parse_run(static_cast<int>(arguments.size()), arguments.data());
+      return generativeqc::cli::saddle_command(options, read_xyz(options), invocation);
+    }
     if (command == "hessian" || command == "hvp") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {

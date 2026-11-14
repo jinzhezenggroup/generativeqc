@@ -279,7 +279,18 @@ class DispersionCorrectionPrimitive:
 
     @property
     def derivative_capabilities(self) -> typing.Any:
-        return ("energy", "nuclear-gradient")
+        first = ("energy", "nuclear-gradient")
+        specification = self.specification
+        if (
+            isinstance(specification, D3Spec)
+            and specification.damping == "bj"
+            and specification.s9 == 0
+            and specification.cn_cutoff is None
+            and specification.pair_cutoff is None
+            and specification.pair_switch_width == 0
+        ):
+            return (*first, "nuclear-hessian", "nuclear-hessian-vector-product")
+        return first
 
     def semantic_payload(self) -> typing.Any:
         return {
@@ -300,6 +311,11 @@ def pbe_d3_bj_spec() -> D3Spec:
 def pbe0_d3_bj_spec() -> D3Spec:
     """Audited PBE0-D3(BJ) two-body parameters from simple-dftd3 1.4.0."""
     return D3Spec(**_parameters.d3_parameters("PBE0-D3(BJ)"))
+
+
+def b3lyp_d3_bj_spec() -> D3Spec:
+    """Canonical Gaussian/VWN-RPA B3LYP fit; two-body BJ, ATM off."""
+    return D3Spec(**_parameters.d3_parameters("B3LYP-D3(BJ)"))
 
 
 def pbe_d3_bj_atm_spec() -> D3Spec:

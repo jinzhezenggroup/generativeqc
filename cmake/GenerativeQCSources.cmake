@@ -5,6 +5,8 @@ include_guard(GLOBAL)
 function(generativeqc_add_api_sources target)
   set_property(SOURCE src/api/c_api_ks_hessian.cpp APPEND PROPERTY COMPILE_DEFINITIONS
     "GENERATIVEQC_HAS_NATIVE_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES}>")
+  set_property(SOURCE src/api/c_api_ks_host_hessian.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+    "GENERATIVEQC_HAS_HOST_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HOST_KS_HESSIAN}>")
   target_sources(${target} PRIVATE
     src/api/c_api_batch.cpp
     src/api/c_api_calculation.cpp
@@ -15,6 +17,7 @@ function(generativeqc_add_api_sources target)
     src/api/c_api_prepared_execution.cpp
     src/api/c_api_ks_snapshot.cpp
     src/api/c_api_ks_hessian.cpp
+    src/api/c_api_ks_host_hessian.cpp
     src/api/c_api_fock.cpp
     src/api/c_api_one_electron_gradient.cpp
     src/api/c_api_projection.cpp
@@ -359,6 +362,8 @@ function(generativeqc_add_cpu_component_object_targets target)
       src/integrals/s_integrals.cpp
       src/integrals/generated_df_cpu.cpp
       src/integrals/ecp.cpp
+      src/integrals/ecp_direction.cpp
+      src/integrals/ecp_curvature.cpp
       src/integrals/stationary_component_contract.cpp
     CODEGEN
       generativeqc_eri_cpu_codegen

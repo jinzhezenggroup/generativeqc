@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <span>
@@ -1318,6 +1320,205 @@ void physical_hessian_diagonal_preconditioning() {
   require(conditioned.workspace_bytes <= options.max_workspace_bytes,
           "diagonal preconditioning exceeded bounded Krylov storage");
 }
+
+bool same_bits(std::span<const double> first, std::span<const double> second) {
+  if (first.size() != second.size()) return false;
+  for (std::size_t index = 0; index < first.size(); ++index)
+    if (std::bit_cast<std::uint64_t>(first[index]) != std::bit_cast<std::uint64_t>(second[index]))
+      return false;
+  return true;
+}
+
+void require_same_response(const generativeqc::response::GmresResult& first,
+                           const generativeqc::response::GmresResult& second) {
+  require(first.status == second.status && same_bits(first.solution, second.solution) &&
+              same_bits(first.history, second.history) && same_bits(first.basis, second.basis) &&
+              first.residual_norm == second.residual_norm &&
+              first.relative_residual == second.relative_residual &&
+              first.iterations == second.iterations && first.restarts == second.restarts &&
+              first.operator_actions == second.operator_actions &&
+              first.preconditioner_actions == second.preconditioner_actions &&
+              first.basis_columns == second.basis_columns &&
+              first.workspace_bytes == second.workspace_bytes &&
+              first.measured_workspace_peak_bytes == second.measured_workspace_peak_bytes,
+          "independent scheduling changed a per-RHS numerical trajectory");
+}
+
+void independent_response_batch_trajectories() {
+  using namespace generativeqc::response;
+  for (const std::size_t dimension : {1, 3, 9}) {
+    DenseOperator matrix{dimension, std::vector<double>(dimension * dimension)};
+    std::vector<double> diagonal(dimension);
+    for (std::size_t row = 0; row < dimension; ++row) {
+      diagonal[row] = 1.5 + row;
+      for (std::size_t column = 0; column < dimension; ++column)
+        matrix.values[row * dimension + column] =
+            row == column ? diagonal[row] : 0.13 * std::sin(1.0 + row + 3 * column);
+    }
+    for (const std::size_t width : {1, 2, 3, 4})
+      for (const std::size_t count : {0, 1, 2, 3, 4, 5, 7, 9})
+        for (const std::size_t restart : {1, 3, 9})
+          for (const std::size_t interval : {1, 2, 99}) {
+            GmresOptions options;
+            options.relative_tolerance = 0.0;
+            options.absolute_tolerance = 1e-12;
+            options.restart = restart;
+            options.max_iterations = 23;
+            options.true_residual_every = interval;
+            options.collect_history = true;
+            options.collect_basis = true;
+            const auto numeric = prepare_gmres(dimension, options);
+            std::vector<std::vector<double>> rhs(count, std::vector<double>(dimension));
+            std::vector<std::vector<double>> guesses(count, std::vector<double>(dimension, 0.17));
+            std::vector<ResponseSolveRequest> requests(count);
+            std::vector<GmresResult> expected;
+            for (std::size_t index = 0; index < count; ++index) {
+              for (std::size_t row = 0; row < dimension; ++row)
+                for (std::size_t column = 0; column < dimension; ++column)
+                  rhs[index][row] += matrix.values[row * dimension + column] *
+                                     std::sin(0.7 * (column + 1) * index);
+              requests[index].rhs = rhs[index];
+              if (index % 3 == 1) requests[index].initial_guess = guesses[index];
+              if (index % 2) requests[index].diagonal_preconditioner = diagonal;
+              expected.push_back(solve_gmres(numeric, std::ref(matrix), requests[index].rhs,
+                                             requests[index].initial_guess,
+                                             requests[index].diagonal_preconditioner));
+            }
+            std::size_t shared_calls = 0, physical_actions = 0, widest = 0;
+            const LinearResponseProblem problem(
+                dimension, std::ref(matrix), LinearResponseSymmetry::General, {},
+                [&](std::span<const LinearAction> actions) {
+                  ++shared_calls;
+                  physical_actions += actions.size();
+                  widest = std::max(widest, actions.size());
+                  require(!actions.empty() && actions.size() <= width,
+                          "independent operator batch exceeds admitted width");
+                  for (const auto& action : actions) matrix(action.input, action.output);
+                });
+            const auto probe = prepare_response_batch(
+                problem, options, count, std::numeric_limits<std::size_t>::max(), width);
+            const auto plan =
+                prepare_response_batch(problem, options, count, probe.peak_numeric_bytes, width);
+            auto result = solve_response_batch(plan, problem, requests);
+            require(result.complete() && result.responses.size() == count,
+                    "independent response batch lost a request");
+            std::size_t expected_actions = 0, live = 0;
+            for (std::size_t index = 0; index < count; ++index) {
+              require_same_response(expected[index], result.responses[index]);
+              expected_actions += result.responses[index].operator_actions;
+              const auto counter = result.responses[index].solution.get_allocator().counter();
+              const auto retained = counter->snapshot().live_bytes;
+              require(retained == sizeof(double) * (result.responses[index].solution.capacity() +
+                                                    result.responses[index].history.capacity() +
+                                                    result.responses[index].basis.capacity()),
+                      "completed independent state retains Krylov scratch");
+              live += retained;
+              if (result.responses[index].converged()) {
+                require(explicit_residual(matrix, result.responses[index].solution, rhs[index]) <=
+                            options.absolute_tolerance,
+                        "independent response accepted an incorrect physical solution");
+                for (std::size_t column = 0; column < dimension; ++column)
+                  require(std::abs(result.responses[index].solution[column] -
+                                   std::sin(0.7 * (column + 1) * index)) < 1e-10,
+                          "independent batch disagrees with known dense-system solution");
+              }
+            }
+            require(physical_actions == expected_actions && live <= plan.peak_numeric_bytes,
+                    "independent batch work or retained-resource accounting is wrong");
+            if (width > 1 && count >= 4) {
+              require(widest > 1 && shared_calls < physical_actions,
+                      "independent schedule never shared a physical action");
+            }
+            if (count) {
+              const auto refused = prepare_response_batch(problem, options, count,
+                                                          plan.peak_numeric_bytes - 1, width);
+              const auto before = matrix.actions;
+              require(!solve_response_batch(refused, problem, requests).complete() &&
+                          matrix.actions == before,
+                      "short simultaneous budget reached the physical operator");
+            }
+          }
+  }
+}
+
+void independent_response_batch_failures() {
+  using namespace generativeqc::response;
+  const std::array<double, 3> first{1.0, 0.0, 0.0}, second{0.0, 1.0, 0.0}, third{0.0, 0.0, 1.0};
+  const std::array<double, 1> malformed{1.0};
+  std::array<ResponseSolveRequest, 4> requests{
+      ResponseSolveRequest{first}, ResponseSolveRequest{second}, ResponseSolveRequest{malformed},
+      ResponseSolveRequest{third}};
+  GmresOptions options;
+  options.absolute_tolerance = 1e-12;
+  options.relative_tolerance = 0.0;
+  options.collect_history = true;
+  options.collect_basis = true;
+  const auto numeric = prepare_gmres(3, options);
+  const auto bound = gmres_batch_workspace_bytes(numeric, requests.size(), 4);
+  std::array<std::size_t, 3> visits{};
+  const auto changing = [&](std::span<const LinearAction> actions) {
+    for (const auto& action : actions) {
+      std::size_t direction = 0;
+      while (direction < 3 && action.input[direction] == 0.0) ++direction;
+      require(direction < 3, "fixture lost its independent direction");
+      const double factor = ++visits[direction] == 1 ? 1.0 : 2.0;
+      for (std::size_t index = 0; index < 3; ++index)
+        action.output[index] = factor * action.input[index];
+    }
+  };
+  const auto changed = solve_gmres_batch(numeric, changing, requests, 4, bound);
+  for (const std::size_t index : {0, 1, 3})
+    require(changed[index].status == GmresStatus::breakdown &&
+                changed[index].operator_actions == 2 && !changed[index].converged(),
+            "batched GMRES certified a stale/predicted residual");
+  require(changed[2].status == GmresStatus::nonfinite_input,
+          "one malformed RHS contaminated independent states");
+  bool cancel = true;
+  const auto injected = [&](std::span<const LinearAction> actions) {
+    if (cancel) throw std::runtime_error("injected independent-action cancellation");
+    for (const auto& action : actions)
+      for (std::size_t index = 0; index < 3; ++index)
+        action.output[index] = action.input[1] != 0.0 ? std::numeric_limits<double>::quiet_NaN()
+                                                      : 2.0 * action.input[index];
+  };
+  bool threw = false;
+  try {
+    (void)solve_gmres_batch(numeric, injected, requests, 4, bound);
+  } catch (const std::runtime_error&) {
+    threw = true;
+  }
+  require(threw, "independent operator cancellation was swallowed");
+  cancel = false;
+  const auto recovered = solve_gmres_batch(numeric, injected, requests, 4, bound);
+  require(recovered[0].converged() && recovered[3].converged() &&
+              recovered[1].status == GmresStatus::nonfinite_operator &&
+              recovered[2].status == GmresStatus::nonfinite_input,
+          "independent failure/cancellation damaged another RHS or later solve");
+  requests[0].right_preconditioner = [](auto, auto output) {
+    std::fill(output.begin(), output.end(), std::numeric_limits<double>::infinity());
+  };
+  const auto invalid_preconditioner = solve_gmres_batch(numeric, injected, requests, 4, bound);
+  require(invalid_preconditioner[0].status == GmresStatus::nonfinite_preconditioner &&
+              invalid_preconditioner[0].operator_actions == 0 &&
+              invalid_preconditioner[3].converged(),
+          "nonfinite right preconditioner reached a batched physical action");
+  for (const std::size_t width : {0, 5}) {
+    threw = false;
+    try {
+      (void)gmres_batch_workspace_bytes(numeric, 4, width);
+    } catch (const std::invalid_argument&) {
+      threw = true;
+    }
+    require(threw, "unbounded independent width was accepted");
+  }
+  threw = false;
+  try {
+    (void)gmres_batch_workspace_bytes(numeric, std::numeric_limits<std::size_t>::max(), 4);
+  } catch (const std::overflow_error&) {
+    threw = true;
+  }
+  require(threw, "independent result retention overflow was accepted");
+}
 }  // namespace
 
 int main() {
@@ -1345,6 +1546,8 @@ int main() {
     physical_hessian_diagonal_preconditioning();
     measured_workspace_owns_returned_storage();
     workspace_covers_restarts_and_optional_diagnostics();
+    independent_response_batch_trajectories();
+    independent_response_batch_failures();
     std::cout << "Native GMRES contracts passed\n";
     return 0;
   } catch (const std::exception& error) {

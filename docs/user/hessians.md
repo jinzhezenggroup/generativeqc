@@ -57,7 +57,13 @@ A changed MethodIR identifier does not change admission or the physical method.
 An optional **uncut two-body D3(BJ), ATM off** correction is added once to the
 qualified electronic result, including coordination-number/C6 response. It uses
 the supplied canonical `D3Spec`, not a second functional-specific Hessian solver.
-PBE0 UKS, density-fitted, ECP and CUDA variants do not inherit this support.
+The exact canonical B3LYP graph instead uses the linked native CPU aggregate
+owner for RKS/UKS, including scalar ECPs within its operator/resource bounds.
+Its response, moving-grid assembly and optional D3 composition do not require
+Python numerical kernels or runtime compilation; missing linked electronic or
+total-method closure fails before SCF without a fallback. ECPs on PBE0 or
+coefficient-variable graphs remain excluded. PBE0 UKS, density-fitted and CUDA
+full-range variants do not inherit this support.
 D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
@@ -85,8 +91,15 @@ exposing one global cap:
 | `grid_budget_bytes` | full-range hybrids and WB97M-V: numeric AO/grid/AD workspace |
 | `max_nonlocal_pairs` | WB97M-V only: ordered VV10 pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |
+| `max_eri_primitives` | linked native CPU only: optional positive-int64 whole-request nuclear primitive-work cap |
 
-For corrected full-range RKS, `output_budget_bytes` holds three dense matrices:
+The linked native CPU owner's reservations, default work allowance and separate
+induced-Fock work are described in
+[Linked native CPU B3LYP endpoint](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+The optional nuclear work override is not a time/RSS or induced-Fock integral
+bound. Other owners reject it rather than ignoring it.
+
+For other corrected CPU composite endpoints, `output_budget_bytes` holds three dense matrices:
 the detached electronic result, the private total, and immutable publication.
 The constructor's `dispersion_memory_budget_bytes` additionally bounds the
 simultaneously retained electronic arrays, total publication and D3 workspace.
@@ -94,7 +107,13 @@ Correction columns are streamed; no separate dense D3 matrix is retained.
 An insufficient correction budget raises without returning an electronic-only
 result under the corrected method's identity.
 
-Corrected results retain the electronic response diagnostics and add one
+The native CPU aggregate publishes immutable raw H/HVP results and scalar
+electronic/total/D3 energies, physical response residuals, source consistency,
+SCF iterations/Fock builds and actual derivative work. It does not export the
+private source component panels or a central density/grid fingerprint. Its
+`endpoint_seconds` includes the fresh native SCF and complete derivative call.
+
+Other corrected composite results retain the electronic response diagnostics and add one
 `d3_bj_two_body` source. HVP `components` includes that positive gradient
 derivative, not a force derivative. `diagnostics["dispersion"]` reports the
 parameter/source identities, actual correction actions/scalar work, workspace
@@ -103,7 +122,7 @@ solve or displaced SCF is introduced. `endpoint_seconds` includes the native
 SCF, electronic curvature and correction, while `scf_energy`, `dispersion_energy`
 and `total_energy` distinguish the energy components.
 
-Public curvature diagnostics also identify the actual central SCF state:
+Snapshot-based CPU composite diagnostics additionally identify the central SCF state:
 `scf_density_sha256` hashes its little-endian float64, C-order spin-major density
 bytes, with shape in `scf_density_shape`. `scf_occupied_orbitals` counts occupied
 orbitals in each stored spin block (one doubly occupied block for RKS, separate
@@ -129,8 +148,11 @@ records relate to actual allocation.
 Full-range hybrids do not have a nonlocal pair contribution, so their
 `max_nonlocal_pairs` setting does not limit semilocal grid work. The native
 default quadrature is preserved. A grid that does not fit the default 128-MiB
-AO/grid lease raises `MemoryError` naming `grid_budget_bytes`; increase that
-explicit allowance when appropriate rather than reducing the grid silently.
+AO/grid lease raises before publication. Python composition paths use
+`MemoryError` naming `grid_budget_bytes`; a linked native owner can instead
+raise `RuntimeError` carrying its geometry/grid or response workspace refusal.
+Increase the applicable explicit allowance when appropriate rather than
+reducing the grid silently.
 The lease is not a whole-process memory limit and excludes compiler subprocesses
 and borrowed SCF storage. Installed endpoint qualification measures process-tree
 RSS separately from provider capacity diagnostics.

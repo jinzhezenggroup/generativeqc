@@ -70,6 +70,10 @@ SCALAR_CLIENTS = {
         "generativeqc_compiler.integral.scalar_c",
         "generativeqc_compiler.integral.scalar_python",
     },
+    "geometry.d3_column": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.graph_composition",
+    },
     "geometry.gcp_scalar": {
         "generativeqc_compiler.integral.expr",
         "generativeqc_compiler.integral.scalar_c",
@@ -82,13 +86,18 @@ SCALAR_CLIENTS = {
         "generativeqc_compiler.integral.expr",
         "generativeqc_compiler.integral.scalar_c",
     },
+    "method.host_hessian_aot": {"generativeqc_compiler.integral.scalar_c"},
+    "method.host_nuclear_integrals": {"generativeqc_compiler.integral.expr"},
     "method.nonlocal_pair_ad": {
         "generativeqc_compiler.integral.expr",
         "generativeqc_compiler.integral.scalar_ad",
     },
     "method.radial_kernel_ad": {"generativeqc_compiler.integral.expr"},
     "method.stationary_grid_second": {"generativeqc_compiler.integral.expr"},
-    "method.wb97mv_grid_response": {"generativeqc_compiler.integral.expr"},
+    "method.wb97mv_grid_response": {
+        "generativeqc_compiler.integral.expr",
+        "generativeqc_compiler.integral.graph_composition",
+    },
     "method.wb97mv_nuclear_grid": {"generativeqc_compiler.integral.expr"},
     "method.nuclear_integral_response": {"generativeqc_compiler.integral.expr"},
     "dft.xc_bilinear": {"generativeqc_compiler.integral.expr"},

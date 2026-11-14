@@ -1006,6 +1006,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                          true, std::move(spins)};
     scf::solver::FinalStateLimits limits{options_.density_tolerance, options_.energy_tolerance, 0,
                                          true};
+    // Export the gate actually verified by the owner, not an unqualified label.
+    // Explicit stationarity also tightens canonical density reconstruction to
+    // the requested tolerance before stationary second-order reuse is allowed.
+    limits.stationarity_tolerance = std::min(1e-9, options_.density_tolerance);
     if (!dft::validate_ks_final_state(current.identity, ints.overlap, ints.hcore, *cpu_physical_,
                                       candidate, limits, compute_weighted_density, state, detail)) {
       invalidate_final_state();
@@ -1208,6 +1212,26 @@ class KsPreparedState final : public KsSingleOwnerPort {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status borrow_host_derivative_sources(const dft::CudaKsFinalStateToken& expected,
+                                                     KsHostDerivativeSources& output,
+                                                     std::string& detail) {
+    output = {};
+    if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE) {
+      detail = "native CPU derivative sources require a CPU KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "native CPU derivative sources have a stale final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    output = {&system_, &fock_, &basis_, &grid_, &execution_plan_.dispersion};
+    detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -3709,6 +3733,17 @@ class KsPreparedBatch final : public PreparedBatch,
       return items_[index].plan->read_derivative_sources(expected, output, detail);
     output = {};
     detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status borrow_host_derivative_sources(std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     KsHostDerivativeSources& output,
+                                                     std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->borrow_host_derivative_sources(expected, output, detail);
+    output = {};
+    detail = "KS batch item has no prepared native CPU source owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 

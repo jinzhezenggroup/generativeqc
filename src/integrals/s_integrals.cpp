@@ -15,6 +15,7 @@
 #include "generated_one_electron_st_cpu.hpp"
 #include "generated_stationary_cpu_derivative_dispatch.hpp"
 #include "integrals/ecp.hpp"
+#include "integrals/eri_symmetry.hpp"
 #include "integrals/generated_df_cpu.hpp"
 #include "integrals/generated_scalar_ad.hpp"
 #include "integrals/range_moments.hpp"
@@ -679,19 +680,6 @@ std::size_t eri_index(std::size_t i, std::size_t j, std::size_t k, std::size_t l
   return ((i * n + j) * n + k) * n + l;
 }
 
-std::array<std::array<std::size_t, 4>, 8> eri_permutations(
-    const std::array<std::size_t, 4>& indices) {
-  const auto [i, j, k, l] = indices;
-  return {{{i, j, k, l},
-           {j, i, k, l},
-           {i, j, l, k},
-           {j, i, l, k},
-           {k, l, i, j},
-           {l, k, i, j},
-           {k, l, j, i},
-           {l, k, j, i}}};
-}
-
 template <typename Value>
 void store_eri_symmetry(std::vector<Value>& eri, std::size_t n,
                         const std::array<std::size_t, 4>& indices, const Value& value) {
@@ -789,17 +777,7 @@ std::vector<std::size_t> cartesian_shell_offsets(const core::System& system) {
 
 template <typename Consumer>
 void for_each_eri_shell_quartet(const core::System& system, Consumer&& consume) {
-  for (std::size_t first = 0; first < system.shells.size(); ++first) {
-    for (std::size_t second = 0; second <= first; ++second) {
-      for (std::size_t third = 0; third <= first; ++third) {
-        for (std::size_t fourth = 0; fourth <= third; ++fourth) {
-          if (first == third && second < fourth) continue;
-          const std::array<std::size_t, 4> shells{first, second, third, fourth};
-          consume(shells);
-        }
-      }
-    }
-  }
+  for_each_unique_eri_quartet(system.shells.size(), consume);
 }
 
 template <typename Consumer>
@@ -891,8 +869,9 @@ PreparedCartesianEri prepare_eri_cartesian(
           prefactor};
 }
 
-void build_f_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
-                                      std::vector<double>& eri) {
+template <typename Consumer>
+void for_each_f_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
+                                        Consumer&& consume) {
   const auto offsets = cartesian_shell_offsets(system);
   std::vector<ValueEriComponent> components;
   for_each_eri_shell_quartet(system, [&](const std::array<std::size_t, 4>& indices) {
@@ -958,9 +937,17 @@ void build_f_value_eri_shell_quartets(const core::System& system, const std::vec
                                                aos[selected[2]].angular, aos[selected[3]].angular));
             }
           }
-    for (const auto& component : components)
-      store_eri_symmetry(eri, aos.size(), component.indices, component.value);
+    consume(indices, std::span<const ValueEriComponent>(components), components.size());
   });
+}
+
+void build_f_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
+                                      std::vector<double>& eri) {
+  for_each_f_value_eri_shell_quartet(
+      system, aos, [&](const auto&, auto components, std::size_t count) {
+        for (std::size_t item = 0; item < count; ++item)
+          store_eri_symmetry(eri, aos.size(), components[item].indices, components[item].value);
+      });
 }
 
 void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
@@ -976,8 +963,8 @@ void build_value_eri_shell_quartets(const core::System& system, const std::vecto
 
 // Invocation-local scratch, independent of molecular size. The unchanged scalar
 // producer still evaluates each canonical Cartesian component exactly once.
-using ValueEriCartesianBlock = std::array<double, 6 * 6 * 6 * 6>;
-static_assert(sizeof(ValueEriCartesianBlock) == 10368);
+using ValueEriCartesianBlock = std::array<double, 10 * 10 * 10 * 10>;
+static_assert(sizeof(ValueEriCartesianBlock) == 80000);
 
 std::size_t eri_block_index(const std::array<std::size_t, 4>& indices,
                             const std::array<std::size_t, 4>& begins,
@@ -988,8 +975,8 @@ std::size_t eri_block_index(const std::array<std::size_t, 4>& indices,
          indices[3] - begins[3];
 }
 
-void assemble_value_eri_cartesian_block(const ValueEriComponents& components, std::size_t count,
-                                        const std::array<std::size_t, 4>& begins,
+void assemble_value_eri_cartesian_block(std::span<const ValueEriComponent> components,
+                                        std::size_t count, const std::array<std::size_t, 4>& begins,
                                         const std::array<std::size_t, 4>& extents,
                                         ValueEriCartesianBlock& block) {
   const std::size_t size = extents[0] * extents[1] * extents[2] * extents[3];
@@ -1055,19 +1042,19 @@ void build_spherical_value_eri_shell_quartets(const core::System& system,
                                               std::vector<double>& eri) {
   const auto offsets = cartesian_shell_offsets(system);
   ValueEriCartesianBlock block;
-  for_each_value_eri_shell_quartet(
-      system, aos, offsets,
-      [&](const std::array<std::size_t, 4>& shells, const ValueEriComponents& components,
-          std::size_t count) {
-        std::array<std::size_t, 4> begins, extents;
-        for (unsigned slot = 0; slot < 4; ++slot) {
-          begins[slot] = offsets[shells[slot]];
-          extents[slot] = offsets[shells[slot] + 1] - begins[slot];
-        }
-        assemble_value_eri_cartesian_block(components, count, begins, extents, block);
-        project_value_eri_shell_quartet(shells, public_offsets, target_aos, begins, extents, block,
-                                        eri);
-      });
+  const auto project = [&](const std::array<std::size_t, 4>& shells,
+                           std::span<const ValueEriComponent> components, std::size_t count) {
+    std::array<std::size_t, 4> begins, extents;
+    for (unsigned slot = 0; slot < 4; ++slot) {
+      begins[slot] = offsets[shells[slot]];
+      extents[slot] = offsets[shells[slot] + 1] - begins[slot];
+    }
+    assemble_value_eri_cartesian_block(components, count, begins, extents, block);
+    project_value_eri_shell_quartet(shells, public_offsets, target_aos, begins, extents, block,
+                                    eri);
+  };
+  for_each_value_eri_shell_quartet(system, aos, offsets, project);
+  for_each_f_value_eri_shell_quartet(system, aos, project);
 }
 
 void unpack_jets(const std::vector<Jet>& source, std::vector<double>& values,
@@ -2106,7 +2093,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   const bool shared_value_geometry =
       !include_derivatives &&
       std::all_of(system.shells.begin(), system.shells.end(),
-                  [](const core::Shell& shell) { return shell.angular_momentum <= 2; });
+                  [](const core::Shell& shell) { return shell.angular_momentum <= 3; });
   const bool spherical_output = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL;
   const bool shell_local_spherical = include_eri && shared_value_geometry && spherical_output;
   std::vector<std::size_t> target_offsets;
@@ -2388,12 +2375,53 @@ bool supports_packaged_cpu_eri_shell_derivatives(
 }
 
 namespace {
+using PackagedEriBinding = std::array<int, 9>;
+
+const PackagedEriBinding* packaged_eri_binding(
+    const std::array<molecule::CartesianComponent, 4>& components) {
+  if (!generated_stationary_dispatch::available) return nullptr;
+  std::size_t component_index = 0;
+  for (const auto& component : components) {
+    const auto label = std::find(std::begin(generated_stationary_dispatch::components),
+                                 std::end(generated_stationary_dispatch::components), component);
+    if (label == std::end(generated_stationary_dispatch::components)) return nullptr;
+    component_index = generated_stationary_dispatch::component_count * component_index +
+                      (label - std::begin(generated_stationary_dispatch::components));
+  }
+  return &generated_stationary_dispatch::bindings[generated_stationary_dispatch::eri_offset +
+                                                  component_index];
+}
+
+/** One native owner restores the generated canonical shell and axis slots.
+ * The record's final field is an explicit kernel weight, not AO normalization. */
+bool evaluate_packaged_eri_derivative(const PackagedEriBinding& binding,
+                                      const std::array<double, 17>& record,
+                                      std::array<double, 12>& derivative) {
+  std::array<double, 17> canonical{};
+  canonical[16] = record[16];
+  for (std::size_t slot = 0; slot < 4; ++slot) {
+    const auto original_slot = static_cast<std::size_t>(binding[2 + slot]);
+    canonical[slot] = record[original_slot];
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      canonical[4 + 3 * slot + axis] = record[4 + 3 * original_slot + binding[6 + axis]];
+  }
+  std::array<double, 12> values{};
+  if (generated_stationary_dispatch::evaluators[binding[0]](binding[1], canonical.data(), 1,
+                                                            values.data()) != 0)
+    return false;
+  for (std::size_t slot = 0; slot < 4; ++slot)
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      derivative[3 * binding[2 + slot] + binding[6 + axis]] = values[3 * slot + axis];
+  return true;
+}
+
 /** Restore compiler-canonicalized slots before channel weighting. A unit
  * external weight evaluates the primitive once for every independent J/K
  * channel; coefficients and public-AO normalization stay in the shared loop. */
-Jet packaged_eri_derivative(const std::array<const core::Primitive*, 4>& primitives,
-                            const std::array<const molecule::CartesianExpansionTerm*, 4>& terms,
-                            const std::array<Vec3, 4>& centers) {
+std::array<double, 12> packaged_eri_derivative(
+    const std::array<const core::Primitive*, 4>& primitives,
+    const std::array<const molecule::CartesianExpansionTerm*, 4>& terms,
+    const std::array<Vec3, 4>& centers) {
   if (std::any_of(terms.begin(), terms.end(), [](const auto* term) {
         return term->component[0] + term->component[1] + term->component[2] == 3;
       })) {
@@ -2410,42 +2438,77 @@ Jet packaged_eri_derivative(const std::array<const core::Primitive*, 4>& primiti
     if (generativeqc_full_range_primitive_derivative_cpu(exponents.data(), positions.data(),
                                                          powers.data(), values.data()) != 0)
       throw std::runtime_error("generated full-range f-shell ERI derivative failed");
-    Jet derivative(0.0, 12);
-    std::copy(values.begin(), values.end(), derivative.derivative.begin());
-    return derivative;
+    return values;
   }
-  std::size_t component_index = 0;
-  for (const auto* term : terms) {
-    const auto label =
-        std::find(std::begin(generated_stationary_dispatch::components),
-                  std::end(generated_stationary_dispatch::components), term->component);
-    if (label == std::end(generated_stationary_dispatch::components))
-      throw std::invalid_argument("packaged CPU ERI component is unsupported");
-    component_index = generated_stationary_dispatch::component_count * component_index +
-                      (label - std::begin(generated_stationary_dispatch::components));
-  }
-  const auto& binding =
-      generated_stationary_dispatch::bindings[generated_stationary_dispatch::eri_offset +
-                                              component_index];
+  std::array<molecule::CartesianComponent, 4> components{};
+  for (std::size_t slot = 0; slot < 4; ++slot) components[slot] = terms[slot]->component;
+  const auto* binding = packaged_eri_binding(components);
+  if (!binding) throw std::invalid_argument("packaged CPU ERI component is unsupported");
   std::array<double, 17> record{};
   record[16] = 1.0;
   for (std::size_t slot = 0; slot < 4; ++slot) {
-    const auto original_slot = static_cast<std::size_t>(binding[2 + slot]);
-    record[slot] = primitives[original_slot]->exponent;
+    record[slot] = primitives[slot]->exponent;
     for (std::size_t axis = 0; axis < 3; ++axis)
-      record[4 + 3 * slot + axis] = centers[original_slot][binding[6 + axis]].value;
+      record[4 + 3 * slot + axis] = centers[slot][axis].value;
   }
-  std::array<double, 12> values{};
-  if (generated_stationary_dispatch::evaluators[binding[0]](binding[1], record.data(), 1,
-                                                            values.data()) != 0)
+  std::array<double, 12> derivative{};
+  if (!evaluate_packaged_eri_derivative(*binding, record, derivative))
     throw std::runtime_error("packaged CPU ERI derivative failed");
-  Jet derivative(0.0, 12);
-  for (std::size_t slot = 0; slot < 4; ++slot)
-    for (std::size_t axis = 0; axis < 3; ++axis)
-      derivative.derivative[3 * binding[2 + slot] + binding[6 + axis]] = values[3 * slot + axis];
   return derivative;
 }
+
+/** Packaged leaves expose only tangents; their former Jet primal is zero.
+ * Retain the generated scalar-AD multiply/add, including its zero tangent
+ * term and nonfinite primal check, without allocating per primitive/channel.
+ * Channel storage is already sized by the caller; publication remains final. */
+void accumulate_packaged_eri_derivative(Jet& sum, double weight,
+                                        const std::array<double, 12>& derivative) {
+  const generated_scalar_ad::Multiply scale(weight, 0.0);
+  const generated_scalar_ad::Add add(sum.value, scale.value);
+  sum.value = add.value;
+  for (std::size_t coordinate = 0; coordinate < derivative.size(); ++coordinate)
+    sum.derivative[coordinate] =
+        add.tangent(sum.derivative[coordinate], scale.tangent(0.0, derivative[coordinate]));
+}
 }  // namespace
+
+PackagedEriGradientStatus packaged_eri_primitive_gradient(const unsigned* angular,
+                                                          unsigned component, const double* record,
+                                                          double* output) {
+  if (!angular || !record || !output) return PackagedEriGradientStatus::EvaluationFailed;
+  if (!generated_stationary_dispatch::available ||
+      std::any_of(angular, angular + 4, [](unsigned order) { return order > 2; }))
+    return PackagedEriGradientStatus::Unavailable;
+  // This is the public CCA component order, not compiler-canonical shell order.
+  constexpr unsigned powers[3][6][3] = {
+      {{0, 0, 0}},
+      {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}},
+      {{2, 0, 0}, {1, 1, 0}, {1, 0, 1}, {0, 2, 0}, {0, 1, 1}, {0, 0, 2}}};
+  std::array<molecule::CartesianComponent, 4> components{};
+  unsigned remaining = component;
+  for (int slot = 3; slot >= 0; --slot) {
+    const auto count = (angular[slot] + 1) * (angular[slot] + 2) / 2;
+    std::copy_n(powers[angular[slot]][remaining % count], 3, components[slot].begin());
+    remaining /= count;
+  }
+  if (remaining) return PackagedEriGradientStatus::EvaluationFailed;
+  const auto* binding = packaged_eri_binding(components);
+  if (!binding) return PackagedEriGradientStatus::Unavailable;
+  std::array<double, 17> unscaled{};
+  unscaled[16] = 1.0;
+  for (std::size_t slot = 0; slot < 4; ++slot) {
+    unscaled[slot] = record[slot];
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      // Keep small separations accurate near a large common origin. All four
+      // independent partials still survive until the physical-owner projection.
+      unscaled[4 + 3 * slot + axis] = record[4 + 3 * slot + axis] - record[13 + axis];
+  }
+  std::array<double, 12> gradient{};
+  if (!evaluate_packaged_eri_derivative(*binding, unscaled, gradient))
+    return PackagedEriGradientStatus::EvaluationFailed;
+  std::copy(gradient.begin(), gradient.end(), output);
+  return PackagedEriGradientStatus::Success;
+}
 
 std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
@@ -2520,13 +2583,16 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
                               std::numeric_limits<std::uint64_t>::max() - recurrence_passes)
                             throw std::overflow_error("weighted ERI primitive count overflow");
                           evaluations += recurrence_passes;
-                          const auto derivative =
-                              packaged
-                                  ? packaged_eri_derivative({&pi, &pj, &pk, &pl}, terms, centers)
-                                  : primitive_eri_cartesian(pi.exponent, centers[0], ei.component,
-                                                            pj.exponent, centers[1], ej.component,
-                                                            pk.exponent, centers[2], ek.component,
-                                                            pl.exponent, centers[3], el.component);
+                          Jet derivative;
+                          std::array<double, coordinates> packaged_derivative{};
+                          if (packaged)
+                            packaged_derivative =
+                                packaged_eri_derivative({&pi, &pj, &pk, &pl}, terms, centers);
+                          else
+                            derivative = primitive_eri_cartesian(
+                                pi.exponent, centers[0], ei.component, pj.exponent, centers[1],
+                                ej.component, pk.exponent, centers[2], ek.component, pl.exponent,
+                                centers[3], el.component);
                           for (std::size_t channel = 0; channel < weights.size(); ++channel) {
                             if (weights[channel][weight_index] == 0.0) continue;
                             double component_weight = weights[channel][weight_index];
@@ -2537,8 +2603,12 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
                             const double primitive_weight = component_weight * pi.coefficient *
                                                             pj.coefficient * pk.coefficient *
                                                             pl.coefficient;
-                            contracted[channel] =
-                                contracted[channel] + primitive_weight * derivative;
+                            if (packaged)
+                              accumulate_packaged_eri_derivative(
+                                  contracted[channel], primitive_weight, packaged_derivative);
+                            else
+                              contracted[channel] =
+                                  contracted[channel] + primitive_weight * derivative;
                           }
                         }
                 }
