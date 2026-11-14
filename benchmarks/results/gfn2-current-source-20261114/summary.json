@@ -1,0 +1,362 @@
+{
+  "source_commit": "95c3e547f96848e2fc3392d85fdfa1a68dff688b",
+  "gate": 5e-07,
+  "reports": {
+    "cpu-force": {
+      "observations": 36,
+      "maximum_energy_error": 1.1800693755503744e-10,
+      "maximum_force_error": 8.146461175778663e-08,
+      "total_scc_iterations": 1842,
+      "timings": [
+        {
+          "case": "water-8",
+          "phase": "cold",
+          "complete_seconds_median": 0.06983565166592598,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "warm",
+          "complete_seconds_median": 0.011808924376964569,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved",
+          "complete_seconds_median": 0.011793544515967369,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.011773095466196537,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "cold",
+          "complete_seconds_median": 0.22418373078107834,
+          "iterations": [
+            14
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "warm",
+          "complete_seconds_median": 0.21631096303462982,
+          "iterations": [
+            14
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved",
+          "complete_seconds_median": 0.21682987827807665,
+          "iterations": [
+            14
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.21635222993791103,
+          "iterations": [
+            14
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "cold",
+          "complete_seconds_median": 35.20459065027535,
+          "iterations": [
+            108
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "warm",
+          "complete_seconds_median": 34.925851214677095,
+          "iterations": [
+            108
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved",
+          "complete_seconds_median": 46.577372347936034,
+          "iterations": [
+            145
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved-warm",
+          "complete_seconds_median": 46.6148049114272,
+          "iterations": [
+            145
+          ]
+        }
+      ]
+    },
+    "cuda-force": {
+      "observations": 36,
+      "maximum_energy_error": 1.7053025658242404e-12,
+      "maximum_force_error": 2.125657862228625e-08,
+      "total_scc_iterations": 1470,
+      "timings": [
+        {
+          "case": "water-8",
+          "phase": "cold",
+          "complete_seconds_median": 0.2309957966208458,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "warm",
+          "complete_seconds_median": 0.03768961597234011,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved",
+          "complete_seconds_median": 0.03770987689495087,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.037698650266975164,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "cold",
+          "complete_seconds_median": 0.24314573174342513,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "warm",
+          "complete_seconds_median": 0.12456128094345331,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved",
+          "complete_seconds_median": 0.12465967005118728,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.12469522515311837,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "cold",
+          "complete_seconds_median": 7.218637566547841,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "warm",
+          "complete_seconds_median": 7.038193654734641,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved",
+          "complete_seconds_median": 20.243521780706942,
+          "iterations": [
+            95
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved-warm",
+          "complete_seconds_median": 20.23986531421542,
+          "iterations": [
+            95
+          ]
+        }
+      ]
+    },
+    "cuda-energy": {
+      "observations": 36,
+      "maximum_energy_error": 1.7053025658242404e-12,
+      "maximum_force_error": null,
+      "total_scc_iterations": 1470,
+      "timings": [
+        {
+          "case": "water-8",
+          "phase": "cold",
+          "complete_seconds_median": 0.2210374684073031,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "warm",
+          "complete_seconds_median": 0.03475770680233836,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved",
+          "complete_seconds_median": 0.034767822828143835,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-8",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.03476077225059271,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "cold",
+          "complete_seconds_median": 0.23205330269411206,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "warm",
+          "complete_seconds_median": 0.11389519413933158,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved",
+          "complete_seconds_median": 0.11383359972387552,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-32",
+          "phase": "moved-warm",
+          "complete_seconds_median": 0.11385188670828938,
+          "iterations": [
+            13
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "cold",
+          "complete_seconds_median": 7.132540707010776,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "warm",
+          "complete_seconds_median": 6.958049918990582,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved",
+          "complete_seconds_median": 20.225378583651036,
+          "iterations": [
+            95
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved-warm",
+          "complete_seconds_median": 20.226390183903277,
+          "iterations": [
+            95
+          ]
+        }
+      ]
+    },
+    "xtbloom-force": {
+      "observations": 12,
+      "maximum_energy_error": 5.684341886080801e-13,
+      "maximum_force_error": 4.523219148885871e-08,
+      "total_scc_iterations": 1164,
+      "timings": [
+        {
+          "case": "water-128",
+          "phase": "cold",
+          "complete_seconds_median": 7.955766012892127,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "warm",
+          "complete_seconds_median": 7.230870775878429,
+          "iterations": [
+            98
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved",
+          "complete_seconds_median": 7.088983326219022,
+          "iterations": [
+            96
+          ]
+        },
+        {
+          "case": "water-128",
+          "phase": "moved-warm",
+          "complete_seconds_median": 7.088248037733138,
+          "iterations": [
+            96
+          ]
+        }
+      ]
+    }
+  },
+  "status": "PASS",
+  "observations": 120,
+  "maximum_energy_error": 1.1800693755503744e-10,
+  "maximum_force_error": 8.146461175778663e-08
+}

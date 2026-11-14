@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 91107328,
+  "benchmark_results_max_bytes": 93204480,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
@@ -667,6 +667,66 @@
       "owner": "hf-matrix-profile-20261109",
       "reason": "Exact 1712-byte losslessly compressed Slurm 2029 Compute Sanitizer receipt for the source-bound Direct-HF matrix-profile fixture. Preserves all executed profile endpoints, build IDs and the original zero-error/zero-leak summary. This admits only these frozen diagnostic bytes, not future logs or optimized performance qualification.",
       "sha256": "6d7669f7e985288c78b67554cbce0771e1b9792a38bc871532b471b0c497d8df"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cpu-configure.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact CPU OpenBLAS/LAPACKE and launcher configuration receipt for the frozen library. Full compilation output remains ignored.",
+      "sha256": "3cad7431c764ef2392b713a8045aa2d28b4255221be2b5e87344cae4ace87927"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cpu-contracts.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact 218-pass/15-skip CPU contract receipt bound to the frozen source/library identities.",
+      "sha256": "a571984d8310fd4bfe09dfdb88f3fc99c3bf02185d3a4557195c0b5646146894"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cpu-history32-budget300.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact failed history-32, 300-iteration moved-geometry diagnostic; not relabeled as history-64 acceptance.",
+      "sha256": "3c9bb13cb0a8a945f9c4867a8993c683b17054b9158e5a1b2b08a6931b667c7a"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cpu-history8-budget300.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact failed history-8, 300-iteration CPU diagnostic, distinct from the qualified history-64 protocol.",
+      "sha256": "7679e4cc170d6e518e10190b6f6af1acd2a4c021cbd7c6417ce5c93f1ad97baa"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-build-configure.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact CUDA 12.9/Release/SM120 full-SDK configuration receipt. Full compilation output remains ignored.",
+      "sha256": "da07f3afd3e050b18706d3c3d6b67918f7b816e3d3e0c83c8fee75c561e37901"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-contracts.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact real-device 103-pass/1-skip contract receipt from finite Slurm 4463, not a CPU-only proxy.",
+      "sha256": "19baa3f28d78567d9187ba03b6e499fc432de4ef78e6d6aea8b7339d55556fa7"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-public-energy.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact scheduled completion receipt for 36 original/moved/FRESH energy endpoints, accompanying full numerical rows.",
+      "sha256": "916481240be2630247bd8bbb94c9bfd9edc154d8fbbb4e6be12116166a94bd4c"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-public-force.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact scheduled completion receipt for 36 original/moved/FRESH analytic-force endpoints, accompanying full numerical rows.",
+      "sha256": "0995f66f5af04e635404c056115d65951e16ad3ab0522e9fffea12c9500a1725"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-sanitizer-test.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact public lifetime/recovery test receipt accompanying the real-device Compute Sanitizer zero-error/zero-leak record.",
+      "sha256": "1857514c24d27ff94c51bc12a729d10fe9e9e476f05bd9b4e36b6d87190c9cb6"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/cuda-xtbloom-force.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact 12-call peer completion receipt. Peer timings are not an oracle substitute or native speedup claim.",
+      "sha256": "dd066d15235acb1b08936c134df5b00c18c420fcc70a2f5f8ee7d6ac97798b72"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/docs-tests.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact 17-pass/58-subtest documentation-contract receipt for the restricted GFN2 endpoint.",
+      "sha256": "56e734049d7090f320bcee39916766a029a13c5cb428461884ec740fea34fb3b"
+    },
+    "benchmarks/results/gfn2-current-source-20261114/evidence-negative-controls.log.xz": {
+      "owner": "gfn2-current-source-20261114",
+      "reason": "Exact compact receipt of 11 rejected evidence mutations: source, model, geometry, numerics and solver controls fail closed.",
+      "sha256": "bc2e2da902f12aee0673edb3620313885960e1e404485d65afde4f5847acab37"
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

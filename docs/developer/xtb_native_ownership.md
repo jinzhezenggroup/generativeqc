@@ -13,6 +13,44 @@ owners, standalone CUDA request/plan API, diagnostic snapshots, DLPack/result-ar
 worker/checkpoint infrastructure are removed. The internal SCC graph and its
 bounded fallback remain part of CUDA execution.
 
+## Admitted molecular contract
+
+The [contextual capability API](../reference/capabilities.md) remains the
+authority for a resolved calculation, not the presence of generated kernels.
+For the restricted, single-system FRESH endpoint, both CPU and a native SDK
+build containing GFN2 CUDA admit energy-only and energy plus analytic forces
+in FP64 with the intrinsic GFN2 basis. CUDA wheels do not currently include
+this native CUDA execution owner; requesting a missing backend fails rather
+than substituting CPU scientific execution. CPU execution reports
+`cpu_reference`; this is the native CPU backend name, not a PySCF/tblite call.
+
+The public method bridge supplies 300 K Fermi occupations on every request.
+Its energy is the corresponding free energy, and analytic forces differentiate
+that endpoint. It does not expose a public arbitrary-temperature or
+fractional-electron control. Integer molecular charge and multiplicity must
+define integral alpha/beta valence populations. Existing shared-orbital
+restricted open-shell fixtures do not imply unrestricted spin-channel support
+or admission of arbitrary occupation modes.
+
+Python singlepoints return detached host results from host molecular inputs.
+The private CUDA descriptor executor additionally validates host/device
+coordinate ingress; that does not create a public DLPack/device-output API.
+Gaussian bases, ECPs, Gaussian density fitting, non-FP64 execution, periodic
+cells, attachments, ragged batches and non-FRESH SCC are not inferred from
+nearby methods. Rejected descriptor features fail before input staging.
+`clear_cache()` releases retained runtime state without invalidating published
+host results. Nonconvergence raises instead of returning finite-looking science.
+
+SCC iteration count and convergence status are reported. Public `energy_change`
+and `density_rms` are NaN, and `physical_residual_rms` is absent for this method;
+these are unavailable measurements, not zero residuals. A caller must choose
+a finite iteration budget and mixer history appropriate to its system; cache
+reuse never changes those controls or retries with a different solver policy.
+See the [qualification driver and receipts](../../benchmarks/results/gfn2-current-source-20261114/README.md)
+for the exact independently tested combinations and resource-counter limits,
+and the [oracle model contract](../maintainer/gfn2_mixer_endpoint_qualification.md)
+before regenerating a tblite reference.
+
 ## Runtime lifetime
 
 Native method selectors, including GFN2, do not initialize the bulk-XC resolver

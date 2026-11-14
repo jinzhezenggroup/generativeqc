@@ -7,6 +7,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ SPEC.loader.exec_module(MODULE)
 def experiment() -> tuple[dict, list[dict]]:
     oracle = {
         "oracle": "tblite 0.6.0",
+        "xtb_config": {"smooth_cutoff": 0.0},
         "cases": [
             {
                 "name": name,
@@ -104,6 +106,63 @@ def experiment() -> tuple[dict, list[dict]]:
     return oracle, rows
 
 
+def test_prepare_uses_and_records_matched_dispersion_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the oracle boundary without requiring a tblite install in CI."""
+    import importlib.metadata
+
+    import numpy as np
+
+    fixture = json.loads(
+        (ROOT / "tests/data/gfn2_sharp_cutoff_tblite.json").read_text()
+    )
+    sharp = fixture["case"]
+    smoothed = fixture["smoothed_control"]
+
+    class ReferenceCalculator:
+        def __init__(
+            self,
+            method: str,
+            numbers: object,
+            coordinates: object,
+            *,
+            xtb_config: dict | None = None,
+        ) -> None:
+            self.configuration = xtb_config
+
+        def set(self, name: str, value: object) -> None:
+            pass
+
+        def singlepoint(self) -> ReferenceCalculator:
+            return self
+
+        def get(self, name: str) -> object:
+            reference = (
+                sharp if self.configuration == {"smooth_cutoff": 0.0} else smoothed
+            )
+            return {
+                "energy": reference["energy"],
+                "gradient": -np.asarray(reference["forces"]),
+                "shell-map": list(range(12)),
+                "orbital-map": list(range(18)),
+            }[name]
+
+    interface = types.ModuleType("tblite.interface")
+    interface.Calculator = ReferenceCalculator
+    inputs = types.ModuleType("compare_xtbloom")
+    inputs.cases = lambda waters: [sharp]
+    monkeypatch.setitem(sys.modules, "tblite.interface", interface)
+    monkeypatch.setitem(sys.modules, "compare_xtbloom", inputs)
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.6.0")
+    directory = tmp_path / "oracle"
+    MODULE.prepare(directory, [])
+    oracle = json.loads((directory / "oracle.json").read_text())
+    assert oracle["xtb_config"] == {"smooth_cutoff": 0.0}
+    assert oracle["cases"][0]["energy"] == sharp["energy"]
+    assert (directory / "oracle.txt").is_file()
+
+
 def write_report(tmp_path: Path, rows: list[dict], oracle: dict) -> dict:
     journal = tmp_path / "journal.jsonl"
     journal.write_text("".join(json.dumps(row) + "\n" for row in rows))
@@ -115,12 +174,51 @@ def test_complete_report_preserves_timing_domain(tmp_path: Path) -> None:
     result = write_report(tmp_path, rows, oracle)
     assert result["status"] == "PASS"
     assert result["mixer_scc_fraction"] == "UNAVAILABLE"
-    assert result["retained_768_ao_gate"].startswith("historical independent FAIL")
+    assert result["768_ao_gate"] == "NOT_EXERCISED"
+    assert result["xtb_config"] == {"smooth_cutoff": 0.0}
     assert result["endpoint_pairs"][0]["on_seconds"] == pytest.approx(0.21)
     assert (
         result["rows"][1]["work"]["per_invocation_measured_stage_shares"][1]["history"]
         == 0.25
     )
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        None,
+        {},
+        {"smooth_cutoff": 0.05},
+        {"smooth_cutoff": False},
+        {"smooth_cutoff": float("nan")},
+        {"smooth_cutoff": "0.0"},
+    ],
+)
+@pytest.mark.parametrize("kind", ["endpoint", "lifecycle"])
+def test_mismatched_or_unverified_oracle_model_is_rejected(
+    tmp_path: Path, configuration: object, kind: str
+) -> None:
+    oracle, rows = experiment() if kind == "endpoint" else lifecycle()
+    if configuration is None:
+        oracle.pop("xtb_config")
+    else:
+        oracle["xtb_config"] = configuration
+    path = tmp_path / "journal.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(ValueError, match="sharp GFN2 D4 cutoffs"):
+        if kind == "endpoint":
+            MODULE.report(path, oracle, 3)
+        else:
+            MODULE.report_lifecycle(path, oracle)
+
+
+def test_large_domain_gate_requires_large_domain_samples(tmp_path: Path) -> None:
+    oracle, rows = experiment()
+    for case in oracle["cases"]:
+        case["intrinsic_aos"] = 768
+    assert write_report(tmp_path, rows, oracle)["768_ao_gate"] == "PASS"
+    rows[0]["energy"] += 1e-6
+    assert write_report(tmp_path, rows, oracle)["768_ao_gate"] == "INCOMPLETE"
 
 
 @pytest.mark.parametrize(

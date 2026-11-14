@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "gfn2-current-source-20261114",
+  "owner": "Restricted FRESH GFN2 CPU/CUDA endpoint qualification (#560)",
+  "reason": "Exact tracked-source inventories bind the two qualified libraries to their retained snapshots. Both manifests stay unchanged for offline verification; full build logs are excluded. This storage review changes no numerical gate and does not qualify later production source.",
+  "review_document": "benchmarks/results/gfn2-current-source-20261114/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/gfn2-current-source-20261114/cpu-source.sha256.xz",
+      "bytes": 629600,
+      "sha256": "6d0b56c5c10879ad489cdbd934ce226c27cdafdab0df6c50ecdda16f6bc02eeb",
+      "family": "gfn2-current-source-20261114",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen CPU tracked-source identity inventory"
+    },
+    {
+      "path": "benchmarks/results/gfn2-current-source-20261114/cuda-source.sha256.xz",
+      "bytes": 629576,
+      "sha256": "75e8e1b24b675b3332585cb4869e730bcad163e277e2a319d7e1da81cf165ade",
+      "family": "gfn2-current-source-20261114",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact frozen CUDA tracked-source identity inventory"
+    }
+  ]
+}

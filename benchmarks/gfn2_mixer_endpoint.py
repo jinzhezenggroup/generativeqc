@@ -17,6 +17,7 @@ from pathlib import Path
 LIMIT = 64 * 1024 * 1024
 GATE = 5e-7
 PARITY = 5e-14
+XTB_CONFIG = {"smooth_cutoff": 0.0}
 STAGES = ("residual", "history", "solve", "combination")
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,7 +56,11 @@ def prepare(directory: Path, waters: list[int]) -> None:
         moved.flat[0] += 0.015
         for geometry, coordinates in enumerate((positions, moved)):
             numbers = np.asarray([symbols[s] for s in original["symbols"]])
-            calculator = Calculator("GFN2-xTB", numbers, coordinates)
+            # tblite 0.6 defaults to a different, smoothed dispersion model.
+            # Native GFN2 parameters select sharp 50/25-bohr D4 cutoffs.
+            calculator = Calculator(
+                "GFN2-xTB", numbers, coordinates, xtb_config=dict(XTB_CONFIG)
+            )
             calculator.set("accuracy", 0.01)
             calculator.set("max-iter", 300)
             calculator.set("temperature", 300 * 3.166808578545117e-6)
@@ -80,6 +85,7 @@ def prepare(directory: Path, waters: list[int]) -> None:
                 json.dumps(
                     {
                         "oracle": "tblite 0.6.0",
+                        "xtb_config": dict(XTB_CONFIG),
                         "accuracy": 0.01,
                         "fixture_sha256": digest(
                             ROOT / "tests/data/gfn2_native_tblite.json"
@@ -113,6 +119,18 @@ def integer(value: object, name: str, low: int = 0, high: int = (1 << 64) - 1) -
 
 def finite(value: object) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
+
+
+def validate_oracle_configuration(oracle: dict) -> None:
+    """Require a verified model match, not a library's version-dependent default."""
+    configuration = oracle.get("xtb_config")
+    if (
+        not isinstance(configuration, dict)
+        or set(configuration) != {"smooth_cutoff"}
+        or not finite(configuration["smooth_cutoff"])
+        or configuration["smooth_cutoff"] != 0.0
+    ):
+        raise ValueError("independent oracle must explicitly use sharp GFN2 D4 cutoffs")
 
 
 def check_pinned_reference(record: dict, original: dict) -> None:
@@ -324,6 +342,7 @@ def numerical(row: dict, expected: dict) -> dict:
 
 
 def report(journal: Path, oracle: dict, repetitions: int) -> dict:
+    validate_oracle_configuration(oracle)
     if not 3 <= repetitions <= 20 or journal.stat().st_size > LIMIT:
         raise ValueError("invalid repetitions or journal capacity")
     rows = [
@@ -506,12 +525,16 @@ def report(journal: Path, oracle: dict, repetitions: int) -> dict:
         "rows": findings,
         "endpoint_pairs": timing,
         "timing_summary": timing_summary,
-        "retained_768_ao_gate": "historical independent FAIL; unresolved",
+        "xtb_config": dict(oracle["xtb_config"]),
+        "768_ao_gate": ("PASS" if qualified else "INCOMPLETE")
+        if any(case.get("intrinsic_aos") == 768 for case in cases)
+        else "NOT_EXERCISED",
         "cycle_contract": "shares of measured stages within one CTA invocation only; no cycles-to-ms or cross-SM sum",
     }
 
 
 def report_lifecycle(journal: Path, oracle: dict) -> dict:
+    validate_oracle_configuration(oracle)
     if journal.stat().st_size > LIMIT:
         raise ValueError("lifecycle journal capacity exceeded")
     rows = [json.loads(line) for line in journal.read_text().splitlines()]
