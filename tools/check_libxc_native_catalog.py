@@ -215,6 +215,86 @@ def require_current_acceptance(report: dict) -> None:
     )
 
 
+def validate_resource_acceptance(
+    resource: dict, reports: list[dict], *, require_current: bool = False
+) -> None:
+    """Authenticate scheduled safety execution and require its actual outcomes.
+
+    A hash binds receipt bytes, not their success. Keep incomplete or failed
+    safety runs out of representative acceptance even when correctly archived.
+    """
+    environment = resource.get("environment", {})
+    require(
+        resource.get("schema") == "generativeqc.libxc-scoped-safety.v1"
+        and all(
+            isinstance(environment.get(field), str) and environment[field]
+            for field in ("slurm_job_id", "cuda_visible_devices", "host", "gpu")
+        )
+        and all(
+            resource.get(field) == environment[field]
+            for field in ("slurm_job_id", "cuda_visible_devices", "host")
+        ),
+        "resource/lifetime receipt has inconsistent scheduled execution",
+    )
+    required_cases = {
+        "test_native_automatic_force_minimum_and_below_budget[1]",
+        "test_native_automatic_force_minimum_and_below_budget[2]",
+        "test_native_automatic_force_ragged_failure_and_recovery",
+    }
+    passed = resource.get("pytest_passed")
+    require(
+        isinstance(passed, list)
+        and all(isinstance(case, str) for case in passed)
+        and len(passed) == len(required_cases)
+        and set(passed) == required_cases,
+        "resource/lifetime receipt lacks complete passed safety cases",
+    )
+    failure = resource.get("nonconvergence", {})
+    require(
+        isinstance(failure, dict)
+        and type(failure.get("attempts")) is int
+        and failure["attempts"] >= 2
+        and type(failure.get("max_iterations")) is int
+        and failure["max_iterations"] == 1
+        and type(failure.get("spins")) is int
+        and failure["spins"] in (1, 2)
+        and all(
+            failure.get(field) is True
+            for field in ("no_forces", "no_warm_seed", "no_force_receipt")
+        ),
+        "resource/lifetime nonconvergence safety did not pass",
+    )
+    matched = [
+        batch
+        for batch in reports
+        if batch["native_library"]["sha256"] == resource.get("native_library_sha256")
+        and any(
+            execution["backend"] in ("cuda", "all")
+            and execution["environment"] == environment
+            and failure.get("name") in execution["names"]
+            for execution in batch["executions"]
+        )
+    ]
+    require(
+        bool(matched),
+        "resource/lifetime receipt has no matching scheduled native execution",
+    )
+    if require_current:
+        spin = "unpolarized" if failure["spins"] == 1 else "polarized"
+        require(
+            any(
+                row["name"] == failure.get("name")
+                and row["backend"] == "cuda"
+                and row["spin"] == spin
+                and row["product"] == "forces"
+                and row["library"]["sha256"] == resource.get("native_library_sha256")
+                for batch in matched
+                for row in batch["endpoints"]
+            ),
+            "current acceptance requires a matching resource/lifetime receipt",
+        )
+
+
 def acceptance_view(report: dict) -> dict:
     """Do not make unrelated whole-tree provenance movement a CI failure.
 
@@ -288,14 +368,7 @@ def check(
             "resource evidence bytes changed",
         )
         resource = load_json(path)
-        require(
-            resource["schema"] == "generativeqc.libxc-scoped-safety.v1"
-            and resource["native_library_sha256"]
-            in {batch["native_library"]["sha256"] for batch in reports}
-            and resource["environment"]["slurm_job_id"]
-            and resource["environment"]["cuda_visible_devices"],
-            "resource/lifetime receipt has no matching scheduled native execution",
-        )
+        validate_resource_acceptance(resource, reports, require_current=require_current)
         report["resource_acceptance"] = {
             **resource_input,
             "native_library_sha256": resource["native_library_sha256"],
