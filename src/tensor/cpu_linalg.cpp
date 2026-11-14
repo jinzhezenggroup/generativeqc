@@ -36,7 +36,7 @@
 extern "C" int openblas_set_num_threads_local(int);
 #endif
 #if GENERATIVEQC_OPENBLAS_HAS_LAPACKE
-#include <lapacke.h>
+#include "tensor/cpu/build_linked_lapacke.hpp"
 #endif
 #endif
 

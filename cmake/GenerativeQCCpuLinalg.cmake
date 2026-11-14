@@ -151,20 +151,21 @@ function(generativeqc_configure_cpu_linalg target)
     include(CheckCXXSourceCompiles)
     set(CMAKE_REQUIRED_INCLUDES ${_include_dirs})
     set(CMAKE_REQUIRED_LIBRARIES ${_provider_libraries})
+    set(_lapack_header "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/tensor/cpu/build_linked_lapacke.hpp")
     if(_scipy_prefix)
       set(_thread_probe
           "#include <cblas.h>\nint main(){return scipy_openblas_set_num_threads_local(1);}")
       set(_global_thread_probe
           "#include <cblas.h>\nint main(){int n=scipy_openblas_get_num_threads();scipy_openblas_set_num_threads(n);return 0;}")
       set(_lapack_probe
-          "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
+          "#define GENERATIVEQC_OPENBLAS_SCIPY_PREFIX 1\n#include \"${_lapack_header}\"\nint main(){double a[1]={1},w[1];int x=scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
     else()
       set(_thread_probe
           "#include <cblas.h>\nint main(){return openblas_set_num_threads_local(1);}")
       set(_global_thread_probe
           "#include <cblas.h>\nint main(){int n=openblas_get_num_threads();openblas_set_num_threads(n);return 0;}")
       set(_lapack_probe
-          "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
+          "#include \"${_lapack_header}\"\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
     endif()
     # Cached successes are hints only: validate their actual compile/link inputs
     # together before reusing them. A dependency fingerprint cannot in general
