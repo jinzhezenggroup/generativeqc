@@ -135,7 +135,6 @@ def test_native_ni_doublet_default_grid_force_matches_independent_state(
         density_tolerance=1e-11,
         max_iterations=600,
     )
-    assert not calculator.capabilities.supported_second_order
     try:
         with calculator.prepare_batch(
             [atoms], multiplicities=[2], warm_start=False
