@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tools import check_libxc_native_catalog as checker
+from tools.generativeqc_validation.libxc_catalog import validate_cuda
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -17,17 +18,24 @@ if TYPE_CHECKING:
 def retained() -> tuple[dict, list[dict]]:
     manifest = checker.load_json(checker.MANIFEST)
     resource = checker.load_json(checker.ROOT / manifest["resource_acceptance"]["path"])
-    snapshot = checker.load_json(checker.ROOT / manifest["snapshot"])
+    # Exercise safety validation with authenticated measured scopes, independent
+    # of whether current generator dependencies permit inheriting those scopes.
     reports = []
-    for campaign in snapshot["campaigns"]:
+    for item in manifest["incremental_campaigns"]:
+        path = checker.ROOT / item["path"]
+        assert checker.file_hash(path) == item["sha256"]
+        campaign = checker.load_json(path)
+        library = campaign["build"]["library"]
+        endpoints = []
+        for name, data in campaign["functionals"].items():
+            for record in data.get("cuda", []):
+                scope = validate_cuda(name, record, library, data["subject_identity"])
+                endpoints.append({**scope, "name": name, "product": "forces"})
         reports.append(
             {
-                **campaign,
-                "endpoints": [
-                    row
-                    for row in snapshot["endpoints"]
-                    if row["library"] == campaign["native_library"]
-                ],
+                "native_library": library,
+                "executions": campaign["executions"],
+                "endpoints": endpoints,
             }
         )
     return resource, reports

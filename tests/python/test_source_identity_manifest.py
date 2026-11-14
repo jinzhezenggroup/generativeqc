@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -192,3 +194,54 @@ def test_manifest_container_type_errors(
     _write_manifest(tmp_path, payload)
     with pytest.raises(TypeError):
         _source_identity_paths(tmp_path)
+
+
+def test_cmake_generator_entrypoints_participate_in_source_identity() -> None:
+    """Actual build-invoked Python inputs cannot escape artifact provenance."""
+    from tools.generate_build_identity import _inventory
+
+    root = Path(__file__).resolve().parents[2]
+    references = set()
+    for build_file in [root / "CMakeLists.txt", *(root / "cmake").glob("*.cmake")]:
+        references.update(
+            re.findall(
+                r"\$\{CMAKE_CURRENT_SOURCE_DIR\}/(tools/[\w/.-]+\.py)",
+                build_file.read_text(),
+            )
+        )
+    assert references
+    # Follow repository-local Python helpers without executing generators.
+    pending = list(references)
+    visited = set()
+    while pending:
+        relative = pending.pop()
+        if relative in visited:
+            continue
+        visited.add(relative)
+        for node in ast.walk(ast.parse((root / relative).read_text())):
+            modules = []
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                modules = [
+                    node.module,
+                    *(f"{node.module}.{a.name}" for a in node.names),
+                ]
+            for module in modules:
+                for candidate in (
+                    root / (module.replace(".", "/") + ".py"),
+                    (root / relative).parent / (module.replace(".", "/") + ".py"),
+                ):
+                    if candidate.is_file() and candidate.is_relative_to(root / "tools"):
+                        helper = candidate.relative_to(root).as_posix()
+                        references.add(helper)
+                        pending.append(helper)
+    native = {
+        path.as_posix()
+        for path in _inventory(root, root / "cmake/GenerativeQCSourceIdentity.json")
+    }
+    frontend = {
+        path.relative_to(root).as_posix() for path in _source_identity_paths(root)
+    }
+    assert not references - native
+    assert not references - frontend

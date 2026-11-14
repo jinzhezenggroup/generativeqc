@@ -1,12 +1,27 @@
 # Scoped Libxc endpoint acceptance
 
-These immutable incremental campaigns qualify representative ordinary LDA,
+These immutable incremental campaigns measured representative ordinary LDA,
 GGA and tau-MGGA CPU/CUDA energy/force endpoints without relabeling the retained
 11-registration historical campaign. They exercise the generic path, not a
 new production allow-list. The [manifest](../../../manifests/libxc/native-qualification.json)
 authenticates both campaigns and the separate resource/lifetime receipt; the
 [generated report](../../../docs/reference/libxc_qualification.md) owns current
 counts and outstanding context-specific revalidation requests.
+
+## Authentication follow-up
+
+The measured results below remain unchanged, but they are not currently reusable
+endpoint qualification. Review found that the retained native census omitted
+transitive source-generator inputs; the build identity now tracks those inputs.
+Neither retained working-tree campaign includes their authenticated measured
+hashes. Current checkout bytes cannot supply that missing historical proof.
+The catalog therefore conservatively reports **zero current endpoint contexts
+and products**, while retaining the independently valid production-domain proofs.
+This is pending source authentication, not a new numerical failure. The exact
+previously published 12-context/24-product summary is preserved separately in
+`manifests/libxc/native-qualification-previous-7d7dc89b5c.json.xz`, and exact
+stage-demotion acknowledgements record the transition. No campaign, executed
+ELF identity, independent result or resource receipt has been rewritten.
 
 ## Source and executed binary
 
@@ -55,7 +70,7 @@ gaps remain in campaign metadata, not as a veto on the later complete receipts.
 The prerequisite-only safety job 17387 did not execute tests after its producer
 timed out; it is not counted as scientific or safety acceptance.
 
-The combined new evidence admits **12 backend/spin contexts and 24 E/F products**:
+The combined measured evidence records **12 backend/spin contexts and 24 E/F products**:
 three registrations, CPU/CUDA and RKS/UKS, each with energy and analytic forces.
 There are 18 measured cold/warm/moved lifecycle rows per backend. Every force
 vector is compared componentwise with native and independently reconverged
@@ -117,12 +132,15 @@ allocations on node1. Preserve scheduler device visibility. Supplement the
 manifest with the measured batches and run:
 
 ```console
-python tools/check_libxc_native_catalog.py --require-current
-python -O tools/check_libxc_native_catalog.py --require-current
+python tools/check_libxc_native_catalog.py
+python -O tools/check_libxc_native_catalog.py
 ```
 
 Unchanged historical dependencies retain their evidence; genuine older
 SCF/J/K/precision differences remain explicit for the other registrations.
-Those pending rows do not erase this representative end-to-end acceptance.
+The additional missing generator bindings now block representative current
+acceptance as well. `--require-current` is expected to fail until those bindings
+are authentically recovered or appropriate new source-bound qualification is
+recorded. A fresh hash of the present checkout must not be attached to old runs.
 The optional stronger `public-method=0/222` count is not a statement that
 222 registrations cannot run or lack all scientific validation.

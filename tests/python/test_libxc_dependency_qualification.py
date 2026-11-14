@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 from generativeqc_compiler.common.provenance import canonical_hash
 from test_libxc_native_catalog import recorded_contract
+from test_libxc_resource_acceptance import retained as retained  # noqa: PLC0414
 
 from tools.generativeqc_validation import libxc_catalog as catalog
 from tools.generativeqc_validation.libxc_dependencies import (
@@ -279,23 +280,30 @@ def test_checker_resource_receipt_rejects_rebinding(
         checker.check(checker.MANIFEST)
 
 
-def test_current_resource_receipt_cannot_borrow_cpu_only_ownership(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("mutation", ["cpu_only", "different_cuda_library"])
+def test_retained_resource_receipt_cannot_borrow_cpu_only_ownership(
+    retained: tuple[dict, list[dict]], mutation: str
 ) -> None:
     from tools import check_libxc_native_catalog as checker
 
-    original = checker.merge_catalogs
-
-    def different_cuda_owner(reports: list[dict]) -> dict:
-        report = original(reports)
-        for row in report["endpoints"]:
-            if row["backend"] == "cuda":
-                row["library"] = {**row["library"], "sha256": "0" * 64}
-        return report
-
-    monkeypatch.setattr(checker, "merge_catalogs", different_cuda_owner)
+    resource, reports = deepcopy(retained)
+    # Positive control: authenticated measured scopes pass independently of
+    # current-source demotion. Never manufacture current acceptance in this test.
+    checker.validate_resource_acceptance(resource, reports, require_current=True)
+    cuda = [
+        row
+        for report in reports
+        for row in report["endpoints"]
+        if row["backend"] == "cuda"
+    ]
+    assert cuda
+    for row in cuda:
+        if mutation == "cpu_only":
+            row["backend"] = "cpu"
+        else:
+            row["library"] = {**row["library"], "sha256": "0" * 64}
     with pytest.raises(ValueError, match="matching resource/lifetime receipt"):
-        checker.check(checker.MANIFEST, require_current=True)
+        checker.validate_resource_acceptance(resource, reports, require_current=True)
 
 
 def test_documentation_edits_do_not_enter_the_execution_census(tmp_path: Path) -> None:
@@ -445,3 +453,24 @@ def test_provenance_equivalence_never_waives_scientific_or_numerical_contracts(
             bundle["build"]["library"],
             measured_subject=result["subject_identity"],
         )
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("product", ["energy", "forces"])
+@pytest.mark.parametrize(
+    "path",
+    ["tools/generate_nuclear_repulsion.py", "tools/generate_solver_lowering.py"],
+)
+def test_unmeasured_shared_build_generators_require_scoped_revalidation(
+    backend: str, product: str, path: str
+) -> None:
+    from tools.generativeqc_validation.libxc_dependencies import native_inventory
+
+    live = native_inventory(ROOT)
+    assert path in live
+    # A newly inventoried input is unknown, not retrospectively authenticated.
+    measured = {name: digest for name, digest in live.items() if name != path}
+    assert changed_inputs(measured, live, backend=backend, product=product) == [path]
+    # Once actually measured, subsequent scientific edits also expire reuse.
+    changed = {**live, path: "0" * 64}
+    assert changed_inputs(live, changed, backend=backend, product=product) == [path]

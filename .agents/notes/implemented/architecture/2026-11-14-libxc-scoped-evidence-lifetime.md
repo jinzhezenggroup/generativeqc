@@ -128,6 +128,27 @@ SCF changes remain explicit endpoint regression requirements outside the newly
 measured representative contexts. A policy change alone is never evidence of
 new scientific execution.
 
+## Review follow-up: incomplete generator authentication
+
+The original three-generator repair did not cover the full transitive native
+source-generation closure. Review identified 42 additional generator inputs;
+the current build manifest now includes them. The two measured working-tree
+campaigns do not retain authenticated hashes for those omitted inputs, and the
+available checkout is not proof of their contents at execution. Do not invent
+historical hashes or silently patch the immutable campaign inventories.
+
+The exact published summary at `7d7dc89b5cce4c71f617c96fdd4865bf8eb7968f`
+is retained as a separate previous-summary artifact. Actual live ingestion
+withdraws current compiled/endpoint inheritance with exact stage-demotion
+acknowledgements, while retaining 11 independent production-domain proofs and
+all historical 12-context/24-product measurements. The normal archival checker
+passes; representative `--require-current` acceptance must fail. This records a
+source-authentication gap, not a new numerical failure or changed runtime policy.
+Tracking issue #1118 is not closed by this partial qualification. Recover an
+authentic measured-source supplement or obtain appropriate new source-bound
+qualification before restoring affected claims; preserve exact provenance and
+all original numerical gates.
+
 ## References
 
 - Tracking issue #1118 and integration #3054.

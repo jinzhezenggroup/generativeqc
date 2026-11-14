@@ -534,3 +534,12 @@ force library. This receipt is separate from numerical E/F promotion; the defaul
 checker preserves its archival validity even when endpoint dependencies change.
 The default archival check deliberately permits
 truthfully recorded stale campaigns without relabeling them as current evidence.
+
+The current retained campaigns do not authenticate every transitive native
+source-generator input now included in the build identity. Endpoint inheritance
+therefore remains pending: the normal archival check passes, while
+`--require-current` must fail until an authentic measured-source supplement or
+appropriate new qualification supplies that missing binding. Existing
+production-domain proofs and historical numerical observations remain retained;
+missing generator authentication is not a measured numerical failure. Consult
+the generated report for exact current counts and scoped requests.
