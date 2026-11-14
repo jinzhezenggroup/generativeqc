@@ -16,7 +16,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from benchmarks._retention import raw_output_path
-from benchmarks.readme_cold_repeats import SCHEMA, aggregate
+from benchmarks.readme_cold_repeats import SCHEMA, aggregate, population_order
 from benchmarks.readme_defaults import COMMON_GATES, METHODS, SIZES, save
 from benchmarks.readme_defaults_qualification import qualify
 
@@ -43,8 +43,59 @@ def load(campaign: Path) -> tuple[list[dict], list[dict]]:
     if status["schema"] != SCHEMA or status["status"] != "complete":
         raise ValueError("publication requires a complete campaign")
     records = json.loads((campaign / "records.json").read_text())["records"]
+    expected = {
+        f"{method}-{mode}-{atoms}-{arm}-r{repeat}": repeat
+        for repeat in range(3)
+        for method, mode, atoms, arm in population_order(repeat)
+    }
+    commands = {}
+    for command in status.get("commands", []):
+        if command.get("stage") != "formal":
+            continue
+        name = command.get("name")
+        if (
+            name not in expected
+            or name in commands
+            or type(command.get("process_repeat")) is not int
+            or command["process_repeat"] != expected[name]
+            or command.get("status") != "complete"
+            or type(command.get("returncode")) is not int
+            or command["returncode"] != 0
+        ):
+            raise ValueError("invalid formal process command census")
+        commands[name] = command
+    if set(commands) != set(expected):
+        raise ValueError("incomplete formal process command census")
+    seen = set()
     for record in records:
-        path = campaign / "formal" / Path(record["raw_file"]).name
+        name = "{method}-{mode}-{atoms}-{arm}-r{process_repeat}".format(**record)
+        filename = Path(record["raw_file"]).name
+        if name not in commands or name in seen or filename != name + ".json":
+            raise ValueError("raw receipt does not own a distinct formal process")
+        seen.add(name)
+        command = commands[name]
+        argv = command.get("argv", [])
+        controls = {
+            "--method": record["method"],
+            "--mode": record["mode"],
+            "--atoms": str(record["atoms"]),
+            "--warm-repeats": "3",
+            "--source-revision": record["source_revision"],
+            "--output": record["raw_file"],
+        }
+        if (
+            not isinstance(argv, list)
+            or argv[1:4] != ["-m", "benchmarks.readme_defaults", record["arm"]]
+            or any(
+                argv.count(flag) != 1
+                or argv.index(flag) + 1 >= len(argv)
+                or argv[argv.index(flag) + 1] != value
+                for flag, value in controls.items()
+            )
+            or command.get("raw_sha256") != record["raw_sha256"]
+        ):
+            raise ValueError("raw receipt differs from its formal process command")
+        path = campaign / "formal" / filename
         if sha(path) != record["raw_sha256"]:
             raise ValueError("raw endpoint differs: " + path.name)
         raw = json.loads(path.read_text())
@@ -54,6 +105,8 @@ def load(campaign: Path) -> tuple[list[dict], list[dict]]:
             if k not in ("process_repeat", "raw_file", "raw_sha256")
         }:
             raise ValueError("collected endpoint differs from original")
+    if seen != set(commands):
+        raise ValueError("unconsumed formal process command")
     return records, aggregate(records)
 
 

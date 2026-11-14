@@ -1,11 +1,14 @@
 """Independent cold-population completeness and allocation behavior."""
 
+import hashlib
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
-from benchmarks.readme_cold_repeats import aggregate, population_order
-from benchmarks.readme_cold_repeats_report import diagnostics, verify_build
+from benchmarks.readme_cold_repeats import SCHEMA, aggregate, population_order
+from benchmarks.readme_cold_repeats_report import diagnostics, load, verify_build
 from benchmarks.readme_defaults import allocation_metadata
 from tests.python.test_readme_defaults import receipt
 
@@ -191,3 +194,126 @@ def test_publication_requires_the_actual_built_image_and_recorder() -> None:
         )
     with pytest.raises(ValueError, match="authenticated build"):
         verify_build([moved], build, {**execution, "library_sha256": "another-library"})
+
+
+@pytest.fixture
+def collected(tmp_path: Path) -> tuple[Path, dict, list[dict]]:
+    """Three independently named process receipts, even if their bytes agree."""
+    (tmp_path / "formal").mkdir()
+    records, commands = [], []
+    for record in matrix():
+        record["samples"][0]["seconds"] = 5
+        name = "{method}-{mode}-{atoms}-{arm}-r{process_repeat}".format(**record)
+        path = tmp_path / "formal" / (name + ".json")
+        raw = {k: v for k, v in record.items() if k != "process_repeat"}
+        data = json.dumps(raw).encode()
+        path.write_bytes(data)
+        digest = hashlib.sha256(data).hexdigest()
+        records.append({**record, "raw_file": str(path), "raw_sha256": digest})
+        commands.append(
+            {
+                "name": name,
+                "stage": "formal",
+                "process_repeat": record["process_repeat"],
+                "status": "complete",
+                "returncode": 0,
+                "raw_sha256": digest,
+                "argv": [
+                    "python",
+                    "-m",
+                    "benchmarks.readme_defaults",
+                    record["arm"],
+                    "--method",
+                    record["method"],
+                    "--mode",
+                    record["mode"],
+                    "--atoms",
+                    str(record["atoms"]),
+                    "--warm-repeats",
+                    "3",
+                    "--source-revision",
+                    record["source_revision"],
+                    "--output",
+                    str(path),
+                ],
+            }
+        )
+    return (
+        tmp_path,
+        {"schema": SCHEMA, "status": "complete", "commands": commands},
+        records,
+    )
+
+
+def write_collected(campaign: Path, status: dict, records: list[dict]) -> None:
+    (campaign / "campaign.json").write_text(json.dumps(status))
+    (campaign / "records.json").write_text(json.dumps({"records": records}))
+
+
+def test_complete_process_receipts_may_have_equal_timings_and_hashes(
+    collected: tuple[Path, dict, list[dict]],
+) -> None:
+    campaign, _status, records = collected
+    write_collected(*collected)
+    loaded, rows = load(campaign)
+    assert len(loaded) == 384
+    assert len({r["raw_sha256"] for r in records}) == 128
+    assert all(row["cold"]["seconds"] == [5, 5, 5] for row in rows)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "reused_receipt",
+        "duplicate_command",
+        "missing_command",
+        "extra_command",
+        "repeat",
+        "failed",
+        "hash",
+        "output",
+        "source",
+        "method",
+        "warm",
+        "duplicate_option",
+    ],
+)
+def test_formal_receipts_cannot_be_relabelled_or_detached_from_commands(
+    collected: tuple[Path, dict, list[dict]], change: str
+) -> None:
+    campaign, status, records = collected
+    commands = status["commands"]
+    command = commands[0]
+    if change == "reused_receipt":
+        index = next(
+            i
+            for i, r in enumerate(records)
+            if r["process_repeat"] == 1
+            and all(r[k] == records[0][k] for k in ("arm", "method", "mode", "atoms"))
+        )
+        records[index] = {**records[0], "process_repeat": 1}
+    elif change == "duplicate_command":
+        commands.append(deepcopy(command))
+    elif change == "missing_command":
+        commands.pop()
+    elif change == "extra_command":
+        commands.append({**command, "name": "unexpected"})
+    elif change == "repeat":
+        command["process_repeat"] = 1
+    elif change == "failed":
+        command["returncode"] = 1
+    elif change == "hash":
+        command["raw_sha256"] = "0" * 64
+    elif change == "duplicate_option":
+        command["argv"] += ["--method", command["argv"][5]]
+    else:
+        flag = {
+            "output": "--output",
+            "source": "--source-revision",
+            "method": "--method",
+            "warm": "--warm-repeats",
+        }[change]
+        command["argv"][command["argv"].index(flag) + 1] = "different"
+    write_collected(campaign, status, records)
+    with pytest.raises(ValueError, match="formal process"):
+        load(campaign)
