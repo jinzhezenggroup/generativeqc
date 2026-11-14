@@ -139,3 +139,10 @@ or universal device support, and do not waive required final-head CI.
 - `2026-11-09-ks-physical-force-and-canonical-proof.md`.
 - `2026-11-10-range-only-cuda-stationary-sources.md`.
 - Issues #2915 and #2840; PR #3060.
+
+## Default-policy follow-up
+
+The default restricted CUDA force stopping policy is superseded by
+[the 2026-11-11 orbital-stopping decision](2026-11-11-ks-default-orbital-stopping.md).
+This note's original scientific evidence remains historical; its stringent
+water96 regression now explicitly selects the retained strict policy.

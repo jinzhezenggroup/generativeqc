@@ -18,7 +18,7 @@ int main() {
   };
   require_test(query() == GENERATIVEQC_STATUS_SUCCESS && output.policy_version == 1 &&
                output.disposition == GENERATIVEQC_PRECISION_CANDIDATE_STRICT);
-  candidate.fast_profile = candidate.fast_native = candidate.forces_requested = 1;
+  candidate.budget_requested = candidate.budget_native = candidate.forces_requested = 1;
   require_test(query() == GENERATIVEQC_STATUS_SUCCESS &&
                output.disposition == GENERATIVEQC_PRECISION_CANDIDATE_AUDIT &&
                output.reasons == GENERATIVEQC_PRECISION_CANDIDATE_BUDGET_AUDIT);

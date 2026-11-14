@@ -219,6 +219,7 @@ def axis_polynomial(
     auxiliary_g_derivative: bool = False,
     auxiliary_h: bool = False,
     auxiliary_h_derivative: bool = False,
+    maximum_orbital: int = 3,
 ) -> typing.Any:
     """Rewrite the shared Gaussian moment DAG as coefficients in u=t^2.
 
@@ -246,6 +247,7 @@ def axis_polynomial(
         auxiliary_g_derivative=auxiliary_g_derivative,
         auxiliary_h=auxiliary_h,
         auxiliary_h_derivative=auxiliary_h_derivative,
+        maximum_orbital=maximum_orbital,
     )
     g = Graph()
     z = g.constant(0)

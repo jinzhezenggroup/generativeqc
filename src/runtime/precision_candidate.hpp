@@ -99,15 +99,17 @@ inline generativeqc_precision_candidate_v1 precision_candidate(
                                                                    : "unknown";
   if (candidate.explicit_target) return result;
   result.disposition = GENERATIVEQC_PRECISION_CANDIDATE_STRICT;
-  if (!candidate.fast_profile) return result;
+  // Presets resolve their allowance before this boundary. Neither the public
+  // mode name nor relaxed SCF tolerances alone authenticate an observable budget.
+  if (!candidate.budget_requested) return result;
   const bool complete = context.census_presence == 1 && work.operator_work_counters_valid &&
                         detail.complete && detail.operator_inventory_complete;
-  if (candidate.fast_native && candidate.fast_fock &&
+  if (candidate.budget_native && candidate.budget_fock &&
       (!candidate.gradient_present || candidate.gradient_returned_mode == 2 || qualified) &&
       (admitted.strict_warm || admitted.budget_fock)) {
     result.disposition = admitted.strict_warm ? GENERATIVEQC_PRECISION_CANDIDATE_WARM_FOCK
                                               : GENERATIVEQC_PRECISION_CANDIDATE_FOCK;
-  } else if (candidate.fast_native && !candidate.fast_fock && candidate.forces_requested &&
+  } else if (candidate.budget_native && !candidate.budget_fock && candidate.forces_requested &&
              qualified &&
              ((candidate.gradient_schema_version >= 2 && candidate.gradient_schema_version <= 4) ||
               (complete && work.strict_stage_fock_builds && work.final_residual_audits)) &&
@@ -126,7 +128,7 @@ inline generativeqc_precision_candidate_v1 precision_candidate(
       result.reasons |= GENERATIVEQC_PRECISION_CANDIDATE_GRID_UNAVAILABLE;
     if (candidate.execution_retries)
       result.reasons |= GENERATIVEQC_PRECISION_CANDIDATE_EXECUTION_RETRIED;
-  } else if (candidate.fast_native && !candidate.fast_fock && !candidate.correction_present &&
+  } else if (candidate.budget_native && !candidate.budget_fock && !candidate.correction_present &&
              complete && candidate.mixed_fock_count_present && work.mixed_stage_fock_builds > 0 &&
              work.strict_stage_fock_builds >= 2 && work.strict_refinement_applied &&
              work.final_residual_audits > 0 &&

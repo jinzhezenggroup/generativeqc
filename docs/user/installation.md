@@ -3,7 +3,27 @@
 Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+. CUDA
 builds additionally require a supported CUDA toolchain.
 
-For a Python installation from source:
+## Get the source
+
+The commands below build from a checkout, not from an arbitrary directory.
+If you already have a checkout, use its repository root and skip cloning.
+
+```bash
+git clone https://github.com/jinzhezenggroup/generativeqc.git
+cd generativeqc
+python -m venv .venv
+source .venv/bin/activate
+```
+
+The activation command above is for a POSIX shell. Use the equivalent
+activation command for your shell.
+
+## Choose a build
+
+Choose **one** of the following commands. A source installation compiles the
+native library; it is not a pure-Python install.
+
+For a Python installation using automatic backend selection:
 
 ```bash
 python -m pip install .
@@ -39,11 +59,17 @@ to the toolkit prefix, or supply library directories through `LD_LIBRARY_PATH`.
 Provider discovery also checks the active Python environment's `lib` directory
 and NVIDIA's separately installed Python packages.
 
+## Verify the installation
+
 Verify method discovery after installation:
 
 ```bash
 generativeqc methods
 ```
+
+Method discovery confirms that the CLI can inspect the registry; it does not
+prove that a CUDA calculation can run on your device. Continue with the
+[quick start](quickstart.md) for an actual energy-and-force calculation.
 
 An installed native SDK/runtime can run without Python. See
 [Native CLI without Python](native_cli.md) for the command-line workflow.

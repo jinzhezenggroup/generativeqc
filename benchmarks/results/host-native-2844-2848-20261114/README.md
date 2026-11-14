@@ -98,3 +98,21 @@ preserved contribution as a **draft**, not as merge-ready or a full fix.
 Keep #2844--#2848 open. Practical 25--40-atom public derivative/force acceptance,
 the representative requested-level Ni reaction TS and public ECP saddle admission
 remain unresolved. No further long-running work is scheduled by this handoff.
+
+### Subsequent conflict-resolution request
+
+The initial draft disposition above records the state at the user-requested
+stop. The user subsequently requested upstream conflict resolution. The
+follow-up integrates `master@17f9317a2` while preserving the original receipts
+and their source identities; it does not resume the stopped chemistry jobs or
+close the remaining scientific gates. The integration choices and qualification
+boundary are recorded in
+[the integration note](../../../.agents/notes/implemented/compatibility/2026-11-14-pr3083-upstream-integration.md).
+The historical `evidence.json` is deliberately unchanged: old numerical
+acceptance is not evidence for a newly merged binary.
+
+The merged CPU build and ten selected native CTest groups pass. Completed
+bounded Python regressions total 394 passes and six explicit heavy-case skips;
+a separate broader Python invocation times out at 300 seconds and is not
+counted as accepted. The integration note records the new source/core hashes,
+test scope and local log paths separately from this historical evidence.

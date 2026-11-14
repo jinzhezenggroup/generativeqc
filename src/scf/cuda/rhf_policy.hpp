@@ -12,6 +12,17 @@
 
 namespace generativeqc::scf::cuda_policy {
 
+/** Default orbital-gradient admission is owner-bound; strict remains explicit. */
+enum class HfConvergenceRequest { Default, Strict, OrbitalGradient, Invalid };
+HfConvergenceRequest parse_hf_convergence_request(const char* value) noexcept;
+HfConvergenceRequest hf_convergence_requested() noexcept;
+/** Resolve the default without granting unsupported owners a looser contract.
+ * Invalid denotes an unsupported explicit request; tighter controls stay strict.
+ */
+HfConvergenceRequest resolve_hf_convergence_request(HfConvergenceRequest request,
+                                                    bool eligible_owner, double energy_tolerance,
+                                                    double density_tolerance) noexcept;
+
 /** Strict explicit controls, with an internal capability-bound default request. */
 enum class SharedRysXyRequest { Off, On, Invalid, WeightedZOn, Auto };
 enum class SharedRysXyAdmission {

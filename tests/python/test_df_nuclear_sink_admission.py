@@ -196,9 +196,10 @@ int main(int argc, char** argv) {
   try {
     const auto orbital = system(ol, ro, primitives, shells);
     const auto auxiliary = system(xl, rx, 1, 1);
-    const auto terms = xl == 4 ? molecule::kMaximumAuxiliaryAoExpansionTerms
-                              : molecule::kMaximumAoExpansionTerms;
-    check_pack(orbital, 3, terms); check_pack(auxiliary, 4, terms);
+    const auto terms = scf::high_df_domain(orbital, auxiliary)
+                           ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                           : molecule::kMaximumAoExpansionTerms;
+    check_pack(orbital, 4, terms); check_pack(auxiliary, 5, terms);
     std::size_t numeric = 0, host_bound = 0, host_peak = 0, combined_peak = 0;
     {
       scf::CudaDfNuclearSink sink(0, orbital, auxiliary, 1ULL << 30);
@@ -238,7 +239,7 @@ int main(int argc, char** argv) {
     }
     for (auto invalid : {std::size_t{0}, std::numeric_limits<std::size_t>::max()}) {
       bool rejected = false;
-      try { (void)scf::pack(orbital, 3, invalid); }
+      try { (void)scf::pack(orbital, 4, invalid); }
       catch (const std::length_error&) { rejected = true; }
       require(rejected, "overflowed/zero metadata stride was not rejected");
     }
@@ -266,7 +267,7 @@ def sink_admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     basis = (ROOT / "src/runtime/cuda_gaussian_products.cuh").read_text()
     view = extract(basis, "struct BasisView {", "/** One real factor")
     view += "using DfDerivativeBasisView = BasisView;\n"
-    failure = extract(source, "struct CudaFailure {", "/** Prepare shell envelopes")
+    failure = extract(source, "bool high_df_domain(", "/** Prepare shell envelopes")
     guard = extract(
         source, "void check(cudaError_t status)", "/** Diagnostic staging only"
     )
@@ -348,12 +349,12 @@ def run_probe(probe: Path, args: tuple[int, ...]) -> None:
 
 
 @pytest.mark.parametrize(
-    "ol,xl,ro,rx", list(itertools.product(range(4), range(5), range(2), range(2)))
+    "ol,xl,ro,rx", list(itertools.product(range(5), range(6), range(2), range(2)))
 )
 def test_all_supported_shell_workspace_peaks(
     sink_admission_probe: Path, ol: int, xl: int, ro: int, rx: int
 ) -> None:
-    # Minimal spherical d/f/g cases expose expansion temporaries which the old
+    # Minimal spherical d/f/g/h cases expose expansion temporaries which the old
     # 2x packed-size bound missed even without long primitive contractions.
     run_probe(sink_admission_probe, (ol, xl, ro, rx, 1, 1))
 
@@ -364,3 +365,12 @@ def test_primitive_and_metadata_growth_boundaries(
     sink_admission_probe: Path, primitives: int, shells: int, ro: int, rx: int, xl: int
 ) -> None:
     run_probe(sink_admission_probe, (0, xl, ro, rx, primitives, shells))
+
+
+@pytest.mark.parametrize("primitives,shells", [(257, 1), (513, 1), (17, 17), (1, 33)])
+@pytest.mark.parametrize("ro,rx,xl", [(0, 0, 0), (1, 1, 0), (0, 1, 5), (1, 0, 5)])
+def test_orbital_g_growth_boundaries(
+    sink_admission_probe: Path, primitives: int, shells: int, ro: int, rx: int, xl: int
+) -> None:
+    """Exercise wider orbital packing with both low-l and h auxiliary shells."""
+    run_probe(sink_admission_probe, (4, xl, ro, rx, primitives, shells))

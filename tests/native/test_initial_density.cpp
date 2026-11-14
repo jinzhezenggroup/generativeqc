@@ -326,6 +326,29 @@ void check_borrowed_setup_operation() {
   }
   require(rejected && cache.numeric_capacity_bytes() == 0, "borrowed setup changed the cutoff");
 }
+
+void check_dense_overlap_construction() {
+  // A rotated analytic spectrum exercises both transpose products without
+  // obtaining the expected orthogonalizer from a production decomposition.
+  const double inv_sqrt_two = std::sqrt(.5);
+  const Matrix vectors{inv_sqrt_two, -inv_sqrt_two, inv_sqrt_two, inv_sqrt_two};
+  const Matrix overlap{2.5, -1.5, -1.5, 2.5};
+  const Matrix expected{.75, .25, .25, .75};
+  const EigenOperation eigen = [&](const Matrix&, const Matrix*, const Matrix*, std::size_t) {
+    return EigenResult{{1, 4}, vectors};
+  };
+  close(symmetric_overlap(overlap, 2, eigen), expected);
+  const EigenOperation bad_frame = [](const Matrix&, const Matrix*, const Matrix*, std::size_t) {
+    return EigenResult{{1, 4}, {1, 0, 0, 1}};
+  };
+  bool rejected = false;
+  try {
+    (void)symmetric_overlap(overlap, 2, bad_frame);
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected, "overlap construction bypassed its metric proof");
+}
 }  // namespace
 
 int main() {
@@ -335,6 +358,7 @@ int main() {
     check_charge_guided_lowdin_contract();
     check_occupied_projection_contract();
     check_overlap_cache_contract();
+    check_dense_overlap_construction();
     check_borrowed_setup_operation();
     observation::active = nullptr;
     return 0;

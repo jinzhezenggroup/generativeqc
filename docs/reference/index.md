@@ -1,6 +1,13 @@
 # Reference
 
 Look up API names, units, method capabilities and numerical conventions here.
+For a first calculation, start with the [quick start](../user/quickstart.md)
+rather than the generated API inventory.
+
+Use the Python API for signatures, the execution contracts for shared input,
+failure and lifetime rules, and the capability sources for interpreting support.
+The contract policy describes how contributors maintain this coverage; it is
+not a prerequisite for using the library.
 
 - [Python API](api.md) — recursively generated from modules that explicitly declare `__all__`.
 - [Python contract policy](python_contracts.md) — applicable contract facets and authoritative owners.

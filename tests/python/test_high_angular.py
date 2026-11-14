@@ -65,7 +65,7 @@ def test_capabilities_are_backend_operator_and_derivative_specific() -> None:
     assert not basis_capability(shells, atoms, operator="ao")["eligible"]
     assert not basis_capability(shells, atoms, derivative_order=2)["eligible"]
     ir = build_one_electron_derivative_ir("kinetic", (4, 0))
-    assert not query_integral_capability(
+    assert query_integral_capability(
         ir, backend="cuda_one_electron_derivatives"
     ).supported
     assert query_integral_capability(

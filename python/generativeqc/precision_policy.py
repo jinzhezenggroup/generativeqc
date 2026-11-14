@@ -1,6 +1,7 @@
 """Budget-selected shared modules, physical final SCF and explicit FP64 audits.
 
-Fast selects supported Direct/XC arithmetic from TargetErrorBudget and publishes
+Resolved TargetErrorBudget and caller convergence controls select supported
+Direct/XC arithmetic, independently of the Standard/Fast preset name, and publish
 a physically validated FP64 final state at the selected stationarity allowance.
 Strict-density routes may also narrow stationary gradients, with bounded FP64
 fallback. Qualification does not invent a per-call observable difference.
@@ -145,19 +146,23 @@ def _standard_fallback_admitted(
 class PrecisionPolicy:
     """Select arithmetic by application budget, or request explicit audits.
 
-    Fast's ``budget`` reuses the adaptive-policy allowance type and controls
-    native FP32 admission. CCSDTCBSCalculator also uses this allowance for
+    ``budget`` reuses the adaptive-policy allowance type and controls native
+    FP32 admission for any preset. Fast supplies a default budget; an explicit
+    budget overrides that preset without changing scientific admission. Equal
+    budgets and convergence controls select the same Standard/Fast execution.
+    CCSDTCBSCalculator also uses this allowance for
     final FP64 convergence limits; its Standard uses the default Fast allowance
     and its CBS-only Tight preset retains strict convergence. These are not
     measured per-call error certificates.
     Explicit ``target`` always requests a relaxed audit, including with Fast.
-    Standard (or legacy FP64) without ``target`` executes once in FP64; no observable error estimate
-    is invented. Supplying a target opts into the full audit, including its cost.
+    Standard is the default. Standard (or FP64) without ``budget`` or ``target``
+    executes once in FP64; no observable error estimate is invented. Supplying
+    a target opts into the full audit, including its cost.
     Other presets are audit allowances, not measured error ranges. Only
     relaxed-target audits are admitted.
     """
 
-    profile: str = "balanced"
+    profile: str = "standard"
     target: TargetAccuracy | None = None
     budget: TargetErrorBudget | None = None
 
@@ -165,13 +170,10 @@ class PrecisionPolicy:
         """Resolve preset allowances and reject incompatible audit contracts."""
         if isinstance(self.profile, str):
             object.__setattr__(self, "profile", self.profile.lower())
-        if self.profile == "fast":
-            if self.budget is None:
-                object.__setattr__(self, "budget", TargetErrorBudget(1e-5, 1e-4, 3e-5))
-            elif not isinstance(self.budget, TargetErrorBudget):
-                raise TypeError("Fast requires a TargetErrorBudget")
-        elif self.budget is not None:
-            raise ValueError("arithmetic-selection budgets currently require Fast")
+        if self.profile == "fast" and self.budget is None:
+            object.__setattr__(self, "budget", TargetErrorBudget(1e-5, 1e-4, 3e-5))
+        if self.budget is not None and not isinstance(self.budget, TargetErrorBudget):
+            raise TypeError("arithmetic selection requires a TargetErrorBudget")
         if not isinstance(self.profile, str) or self.profile not in (
             "fast",
             "standard",
@@ -443,6 +445,8 @@ def _solve_record(
 class PrecisionCalculator:
     """Budget-selected arithmetic and explicit all-electron HF/KS precision audits.
 
+    ``policy`` defaults to Standard, the FP64 profile used by the README benchmark.
+    Explicit audit profiles or targets retain their complete comparison work.
     ``policy`` is a preset name or a PrecisionPolicy with an application budget.
     Other options have Calculator semantics except ``precision`` and
     ``target_accuracy``, which this facade owns. Standard (legacy alias: fp64)
@@ -474,7 +478,7 @@ class PrecisionCalculator:
         basis: typing.Any = None,
         device: str = "cpu",
         *,
-        policy: PrecisionPolicy | str = "balanced",
+        policy: PrecisionPolicy | str = "standard",
         **options: typing.Any,
     ) -> None:
         """Snapshot one native model and select its admitted candidate precision."""
@@ -501,7 +505,7 @@ class PrecisionCalculator:
         self._policy = policy
         self._lock = threading.RLock()
         self._options = {"method": method, "basis": basis, "device": device, **options}
-        if policy.profile in ("standard", "fp64", "fast"):
+        if policy.profile in ("standard", "fp64", "fast") or policy.budget is not None:
             for name in (
                 "energy_tolerance",
                 "density_tolerance",
@@ -512,20 +516,57 @@ class PrecisionCalculator:
                     requested = float(requested)
                     if not math.isfinite(requested) or requested <= 0:
                         raise ValueError(f"{name} must be finite and positive")
-        self._candidate = Calculator(**self._options, precision="fp64")
-        if policy.profile in ("standard", "fp64", "fast"):
+        self._candidate_precision = "fp64"
+        self._budget_native = False
+        self._budget_fock = False
+        self._budget_transport_v2 = False
+        self._route_reasons = ["fp32_gradient_not_qualified"]
+        self._candidate = Calculator(
+            **self._options,
+            precision="fp64",
+            _execution_selector=lambda calculator, configure: self._select_execution(
+                calculator, configure, options
+            ),
+        )
+        require_precision_schedule(self._candidate._library)
+        require_observable_comparison(self._candidate._library)
+        require_candidate_classification(self._candidate._library)
+
+    def _select_execution(
+        self,
+        calculator: Calculator,
+        configure: typing.Callable[..., None],
+        requested: dict[str, typing.Any],
+    ) -> None:
+        """Select arithmetic during the shared calculator construction phase.
+
+        The resolved model, basis snapshots and selected native library are
+        fixed. Optional configurations rerun ordinary capability and guess
+        admission before the calculator becomes observable to any caller.
+        Resolved budgets and explicit solver ceilings select those configurations;
+        the Standard/Fast label supplies defaults, not an admission privilege.
+        """
+        policy = self._policy
+        device = calculator._device_name
+        if policy.profile in ("standard", "fp64", "fast") or policy.budget is not None:
             # Select the same qualified Standard controls as Calculator after
             # resolving the native library and complete model. Unsupported
             # native owners keep their strict defaults. Missing policy support
             # rejects the installation instead of choosing Python defaults. Tight
             # caller values survive both Standard and Fast fallback paths.
-            for name, ceiling in default_controls(self._candidate).items():
-                requested = self._options.get(name)
-                value = min(ceiling, ceiling if requested is None else float(requested))
+            controls = {}
+            for name, ceiling in default_controls(calculator).items():
+                supplied = self._options.get(name)
+                value = min(ceiling, ceiling if supplied is None else float(supplied))
                 self._options[name] = value
-                setattr(self._candidate, "_" + name, value)
-        self._fp64_properties = self._candidate.capabilities.supported_properties
-        if self._candidate.capabilities.family not in (
+                controls[name] = value
+            if any(
+                getattr(calculator, "_" + name) != value
+                for name, value in controls.items()
+            ):
+                configure("fp64", controls)
+        self._fp64_properties = calculator.capabilities.supported_properties
+        if calculator.capabilities.family not in (
             "hartree_fock",
             "density_functional",
         ):
@@ -536,52 +577,25 @@ class PrecisionCalculator:
         # resolved options also contain composition/functional outputs, which
         # named and MethodIR constructors reject as conflicting model owners.
         self._options.update(
-            basis=self._candidate._basis,
-            auxiliary_basis=self._candidate._auxiliary_basis,
+            basis=calculator._basis,
+            auxiliary_basis=calculator._auxiliary_basis,
         )
-        self._candidate_precision = "fp64"
-        self._fast_native = False
-        self._fast_fock = False
-        self._fast_transport_v2 = False
-        self._route_reasons = ["fp32_gradient_not_qualified"]
-        if policy.profile == "fast":
+        if policy.budget is not None:
             from ._precision_native import require_admission
-            from .ks import KsOptions
 
-            require_admission(self._candidate)
+            require_admission(calculator)
             method_transport = getattr(
-                getattr(self._candidate, "_library", None),
+                getattr(calculator, "_library", None),
                 "generativeqc_application_precision_version_v2",
                 None,
             )
             if device == "cuda" and (
-                self._candidate._ks_options is not None or method_transport is not None
+                calculator._ks_options is not None or method_transport is not None
             ):
-                candidate_options = dict(self._options)
                 fock_controls = _budget_fock_controls(
-                    self._candidate, policy.budget, options
+                    calculator, policy.budget, requested
                 )
-                candidate_options.update(fock_controls)
-                if method_transport is not None:
-                    candidate_options["_application_precision_budget"] = policy.budget
-                else:
-                    ks_options = candidate_options.get("ks_options") or KsOptions()
-                    candidate_options["ks_options"] = replace(
-                        ks_options,
-                        _precision_budget=(
-                            policy.budget.energy_abs,
-                            policy.budget.force_max_abs,
-                            policy.budget.force_rms or 0.0,
-                        ),
-                    )
-                    # replace() resets init=False fields. Resolved options retain
-                    # their scientific composition there, including exact exchange.
-                    object.__setattr__(
-                        candidate_options["ks_options"],
-                        "_method_ir",
-                        ks_options._method_ir,
-                    )
-                resolved_ks = self._candidate._ks_options
+                resolved_ks = calculator._ks_options
                 nonlocal_scf = (
                     resolved_ks is not None
                     and getattr(resolved_ks, "_method_ir", None) is not None
@@ -598,14 +612,18 @@ class PrecisionCalculator:
                 # strict SCF may still own budget-qualified derivative consumers.
                 for precision in precisions:
                     try:
-                        candidate = Calculator(**candidate_options, precision=precision)
+                        configure(
+                            precision,
+                            fock_controls,
+                            policy.budget,
+                            legacy_ks_transport=method_transport is None,
+                        )
                     except NotImplementedError:
                         continue
-                    self._candidate = candidate
                     self._candidate_precision = precision
-                    self._fast_native = True
-                    self._fast_fock = bool(fock_controls) and precision == "auto"
-                    self._fast_transport_v2 = method_transport is not None
+                    self._budget_native = True
+                    self._budget_fock = bool(fock_controls) and precision == "auto"
+                    self._budget_transport_v2 = method_transport is not None
                     break
                 else:
                     self._route_reasons.append(
@@ -613,18 +631,15 @@ class PrecisionCalculator:
                     )
             else:
                 self._route_reasons.append("application_warmup_unavailable_on_backend")
-        if policy.profile == "audit_auto":
+        if policy.profile == "audit_auto" and policy.budget is None:
             if device != "cuda":
                 self._route_reasons.append("auto_scf_unavailable_on_backend")
             else:
                 try:
-                    self._candidate = Calculator(**self._options, precision="auto")
+                    configure("auto", {})
                     self._candidate_precision = "auto"
                 except NotImplementedError:
                     self._route_reasons.append("auto_scf_unavailable_for_model")
-        require_precision_schedule(self._candidate._library)
-        require_observable_comparison(self._candidate._library)
-        require_candidate_classification(self._candidate._library)
 
     @property
     def policy(self) -> PrecisionPolicy:
@@ -696,7 +711,7 @@ class PrecisionCalculator:
     ) -> typing.Any:
         """Prepare a reusable native fleet with per-item precision validation.
 
-        Qualified Fast and untargeted FP64 retain the original native plan.
+        Budget-qualified and untargeted FP64 calls retain the original native plan.
         Audits suspend that plan with bounded host seed storage; later execution
         restores only its own seeds, never an auditor's density. Candidate batch
         timing is shared, not invented per-item or divided equally among items.
@@ -752,7 +767,7 @@ class PrecisionCalculator:
             # Choose FP64 for this request without disabling later AUTO calls.
             self._candidate.clear_cache()
             candidate_options = dict(self._options)
-            if self._fast_transport_v2:
+            if self._budget_transport_v2:
                 candidate_options["_application_precision_budget"] = self.policy.budget
             candidate_calculator = Calculator(**candidate_options, precision="fp64")
             candidate_precision = "fp64"
@@ -772,7 +787,7 @@ class PrecisionCalculator:
         The reference uses the same backend and includes SCF relaxation and all
         requested force contributions. An over-budget candidate is replaced by
         the FP64 reference only after a third, tighter independent solve agrees.
-        FP64 without a target reports ``strict_fp64``, not ``observed_met``;
+        FP64 without a budget or target reports ``strict_fp64``, not ``observed_met``;
         it retains native final-state checks but does not estimate observable
         errors. No geometry-independent calibration is presented as a bound.
         """
@@ -833,7 +848,7 @@ class PrecisionCalculator:
                     )
                 except BaseException as error:
                     calculator.clear_cache()
-                    if self._fast_fock and calculator is self._candidate:
+                    if self._budget_fock and calculator is self._candidate:
                         solves.append(
                             PrecisionSolve(
                                 role,
@@ -969,7 +984,7 @@ class PrecisionCalculator:
             )
 
         outcome = run_precision_schedule(
-            selected_library, operation, retry_candidate=self._fast_fock
+            selected_library, operation, retry_candidate=self._budget_fock
         )
         if outcome == PrecisionOutcome.QUALIFIED:
             if publication is None:
@@ -1017,11 +1032,10 @@ class PrecisionCalculator:
         disposition, reasons, gradient_admission = classify_candidate(
             candidate_calculator,
             candidate,
-            profile=self.policy.profile,
             target=self.policy.target,
-            fast_native=self._fast_native
-            and (candidate_calculator is self._candidate or self._fast_transport_v2),
-            fast_fock=self._fast_fock,
+            budget_native=self._budget_native
+            and (candidate_calculator is self._candidate or self._budget_transport_v2),
+            budget_fock=self._budget_fock,
             forces="forces" in requested,
             precision=candidate_precision,
             budget=self.policy.budget,

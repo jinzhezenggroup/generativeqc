@@ -1,0 +1,174 @@
+{
+  "schema": "gfn2-current-source-qualification-v1",
+  "date": "2026-11-14",
+  "source_commit": "95c3e547f96848e2fc3392d85fdfa1a68dff688b",
+  "source_scope": "tracked snapshots with retained patches; production scientific sources unchanged",
+  "oracle": "tblite 0.6.0",
+  "xtb_config": {
+    "smooth_cutoff": 0.0
+  },
+  "independent_reference": "../gfn2-sharp-cutoff-20261113/matched-oracle.json.xz",
+  "energy_gate_hartree": 5e-07,
+  "force_gate_hartree_per_bohr": 5e-07,
+  "reports": {
+    "cpu-force": {
+      "library_sha256": "76a6199a5eca44a6bf513aa17b71cd56cfb746e2a8aa1e0ade7cf63e25046d1d",
+      "driver_sha256": "6c4ea2c92dfe296642bb360d9c82576d8f77d5c10d3258651530dd934de42110",
+      "status": "PASS",
+      "observations": 36,
+      "source_manifest_sha256": "934b8f33ffcca597ce8987cf96b97f6e42d6ce474737bf49dac4399ec0efdb25",
+      "source_manifest_archive": "cpu-source.sha256.xz"
+    },
+    "cuda-force": {
+      "library_sha256": "d03fc5ba8d39b2c973e7feed2dc39da2693086fef8ab7e6dcba9a587b07a23f2",
+      "driver_sha256": "6c4ea2c92dfe296642bb360d9c82576d8f77d5c10d3258651530dd934de42110",
+      "status": "PASS",
+      "observations": 36,
+      "source_manifest_sha256": "9d5d2c09ad6be007955d380b15731588b9a791090735573553df7d9cbe97654a",
+      "source_manifest_archive": "cuda-source.sha256.xz"
+    },
+    "cuda-energy": {
+      "library_sha256": "d03fc5ba8d39b2c973e7feed2dc39da2693086fef8ab7e6dcba9a587b07a23f2",
+      "driver_sha256": "6c4ea2c92dfe296642bb360d9c82576d8f77d5c10d3258651530dd934de42110",
+      "status": "PASS",
+      "observations": 36,
+      "source_manifest_sha256": "9d5d2c09ad6be007955d380b15731588b9a791090735573553df7d9cbe97654a",
+      "source_manifest_archive": "cuda-source.sha256.xz"
+    },
+    "xtbloom-force": {
+      "library_sha256": "6be47a7183a21c10c8204b6fbeb27e8587bc45d1958e59f5c7d61356777db53f",
+      "driver_sha256": "7da7eed71c9b10244416c496e56f5a9e2555316d7537b037621b964e8880b95c",
+      "status": "measured",
+      "observations": 12
+    }
+  },
+  "cpu": {
+    "host": "node3",
+    "system": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+    "model": "AMD EPYC 7K62 48-Core Processor",
+    "compiler": "GNU C++ 11.4.0",
+    "cuda": false,
+    "build_type": "Release",
+    "launcher": "sccache 0.16.0",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": 1,
+      "OMP_NUM_THREADS": 1
+    },
+    "maximum_iterations": 300,
+    "mixer_history": 64,
+    "clean_exit": 0
+  },
+  "cuda": {
+    "host": "node2 (SSH alias n2)",
+    "build_type": "Release",
+    "compiler": "GNU C++ 14.3.0",
+    "toolkit": "12.9.86",
+    "architecture": "120",
+    "fast_compile": false,
+    "launcher": "sccache 0.16.0; one logged local fallback after shared-server loss",
+    "cache_statistics": "counters reset across server restart; no reliable hit/miss delta claimed",
+    "library_path": "n2:/data/jzzeng/gqc-issue-560-20261113/source/build-cuda/libgenerativeqc.so.0.1.0",
+    "slurm_job": "4463",
+    "partition": "main",
+    "gres": "gpu:pro6000:1",
+    "node": "node2",
+    "time_limit": "00:20:00",
+    "visibility": "preserved from Slurm; raw value in public receipts",
+    "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "driver": "595.99.02",
+    "maximum_iterations": 300,
+    "mixer_history": 8,
+    "clean_exit": 0,
+    "slurm_accounting": "disabled; script and srun exit status, start allocation and raw job identity retained instead"
+  },
+  "validation": {
+    "cpu_contracts": {
+      "passed": 218,
+      "skipped": 15
+    },
+    "cuda_contracts": {
+      "passed": 103,
+      "skipped": 1
+    },
+    "docs": {
+      "passed": 17,
+      "subtests_passed": 58
+    },
+    "sanitizer": {
+      "tool": "Compute Sanitizer 2025.2.1.0 memcheck, leak-check full",
+      "test_passed": 1,
+      "errors": 0,
+      "leaked_bytes": 0,
+      "leaked_allocations": 0,
+      "scope": "public result lifetime across reuse, invalid request, recovery and cache release; separate from endpoint timing"
+    },
+    "evidence_negative_controls_rejected": 11
+  },
+  "telemetry_limits": {
+    "device_peak_bytes": null,
+    "exact_workspace_bytes": null,
+    "allocator_count": null,
+    "logical_fock_builds": null,
+    "physical_residual_rms": null,
+    "host_memory": "Linux process peak RSS; not exclusive workspace",
+    "device_memory": "device-wide cudaMemGetInfo used snapshots, not process or transient peaks",
+    "iteration_counts": "published backend SCC iterations; not cross-backend-normalized kernel counts"
+  },
+  "fixture_sha256": {
+    "tests/data/gfn2_native_tblite.json": "2c21d1244c22008389397dbed196cb0d731d923d9e3710119b290b9c27d015ab",
+    "tests/data/gfn2_sharp_cutoff_tblite.json": "28559c11226ff4a895fc8ca1d3c12ecf1745c1e0ce3cbb8573a65cd2e604be33"
+  },
+  "archive_sha256": {
+    "cpu-cache-after.txt.xz": "b8d88da8e850cf67eb68128846a6f20f9c774b255e476a3ec14cf28830003419",
+    "cpu-cache-before.txt.xz": "e1503bc3ccaa5888b826f0bcb622081cb565fa9be6409b8da33449ded6312c5f",
+    "cpu-configure.log.xz": "3cad7431c764ef2392b713a8045aa2d28b4255221be2b5e87344cae4ace87927",
+    "cpu-contracts.log.xz": "a571984d8310fd4bfe09dfdb88f3fc99c3bf02185d3a4557195c0b5646146894",
+    "cpu-convergence-diagnostics.json.xz": "40bd12b7fdfe744d7a7b3bd68b4ddb5b9fda6976c893a7f3070165853b108e00",
+    "cpu-force.json.xz": "5cfee08e4ef67de311810e11b02fd4b6d6987bd7eec91825282d46cd790850d4",
+    "cpu-history32-budget300.log.xz": "3c9bb13cb0a8a945f9c4867a8993c683b17054b9158e5a1b2b08a6931b667c7a",
+    "cpu-history8-budget300.log.xz": "7679e4cc170d6e518e10190b6f6af1acd2a4c021cbd7c6417ce5c93f1ad97baa",
+    "cpu-source.patch.xz": "1c8e64d08e9032cb7cdfd700a9e163d61f5944f7b49536a776e764fb5be2de91",
+    "cpu-source.sha256.xz": "6d0b56c5c10879ad489cdbd934ce226c27cdafdab0df6c50ecdda16f6bc02eeb",
+    "cuda-build-CMakeCache.txt.xz": "531f28fe68065015732679aa431a2dc6eb992319096bfc12266324e48c5d569a",
+    "cuda-build-compiler-launcher-observation.txt.xz": "a646946e3724d6a105799e0dd8bcf25b64488335cc30be91dae8e34f95a3a5bb",
+    "cuda-build-configure.log.xz": "da07f3afd3e050b18706d3c3d6b67918f7b816e3d3e0c83c8fee75c561e37901",
+    "cuda-build-gfn2-compiler-command.txt.xz": "ac7d26cbc55704270bad914c310293c046ce9f53d67215dc1859fe4db11495f8",
+    "cuda-build-nvcc-version.txt.xz": "cc740b948f0f28cbe38bf24bf3e3e0454613c62f50894f2540d1d0d632bcb980",
+    "cuda-build-orphan-cleanup-resume.txt.xz": "59e8fdcb99f38c4cab94ace553f0713d42690e55507b751191d6c49c68426740",
+    "cuda-build-sccache-resume-after.txt.xz": "6fceaf3aeae97c4250db8379bbcf239a09cf64a8981ea957886bb218a85fe10d",
+    "cuda-build-sccache-resume-before.txt.xz": "6fceaf3aeae97c4250db8379bbcf239a09cf64a8981ea957886bb218a85fe10d",
+    "cuda-build-toolchain-versions.txt.xz": "d80217a0e52abb8d622101919bca45a6675cb44176740d925a654de39fa1dbad",
+    "cuda-cache-after.txt.xz": "5a8c003c9664a2c2fb0b21a283578c3d292686e7a4ed910ad4f352685c406c0e",
+    "cuda-cache-before.txt.xz": "6fceaf3aeae97c4250db8379bbcf239a09cf64a8981ea957886bb218a85fe10d",
+    "cuda-cache-version.txt.xz": "d2e7beb9de3f78def39b2ec0eddb0edcfed19f56c66cd521c066da106f7b3f78",
+    "cuda-contracts.log.xz": "19baa3f28d78567d9187ba03b6e499fc432de4ef78e6d6aea8b7339d55556fa7",
+    "cuda-device.csv.xz": "b14a0ce55b2086ec953c70b22b1e11665d5460a9924e430e89725d2c9bebd197",
+    "cuda-energy.json.xz": "493aaaa145ca93852476abbdfc259b13299414e637ae3f8e7656d95b9e0c583b",
+    "cuda-force.json.xz": "776c4f221d8ddc5a543b517452d89096884f1834ffbfabd300061295cb1007f2",
+    "cuda-inputs.sha256.xz": "2f87892197aa84b6db793f60cd9642ab23e28d80df91cf9745e7aba286ed4c46",
+    "cuda-loaded-libraries.sha256.xz": "70561f835ee34ecbb72852305687acebd14ec4c403b21764dd9b6dddd02d91c3",
+    "cuda-loaded-libraries.txt.xz": "5a5d7f505d33b7a0bae3c92dd2f743728d120acc6dd5851304b389f813811ec4",
+    "cuda-outcome.json.xz": "f28b448963ae1c7f1dec05ab61bbf3e03f8671031b5d1da2239c6bf74c002b7d",
+    "cuda-public-energy.log.xz": "916481240be2630247bd8bbb94c9bfd9edc154d8fbbb4e6be12116166a94bd4c",
+    "cuda-public-force.log.xz": "0995f66f5af04e635404c056115d65951e16ad3ab0522e9fffea12c9500a1725",
+    "cuda-sanitizer-test.log.xz": "1857514c24d27ff94c51bc12a729d10fe9e9e476f05bd9b4e36b6d87190c9cb6",
+    "cuda-sanitizer.txt.xz": "280bba7222509934f79985f165f6a0aa6caec57216cd69f318b2f4cdf03b94d3",
+    "cuda-slurm.txt.xz": "ea7b64d7c20cbed5a2d44c681c2e4a049f494ee1cff79e7626f4411a1e843a5e",
+    "cuda-source.patch.xz": "1235f0f6183bbb357102bb1755129e8ca58d83bfa75217689ea472c338c62dab",
+    "cuda-source.sha256.xz": "75e8e1b24b675b3332585cb4869e730bcad163e277e2a319d7e1da81cf165ade",
+    "cuda-xtbloom-force.log.xz": "dd066d15235acb1b08936c134df5b00c18c420fcc70a2f5f8ee7d6ac97798b72",
+    "docs-tests.log.xz": "56e734049d7090f320bcee39916766a029a13c5cb428461884ec740fea34fb3b",
+    "xtbloom-force.json.xz": "a4657a2fc76204ea963b390bb98a8efd61ae40d56e0c4e6843af93ae12d0a37f",
+    "cuda-slurm-final.txt.xz": "0040f94d11d0039505328a90b2ff48968db873e9e7967307631bf40ef5679275",
+    "evidence-negative-controls.log.xz": "bc2e2da902f12aee0673edb3620313885960e1e404485d65afde4f5847acab37"
+  },
+  "unpublished_build_logs": {
+    "location": ".artifacts/issue-560/unpublished-build-logs/",
+    "scope": "Full compilation logs remain ignored local artifacts, not offline reducer dependencies. Compact configuration, compiler-command, launcher, cache and acceptance receipts remain archived.",
+    "sha256": {
+      "cpu-build.log.xz": "646921f833d02f654edfb7e3c5d487ac637c4731ca71a1164dc3f51ec4391abf",
+      "cuda-build-build-resume.log.xz": "1e0fb380070a8bc5118d7952c047bb49ff2f3296ee9b2e2f9cf3037e023c508f"
+    }
+  }
+}

@@ -109,14 +109,13 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
     for (std::uint32_t i = 0; i < descriptor->shell_count; ++i) {
       const generativeqc_shell& shell = descriptor->shells[i];
       if (context->state.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
-          shell.angular_momentum > (scf_auxiliary                           ? 5U
-                                    : correlation_auxiliary || ks_auxiliary ? 4U
-                                                                            : 3U)) {
-        context->last_detail =
-            scf_auxiliary ? "CUDA SCF source-only auxiliary shells support l<=5"
-            : correlation_auxiliary || ks_auxiliary
-                ? "CUDA source-only auxiliary shells support l<=4"
-                : "CUDA basis execution supports l<=3; g shells require CPU reference";
+          shell.angular_momentum > (scf_auxiliary || correlation_auxiliary ? 5U : 4U)) {
+        context->last_detail = scf_auxiliary ? "CUDA SCF source-only auxiliary shells support l<=5"
+                               : correlation_auxiliary
+                                   ? "CUDA correlation source-only auxiliary shells support l<=5"
+                               : ks_auxiliary ? "CUDA source-only auxiliary shells support l<=4"
+                                              : "CUDA orbital metadata supports l<=4; execution "
+                                                "requires a qualified operator route";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       }
       if (shell.primitive_count == 0 || shell.primitive_offset > descriptor->primitive_count ||
@@ -135,7 +134,7 @@ static generativeqc_status create_system_impl(generativeqc_context* context,
       candidate->data.shells.push_back(std::move(native_shell));
     }
     const generativeqc_status status = generativeqc::molecule::validate_and_normalize(
-        candidate->data, context->last_detail, scf_auxiliary ? 5U : 4U);
+        candidate->data, context->last_detail, scf_auxiliary || correlation_auxiliary ? 5U : 4U);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     *system = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;

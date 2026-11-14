@@ -81,7 +81,10 @@ enum {
 };
 
 /** Detached facts for completed candidate classification, not new qualification.
- * Boolean fields are 0/1. Gradient owner: 0 unknown, 1 stationary CUDA,
+ * Boolean fields are 0/1. budget_requested identifies an explicit arithmetic
+ * allowance, not a frontend profile; budget_native/budget_fock describe actual
+ * admitted execution. Equal targets and work receive equal decisions regardless
+ * of preset names. Gradient owner: 0 unknown, 1 stationary CUDA,
  * 2 composite stationary CUDA. Returned mode: 0 unknown, 1 mixed, 2 FP64.
  * correction_result_flags bits identify the typed complete correction, its
  * success, D4 success, gCP success, cuda+cpu backend and present gradient.
@@ -91,7 +94,7 @@ enum {
  */
 typedef struct generativeqc_precision_candidate_context_v1 {
   uint32_t struct_size, abi_version;
-  uint32_t fast_profile, explicit_target, fast_native, fast_fock, forces_requested;
+  uint32_t budget_requested, explicit_target, budget_native, budget_fock, forces_requested;
   uint32_t gradient_present, gradient_schema_version, gradient_complete;
   uint32_t gradient_owner, gradient_returned_mode, qualification_present;
   uint32_t gradient_capability_fallback, weighted_task_counters_collected;

@@ -133,7 +133,16 @@ def test_native_public_mode_and_default_grid_selection(
         for method in runner.METHODS:
             standard = runner.native_calculator(method, "standard", mode, tmp_path)
             fast = runner.native_calculator(method, "fast", mode, tmp_path)
-            assert standard["policy"] == "standard"
+            assert "policy" not in standard
+            for name in (
+                "energy_tolerance",
+                "density_tolerance",
+                "screening_tolerance",
+                "initial_guess",
+                "diis_history",
+                "max_iterations",
+            ):
+                assert name not in standard
             assert "ks_options" not in standard and "ks_options" not in fast
             assert "precision" not in fast and fast["policy"] == "fast"
             assert "energy_tolerance" not in fast

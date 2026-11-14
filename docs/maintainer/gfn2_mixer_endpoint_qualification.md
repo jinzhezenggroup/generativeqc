@@ -15,11 +15,19 @@ python benchmarks/gfn2_mixer_endpoint.py prepare /absolute/experiment/oracle
 
 This uses the seven pinned small fixtures and the existing six-bohr water-cluster
 recipe at 48/192 intrinsic AOs. Each original geometry has a nonrigid moved partner
-and a fresh tblite reference at accuracy 0.01 and 300 K. Small original references
-also pass the pinned fixture's unchanged `5e-7` energy/force gates. Shell and
+and a fresh tblite reference at accuracy 0.01 and 300 K. References explicitly use
+`xtb_config={"smooth_cutoff": 0.0}` to match the native GFN2 parameter contract's
+sharp D4 two-/three-body cutoffs (50/25 bohr). tblite 0.6.0's default 0.05-bohr
+switch is a different model, not an SCC tolerance. The oracle JSON records this
+configuration, and both report modes reject missing or mismatched configuration.
+Regenerate older oracles rather than adding unverified metadata to frozen results.
+Small original references also pass the pinned fixture's unchanged `5e-7`
+energy/force gates. Shell and
 orbital dimensions come from tblite, independently of the CUDA history generator.
-Optional `--waters 8 32 128` includes the separate 768-AO domain; its historical
-independent `5e-7` E/F failure remains unresolved. Retain every new failure or
+Optional `--waters 8 32 128` includes the separate 768-AO domain. The report's
+`768_ao_gate` is `NOT_EXERCISED` unless the supplied journal covers that domain;
+its status is scoped to the supplied source-bound experiment, not historical runs
+or overall product qualification. Retain every new failure or
 timeout with its source identity rather than widening acceptance or substituting
 peer agreement.
 

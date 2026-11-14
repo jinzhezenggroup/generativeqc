@@ -9,7 +9,13 @@ from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import GridSpec, KsOptions, PrecisionCalculator
+from generativeqc import (
+    GridSpec,
+    KsOptions,
+    PrecisionCalculator,
+    PrecisionPolicy,
+    TargetErrorBudget,
+)
 
 from benchmarks._cases import benchmark_cases
 from benchmarks.pbe0_precision import reference
@@ -30,6 +36,187 @@ def _oracle(functional: str, case_name: str = CASE) -> dict[str, Any]:
     pytest.importorskip("pyscf")
     pytest.importorskip("gpu4pyscf")
     return reference(case_name, GRID, 4, functional=functional, backend="gpu4pyscf")
+
+
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize("relaxed", (False, True))
+def test_target_budget_selects_same_endpoint_across_profiles(
+    policy: str, relaxed: bool
+) -> None:
+    """Both presets admit the same qualified work for the same actual target.
+
+    Independent E/F gates follow the requested allowance, not the profile name.
+    A strict Fast target must not inherit its preset's loose allowance; an
+    equally loose Standard target can execute the qualified mixed Direct path.
+    """
+    budget = (
+        TargetErrorBudget(1e-5, 1e-4, 3e-5)
+        if relaxed
+        else TargetErrorBudget(1e-9, 1e-7, 3e-8)
+    )
+    oracle = _oracle("PBE0")
+    case = benchmark_cases()[CASE]
+    calculator = PrecisionCalculator(
+        method="pbe0-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        policy=PrecisionPolicy(policy, budget=budget),
+        max_iterations=180,
+    )
+    try:
+        with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+            for replay in range(2):
+                result = owner.execute(
+                    strict=True, properties=("energy", "forces")
+                ).items[0]
+                assert result.succeeded and result.converged
+                assert result.executed_backend == "cuda"
+                assert abs(result.energy - oracle["energy"]) < (
+                    1e-5 if relaxed else 1e-8
+                )
+                difference = np.asarray(result.forces) - oracle["forces"]
+                assert np.max(np.abs(difference)) < budget.force_max_abs
+                assert np.sqrt(np.mean(difference * difference)) < budget.force_rms
+                assert result.precision["complete"]
+                if not relaxed:
+                    assert result.precision["mixed_stage_fock_builds"] == 0
+                elif replay == 0:
+                    assert result.precision["mixed_stage_fock_builds"] > 0
+    finally:
+        calculator.clear_cache()
+
+
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+@pytest.mark.parametrize(
+    "case_name",
+    ("water-tetramer-def2-svp-spherical", "water-octamer-s4-def2-svp-spherical"),
+)
+def test_fixed_fp64_anchor_selection_is_profile_independent(
+    monkeypatch: pytest.MonkeyPatch, policy: str, case_name: str
+) -> None:
+    """Default/off and explicit reuse preserve complete cold and warm observables.
+
+    Exercise both sides of the shared automatic floor against an independent
+    oracle. Timing qualification remains separate from these scientific gates.
+    """
+    case = benchmark_cases()[case_name]
+    oracle = _oracle("WB97M-V", case_name)
+    energy_gate = 1e-7 if policy == "standard" else 1e-5
+    force_gate = 1e-6 if policy == "standard" else 1e-4
+    rms_gate = 3e-7 if policy == "standard" else 3e-5
+    endpoints = []
+    for selection in (None, "0", "1"):
+        if selection is None:
+            monkeypatch.delenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", selection)
+        calculator = PrecisionCalculator(
+            method="wb97m-v-rks",
+            basis=case.generativeqc_basis,
+            basis_representation=case.basis_representation,
+            device="cuda",
+            ks_options=KsOptions(grid=GRID),
+            initial_guess=None,
+            max_iterations=180,
+            policy=policy,
+            **(
+                {
+                    "energy_tolerance": 1e-10,
+                    "density_tolerance": 1e-8,
+                    "screening_tolerance": 1e-12,
+                }
+                if policy == "standard"
+                else {}
+            ),
+        )
+        try:
+            with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+                observed = []
+                for _ in range(2):
+                    result = owner.execute(
+                        strict=True, properties=("energy", "forces")
+                    ).items[0]
+                    assert result.succeeded and result.converged
+                    assert result.executed_backend == "cuda"
+                    assert abs(result.energy - oracle["energy"]) < energy_gate
+                    np.testing.assert_allclose(
+                        result.forces, oracle["forces"], atol=force_gate, rtol=0
+                    )
+                    difference = np.asarray(result.forces) - oracle["forces"]
+                    assert np.sqrt(np.mean(difference * difference)) < rms_gate
+                    observed.append(result)
+                endpoints.append(observed)
+        finally:
+            calculator.clear_cache()
+    for selected in endpoints[1:]:
+        for baseline, candidate in zip(endpoints[0], selected, strict=True):
+            assert abs(baseline.energy - candidate.energy) < (
+                1e-9 if policy == "standard" else 1e-5
+            )
+            np.testing.assert_allclose(
+                baseline.forces,
+                candidate.forces,
+                atol=1e-7 if policy == "standard" else 1e-4,
+                rtol=0,
+            )
+
+
+@pytest.mark.parametrize("policy", ("standard", "fast"))
+def test_fixed_fp64_anchor_moved_owner_matches_fresh(
+    monkeypatch: pytest.MonkeyPatch, policy: str
+) -> None:
+    """A geometry move cannot reuse a previous density's linear-operator anchor.
+
+    Supply moved coordinates on both replays: omitting them requests the
+    originally prepared geometry, not the preceding execution's coordinates.
+    """
+    case_name = "water-octamer-s4-def2-svp-spherical"
+    case = benchmark_cases()[case_name]
+    coordinates = np.asarray([position for _, position in case.atoms])
+    coordinates[0, 0] += 0.01
+    moved_atoms = tuple(
+        (element, tuple(position))
+        for (element, _), position in zip(case.atoms, coordinates, strict=True)
+    )
+    oracle = reference(
+        case_name, GRID, 4, functional="WB97M-V", atoms=moved_atoms, backend="gpu4pyscf"
+    )
+    monkeypatch.delenv("GENERATIVEQC_KS_FIXED_ANCHOR_DELTA", raising=False)
+    calculator = PrecisionCalculator(
+        method="wb97m-v-rks",
+        basis=case.generativeqc_basis,
+        basis_representation=case.basis_representation,
+        device="cuda",
+        ks_options=KsOptions(grid=GRID),
+        max_iterations=180,
+        policy=policy,
+    )
+    try:
+        with calculator.prepare_batch([case.atoms], warm_start=True) as owner:
+            owner.execute(strict=True, properties=("energy", "forces"))
+            moved = owner.execute(
+                [coordinates], strict=True, properties=("energy", "forces")
+            ).items[0]
+            warm = owner.execute(
+                [coordinates], strict=True, properties=("energy", "forces")
+            ).items[0]
+            assert warm.warm_start_used
+        with calculator.prepare_batch([moved_atoms], warm_start=True) as fresh:
+            cold = fresh.execute(strict=True, properties=("energy", "forces")).items[0]
+        for result in (moved, warm, cold):
+            assert result.succeeded and result.converged
+            assert abs(result.energy - oracle["energy"]) < (
+                1e-7 if policy == "standard" else 1e-5
+            )
+            difference = np.asarray(result.forces) - oracle["forces"]
+            assert np.max(np.abs(difference)) < (1e-6 if policy == "standard" else 1e-4)
+            assert np.sqrt(np.mean(difference * difference)) < (
+                3e-7 if policy == "standard" else 3e-5
+            )
+    finally:
+        calculator.clear_cache()
 
 
 @pytest.mark.parametrize("selection", ("auto", "full", "partial", "refused"))

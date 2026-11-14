@@ -65,7 +65,81 @@ def options(case_name: str, functional: str, grid: GridSpec = GRID) -> dict:
     }
 
 
+def test_public_fitted_fp64_fast_shares_standard_execution() -> None:
+    """A nonzero budget does not change an otherwise identical FP64 owner.
+
+    Default stationarity controls do not qualify mixed geometry for this DF
+    hybrid. Compare complete cold, frozen and moved endpoints to an independent
+    moving-grid oracle; neither facade may obtain a reference density.
+    """
+    pytest.importorskip("pyscf")
+    from test_dft_complete_cuda import no_cpu_derivatives
+
+    case_name = "water-tetramer-def2-svp-spherical"
+    case = benchmark_cases()[case_name]
+    grid = GridSpec(24, 8, 16)
+    _, auxiliary = auxiliary_bases(case)
+    shared = options(case_name, "PBE0", grid)
+    shared.update(energy_tolerance=1e-9, density_tolerance=1e-5)
+    moved = tuple(
+        (
+            symbol,
+            tuple(float(value) + (0.001 if index == 0 else 0.0) for value in position),
+        )
+        for index, (symbol, position) in enumerate(case.atoms)
+    )
+    references = [
+        reference(
+            case_name,
+            grid,
+            1,
+            functional="PBE0",
+            atoms=geometry,
+            auxiliary_basis=auxiliary,
+        )
+        for geometry in (case.atoms, moved)
+    ]
+    observed: dict[str, list[Any]] = {}
+    for policy in ("standard", "fast"):
+        calculator = PrecisionCalculator(**shared, policy=policy)
+        assert calculator._candidate_precision == "fp64"
+        observed[policy] = []
+        try:
+            with calculator.prepare_batch([case.atoms], warm_start=True) as prepared:
+                for geometry_index, geometry in (
+                    (0, case.atoms),
+                    (0, case.atoms),
+                    (1, moved),
+                ):
+                    with no_cpu_derivatives():
+                        endpoint = prepared.execute(
+                            [np.asarray([position for _, position in geometry])],
+                            strict=True,
+                            properties=("energy", "forces"),
+                        ).items[0]
+                    assert endpoint.succeeded and endpoint.converged
+                    assert endpoint.executed_backend == "cuda"
+                    oracle = references[geometry_index]
+                    assert abs(endpoint.energy - oracle["energy"]) < 1e-7
+                    np.testing.assert_allclose(
+                        endpoint.forces, oracle["forces"], atol=1e-6, rtol=0
+                    )
+                    assert endpoint.precision["effective_bits"] == 64
+                    assert not endpoint.precision["mixed_stage_fock_builds"]
+                    gradient = endpoint.precision.get("gradient") or {}
+                    assert not gradient.get("returned_fp32_geometry_points", 0)
+                    observed[policy].append(endpoint)
+                    if len(observed[policy]) == 1:
+                        prepared.set_warm_start_updates(False)
+        finally:
+            calculator.clear_cache()
+    for standard, fast in zip(observed["standard"], observed["fast"], strict=True):
+        assert abs(standard.energy - fast.energy) < 1e-10
+        np.testing.assert_allclose(standard.forces, fast.forces, atol=1e-9, rtol=0)
+
+
 @pytest.mark.parametrize("functional", ("PBE", "PBE0", "B3LYP", "R2SCAN", "M06-2X"))
+@pytest.mark.parametrize("force_python", (False, True), ids=("selected", "python"))
 @pytest.mark.parametrize(
     "case_name,grid",
     (
@@ -76,12 +150,22 @@ def options(case_name: str, functional: str, grid: GridSpec = GRID) -> dict:
     ),
 )
 def test_public_fitted_fast_selects_complete_model(
-    case_name: str, grid: GridSpec, functional: str
+    case_name: str,
+    grid: GridSpec,
+    functional: str,
+    force_python: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No policy override: public Fast must select actual FP32 work itself."""
+    """Both selected-native and packaged fallback consumers retain oracle gates."""
     pytest.importorskip("pyscf")
     from test_dft_complete_cuda import no_cpu_derivatives
 
+    if force_python:
+        from generativeqc.batch import PreparedBatch
+
+        monkeypatch.setattr(
+            PreparedBatch, "_native_dft_force_eligible", lambda *arguments: False
+        )
     case = benchmark_cases()[case_name]
     _, auxiliary = auxiliary_bases(case)
     oracle = reference(
@@ -98,9 +182,6 @@ def test_public_fitted_fast_selects_complete_model(
         assert report.status == "qualified_mixed_gradient"
         assert report.solve_count == 1
         assert report.solves[0].requested_precision == "fp64"
-        assert (
-            report.gradient_admission == f"{functional.lower()}-df-rks-budget-fp32-v1"
-        )
         assert "fp32_grid_storage_unavailable" not in report.fallback_reasons
         assert abs(candidate.energy - oracle["energy"]) < 1e-7
         assert abs(baseline.energy - oracle["energy"]) < 1e-7
@@ -111,12 +192,31 @@ def test_public_fitted_fast_selects_complete_model(
         assert np.sqrt(np.mean((candidate.forces - baseline.forces) ** 2)) < 3e-6
         np.testing.assert_allclose(candidate.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
         work = candidate.precision["gradient"]
-        assert work["schema_version"] == 4
         assert work["attempted_fp32_geometry_points"] == oracle["grid_points"]
-        assert work["returned_fp32_geometry_points"] == oracle["grid_points"]
-        assert work["attempted_fp32_grid_points"] == 0
         assert work["fp64_gradient_retries"] == 0
-        assert "df-integrals-and-metric-response" in work["strict_components"]
+        if work["schema_version"] == 3 and not force_python:
+            # The native owner qualifies weighted/point arithmetic as well as
+            # geometry; its v3 receipt must not be relabeled as Python DF v4.
+            assert (
+                report.gradient_admission == f"{functional.lower()}-rks-budget-fp32-v1"
+            )
+            assert work["qualification"] == report.gradient_admission
+            assert work["complete"] and work["returned_mode"] == "mixed"
+            assert work["attempted_fp32_grid_points"] == oracle["grid_points"]
+            assert {
+                "final_scf",
+                "one_electron_and_pulay",
+                "global_reductions",
+            } <= set(work["fp64_components"])
+        else:
+            assert work["schema_version"] == 4
+            assert (
+                report.gradient_admission
+                == f"{functional.lower()}-df-rks-budget-fp32-v1"
+            )
+            assert work["returned_fp32_geometry_points"] == oracle["grid_points"]
+            assert work["attempted_fp32_grid_points"] == 0
+            assert "df-integrals-and-metric-response" in work["strict_components"]
     finally:
         strict.clear_cache()
         fast.clear_cache()

@@ -517,17 +517,22 @@ def test_no_checkpoint_cold_run_remains_available_after_clear(
     DEVICE != "cuda", reason="real-GPU cross-backend test runs under Slurm"
 )
 @pytest.mark.parametrize("fitted", [False, True])
-@pytest.mark.parametrize("explicit_controls", [False, True])
+@pytest.mark.parametrize("controls_mode", ["defaults", "matched", "different"])
 def test_backend_independent_cpu_cuda_restart_both_directions(
-    tmp_path: typing.Any, fitted: typing.Any, explicit_controls: bool
+    tmp_path: typing.Any, fitted: typing.Any, controls_mode: str
 ) -> None:
-    # CUDA RHF has qualified defaults distinct from the strict CPU defaults.
-    # Matching explicit controls permit exact restart; differing defaults must
-    # retain conservative classification and require an explicit warm import.
+    # Defaults are shared across CPU/CUDA. Matching default or explicit controls
+    # permit exact restart; genuinely different explicit controls retain
+    # conservative classification and require an explicit warm import.
     controls = (
         {"energy_tolerance": 1e-10, "density_tolerance": 1e-8}
-        if explicit_controls
+        if controls_mode != "defaults"
         else {}
+    )
+    target_controls = (
+        {**controls, "energy_tolerance": 1e-11}
+        if controls_mode == "different"
+        else controls
     )
     path = tmp_path / "state"
     for source_device, target_device in (("cpu", "cuda"), ("cuda", "cpu")):
@@ -544,9 +549,9 @@ def test_backend_independent_cpu_cuda_restart_both_directions(
                 device=target_device,
                 method=method,
                 density_fitting=target_device if fitted else "none",
-                **controls,
+                **target_controls,
             ).prepare_batch([H2], charges=[charge], multiplicities=[mult]) as target:
-                if explicit_controls or method == "uhf":
+                if controls_mode != "different":
                     report = target.load_checkpoint(path)
                     expected = "exact_restart"
                 else:
@@ -637,6 +642,8 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
         ("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", "1"),
         ("GENERATIVEQC_DF_COULOMB_RESPONSE", "slices"),
         ("GENERATIVEQC_HF_MATRIX_PROFILE", "/unread/matrix-profile"),
+        ("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "orbital-gradient"),
+        ("GENERATIVEQC_CUDA_KS_CONVERGENCE", "strict"),
     ],
 )
 def test_runtime_numerical_policy_changes_require_explicit_warm_restart(

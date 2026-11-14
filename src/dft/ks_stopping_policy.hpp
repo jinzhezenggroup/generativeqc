@@ -3,17 +3,30 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
+#include <string_view>
 
+#include "dft/energy_change.hpp"
 #include "dft/semilocal_family.hpp"
 
 namespace generativeqc::dft {
 
-/** Full-range force/reference consumers retain the strict physical ceiling.
- * Public energy/density controls do not bound force error. The separately
- * qualified nonlocal orbital-gradient contract keeps its own admission. */
+/** Explicit opt-out of default orbital stopping, snapshotted by the owner.
+ * This preserves stringent force-repeatability tasks without changing their
+ * public E/D tolerances. Unknown values must not silently loosen convergence. */
+inline bool strict_ks_convergence_requested(const char* value) {
+  if (!value || !*value) return false;
+  if (std::string_view(value) == "strict") return true;
+  throw std::invalid_argument("GENERATIVEQC_CUDA_KS_CONVERGENCE requires empty or strict");
+}
+
+/** Default E/F endpoints share the restricted physical orbital-gradient gate.
+ * Requesting forces must not silently change the SCF accuracy contract. A
+ * full-range physical-reference export still needs its stricter canonical
+ * contract; tighter public controls also retain the strict owner admission. */
 constexpr bool standard_ks_stationarity_allowance(bool standard_owner, bool nonlocal_owner,
-                                                  bool forces, bool physical_reference) noexcept {
-  return standard_owner && (nonlocal_owner || (!forces && !physical_reference));
+                                                  bool physical_reference) noexcept {
+  return standard_owner && (nonlocal_owner || !physical_reference);
 }
 
 /** Complete compositions with independent default-grid early-stop evidence.
@@ -77,6 +90,19 @@ constexpr bool early_ks_final_probe_stationary(const KsStoppingState& state,
  */
 inline bool orbital_ks_stationary(const KsStoppingState& state, double orbital_gradient) noexcept {
   return orbital_gradient >= 0.0 && orbital_gradient < std::sqrt(state.energy_tolerance);
+}
+
+/** An unchanged Direct density may confirm energy only after every active
+ * stationarity gate passes. Strict callers retain the existing AO policy. */
+inline bool direct_ks_density_confirmation(const KsStoppingState& state, bool orbital_policy,
+                                           double orbital_gradient) noexcept {
+  const bool history =
+      state.iterations > 1 || (state.iterations == 1 && state.warm_energy_baseline);
+  return detail::stationary_density_needs_energy_confirmation(
+             history, state.energy_change, state.density_change, state.residual,
+             state.maximum_residual, state.energy_tolerance, state.density_tolerance,
+             state.stationarity_tolerance) &&
+         (!orbital_policy || orbital_ks_stationary(state, orbital_gradient));
 }
 
 /** Restricted molecular E/MO-gradient candidate, matching GPU4PySCF's norms.

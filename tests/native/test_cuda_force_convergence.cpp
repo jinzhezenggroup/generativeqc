@@ -647,6 +647,74 @@ void check_reference_startup(bool retain, unsigned threads, unsigned basis_size)
       throw std::runtime_error("small cold-reference proposals unnecessarily retired DIIS");
   }
 }
+void check_orbital_gradient_convergence(unsigned threads, bool retain, bool graph,
+                                        bool fitted = false) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned basis_size = 33, batch = 5, matrix = basis_size * basis_size;
+  constexpr double energy_tolerance = 1e-9;
+  const double gradient_tolerance = std::sqrt(energy_tolerance);
+  std::vector<double> values(batch * matrix, 0.0);
+  for (unsigned item = 0; item < batch; ++item) {
+    const double entry = (item == 0 ? 0.5 : 2.0) * gradient_tolerance / std::sqrt(basis_size - 1.0);
+    for (unsigned column = 1; column < basis_size; ++column) {
+      values[item * matrix + column] = entry;
+      values[item * matrix + column * basis_size] = -entry;
+    }
+  }
+  values[3 * matrix - 1] = std::numeric_limits<double>::quiet_NaN();
+  values[4 * matrix - 1] = std::numeric_limits<double>::infinity();
+  Device<double> residual(values), density(std::vector<double>(batch * matrix, 0.25)),
+      next(std::vector<double>(batch * matrix, 0.25 + 2e-5)),
+      energy(std::vector<double>(batch, -1.0)), previous(std::vector<double>(batch, -1.0)),
+      change(std::vector<double>(batch, 0.0)), rms(std::vector<double>(batch, 0.0));
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1, 1, 1, 1, 0}),
+      converged(std::vector<std::uint8_t>(batch, 0));
+  Device<std::uint32_t> iterations(std::vector<std::uint32_t>(batch, 0));
+  const auto launch = [&](cudaStream_t stream) {
+    if (fitted) {
+      generativeqc::scf::cuda_df::launch_update_device_convergence_kernel(
+          batch, 32, 0, stream, batch, basis_size, energy_tolerance, 1e-5, energy.data,
+          previous.data, next.data, density.data, active.data, converged.data, iterations.data,
+          change.data, rms.data, residual.data, true, true);
+    } else {
+      launch_update_convergence_kernel(retain, batch, threads, 0, stream, batch, basis_size,
+                                       energy_tolerance, 1e-5, false, energy.data, previous.data,
+                                       next.data, density.data, active.data, converged.data,
+                                       iterations.data, change.data, rms.data, residual.data,
+                                       nullptr, false, nullptr, nullptr, {}, true);
+    }
+    check(cudaGetLastError());
+  };
+  if (graph) {
+    cudaStream_t stream{};
+    cudaGraph_t captured{};
+    cudaGraphExec_t executable{};
+    check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+    check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
+    launch(stream);
+    check(cudaStreamEndCapture(stream, &captured));
+    check(cudaGraphInstantiate(&executable, captured, nullptr, nullptr, 0));
+    check(cudaGraphLaunch(executable, stream));
+    check(cudaStreamSynchronize(stream));
+    check(cudaGraphExecDestroy(executable));
+    check(cudaGraphDestroy(captured));
+    check(cudaStreamDestroy(stream));
+  } else {
+    launch(nullptr);
+  }
+  if (converged.read() != std::vector<std::uint8_t>{1, 0, 0, 0, 0})
+    throw std::runtime_error("physical MO-gradient convergence did not use the full norm");
+  Device<std::uint8_t> final_active(std::vector<std::uint8_t>{1, 1, 1, 1, 0}),
+      final_converged(std::vector<std::uint8_t>{1, 1, 1, 1, 9}),
+      tested(std::vector<std::uint8_t>(batch, 0));
+  Device<std::uint32_t> count(std::vector<std::uint32_t>(1, 0));
+  launch_validate_force_residual_kernel(nullptr, batch, 1, basis_size, 1e-5, residual.data,
+                                        final_active.data, final_converged.data, count.data,
+                                        tested.data, energy_tolerance, false, true);
+  check(cudaGetLastError());
+  if (final_converged.read() != std::vector<std::uint8_t>{1, 0, 0, 0, 9} || count.read()[0] != 4)
+    throw std::runtime_error("final physical MO-gradient validation disagrees with iteration");
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -655,6 +723,10 @@ int main(int argc, char** argv) {
   if (!block_only && !std::getenv("SLURM_JOB_ID")) return 77;
   try {
     check(cudaSetDevice(0));
+    for (unsigned threads : {32U, 256U})
+      for (bool retain : {false, true})
+        for (bool graph : {false, true}) check_orbital_gradient_convergence(threads, retain, graph);
+    for (bool graph : {false, true}) check_orbital_gradient_convergence(32, false, graph, true);
     if (block_only) {
       for (unsigned threads : {32U, 256U}) {
         for (bool retain : {false, true}) {

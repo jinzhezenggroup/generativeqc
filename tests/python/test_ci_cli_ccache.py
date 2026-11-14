@@ -23,6 +23,7 @@ def _step(name: str) -> str:
 
 
 def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
     script = (
         "#!" + sys.executable + "\n"
         "import json, os, pathlib, sys\n"
@@ -33,6 +34,9 @@ def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "os.environ.get('CCACHE_SLOPPINESS')]) + '\\n')\n"
         "if tool == 'cmake':\n"
         "    stage = 'build' if '--build' in args else 'configure'\n"
+        "    if stage == 'build':\n"
+        "        names = ['CCACHE_PREFIX', 'CCACHE_PREFIX_CPP', 'GENERATIVEQC_CI_COMPILE_TRACE_DIR']\n"
+        "        pathlib.Path(os.environ['TRACE_CONFIG']).write_text(json.dumps({name: os.environ.get(name) for name in names}))\n"
         "    if stage == os.environ['FAIL_STAGE']:\n"
         "        sys.exit(23)\n"
         "elif '--show-stats' in args and '--verbose' in args:\n"
@@ -53,13 +57,16 @@ def _fake_tools(tmp_path: Path, failure: str = "") -> dict[str, str]:
         "CALLS": str(tmp_path / "calls.jsonl"),
         "FAIL_STAGE": failure,
         "GITHUB_OUTPUT": str(tmp_path / "outputs.txt"),
+        "TRACE_CONFIG": str(tmp_path / "trace_config.json"),
+        "RUNNER_TEMP": str(tmp_path),
     }
 
 
 @pytest.mark.parametrize("fast", ["ON", "OFF"])
 @pytest.mark.parametrize("failure", ["", "configure", "build"])
+@pytest.mark.parametrize("inherited_parallelism", ["", "8"])
 def test_cli_ci_configures_non_pch_strict_caching_and_preserves_failures(
-    tmp_path: Path, fast: str, failure: str
+    tmp_path: Path, fast: str, failure: str, inherited_parallelism: str
 ) -> None:
     step = _step("Build monolithic C++ CUDA CLI (release or fast PR)")
     assert "continue-on-error:" not in step
@@ -67,7 +74,11 @@ def test_cli_ci_configures_non_pch_strict_caching_and_preserves_failures(
     result = subprocess.run(
         ["bash", "-e", "-o", "pipefail", "-c", script],
         cwd=tmp_path,
-        env={**_fake_tools(tmp_path, failure), "CLI_FAST_COMPILE": fast},
+        env={
+            **_fake_tools(tmp_path, failure),
+            "CLI_FAST_COMPILE": fast,
+            "CMAKE_BUILD_PARALLEL_LEVEL": inherited_parallelism,
+        },
         capture_output=True,
         text=True,
         check=False,
@@ -110,11 +121,22 @@ def test_cli_ci_configures_non_pch_strict_caching_and_preserves_failures(
     builds = [
         args for tool, args, _ in records if tool == "cmake" and "--build" in args
     ]
+    # An explicit build cap takes precedence over a larger inherited default.
+    # Exercise the shell and real diagnostics wrapper, including failure status.
     assert builds == (
         []
         if failure == "configure"
-        else [["--build", "--preset", preset_name, "--parallel", "3"]]
+        else [["--build", "--preset", preset_name, "--parallel", "2"]]
     )
+    trace_config = tmp_path / "trace_config.json"
+    if builds:
+        assert json.loads(trace_config.read_text()) == {
+            "CCACHE_PREFIX": str(tmp_path / "tools/ci_compile_trace.py"),
+            "CCACHE_PREFIX_CPP": str(tmp_path / "tools/ci_compile_trace.py"),
+            "GENERATIVEQC_CI_COMPILE_TRACE_DIR": str(tmp_path / "cli-compile-traces"),
+        }
+    else:
+        assert not trace_config.exists()
 
 
 def test_cli_verbose_statistics_include_uncacheable_reasons(tmp_path: Path) -> None:

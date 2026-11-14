@@ -98,3 +98,15 @@ supersedes the Fast-only anchor admission described here: it shares the actual
 operator path with explicitly selected strict owners, while retaining current
 defaults and all resource/numerical gates. The constructor, tile and numeric-cap
 differences above are not removed by that trial.
+
+The [selected-force resource follow-up](../implemented/architecture/2026-11-13-selected-force-resource-parity.md)
+subsequently removes the zero-budget exclusions for otherwise admitted FP64
+SCF/force reservations and large force tiles. Actual mixed-gradient scratch
+retains its bounded path. Constructor model resolution and strict-anchor
+default profitability remain separate work; this does not establish full
+execution parity.
+
+The [common construction and anchor-selection follow-up](../implemented/architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md)
+then resolves the model once and gives both profiles the same conservative
+explicit anchor selector. Numerical arithmetic/screening/audit policies remain
+distinct; shared engineering is not a claim of identical endpoint work or cost.

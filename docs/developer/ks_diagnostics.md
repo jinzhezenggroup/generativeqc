@@ -56,13 +56,16 @@ and residual separately from the original historical rows.
 
 ## Final-state-aware CUDA stopping
 
-The qualified CUDA Standard defaults use the solver contract documented in
+The qualified restricted CUDA Standard E/F defaults use the solver contract documented in
 [application precision](../user/application_precision.md). Before accepting an
-ordinary Standard stop, the owner runs the complete resident physical/canonical
+energy/MO-gradient candidate, the owner runs the complete resident physical/canonical
 proof with matching `1e-5` density/stationarity ceilings. Rejection continues
 SCF. This mandatory proof includes fitted exchange and canonical M06-2X;
 it is independent of the optional strict-tolerance early-probe control below.
-Range/nonlocal, budget/mixed, UKS, incremental, ECP, chunked and missing-resident
+Requesting forces does not add a stricter SCF candidate gate. Explicit tighter
+E/D controls, `GENERATIVEQC_CUDA_KS_CONVERGENCE=strict`, and full-range physical
+reference exports retain the historical strict policy. Range/nonlocal,
+budget/mixed, UKS, ECP, chunked and missing-resident
 owners retain their stricter physical policy.
 
 The canonical all-electron CUDA WB97M-V Standard owner is a separate admitted

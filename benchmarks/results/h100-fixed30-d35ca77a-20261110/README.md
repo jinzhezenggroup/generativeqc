@@ -101,7 +101,7 @@ These are the remaining nonwins.
   HF96 DF (median 0.834) and r2SCAN-3c96 Direct (median 0.938).
 
 Full ratios, per-pair native and reference medians, cold SCF work counters and
-qualification status are in `summary.json`.
+qualification status are in `summary.json.xz`.
 
 ## Reviewed lossless storage
 
@@ -140,7 +140,7 @@ the protocols, the frozen inputs, the oracles and the producers. It restores
 the task layout in a temporary directory and materializes the pinned
 benchmark helpers from local Git objects of d35ca77a4. It then reruns the
 independent qualification and timing reduction (`analyze-fixed30-d35-v1.py`)
-and requires exact equality with both the sealed reduction and `summary.json`.
+and requires exact equality with both the sealed reduction and `summary.json.xz`.
 
 ## Limitations
 

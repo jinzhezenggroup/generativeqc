@@ -985,13 +985,21 @@ RccsdNativeState run_rccsd_native_state(
                       "native molecular DF-CC source requires CUDA");
   scf::cuda_execution::CudaDfSourcePolicy correlation_policy;
 #if GENERATIVEQC_HAS_CUDA
+  if (!df_reference && std::any_of(system.shells.begin(), system.shells.end(),
+                                   [](const auto& shell) { return shell.angular_momentum > 3; }))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "CUDA orbital g correlation requires a full-DF reference");
   if (correlation_auxiliary) {
-    // SCF's full-range h source does not qualify correlation response or
-    // its retained-source ownership. Reject before reference/cache work.
+    // Only the complete closed-shell RI-JK/correlation owner admits h. Other
+    // reference models retain their independently qualified auxiliary-g bound.
     if (std::any_of(correlation_auxiliary->shells.begin(), correlation_auxiliary->shells.end(),
-                    [](const auto& shell) { return shell.angular_momentum > 4; }))
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "CUDA DF correlation auxiliary shells beyond g (l > 4) are unsupported");
+                    [df_reference](const auto& shell) {
+                      return shell.angular_momentum > (df_reference ? 5U : 4U);
+                    }))
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          df_reference ? "CUDA full-DF auxiliary shells beyond h are unsupported"
+                       : "CUDA DF correlation auxiliary shells beyond g (l > 4) are unsupported");
     std::string detail;
     if (!scf::cuda_execution::resolve_cuda_df_source_policy(correlation_policy, detail) ||
         !scf::cuda_execution::cuda_df_value_domain(system, *correlation_auxiliary,
@@ -1062,11 +1070,13 @@ RccsdNativeState run_rccsd_native_state(
   return state;
 }
 
-generativeqc_status validate_rccsd_system(generativeqc_method, const core::System& system,
+generativeqc_status validate_rccsd_system(generativeqc_method method, const core::System& system,
                                           std::string& detail) {
-  if (std::any_of(system.shells.begin(), system.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum > 3; })) {
-    detail = "RCCSD reference/provider validation supports shells through f";
+  const auto maximum_angular = method == GENERATIVEQC_METHOD_DF_RCCSD_T ? 4U : 3U;
+  if (std::any_of(system.shells.begin(), system.shells.end(), [maximum_angular](const auto& shell) {
+        return shell.angular_momentum > maximum_angular;
+      })) {
+    detail = "RCCSD orbital metadata exceeds the method's reference-specific angular domain";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2) {

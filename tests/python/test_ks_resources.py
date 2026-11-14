@@ -1,5 +1,6 @@
 """Method-level KS capacity gates include preparation and retained replay state."""
 
+import json
 import os
 import typing
 from dataclasses import replace
@@ -55,6 +56,28 @@ def test_topology_controls_and_spin_bind_the_resource_identity() -> None:
         {"energy_tolerance": 1e-12},
     ):
         assert estimate_ks_resources([H2], **options).identity != base.identity
+
+
+def test_cuda_ks_convergence_policy_binds_resources_without_changing_cpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prepared CUDA plan cannot be reused across default/strict policies."""
+    from generativeqc import _native
+
+    library = _native.load_library(device="cpu")
+    cpu = estimate_ks_resources([H2]).identity
+    identities = []
+    for value in (None, "strict", "invalid"):
+        if value is None:
+            monkeypatch.delenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", raising=False)
+        else:
+            monkeypatch.setenv("GENERATIVEQC_CUDA_KS_CONVERGENCE", value)
+        plan = estimate_ks_resources([H2], backend="cuda", library=library)
+        identity = plan.requests[0].identity
+        assert json.loads(identity.schedule)["convergence_policy"] == value
+        assert estimate_ks_resources([H2]).identity == cpu
+        identities.append(identity)
+    assert len(set(identities)) == 3
 
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "pbe0-rks", "pbe-uks"))

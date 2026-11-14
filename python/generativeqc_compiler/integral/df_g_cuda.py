@@ -2,7 +2,8 @@
 
 The f/f/g and f/f/h classes need F10/F11, beyond the five-root Rys domain. Emit
 polynomial coefficients from the existing moment DAG and integrate with the
-same Boys routine as DF response. Orbital g and g derivatives stay excluded.
+same Boys routine as DF response. The explicit g/g/h variant extends the same
+DAG to F13; first derivatives have their separate raised-moment emitter.
 """
 
 from itertools import product
@@ -16,17 +17,25 @@ from .df_derivatives_cuda import (
 )
 
 
-def emit_df_g_values_cuda(*, maximum_auxiliary: int = 4) -> str:
+def emit_df_g_values_cuda(
+    *, maximum_auxiliary: int = 4, maximum_orbital: int = 3
+) -> str:
     """Emit bounded value helpers inside the generated DF value namespace.
 
     The g domain has 85 axis cases; h adds only its role-checked moment cases.
     A primitive owns three bounded polynomials and F0..F10 (g) or F0..F11 (h).
     No recurrence workspace grows with the molecular basis or batch size.
+    Explicit orbital g needs fourteen coefficients/F0..F13 and a separate
+    namespace, preserving the existing auxiliary-only evaluators' arithmetic.
     """
     if maximum_auxiliary not in (4, 5):
         raise ValueError("bounded auxiliary values require g or h")
+    if maximum_orbital not in (3, 4) or (
+        maximum_orbital == 4 and maximum_auxiliary != 5
+    ):
+        raise ValueError("orbital g requires the auxiliary-through-h value domain")
     extent = maximum_auxiliary + 1
-    slots = max(6 + maximum_auxiliary, 2 * maximum_auxiliary) + 1
+    slots = max(2 * maximum_orbital + maximum_auxiliary, 2 * maximum_auxiliary) + 1
     lines = [
         "namespace auxiliary_g {",
         "__device__ __forceinline__ double component(Vec3 a,unsigned i) { return i==0?a.x:i==1?a.y:a.z; }",
@@ -36,8 +45,8 @@ def emit_df_g_values_cuda(*, maximum_auxiliary: int = 4) -> str:
         "    double pa,double pb,double dx,double sx,double sy,double ip,double iq,double* out) {",
         "  switch(a*25U+b*5U+c) {",
     ]
-    for a, b, c in product(range(extent), range(4), range(extent)):
-        if a > 3 and b != 0:
+    for a, b, c in product(range(extent), range(maximum_orbital + 1), range(extent)):
+        if a > maximum_orbital and b != 0:
             continue
         graph, roots = axis_polynomial(
             a,
@@ -45,6 +54,7 @@ def emit_df_g_values_cuda(*, maximum_auxiliary: int = 4) -> str:
             c,
             auxiliary_g=maximum_auxiliary == 4,
             auxiliary_h=maximum_auxiliary == 5,
+            maximum_orbital=maximum_orbital,
         )
         emitter = CudaEmitter(graph, {})
         emitter.emit(roots)
@@ -89,4 +99,6 @@ __device__ __noinline__ double evaluate(double alpha,Vec3 A,Angular a,
             .replace("f[11]", f"f[{slots}]")
             .replace("base[3][11]", f"base[3][{slots}]")
         )
+    if maximum_orbital == 4:
+        source = source.replace("namespace auxiliary_h", "namespace orbital_g")
     return source

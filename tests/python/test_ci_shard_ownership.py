@@ -3,6 +3,7 @@
 import ast
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ from itertools import pairwise
 from pathlib import Path
 
 import pytest
+from test_ci_pr_cli_ccache import expression
 
 ROOT = Path(__file__).resolve().parents[2]
 SHARDS = (
@@ -442,6 +444,7 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
     ("module", "owner"),
     (
         ("tests/python/test_df_shell_units.py", "ecp-forces"),
+        ("tests/python/test_one_electron_g_shared_values.py", "compiler-heavy"),
         ("tests/python/test_treutler_endpoints.py", "posthf"),
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
@@ -580,6 +583,7 @@ def test_measured_hotspots_preserve_dedicated_shard_precedence(event: str) -> No
         ),
         "uccsd-forces": (
             "test_wb97mv_hessian.py",
+            "test_global_hybrid_molecular_hessian.py",
             "test_uccsd_gradient.py",
             "test_uccsd_t_gradient.py",
             "test_uccsd_t_lambda.py",
@@ -787,6 +791,7 @@ def test_complete_forces_and_rks_hessian_share_prioritized_worksteal_owner(
     distribution, targets, arguments = _selection(event, "uccsd-forces")
     expected = [
         "tests/python/test_wb97mv_hessian.py",
+        "tests/python/test_global_hybrid_molecular_hessian.py",
         "tests/python/test_uccsd_gradient.py",
         "tests/python/test_uccsd_t_gradient.py",
         "tests/python/test_uccsd_t_lambda.py",
@@ -879,14 +884,30 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         in preparation
     )
     assert '-o "$RUNNER_TEMP/libnative-fault-record.so"' in preparation
-    assert (
-        "&& 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30)"
-        in step
-    )
-    assert (
-        "&& 100 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40)"
-        in source
-    )
+    python_job = source.split("\n  python:\n", 1)[1].split("\n  upload-coverage:\n", 1)[
+        0
+    ]
+    job_limit = re.search(r"^    timeout-minutes: (.+)$", python_job, re.MULTILINE)
+    test_limit = re.search(r"^        timeout-minutes: (.+)$", step, re.MULTILINE)
+    assert job_limit and test_limit
+    for event in (
+        "pull_request",
+        "push",
+        "merge_group",
+        "schedule",
+        "workflow_dispatch",
+    ):
+        for shard in SHARDS:
+            full = event in {"schedule", "workflow_dispatch"}
+            extended = shard in {"core-b", "posthf", "compiler-heavy", "runtime-heavy"}
+            job_minutes = {"core-a": 50, "core-b": 60, "ecp-forces": 50}.get(
+                shard, 45 if extended else 40
+            )
+            context = {"matrix.shard": shard, "github.event_name": event}
+            assert expression(job_limit[1], context) == (100 if full else job_minutes)
+            assert expression(test_limit[1], context) == (
+                90 if full else 35 if extended else 30
+            )
 
 
 @pytest.mark.parametrize(
@@ -900,14 +921,6 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         ('"${diagnostic_args[@]}"', '""'),
         ("-p tools.pytest_native_diagnostics", "-p no:tools.pytest_native_diagnostics"),
         ("tools/native_fault_record.c", "tools/not-the-fatal-recorder.c"),
-        # Exercise full, ordinary, and extended-shard budgets independently. The old
-        # pre-exception fragments no longer reached the contract assertion.
-        ("&& 90 ||", "&& 91 ||"),
-        ("&& 100 ||", "&& 101 ||"),
-        ("&& 35 || 30", "&& 35 || 31"),
-        ("&& 45 || 40", "&& 45 || 41"),
-        ("&& 35 || 30", "&& 36 || 30"),
-        ("&& 45 || 40", "&& 46 || 40"),
     ],
 )
 def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
@@ -917,6 +930,76 @@ def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
     assert before in source
     with pytest.raises(AssertionError):
         _assert_timed_diagnostics_contract(source.replace(before, after))
+
+
+@pytest.mark.parametrize(
+    ("indent", "event", "shard", "minutes"),
+    (
+        (4, "schedule", "core-c", 101),
+        (8, "schedule", "core-c", 91),
+        (4, "pull_request", "core-c", 41),
+        (8, "pull_request", "core-c", 31),
+        (4, "merge_group", "posthf", 46),
+        (8, "merge_group", "posthf", 36),
+        (4, "pull_request", "core-a", 40),
+        (4, "pull_request", "core-b", 45),
+    ),
+)
+def test_timed_diagnostics_contract_rejects_changed_budget_policy(
+    indent: int, event: str, shard: str, minutes: int
+) -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    start = source.index("\n  python:\n")
+    end = source.index("\n  upload-coverage:\n", start)
+    if indent == 8:
+        start = source.index("      - name: Run Python tests with coverage\n", start)
+        end = source.index("\n      - name:", start)
+    section = source[start:end]
+    pattern = rf"^({' ' * indent}timeout-minutes: )(.+)$"
+    original = re.search(pattern, section, re.MULTILINE)
+    assert original
+    fallback = original[2].removeprefix("${{").removesuffix("}}").strip()
+    override = (
+        "${{ "
+        f"github.event_name == '{event}' && matrix.shard == '{shard}' && {minutes}"
+        f" || ({fallback}) "
+        "}}"
+    )
+    changed = re.sub(
+        pattern, lambda match: match[1] + override, section, count=1, flags=re.MULTILINE
+    )
+    with pytest.raises(AssertionError):
+        _assert_timed_diagnostics_contract(source[:start] + changed + source[end:])
+
+
+def test_timed_diagnostics_contract_accepts_equivalent_timeout_expressions() -> None:
+    source = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    full = (
+        "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')"
+    )
+    extended = "(matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy' || matrix.shard == 'posthf')"
+    alternatives = {
+        4: f"${{{{ {full} && 100 || {extended} && 45 || matrix.shard == 'ecp-forces' && 50 || matrix.shard == 'core-a' && 50 || matrix.shard == 'core-b' && 60 || 40 }}}}",
+        8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || 30 }}}}",
+    }
+    for indent, budget in alternatives.items():
+        start = source.index("\n  python:\n")
+        end = source.index("\n  upload-coverage:\n", start)
+        if indent == 8:
+            start = source.index(
+                "      - name: Run Python tests with coverage\n", start
+            )
+            end = source.index("\n      - name:", start)
+        section, replaced = re.subn(
+            rf"^{' ' * indent}timeout-minutes: .+$",
+            f"{' ' * indent}timeout-minutes: {budget}",
+            source[start:end],
+            count=1,
+            flags=re.MULTILINE,
+        )
+        assert replaced == 1
+        source = source[:start] + section + source[end:]
+    _assert_timed_diagnostics_contract(source)
 
 
 @pytest.mark.parametrize(
@@ -1581,7 +1664,7 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
     event: str, shard: str
 ) -> None:
     distribution, selected, extra = _selection(event, shard)
-    prioritized = shard in {"posthf", "runtime-heavy"} and event in {
+    prioritized = shard in {"posthf", "runtime-heavy", "ecp-forces"} and event in {
         "pull_request",
         "push",
         "merge_group",
@@ -1589,7 +1672,16 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
     assert ("--no-loadscope-reorder" in extra) == prioritized
     if prioritized:
         assert distribution == "loadfile"
-        if shard == "runtime-heavy":
+        if shard == "ecp-forces":
+            assert selected[:6] == [
+                "tests/python/test_ecp_f_spherical_cpu.py",
+                "tests/python/test_ecp_f_cartesian_cpu.py",
+                "tests/python/test_ecp_public_cpu.py",
+                "tests/python/test_ecp_spd_cartesian_cpu.py",
+                "tests/python/test_ecp_spd_spherical_cpu.py",
+                "tests/python/test_ecp_stuttgart_dft.py",
+            ]
+        elif shard == "runtime-heavy":
             assert selected[:4] == [
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
@@ -1645,7 +1737,7 @@ def test_posthf_order_preserves_unknown_missing_and_duplicate_targets(
         assert actual[:2] == ["tests/python/test_uccsd_lambda.py"] * 2
 
 
-@pytest.mark.parametrize("lane", ("posthf", "runtime"))
+@pytest.mark.parametrize("lane", ("posthf", "runtime", "ecp"))
 @pytest.mark.parametrize("parent_worker", (None, "gw0"))
 def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixtures(
     tmp_path: Path,
@@ -1675,22 +1767,30 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         "            stream.write(json.dumps([report.nodeid, report.outcome]) + '\\n')\n",
         encoding="utf-8",
     )
-    priority = (
-        [
-            "test_treutler_endpoints.py",
-            "test_uccsd_lambda.py",
-            "test_uccsd_t_owner.py",
-            "test_uccsd_physical_response.py",
-        ]
-        if lane == "posthf"
-        else [
-            "test_uccsd_triples_response.py",
-            "test_native_stationary_phased_budget.py",
-            "test_correlation_convergence.py",
-            "test_bulk_aot_clangxx_closure.py",
-        ]
-    )
-    ordinary = [f"test_future_{index}.py" for index in range(4)]
+    if lane == "ecp":
+        distribution, selected, extra = _selection("pull_request", "ecp-forces")
+        assert distribution == "loadfile"
+        assert "--no-loadscope-reorder" in extra
+        # Exercise the real ECP selector, including the module-scoped source
+        # emission and Hessian owners. Only test costs are synthetic here.
+        priority = [Path(path).name for path in selected[:4]]
+        ordinary = [Path(path).name for path in selected[4:]]
+    else:
+        priority = {
+            "posthf": [
+                "test_treutler_endpoints.py",
+                "test_uccsd_lambda.py",
+                "test_uccsd_t_owner.py",
+                "test_uccsd_physical_response.py",
+            ],
+            "runtime": [
+                "test_uccsd_triples_response.py",
+                "test_native_stationary_phased_budget.py",
+                "test_correlation_convergence.py",
+                "test_bulk_aot_clangxx_closure.py",
+            ],
+        }[lane]
+        ordinary = [f"test_future_{index}.py" for index in range(4)]
     for name in [*priority, *ordinary]:
         count = 3 if name in priority else 8
         (directory / name).write_text(
@@ -1706,11 +1806,16 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             "def test_skip(shared):\n    raise AssertionError('skipped')\n",
             encoding="utf-8",
         )
-    selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
-    ordered = _prioritized_posthf_targets(selected, tmp_path, lane=lane)
+    if lane == "ecp":
+        ordered = selected
+    else:
+        selected = [f"tests/python/{name}" for name in [*ordinary, *reversed(priority)]]
+        ordered = _prioritized_posthf_targets(selected, tmp_path, lane=lane)
     adapted, collection_args = _split_collection(
         _collection_arguments(
-            "posthf" if lane == "posthf" else "runtime-heavy", ordered, tmp_path
+            {"posthf": "posthf", "runtime": "runtime-heavy", "ecp": "ecp-forces"}[lane],
+            ordered,
+            tmp_path,
         )
     )
     env = {**os.environ, "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_ADDOPTS": ""}
@@ -1741,20 +1846,21 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
             timeout=90,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "44 passed, 8 skipped" in result.stdout
+        passed, skipped = 3 * len(priority) + 8 * len(ordinary), len(selected)
+        assert f"{passed} passed, {skipped} skipped" in result.stdout
         records = [
             [json.loads(line) for line in path.read_text().splitlines()]
             for path in sorted(tmp_path.glob("gw*.jsonl"))
         ]
         inventories.append(Counter(tuple(row) for rows in records for row in rows))
-        assert sum(inventories[-1].values()) == 52
+        assert sum(inventories[-1].values()) == passed + skipped
         assert (
             sum(
                 count
                 for (_, outcome), count in inventories[-1].items()
                 if outcome == "skipped"
             )
-            == 8
+            == skipped
         )
         first_files.append(
             {Path(rows[0][0].split("::", 1)[0]).name for rows in records}
@@ -1775,7 +1881,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         for path in [*tmp_path.glob("gw*.jsonl"), *tmp_path.glob("fixtures-*.txt")]:
             path.unlink()
     assert inventories[0] == inventories[1]
-    assert first_files == [set(ordinary), set(priority)]
+    assert first_files == [set(ordinary[:4]), set(priority)]
 
 
 @pytest.mark.parametrize(
@@ -1787,11 +1893,12 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     """Execute the selector's real order and plugin without scientific workloads."""
     names = (
         "test_wb97mv_hessian.py",
+        "test_global_hybrid_molecular_hessian.py",
         "test_uccsd_gradient.py",
         "test_uccsd_t_gradient.py",
         "test_uccsd_t_lambda.py",
     )
-    counts = (10, 24, 24, 17)
+    counts = (10, 13, 24, 24, 17)
     (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
     directory = tmp_path / "tests/python"
     directory.mkdir(parents=True)
@@ -1861,6 +1968,16 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     owner = next(entries for entries in records if hvp in entries)
     assert owner.index(hvp) <= 1
     assert all(node.startswith(prefix) for node in owner[: owner.index(hvp)])
+    molecular = "tests/python/test_global_hybrid_molecular_hessian.py::"
+    force = "tests/python/test_uccsd"
+    # All four initial queues receive molecular cases immediately after RKS,
+    # before any existing force work. Their fresh setups remain independent.
+    assert all(any(node.startswith(molecular) for node in rows) for rows in records)
+    for rows in records:
+        first_force = next(
+            (i for i, node in enumerate(rows) if node.startswith(force)), len(rows)
+        )
+        assert any(node.startswith(molecular) for node in rows[:first_force])
     expected = Counter(
         f"tests/python/{name}::test_case[{value}]"
         for name, count in zip(names, counts, strict=True)
@@ -1880,7 +1997,7 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("family", ("hybrid", "derivative"))
+@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values"))
 def test_qualification_insertion_preserves_existing_core_owners(
     event: str, presence: str, family: str, tmp_path: Path
 ) -> None:
@@ -1891,7 +2008,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
         "test_factorized_host.py": "core-b",
         "test_global_hybrid_grid_second_order.py": "core-a",
         "test_global_hybrid_hessian_lifecycle.py": "core-b",
-        "test_global_hybrid_molecular_hessian.py": "core-c",
+        "test_global_hybrid_molecular_hessian.py": "uccsd-forces",
         "test_native_semilocal_grid_second_order.py": "core-c",
         "test_orbital_gap_preconditioner.py": "core-c",
         "test_second_component_schedule.py": "core-a",
@@ -1910,10 +2027,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
             "test_quadrature_ad.py": "core-b",
             "test_scalar_graph_ad.py": "core-c",
         }
+    elif family == "g-values":
+        owners = {"test_one_electron_g_shared_values.py": "compiler-heavy"}
     owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
     # Interleave ordinary files with the inserted qualification filenames.
+    suffixes = ("aaa", "mmm", "zzz") if family == "g-values" else ("aaa", "zzz")
     ordinary = sorted(
-        f"{path[:-3]}_{suffix}.py" for path in owners for suffix in ("aaa", "zzz")
+        f"{path[:-3]}_{suffix}.py" for path in owners for suffix in suffixes
     )
     subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
     for relative in ordinary:
@@ -1935,13 +2055,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
     after = {shard: _selection(event, shard, root=tmp_path) for shard in SHARDS}
     for shard in shards:
         assert after[shard][0] == before[shard][0] == "worksteal"
-        priority = (
-            "--ci-fresh-priority=tests/python/test_global_hybrid_molecular_hessian.py"
-        )
-        expected_extra = list(before[shard][2])
-        if family == "hybrid" and tracked and shard == "core-c":
-            expected_extra += ["-p", "tools.pytest_ci_fresh_frontier", priority]
-        assert after[shard][2] == expected_extra
+        assert after[shard][2] == before[shard][2]
         assert [p for p in after[shard][1] if p not in owners] == before[shard][1]
         assert Counter(p for p in after[shard][1] if p in owners) == Counter(
             p for p, owner in owners.items() if tracked and owner == shard
@@ -1958,6 +2072,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
         )
         == expected
     )
+    if family == "hybrid":
+        module = "tests/python/test_global_hybrid_molecular_hessian.py"
+        distribution, targets, extra = after["uccsd-forces"]
+        assert distribution == "worksteal"
+        assert targets == ([module] if tracked else [])
+        assert (f"--ci-fresh-priority={module}" in extra) == tracked
+        assert ("tools.pytest_ci_fresh_frontier" in extra) == tracked
     if family == "derivative":
         assert not any(
             path in argument
@@ -2013,7 +2134,7 @@ def test_real_hybrid_lane_starts_curvature_before_ordinary_queues(
     subprocess.run(["git", "add", "tests"], check=True, cwd=tmp_path)
     selections = [
         _selection(event, shard, root=tmp_path)
-        for shard in ("core-a", "core-b", "core-c")
+        for shard in ("core-a", "core-b", "core-c", "uccsd-forces")
     ]
     owners = [
         selection
@@ -2113,3 +2234,155 @@ def test_hybrid_tail_priority_preserves_modulo_owners(
             for path in fresh
             if not arg.startswith("--ci-fresh-priority=")
         )
+
+
+@pytest.mark.parametrize(
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
+)
+def test_ecp_f_representation_units_have_one_owner(event: str) -> None:
+    """Keep both complete force matrices exclusively on the existing force lane."""
+    modules = {
+        f"tests/python/test_ecp_f_{representation}_cpu.py"
+        for representation in ("cartesian", "spherical")
+    }
+    selections = {shard: _selection(event, shard) for shard in SHARDS}
+    for module in modules:
+        owners = [
+            shard for shard, (_, targets, _) in selections.items() if module in targets
+        ]
+        assert owners == ["ecp-forces"]
+        assert selections["ecp-forces"][1].count(module) == 1
+    assert selections["ecp-forces"][0] == "loadfile"
+    if event not in {"schedule", "workflow_dispatch"}:
+        assert selections["ecp-forces"][1][:2] == [
+            "tests/python/test_ecp_f_spherical_cpu.py",
+            "tests/python/test_ecp_f_cartesian_cpu.py",
+        ]
+        assert "--no-loadscope-reorder" in selections["ecp-forces"][2]
+
+    collected = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "tests/python/test_ecp_public_cpu.py",
+            *sorted(modules),
+            *selections["ecp-forces"][2],
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert collected.returncode == 0, collected.stdout + collected.stderr
+    nodes = [
+        line
+        for line in collected.stdout.splitlines()
+        if "::test_cpu_f_ecp_forces_owned_by_prepared_provider[" in line
+    ]
+    assert len(nodes) == len(set(nodes)) == 12
+    assert all(
+        any(node.startswith(module + "::") for module in modules) for node in nodes
+    )
+
+
+@pytest.mark.parametrize("event", ("pull_request", "schedule"))
+def test_ecp_f_wrappers_execute_all_gates_on_parallel_file_owners(
+    event: str, tmp_path: Path
+) -> None:
+    """Exercise real wrappers, fixture retention and simultaneous independent owners."""
+    distribution, targets, arguments = _selection(event, "ecp-forces")
+    modules = [
+        path
+        for path in targets
+        if re.search(r"/test_ecp_f_(cartesian|spherical)_cpu\.py$", path)
+    ]
+    plugin = tmp_path / "ecp_dispatch_probe.py"
+    plugin.write_text(
+        """import json, os, time
+from pathlib import Path
+import pytest
+
+def pytest_configure(config):
+    import test_ecp_public_cpu as gates
+    def oracle(method, representation, record_property, tmp_path, *, f_shell=False):
+        from generativeqc.batch import PreparedBatch
+        assert f_shell is True
+        with pytest.raises(pytest.fail.Exception, match="compatibility consumer"):
+            PreparedBatch._public_dft_cpu_force()
+        root = Path(os.environ["ECP_DISPATCH_PROBE"])
+        ready = root / (representation + ".ready")
+        ready.touch()
+        other = "spherical" if representation == "cartesian" else "cartesian"
+        deadline = time.monotonic() + 15
+        while not (root / (other + ".ready")).exists():
+            assert time.monotonic() < deadline, "representation files ran serially"
+            time.sleep(0.01)
+        payload = {"method": method, "representation": representation,
+                   "worker": os.environ["PYTEST_XDIST_WORKER"]}
+        with (root / (representation + "-" + method + ".json")).open("x") as output:
+            json.dump(payload, output)
+        record_property("dispatch_probe", payload)
+    gates.test_public_ecp_force_analytic_and_reconverged_fd = oracle
+""",
+        encoding="utf-8",
+    )
+    environment = {
+        **os.environ,
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_ADDOPTS": "",
+        "ECP_DISPATCH_PROBE": str(tmp_path),
+        "PYTHONPATH": os.pathsep.join(
+            [str(tmp_path), str(ROOT / "tests/python"), str(ROOT / "python"), str(ROOT)]
+        ),
+    }
+    # The probe is an orchestration contract, not a substitute for the actual
+    # independent scientific oracle. Run identical real wrappers and fixtures.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "xdist.plugin",
+            "-p",
+            "ecp_dispatch_probe",
+            "-n",
+            "4",
+            f"--dist={distribution}",
+            *[str(ROOT / module) for module in modules],
+            *arguments,
+        ],
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    rows = [json.loads(path.read_text()) for path in tmp_path.glob("*-*.json")]
+    methods = {"lda-rks", "pbe-rks", "b3lyp-rks", "lda-uks", "pbe-uks", "b3lyp-uks"}
+    assert Counter((row["representation"], row["method"]) for row in rows) == Counter(
+        (representation, method)
+        for representation in ("cartesian", "spherical")
+        for method in methods
+    )
+    owners = {
+        representation: {
+            row["worker"] for row in rows if row["representation"] == representation
+        }
+        for representation in ("cartesian", "spherical")
+    }
+    assert all(len(workers) == 1 for workers in owners.values())
+    assert owners["cartesian"].isdisjoint(owners["spherical"])
+    receipts = [
+        json.loads(path.read_text())
+        for path in (tmp_path / ".artifacts/spd-cpu").glob("*.json")
+    ]
+    assert len(receipts) == 12
+    assert all("dispatch_probe" in receipt["measurements"] for receipt in receipts)

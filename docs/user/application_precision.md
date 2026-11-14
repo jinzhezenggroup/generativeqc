@@ -1,13 +1,44 @@
 # Application precision and explicit audits
 
+`PrecisionCalculator(...)` and `PrecisionPolicy()` default to Standard,
+the same optimized FP64 endpoint used by the README benchmark. Omitted
+convergence, initial-guess, grid and scheduling controls use the ordinary
+`Calculator` defaults; no benchmark-only environment selector is required.
+The method, orbital/auxiliary bases and Direct/DF mode still define the model
+and must match the plotted case when reproducing it.
+
 `PrecisionCalculator(policy="standard")` runs one optimized FP64 endpoint,
 while `PrecisionCalculator(policy="fast")` permits qualified approximations
 from an application error budget: supported routes can use FP32 arithmetic,
 relaxed stopping limits, or both, without asking users to select kernels.
 Fast need not execute approximate work or be faster on every input.
 
+Standard and Fast are **precision presets, not separate optimization paths**.
+An explicit `PrecisionPolicy(..., budget=TargetErrorBudget(...))` is accepted
+with either preset. After defaults resolve, native admission uses the actual
+energy/force allowances, explicit SCF convergence and screening ceilings, model,
+provider and resource capabilities—not the profile name. Equal resolved targets
+select the same arithmetic, provisional operators, fallback and publication
+policy. Fast supplies a default relaxed budget; Standard without a budget keeps
+its optimized FP64 default. A tighter explicit Fast budget cannot borrow the
+default relaxed allowance, and a Standard request with that relaxed budget can
+use every route admitted for the equivalent Fast request.
+
+References to Fast-qualified routes below describe that preset's default
+allowance, not a profile-only eligibility rule.
+
+Application error allowances and SCF stopping tolerances remain distinct.
+Explicit solver tolerances are never silently loosened; a loose scalar SCF
+tolerance alone does not authorize an inferred force-error allowance or FP32
+gradient. Explicit `target` continues to request a complete independent audit,
+regardless of preset or budget.
+
 Both profiles use the same candidate execution, native scheduling and publication
-pipeline. Successful unaudited scalar calls retain their candidate's native
+pipeline. Construction resolves the model, basis snapshots and native library
+once. Arithmetic selection reuses that snapshot and reruns the ordinary
+capability, transport and initial-guess checks before publishing the calculator;
+rejected optional configurations restore the complete strict configuration.
+Successful unaudited scalar calls retain their candidate's native
 workspace for subsequent calls in either profile. `clear_cache()` releases it;
 execution/publication failures and transitions to an independent audit also
 release candidate residency. Precision policy changes arithmetic admission and
@@ -16,9 +47,15 @@ policy owner and retain their independently managed `close()` lifetime.
 
 Shared drivers are not a dtype-only parity guarantee. Fast can also change SCF
 stopping and provisional screening, and its required fallback/audit work may add
-complete solves. Some native execution optimizations and resource admissions
-still depend on the application budget. The VV10 fixed-anchor implementation is
-shared, but its strict route remains explicitly selected rather than automatic.
+complete solves. Strict FP64 SCF/force owners share the optional native numeric
+reservation and automatic force-tile admission even with a nonzero application
+budget. These decisions use the selected force qualification, not the mere
+presence of a budget. Mixed derivative scratch remains outside the strict fleet
+reservation; existing bounded admission, explicit tile overrides, complete-model
+checks and resource-constrained tile fallbacks still apply. VV10 fixed-anchor
+reuse shares implementation and the automatic AO floor in both profiles.
+Scientific/precision/resource admission still applies independently; budget
+presence alone is not sufficient admission.
 Equal FP64 arithmetic alone therefore does not establish identical
 internal schedules, work counts, memory requirements or endpoint cost.
 
@@ -55,7 +92,7 @@ CBS Standard uses routine budget-scaled convergence, while its `tight` preset
 retains the original strict controls. The CBS `fast` name remains a compatibility
 alias for its routine allowance; this does not change HF/DFT Fast.
 
-## Module-selected Fast Fock
+## Budget-selected Fock
 
 Every supported native CUDA XC composition uses the same shared Direct-Fock precision
 policy. Admission depends on executable operator capabilities, not a functional
@@ -156,16 +193,21 @@ admission policy. Failed mixed proposals retire their source
 without certifying it and retry the strict target. Completed construction is
 counted once; replay reports mixed-source J/K work but no new recurrence work.
 
-For relaxed Fast WB97M-V restricted exact-Direct solves, the ordinary cold
-nonlocal outer schedule uses a fixed FP64 J/K/range-K anchor automatically
-at 192 or more AOs, without a fixed upper AO limit. This is not a whitelist of
-measured AO counts or a claim that every larger shape has been benchmarked. Smaller eligible
-owners keep ordinary Fast unless explicitly opted in. Provisional
-initializer and frozen-VV10 iterations evaluate linear operators on the total
+For eligible Standard and Fast WB97M-V restricted exact-Direct solves,
+`GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` explicitly selects fixed FP64 J/K/range-K
+anchors in the cold nonlocal outer schedule. Explicit `0` disables reuse.
+Unset selects automatic reuse for eligible outer solves at 192 or more AOs whose
+actual energy/density/screening targets are at least `1e-6`/`1e-4`/`1e-10`.
+There is no fixed upper AO ceiling. Smaller owners and tighter targets remain
+opt-in. The same target predicate applies to strict FP64 and budget arithmetic;
+it never reads a public profile or uses budget presence as a profitability test.
+The size and target floors are not a
+measured-size whitelist or a claim of profitability for every larger shape.
+Provisional initializer and frozen-VV10 iterations evaluate linear operators on the total
 current-minus-anchor density and reconstruct their full matrices in FP64.
 Every full target refreshes the anchor with full-density FP64 J/K; nonlinear
 XC and VV10 still consume total density. Delta iterations do not advance the
-anchor. Final physical checks and Fast's selected convergence tolerances are
+anchor. Final physical checks and the selected convergence tolerances are
 unchanged: this does not promise FP64-mode observable accuracy.
 
 The anchor lease is optional, allocated after mandatory preparation and included
@@ -176,16 +218,15 @@ force handoff the idle anchor is retired before optional ERIs; density, stationa
 weights, XC, the final-state token and the warm seed remain valid. Subsequent
 warm and cold solves on that owner use the incumbent route without reallocating anchors.
 Both policies use the same FP64 anchor implementation and complete-model/provider
-guards. `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=1` also opts strict FP64 WB97M-V
-single-spin exact-Direct VV10 owners into provisional anchor reuse, without
-relaxing their tolerances, narrowing arithmetic or changing final physical closure.
+guards. When selected, strict FP64 WB97M-V single-spin exact-Direct VV10 owners
+use provisional anchor reuse without relaxing their tolerances, narrowing arithmetic or changing
+final physical closure.
 Strict AUTO requests alone are not admission. Other models, DF/UKS, public
 resource-ledger owners, device chunks and same-owner warm replays retain their
 incumbent path. The selector replaces `GENERATIVEQC_KS_FAST_ANCHOR_DELTA`; no
 compatibility alias is retained.
 `GENERATIVEQC_KS_FIXED_ANCHOR_DELTA=0` disables the optimization before preparation;
-unset retains automatic admission only for the budget-qualified Fast domain at
-192 or more AOs. Strict owners remain default-off pending endpoint qualification.
+unset uses the same target and 192-AO automatic floors for both eligible precision routes.
 Explicit `1` never forces unsupported domains. The selector is part of new
 checkpoint execution identities.
 The native C++ transfer diagnostics retain their `fast_anchor_builds` and
@@ -377,14 +418,16 @@ calculator = PrecisionCalculator(
     method="pbe0-rks", basis="def2-svp", device="cuda",
     ks_options=KsOptions(grid=GridSpec(48, 16, 32)),
     initial_guess=None,
-    policy=PrecisionPolicy("fast", budget=TargetErrorBudget(
+    policy=PrecisionPolicy("standard", budget=TargetErrorBudget(
         energy_abs=1e-5, force_max_abs=1e-4, force_rms=3e-5,
     )),
 )
 ```
 
-`budget` reuses the adaptive numerical policy's energy/force allowances; users
-do not select kernels. The native admission floors are `1e-6` Eh energy,
+The explicit budget above selects the same execution with `"standard"` or
+`"fast"`; it is not a Fast-only capability. `budget` reuses the adaptive
+numerical policy's energy/force allowances; users do not select kernels. The
+native admission floors are `1e-6` Eh energy,
 `1e-5` Eh/bohr maximum force component, and `3e-6` Eh/bohr RMS if requested.
 Tighter allowances or unsupported domains do not silently inherit ordinary
 AUTO: they select FP64 and a measured fallback audit. Fast uses the published
@@ -463,7 +506,7 @@ calculations retain their faster phased executor. Fast comparisons must use this
 already-optimized strict baseline, not withhold scheduling improvements from it.
 It does not imply FP32 execution or promise a speedup for every workload.
 
-Standard (or legacy `fp64`) without `target` reports `strict_fp64`, with `target=None` and no measured
+Standard (or `fp64`) without `budget` or `target` reports `strict_fp64`, with `target=None` and no measured
 errors. Native convergence/final-state checks are retained, but **no independent
 observable-budget audit is claimed**. Shared public SCF defaults are `1e-9`
 energy change, `1e-5` density change and `1e-12` screening, independent of backend,
@@ -477,12 +520,17 @@ GFN2-xTB is an SCC method with no GPU4PySCF counterpart and retains its own
 The energy default matches GPU4PySCF's `conv_tol=1e-9`. GPU4PySCF's ordinary SCF
 test additionally requires an MO-gradient norm below `sqrt(conv_tol)` (about
 `3.1623e-5` at the default); its density change is diagnostic, not a stopping
-threshold. GenerativeQC's density control and physical final-state gates are
-additional native conditions, not a relabeling of that MO-gradient norm. These
+threshold. Qualified restricted CUDA owners use that same SCF candidate test;
+their physical final-state gates remain separate native conditions, not a
+relabeling of that MO-gradient norm. Other owners retain density-based stopping. These
 shared settings do not imply identical SCF trajectories or iteration counts.
 Neither FP64 arithmetic nor solver thresholds bound observable energy/force error.
 
-Eligible CUDA owners cap the physical AO commutator at `1e-5`. KS must also
+With the AO-commutator policy, eligible energy-only CUDA RHF
+owners cap the physical AO
+commutator at `1e-5`. Direct CUDA RHF's explicit strict analytic-force policy
+uses the `1e-8` ceiling, capped by the requested density tolerance; its default
+orbital-gradient policy is described below. KS must also
 pass its complete canonical final-state proof before accepting convergence;
 a rejected proof continues SCF without publishing a warm seed. Either tighter
 energy or density controls restore the strict physical residual ceiling.
@@ -496,7 +544,46 @@ error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
 
-Canonical restricted CUDA WB97M-V instead uses the molecular GPU4PySCF-style
+Standard all-electron FP64 **Direct and DF CUDA RHF default to orbital-gradient
+convergence**, matching the norm and threshold used by default GPU4PySCF.
+The SCF candidate uses `|delta E| < energy_tolerance` and
+`||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
+must belong to that same determinant; a DIIS-extrapolated Fock cannot supply
+the norm. The implementation evaluates `X^T(FDS-SDF)X/sqrt(2)` in the existing
+scratch storage. Screening, FP64 arithmetic, initial guess, final-state ownership
+and complete force evaluation remain in effect. Density change is diagnostic,
+not an additional orbital-policy candidate gate. Direct force finalization uses
+the same gradient norm; DF retains its separate complete physical-state proof,
+including its existing final AO-commutator, density/projector, trace,
+idempotency, canonicality and response-token checks.
+Either tighter energy or density controls restore the historical strict
+physical gate regardless of the default or explicit orbital request, including
+stricter audit solves; the default must not weaken their reference calculation.
+
+Set `GENERATIVEQC_CUDA_RHF_CONVERGENCE=strict` before preparing the owner to
+retain the historical AO-maximum force-stationarity contract. Unset or empty
+selects the owner-bound default. UHF, ECP, mixed arithmetic,
+application-budget/Fast owners and physical-reference exports retain their
+strict gates by default. Explicit `orbital-gradient` requests reject these
+unsupported owners rather than inherit an unqualified stopping policy.
+The compact DF RHF owner uses the same control when physical DIIS residual
+storage is available; no-DIIS execution retains strict stopping. DF transforms
+only the stopping residual after DIIS has retained its AO history, preserving
+the proposal trajectory. Both owners treat density change as diagnostic under
+orbital policy and require the exact energy threshold without a roundoff margin.
+KS has a separate convergence control. The
+request is part of CUDA resource/checkpoint identity. Prepared resource plans
+reject a changed request. Compact DF graphs rebuild when the effective stopping
+policy or numerical controls change; Direct captured plans reject a changed
+policy. Unknown values
+fail rather than select a looser policy.
+This is **not** a promise of `1e-7` maximum-force accuracy: compare complete
+energies/forces with independent references and disclose the selected numerical
+policy. GPU4PySCF needs no convergence or other default-setting changes. Equal
+norm thresholds do not imply equal iterations, algorithms or force errors.
+
+Qualified all-electron FP64 restricted CUDA PBE/PBE0/B3LYP/r2SCAN/M06-2X,
+including the electronic component of r2SCAN-3c, and canonical WB97M-V use the molecular GPU4PySCF-style
 **energy AND orbital-gradient** SCF candidate test: `|delta E| < 1e-9` and
 `||2 C_vir^T F[D] C_occ||_F < sqrt(1e-9)`. Density change remains diagnostic,
 not an extra SCF candidate gate. The native owner evaluates this norm from
@@ -507,7 +594,18 @@ token checks still apply; frozen/provisional VV10 operators cannot publish.
 The final proof retains the Standard `1e-5` density/stationarity ceilings, so
 matching SCF candidate thresholds does not imply identical algorithms or cycle
 counts. Either explicit tighter energy/density request restores the historical
-strict WB97M-V gates and strict VV10 inner tolerances. CPU, UKS, custom models
+strict KS gates (including strict VV10 inner tolerances for WB97M-V).
+The default candidate test is the same for energy-only and energy+force calls;
+requesting forces does not silently tighten SCF. Full-range physical-reference
+exports retain their stricter contract. Set
+`GENERATIVEQC_CUDA_KS_CONVERGENCE=strict` before preparing an owner to keep the
+historical AO/density stopping policy even with the public default E/D controls.
+Unset or empty selects the qualified default; other values fail closed. This
+control participates in CUDA resource and checkpoint identity. It is independent
+of `GENERATIVEQC_CUDA_RHF_CONVERGENCE` and does not change GPU4PySCF settings.
+Neither the default nor matched SCF thresholds promise `1e-7` force repeatability;
+use an explicit stringent request and independent validation for that task.
+CPU, UKS, custom models
 or grids, mixed arithmetic, chunked owners and missing validation resources
 retain the bounded conservative path.
 
@@ -543,8 +641,9 @@ result = calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 print(result.precision_validation.to_dict())
 ```
 
-The preset names are case-insensitive. Balanced remains the facade default;
-this naming change does not alter default calculations or audit behavior.
+The preset names are case-insensitive. Standard is the facade and policy-object
+default. Select `policy="balanced"`, `policy="strict"`, `policy="audit_auto"`
+or an explicit target to request the separate comparison endpoints and their cost.
 Providing `target` replaces all preset audit requirements, so energy-only audits
 use a target containing just energy. `properties` must include every explicit
 target observable and energy; by default these are requested automatically.

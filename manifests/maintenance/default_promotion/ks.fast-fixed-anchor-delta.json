@@ -13,10 +13,14 @@
     "python/generativeqc/resources_hf.py",
     "src/dft/application_precision.hpp"
   ],
-  "rationale": "Unset admits fixed FP64 J/K/range-K anchors at 192 or more AOs for relaxed application-budget Fast WB97M-V restricted exact-Direct cold nonlocal outer solves, without a fixed upper AO limit. The profile-neutral selector and shared complete-model/provider admission also allow explicitly selected strict-FP64 owners; strict reuse is not automatic and its tolerances/arithmetic/final closure do not change. Shared budget-Fock admission also has no fixed AO or atom-count ceiling; native dimensions, actual resources and all other scientific conditions remain checked. Explicit 1 opts in smaller scientifically eligible owners; 0 disables. Provisional operators act on total current-minus-anchor density; full targets refresh strict anchors and nonlinear XC/VV10 retain total density. Unsupported domains, warm solves and optional device-allocation failure preserve the incumbent path. Five FP64 matrices and one scalar are charged, then retired at a pressured force handoff without revoking D/W/XC or the final token; later solves use the incumbent selected-precision route. Numerical acceptance thresholds are unchanged. Historical measurements do not qualify every newly admitted larger shape.",
-  "revisit_condition": "Require profitable complete-endpoint evidence before lowering the 192-AO automatic floor: retained water-12 observations are adverse. Removing count ceilings is not a new large-size accuracy or speed qualification. Record independent large-system energy/force gates and actual work/resource failures separately. Qualify other models, precision, spin, DF, warm, chunk or public resource-ledger anchor domains independently; preserve strict full-target audits, explicit rollback and force-phase optional-memory fallback.",
+  "rationale": "Automatic fixed FP64 reuse follows actual energy/density/screening goals at least 1e-6/1e-4/1e-10 and the 192-AO amortization floor, never the frontend Standard/Fast label, dtype or budget-presence flags. Explicit TargetErrorBudget is admitted for either preset; equal budgets and solver ceilings select the same qualified execution. Preserve incumbent relaxed-target reuse instead of withdrawing Fast optimization or forcing a target-independent strict default. Tighter targets and smaller owners retain opt-in. The retained 2026-11-13 always-on strict-target trial is a rejected historical candidate, not a current Standard speedup claim. Explicit 0 disables reuse and 1 cannot bypass model, precision, lifetime or resource admission. Strict arithmetic, screening, convergence and full-density closure are unchanged. Five FP64 matrices and one scalar remain charged and optional, with bounded allocation fallback and force-pressure retirement.",
+  "revisit_condition": "Qualify complete endpoints at newly admitted convergence/error targets before expanding the automatic target floor, scientific domain or resource admission. Compare actual targets and operator work, not preset labels. Preserve independent references, warm/moved and failure/lifetime gates, explicit rollback and the size floor; do not infer profitability or omitted J/K applications from delta counts.",
   "evidence": [
     "docs/user/application_precision.md",
+    ".agents/notes/rejected/2026-11-13-shared-fp64-anchor-default.md",
+    ".agents/notes/implemented/architecture/2026-11-13-target-selected-precision-presets.md",
+    "benchmarks/results/shared-fp64-anchor-default-trial-20261113/README.md",
+    ".agents/notes/implemented/architecture/2026-11-13-standard-fast-common-construction-and-anchor-selection.md",
     ".agents/notes/implemented/performance/2026-11-05-shared-fp64-anchor-trial.md",
     ".agents/notes/implemented/performance/2026-10-18-fast-fixed-anchor-delta.md",
     ".agents/notes/implemented/performance/2026-10-18-fast-anchor-force-handoff-and-size-gate.md",
@@ -26,6 +30,7 @@
     "benchmarks/results/fast-anchor-domain-20261019/README.md",
     "tests/python/test_fast_anchor_delta_controller.py",
     "tests/native/test_ks_cuda.cpp",
-    ".agents/notes/proposed/2026-11-05-strict-vv10-fixed-anchors.md"
+    ".agents/notes/proposed/2026-11-05-strict-vv10-fixed-anchors.md",
+    ".agents/notes/implemented/performance/2026-11-12-retain-qualified-fast-anchor-default.md"
   ]
 }

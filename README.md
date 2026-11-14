@@ -50,6 +50,9 @@ independent scientific references—not replaced by a learned surrogate.
 Source builds require CMake 3.24+, a C++20 compiler, and Python 3.10+.
 CUDA builds also require a supported CUDA toolkit.
 
+From the repository root (see the [installation guide](docs/user/installation.md)
+for obtaining the source and setting up an environment):
+
 ```bash
 python -m pip install .
 ```
@@ -100,11 +103,15 @@ calc = Calculator(method="rhf", basis="sto-3g", device="cuda")
 result = calc.singlepoint([
     ("H", (0.0, 0.0, -0.7)),
     ("H", (0.0, 0.0, 0.7)),
-])
+], properties=("energy", "forces"))
 
 print(result.energy)
 print(result.forces)
 ```
+
+For energy-only requests, use `properties=("energy",)`; `result.forces` is then
+`None`. The [quick start](docs/user/quickstart.md) explains input units, charge,
+spin and failure behavior.
 
 Prepared batches reuse system topology and converged density state:
 
@@ -124,28 +131,49 @@ print(first.energies)
 
 ## Benchmarks
 
-**Historical HF/DFT energy + analytic forces — RTX 5090 (2026-10-26 frozen cohort)**
+**HF/DFT energy + analytic forces — RTX 5090 (2026-11-11)**
 
-With the frozen cohort's then-default settings, GenerativeQC was faster than
-GPU4PySCF in **64/64** measured warm cases. For 96-atom Direct ωB97M-V,
-the measured warm speedup was **4.22×**.
+Fresh measurements of master `4024f95b8` plus exact nuclear-derivative and
+overlap-preparation optimizations, on an exclusive node with unchanged
+GPU4PySCF settings, show GenerativeQC faster in **64/64 cold**
+and **64/64 warm** cases. For 96-atom Direct ωB97M-V, warm speedup is **9.42×**.
+The Standard benchmark uses the public default policy, initial guess, grids and
+solver/scheduling controls without benchmark-only overrides.
 
-These figures preserve the `46b916ac` image after the DF screening-headroom
-repair, not current-master performance. That image enabled screened Direct HF
-by default; the current source keeps that route explicit opt-in after a stronger
-force diagnostic failed. These historical timings do not qualify the restored
-ordinary-HF default, and no new integrated-image GPU measurements are claimed.
+![Direct cold and warm endpoint timings on RTX 5090, measured 2026-11-11](assets/readme-direct-defaults.svg)
 
-![Historical frozen-image Direct cold and warm endpoint timings](assets/readme-direct-defaults.svg)
+![Density-fitted cold and warm endpoint timings on RTX 5090, measured 2026-11-11](assets/readme-df-defaults.svg)
 
-![Historical frozen-image density-fitted cold and warm endpoint timings](assets/readme-df-defaults.svg)
+The source-matched Release build uses default XC/VV10 grids, native SCF policies
+and full grid-response forces. Cold includes setup; warm is the median of three
+frozen-density calls, with min–max bars. These are single-process observations,
+not statistical rankings. Both engines' energy and force errors against the same
+untimed dense reference are [reported for every pair](benchmarks/results/readme-rtx5090-composed-20261111/errors.md)
+rather than gated. The largest are 2.1e-5 Eh/atom (DF HF, fitting error) and
+5.7e-5 Eh/Bohr (DF M06-2X) for both engines; call by call (cold with cold, warm with warm), the two engines' errors differ by at most 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
+See [measurements, accuracy and conditions](benchmarks/results/readme-rtx5090-composed-20261111/README.md)
+for all 512 endpoints, the default convergence contract and reproducible
+timing/error summaries and exact source/image identities. Cold DF HF96 now takes
+**16.259 s versus 16.559 s**; six separate balanced-order repeats also favor
+GenerativeQC. Matching SCF thresholds still does not imply identical work or a
+universal speedup guarantee.
 
-The measured image used its default XC/VV10 grids, native SCF policies and full grid-response forces;
-all complete performance points are shown, including accuracy failures.
-Cold includes setup; warm is the median of three frozen-density calls.
-Independent energy/force accuracy results remain in the detailed tables.
-See [measurements and conditions](benchmarks/results/readme-refresh-20261026/README.md)
-for accuracy checks and detailed comparisons.
+**HF/DFT energy + analytic forces — H100 (2026-11-12)**
+
+The same 64 pairs on master `a7241b4fd` (after #3072) on one H100 80GB,
+against GPU4PySCF 1.9.0 defaults, show GenerativeQC faster in **62/64 cold**
+and **61/64 warm** cases. **H100 is not ahead everywhere:** the slow points are
+Direct HF96 (cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
+(48.3 vs 40.7 s), Direct r2SCAN-3c96 warm (4.02 vs 3.75 s) and DF HF96 warm
+(0.98 vs 0.75 s). [Per-pair errors](benchmarks/results/readme-h100-20261112/errors.md)
+match the RTX 5090 cohort: largest 2.1e-5 Eh/atom and 5.7e-5 Eh/Bohr for both engines,
+with the same call-by-call bounds of 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
+
+![Direct cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-direct-defaults-h100.svg)
+
+![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-df-defaults-h100.svg)
+
+See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261112/README.md).
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 

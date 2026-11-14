@@ -590,11 +590,6 @@ def test_native_pair_reserve_matches_actual_native_admission(
             "  if (host_bound > maximum_bytes)"
         )
     ]
-    basis = (ROOT / "src/molecule/basis.hpp").read_text()
-    terms = re.search(
-        r"inline constexpr std::size_t kMaximumAoExpansionTerms = \d+;", basis
-    )
-    assert terms is not None
     checks = []
     for atoms, aos, primitives in (
         (1, 1, 3),
@@ -610,9 +605,9 @@ def test_native_pair_reserve_matches_actual_native_admission(
         )
     source = tmp_path / "native-reserve.cpp"
     source.write_text(
-        "#include <cstddef>\n#include <cstdint>\nnamespace molecule {"
-        + terms[0]
-        + "}\nsize_t bound(size_t atoms,size_t n,size_t primitives) {\n"
+        '#include "molecule/basis.hpp"\n'
+        "namespace molecule = generativeqc::molecule;\n"
+        "size_t bound(size_t atoms,size_t n,size_t primitives) {\n"
         + expression
         + "return size_t(host_bound);\n}\nint main() {\n"
         + "\n".join(checks)
@@ -620,7 +615,9 @@ def test_native_pair_reserve_matches_actual_native_admission(
     )
     executable = tmp_path / "native-reserve"
     required_native_cxx.build_executable(
-        [source], executable, compile_args=["-std=c++17"]
+        [source],
+        executable,
+        compile_args=["-std=c++20", f"-I{ROOT / 'src'}", f"-I{ROOT / 'include'}"],
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

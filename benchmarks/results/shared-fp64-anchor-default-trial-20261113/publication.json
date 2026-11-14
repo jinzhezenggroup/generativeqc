@@ -1,0 +1,90 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Complete candidate observables pass but Standard does not meet the declared profitable-default gate; preserve Fast and do not relabel historical Standard gains.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 4112,
+      "path": "validation.json.xz",
+      "role": "evidence",
+      "sha256": "61f6686023e3c484b6a6cfc4caae274f8ff21fdcae012bf5c6d5994511424631"
+    },
+    {
+      "bytes": 10280,
+      "path": "samples.json.xz",
+      "role": "samples",
+      "sha256": "f3f198a34e7b0be51a2fad0c106fcd1d3b1c746df21bc0f42b67c363633474e6"
+    },
+    {
+      "bytes": 2524,
+      "path": "comparison-summary.json.xz",
+      "role": "summary",
+      "sha256": "92cb2a882881f9bdfe92421be88f14a6f4ef887f5e12231cebcaef83efae3eda"
+    },
+    {
+      "bytes": 1296,
+      "path": "diagnostic-summary.json.xz",
+      "role": "summary",
+      "sha256": "fc07aa56c597c94c48b037968af6ad88d614ba4a6f2ad8ded1883aa9abdde5fc"
+    },
+    {
+      "bytes": 792,
+      "path": "acceptance.json.xz",
+      "role": "input",
+      "sha256": "b7926ab1a9ae135fef33e03f281e2add04f177f29cd405dd9d2f55695a6088d0"
+    },
+    {
+      "bytes": 685,
+      "path": "source-provenance.json",
+      "role": "summary",
+      "sha256": "a415e2f3c0aad2f09d4916fa6fca01b37b9abfa450c2e59c978ecedce567b92d"
+    },
+    {
+      "bytes": 3964,
+      "path": "measured-source.patch.xz",
+      "role": "source-patch",
+      "sha256": "28bf80d93f7e004a0d29661aef0549748c3ebd9de06f229c7cba5586c5694197"
+    },
+    {
+      "bytes": 3220,
+      "path": "qualification.json.xz",
+      "role": "summary",
+      "sha256": "bf289ab40300d05f59f3944f588b45a4662587115c808451e8bd260126ee3143"
+    },
+    {
+      "bytes": 1661,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "a30046e0a70b68909381db82651b2c7f3d5219ee86268ac77a7bec90d50cc309"
+    },
+    {
+      "bytes": 6643,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "41774f82186cd4cf37f2faa26809fbf1922cf4de5b7ee933c733305ab527c2b2"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:45:00",
+      "bash",
+      "reproduce.sh",
+      "24",
+      "/absolute/fresh/output/directory"
+    ],
+    "notes": "Run on an allowed Slurm host (n1/n2/n4/n5), not maintenance n3. Reconstruct exact base plus decompressed measured-source.patch.xz, deploy source-matched artifacts, set Python/library paths and verify the native identity. README.md describes independent references and the retained compact selection."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "e41c546c40c1fa04db5e319506aac1f9ed330d50"
+  }
+}

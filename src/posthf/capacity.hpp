@@ -29,8 +29,8 @@ inline std::size_t source_capacity(const core::System& system) {
   auto bytes = checked_mul(128, system.atoms.size());
   bytes = checked_add(bytes, checked_mul(sizeof(core::EcpTerm), system.ecp_terms.capacity()));
   for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 4)
-      throw std::invalid_argument("post-HF source capacity supports through g");
+    if (shell.angular_momentum > 5)
+      throw std::invalid_argument("post-HF source metadata capacity supports through h");
     const auto l = static_cast<std::size_t>(shell.angular_momentum);
     const auto cart = (l + 1) * (l + 2) / 2;
     const auto pub = system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart;

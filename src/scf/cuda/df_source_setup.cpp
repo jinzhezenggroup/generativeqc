@@ -345,8 +345,14 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   double* metric_device = nullptr;
   // The two-center metric publishes raw values, with no transformed auxiliary
   // reduction. Use the raw consumer's schedule so short contractions do not
-  // inherit the transformed consumer's full warp. Explicit mappings still win.
-  const auto metric_mapping = candidate->raw_value_mapping;
+  // inherit the transformed consumer's full warp. Explicit mappings still win
+  // for the Coulomb metric. The erf metric keeps the warp-cooperative primitive
+  // schedule: CUDA 12.9 ptxas -O1/-O3 miscompiles its single-lane evaluation on
+  // sm_90 (scattered wrong M[P,Q]; ptxas -O0 and the primitive schedule agree
+  // with libcint). See .agents/notes/implemented/compatibility/
+  // 2026-11-11-sm90-erf-metric-schedule.md.
+  const auto metric_mapping =
+      candidate->batch.df_range_omega > 0.0 ? 2U : candidate->raw_value_mapping;
   const unsigned metric_outputs_per_block = metric_mapping == 2U ? 4U : 128U;
   if (metric_elements >
       static_cast<std::size_t>(std::numeric_limits<unsigned>::max()) * metric_outputs_per_block) {

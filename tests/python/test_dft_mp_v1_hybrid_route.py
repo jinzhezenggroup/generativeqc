@@ -41,16 +41,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _nodes() -> tuple[str, dict[str, ast.Assign], ast.If]:
     source = (ROOT / "python/generativeqc/calculator.py").read_text(encoding="utf-8")
-    owner = next(
-        node
-        for node in ast.parse(source).body
-        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
-    )
-    constructor = next(
-        node
-        for node in owner.body
-        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-    )
+    from tools.generativeqc_validation.calculator_admission import force_admission_owner
+
+    constructor = force_admission_owner(source)
     predicate_names = {
         "cpu_direct_semilocal_force",
         "semilocal_force",
@@ -206,13 +199,9 @@ def _promoted(
     # evaluating predicates. An absent package is this source-only fixture's
     # explicit default; the guard itself must still enforce backend/precision.
     source = (ROOT / "python/generativeqc/calculator.py").read_text(encoding="utf-8")
-    constructor = next(
-        node
-        for owner in ast.parse(source).body
-        if isinstance(owner, ast.ClassDef) and owner.name == "Calculator"
-        for node in owner.body
-        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-    )
+    from tools.generativeqc_validation.calculator_admission import force_admission_owner
+
+    constructor = force_admission_owner(source)
     initializer = next(
         node
         for node in constructor.body

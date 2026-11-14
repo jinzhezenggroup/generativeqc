@@ -109,6 +109,30 @@ def test_failed_cached_requests_do_not_poison_later_fresh_scc(device: str) -> No
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_public_results_outlive_reuse_failure_and_cache_clear(device: str) -> None:
+    """Retained scratch must never own a previously published host force array."""
+    calculator = _calculator(device)
+    first = calculator.singlepoint(WATER)
+    saved_forces = first.forces.copy()
+    saved_energy = first.energy
+    assert first.iterations > 0
+    # These public fields deliberately represent unavailable SCC telemetry,
+    # not a measured zero residual or zero energy change.
+    assert np.isnan(first.energy_change) and np.isnan(first.density_rms)
+    assert first.physical_residual_rms is None
+    moved = [WATER[0], ("H", (0.02, 1.44, 1.09)), WATER[2]]
+    assert calculator.singlepoint(moved).converged
+    energy_only = calculator.singlepoint(WATER, properties=("energy",))
+    assert energy_only.converged and energy_only.forces is None
+    with pytest.raises((ValueError, RuntimeError)):
+        calculator.singlepoint([("O", (float("nan"), 0, 0)), *WATER[1:]])
+    _same(calculator.singlepoint(WATER), first)
+    calculator.clear_cache()
+    assert first.energy == saved_energy
+    np.testing.assert_array_equal(first.forces, saved_forces)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
 def test_shared_calculator_serializes_requests_and_cache_clear(device: str) -> None:
     calculator = _calculator(device)
     probes = [[WATER[0], ("H", (0.01 * i, 1.43, 1.1)), WATER[2]] for i in range(4)]
