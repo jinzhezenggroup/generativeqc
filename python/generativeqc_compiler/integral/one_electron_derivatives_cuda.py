@@ -1,6 +1,7 @@
 """CUDA scalar lowering of shared S/T/V first-derivative DAG roots."""
 
 import typing
+from functools import cache
 from itertools import product
 
 from .cuda import CudaEmitter
@@ -41,6 +42,25 @@ def one_electron_derivative_inventory(
             for weighted in (False, True)
         ],
     }
+
+
+@cache
+def _canonical_yz_component_map(angular: tuple[int, int]) -> tuple[int, ...]:
+    """Choose one representative of each y/z orbit, leaving the x axis fixed."""
+    components = tuple(cartesian_components(value) for value in angular)
+    mapping = []
+    for index, pair in enumerate(product(*components)):
+        rotated = tuple(
+            "x" * component.count("x")
+            + "y" * component.count("z")
+            + "z" * component.count("y")
+            for component in pair
+        )
+        rotated_first = components[0].index(rotated[0])
+        rotated_second = components[1].index(rotated[1])
+        swapped = rotated_first * len(components[1]) + rotated_second
+        mapping.append(min(index, swapped))
+    return tuple(mapping)
 
 
 def _emit_axis_permutations(maximum_angular_momentum: int = 3) -> typing.Any:
@@ -89,7 +109,101 @@ def _emit_axis_permutations(maximum_angular_momentum: int = 3) -> typing.Any:
                 f"    result.{center}_{name} = pair.{center}_x;",
             ]
         lines.append("  }")
-    return "\n".join(lines + ["  return result;", "}"])
+    lines += ["  return result;", "}"]
+    if maximum == 4:
+        lines += [
+            "__device__ __forceinline__ PairGeometry permute_pair_yz(const PairGeometry& pair){",
+            "  PairGeometry result=pair;",
+        ]
+        for prefix in sorted(axis_fields):
+            lines += [
+                f"  result.{prefix}_y=pair.{prefix}_z;",
+                f"  result.{prefix}_z=pair.{prefix}_y;",
+            ]
+        lines += ["  return result;", "}"]
+        for angular in product(range(maximum + 1), repeat=2):
+            if 4 not in angular:
+                continue
+            lines += [
+                f"__device__ __forceinline__ unsigned canonical_yz_{angular[0]}{angular[1]}(unsigned component){{",
+                "  switch(component){",
+            ]
+            for index, canonical in enumerate(_canonical_yz_component_map(angular)):
+                if index != canonical:
+                    lines.append(f"    case {index}U:return {canonical}U;")
+            lines += ["    default:return component;", "  }", "}"]
+    return "\n".join(lines)
+
+
+def _emit_gradient_shell_helper(attraction: bool, angular: tuple[int, int]) -> str:
+    """Emit exact x roots, reusing g-shell cases under y/z covariance.
+
+    A y/z swap fixes the differentiated x axis. Swap both Gaussian powers,
+    every Cartesian pair field and the external center, but retain the radial
+    geometry/Boys values just as the outer x/y and x/z lowering already does.
+    Only g-bearing pairs use this additional dispatch; <=f lowering is intact.
+    """
+    name = "attraction_gradient" if attraction else "overlap_kinetic_gradient"
+    name += f"_x_{angular[0]}{angular[1]}"
+    arguments = "const PairGeometry& pair, unsigned component"
+    if attraction:
+        arguments += ", double c_x, double c_y, double c_z, const double* boys"
+    components = tuple(product(*(cartesian_components(value) for value in angular)))
+    mapping = _canonical_yz_component_map(angular) if 4 in angular else None
+    kernel_name = name + "_canonical" if mapping is not None else name
+    lines = [
+        f"static __device__ __noinline__ GradientAxis {kernel_name}({arguments}) {{",
+        "  switch (component) {",
+    ]
+    for index, component in enumerate(components):
+        if mapping is not None and mapping[index] != index:
+            continue
+        graph = Graph()
+        if attraction:
+            kernel = build_one_electron_derivative_kernel(
+                build_one_electron_derivative_ir("nuclear_attraction", angular),
+                component,
+                graph=graph,
+            )
+            roots = (kernel.gradients[0][0], kernel.gradients[1][0])
+        else:
+            overlap = build_one_electron_derivative_kernel(
+                build_one_electron_derivative_ir("overlap", angular),
+                component,
+                graph=graph,
+            )
+            kernel = build_one_electron_derivative_kernel(
+                build_one_electron_derivative_ir("kinetic", angular),
+                component,
+                graph=graph,
+            )
+            roots = (overlap.gradients[0][0], kernel.gradients[0][0])
+        target, roots = _geometry_boundary(kernel, roots)
+        emitter = CudaEmitter(target, {})
+        emitter.emit(roots)
+        lines += [
+            f"    case {index}U: {{",
+            *emitter.lines,
+            "      return {"
+            + ", ".join(emitter.reference(root) for root in roots)
+            + "};",
+            "    }",
+        ]
+    lines += ["  }", "  return {NAN,NAN};", "}"]
+    if mapping is not None:
+        external = ",c_x,c_z,c_y,boys" if attraction else ""
+        lines += [
+            f"static __device__ __forceinline__ GradientAxis {name}({arguments}) {{",
+            f"  if(component >= {len(mapping)}U) return {{NAN,NAN}};",
+            f"  const unsigned canonical=canonical_yz_{angular[0]}{angular[1]}(component);",
+            "  if(canonical!=component){",
+            "    const auto rotated=permute_pair_yz(pair);",
+            f"    return {name}_canonical(rotated,canonical{external});",
+            "  }",
+        ]
+        external = ",c_x,c_y,c_z,boys" if attraction else ""
+        lines += [f"  return {name}_canonical(pair,canonical{external});", "}"]
+    return "\n".join(lines)
 
 
 def _emit_gradient_helpers(
@@ -107,50 +221,10 @@ def _emit_gradient_helpers(
     shell_count = maximum + 1
     maximum_boys_order = 2 * maximum + 1
     name = "attraction_gradient" if attraction else "overlap_kinetic_gradient"
-    arguments = "const PairGeometry& pair, unsigned component"
-    if attraction:
-        arguments += ", double c_x, double c_y, double c_z, const double* boys"
-    lines = []
-    for angular in product(range(maximum + 1), repeat=2):
-        lines += [
-            f"static __device__ __noinline__ GradientAxis {name}_x_{angular[0]}{angular[1]}({arguments}) {{",
-            "  switch (component) {",
-        ]
-        for index, components in enumerate(
-            product(*(cartesian_components(l) for l in angular))
-        ):
-            graph = Graph()
-            if attraction:
-                kernel = build_one_electron_derivative_kernel(
-                    build_one_electron_derivative_ir("nuclear_attraction", angular),
-                    components,
-                    graph=graph,
-                )
-                roots = (kernel.gradients[0][0], kernel.gradients[1][0])
-            else:
-                overlap = build_one_electron_derivative_kernel(
-                    build_one_electron_derivative_ir("overlap", angular),
-                    components,
-                    graph=graph,
-                )
-                kernel = build_one_electron_derivative_kernel(
-                    build_one_electron_derivative_ir("kinetic", angular),
-                    components,
-                    graph=graph,
-                )
-                roots = (overlap.gradients[0][0], kernel.gradients[0][0])
-            target, roots = _geometry_boundary(kernel, roots)
-            emitter = CudaEmitter(target, {})
-            emitter.emit(roots)
-            lines += [
-                f"    case {index}U: {{",
-                *emitter.lines,
-                "      return {"
-                + ", ".join(emitter.reference(r) for r in roots)
-                + "};",
-                "    }",
-            ]
-        lines += ["  }", "  return {NAN,NAN};", "}"]
+    lines = [
+        _emit_gradient_shell_helper(bool(attraction), angular)
+        for angular in product(range(maximum + 1), repeat=2)
+    ]
     external = (
         ", double c_x, double c_y, double c_z, const double* boys" if attraction else ""
     )
