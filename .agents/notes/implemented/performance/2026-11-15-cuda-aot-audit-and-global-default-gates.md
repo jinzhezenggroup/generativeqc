@@ -77,7 +77,7 @@ RTX5090 and RTX PRO 6000 Blackwell GPUs; a finite n2 discovery job reports
 compute capability 12.0 for the PRO 6000. That observation is not a performance
 equivalence claim or an A100/H100 numerical run.
 
-The focused implementation suite passes 491 tests, with one existing skip and
+The focused implementation suite passes 494 tests, with one existing skip and
 one full-native-library identity test deselected. This includes negative
 qualification cases, the complete raw receipt chain, nonzero C ABI route masks
 and the original build/profile resolver checks. Compiler structure, native API
@@ -86,6 +86,10 @@ checks pass without changing scientific source identities or historical outcomes
 The additional regressions cover frozen baseline semantics, new explicit and
 wildcard compatibility domains, and an opt-in named experiment that leaves
 ordinary auto selection unchanged.
+Raw per-kernel resource comparison prevents an unrelated maximum from hiding
+a newly spilling/register-heavy consumer. Explicit frozen-density warm replay
+keeps genuine zero SCF/Fock work; that exemption never covers cold or moved
+convergence and does not permit artificial positive counters.
 
 This work does not change methods, quadrature, thresholds or numerical
 precision to manufacture a win. It does not dismiss #3084 review objections,

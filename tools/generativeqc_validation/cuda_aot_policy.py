@@ -63,6 +63,7 @@ def _digest(value: Any, name: str) -> str:
 
 
 def _finite_slurm_time(value: Any) -> bool:
+    """Accept positive finite Slurm limits, never an unlimited sentinel."""
     if not isinstance(value, str):
         return False
     match = re.fullmatch(r"(?:(\d+)-)?(\d+):([0-5]\d):([0-5]\d)", value)
@@ -575,6 +576,12 @@ def promotion_gate(
             _number(run["peak_device_bytes"], "peak device bytes", positive=True)
             for phase in PHASES:
                 sample = run["phases"][phase]
+                reuse = sample.get("reused_converged_state", False)
+                _require(
+                    isinstance(reuse, bool)
+                    and (not reuse or phase in ("warm", "moved_warm")),
+                    "converged-state reuse is warm-phase only",
+                )
                 reference = oracle["geometries"][
                     "moved" if phase.startswith("moved") else "initial"
                 ]
@@ -598,8 +605,7 @@ def promotion_gate(
                         f"invalid semantic count {name}",
                     )
                 _require(
-                    work["scf_iterations"] > 0
-                    and work["fock_builds"] > 0
+                    (reuse or (work["scf_iterations"] > 0 and work["fock_builds"] > 0))
                     and work["force_evaluations"] > 0,
                     "endpoint did not execute required work",
                 )
@@ -609,7 +615,7 @@ def promotion_gate(
                     and all(
                         isinstance(count, int)
                         and not isinstance(count, bool)
-                        and count > 0
+                        and count >= (0 if reuse else 1)
                         for count in sample["iterations"]
                     ),
                     "SCF iteration branch data incomplete",
@@ -778,6 +784,7 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
             },
             "independent reference receipt mismatch",
         )
+        kernel_resources = {}
         for pair in campaign["pairs"]:
             for arm, run in pair.items():
                 _require(
@@ -792,7 +799,25 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
                     ],
                     "executed compiled inventory differs from declared policy",
                 )
-                _check_raw_receipts(run, artifact_paths)
+                kernel_resources[run["process_id"]] = _check_raw_receipts(
+                    run, artifact_paths
+                )
+            baseline_resources = kernel_resources[pair["baseline"]["process_id"]]
+            candidate_resources = kernel_resources[pair["candidate"]["process_id"]]
+            mapping = campaign.get("resource_kernel_map", {})
+            for function, usage in candidate_resources.items():
+                baseline_function = mapping.get(function, function)
+                _require(
+                    baseline_function in baseline_resources,
+                    "new kernel requires an explicit baseline resource mapping",
+                )
+                _require(
+                    all(
+                        value <= baseline_resources[baseline_function][field]
+                        for field, value in usage.items()
+                    ),
+                    "per-kernel compiled resource regression",
+                )
         reports[target] = promotion_gate(
             campaign,
             source_identity=source_identity,
@@ -807,7 +832,9 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
     }
 
 
-def _check_raw_receipts(run: dict, artifacts: dict[str, Path]) -> None:
+def _check_raw_receipts(
+    run: dict, artifacts: dict[str, Path]
+) -> dict[str, dict[str, int]]:
     """Recompute raw-resource aggregates and bind complete acquisition records.
 
     A resource ``passed`` string alone is insufficient. The existing cubin
@@ -862,3 +889,4 @@ def _check_raw_receipts(run: dict, artifacts: dict[str, Path]) -> None:
         acquisition["run_sha256"] == canonical_hash(measured),
         "acquisition receipt does not bind the measured run",
     )
+    return kernels

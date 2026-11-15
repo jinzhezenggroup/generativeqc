@@ -54,9 +54,14 @@ receipt validation are owned by
 - Explicit SCF branches and actual semantic work counts: iterations, Fock builds,
   force evaluations and quartet tasks, plus any additional measured axes. Work
   amplification, missing counters and changed iteration branches reject a pair.
+  Explicit frozen-converged-state warm reuse may report zero SCF/Fock work;
+  do not fabricate positive counts or force an unnecessary solve. This exemption
+  cannot be applied to a fresh cold or moved-geometry convergence.
 - No package-size, peak-device-memory, compiled register/stack/shared/local or
   module-first-use regression. Resource aggregates are recomputed from retained
   CUOBJDump output, not accepted from a `passed` flag.
+  Compare each candidate kernel as well as aggregate maxima; renamed/new kernels
+  need an explicit, reviewable baseline-kernel mapping in the campaign.
 - Mean/median and paired-bootstrap nonregression for every endpoint and first
   use, with at least one complete endpoint improving by `1.02x` and a positive
   bootstrap lower bound. All raw processes enter the gate.

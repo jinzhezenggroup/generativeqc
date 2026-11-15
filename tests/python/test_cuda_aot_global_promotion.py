@@ -386,7 +386,12 @@ def test_policy_identity_is_semantic_and_keeps_precision_contracts() -> None:
     assert canonical_hash(policies["sm_80"]) != canonical_hash(policies["sm_90"])
 
 
-def retained_campaign(tmp_path: Path, *, corrupt_resources: bool = False) -> dict:
+def retained_campaign(
+    tmp_path: Path,
+    *,
+    corrupt_resources: bool = False,
+    hidden_resource_regression: bool = False,
+) -> dict:
     """Exercise the entire receipt chain using explicitly synthetic records."""
     inventory = fixture_root(tmp_path)
     path = tmp_path / MANIFEST
@@ -429,6 +434,14 @@ def retained_campaign(tmp_path: Path, *, corrupt_resources: bool = False) -> dic
             run["policy_sha256"] = canonical_hash(policies[arm])
             run["compiled_masks"] = policies[arm]["compiled_masks"]
             build = run["build"]
+            selected_log = log
+            if hidden_resource_regression:
+                registers = 40 if arm == "candidate" else 32
+                selected_log = retain(
+                    f"resources-{index}-{arm}.txt",
+                    f"Function synthetic_kernel:\n REG:{registers} STACK:0 SHARED:0 LOCAL:0\nFunction unrelated_peak:\n REG:64 STACK:0 SHARED:0 LOCAL:0\n",
+                )
+                build["resource_usage"]["registers_per_thread"] = 64
             resource = {
                 "schema": "generativeqc.cuda-aot-resource-receipt/v1",
                 "source_identity": SOURCE,
@@ -438,7 +451,7 @@ def retained_campaign(tmp_path: Path, *, corrupt_resources: bool = False) -> dic
                 "cuda_images": build["cuda_images"],
                 "exit_code": 0,
                 "commands": [["synthetic-test-command"]],
-                "cuobjdump_sha256": log,
+                "cuobjdump_sha256": selected_log,
             }
             build["resource_receipt_sha256"] = retain(
                 f"resource-{index}-{arm}.json", json.dumps(resource)
@@ -486,6 +499,32 @@ def test_a_passed_string_cannot_substitute_for_actual_kernel_resources(
     inventory = retained_campaign(tmp_path, corrupt_resources=True)
     with pytest.raises(ValueError, match="no kernel resources"):
         check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+def test_aggregate_maxima_cannot_hide_a_regressing_kernel(tmp_path: Path) -> None:
+    inventory = retained_campaign(tmp_path, hidden_resource_regression=True)
+    with pytest.raises(ValueError, match="per-kernel compiled resource"):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+def test_frozen_density_warm_replay_retains_real_zero_scf_work() -> None:
+    payload = campaign()
+    for pair in payload["pairs"]:
+        for run in pair.values():
+            for phase in ("warm", "moved_warm"):
+                sample = run["phases"][phase]
+                sample["reused_converged_state"] = True
+                sample["iterations"] = [0]
+                sample["semantic_work"]["scf_iterations"] = 0
+                sample["semantic_work"]["fock_builds"] = 0
+    assert gate(payload)["passed"]
+
+
+def test_fresh_cold_process_cannot_claim_warm_state_reuse() -> None:
+    payload = campaign()
+    payload["pairs"][0]["candidate"]["phases"]["cold"]["reused_converged_state"] = True
+    with pytest.raises(ValueError, match="warm-phase only"):
+        gate(payload)
 
 
 def test_raw_acquisition_tampering_is_rejected(tmp_path: Path) -> None:
