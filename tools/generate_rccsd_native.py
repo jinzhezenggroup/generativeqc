@@ -23,6 +23,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 from fractions import Fraction
+from hashlib import sha256
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
 from generativeqc_compiler.cc.gradient_equations import (
@@ -1560,6 +1561,7 @@ def _parallel_scalar_reduction_kernel(
     arguments: list[str],
     *,
     batch_dim: bool,
+    dynamic_node_number: bool = False,
 ) -> str | None:
     """Emit a deterministic block-parallel FP64 scalar reduction.
 
@@ -1572,6 +1574,7 @@ def _parallel_scalar_reduction_kernel(
     opt in explicitly; independent physical replay therefore remains the
     serial acceptance oracle.
     """
+    diagnostic_node = "node_number" if dynamic_node_number else number
     if node.spec.indices or node.op not in ("reduce", "einsum"):
         return None
 
@@ -1641,7 +1644,7 @@ def _parallel_scalar_reduction_kernel(
       for(std::size_t r=0;r<reduction_count;++r){{
 {serial}
       }}
-      out[0]=generativeqc_tensor::finite({result},error,{number});
+      out[0]=generativeqc_tensor::finite({result},error,{diagnostic_node});
     }}
     return;
   }}
@@ -1652,7 +1655,7 @@ def _parallel_scalar_reduction_kernel(
   }}
   sum=BlockReduce::sum(sum,temp_storage);
   if(threadIdx.x==0)
-    out[0]=generativeqc_tensor::finite({result},error,{number});
+    out[0]=generativeqc_tensor::finite({result},error,{diagnostic_node});
 #endif
 }}"""
 
@@ -1666,7 +1669,11 @@ def _cuda_kernel(
     batch_dim: bool = False,
     parallel_scalar_reductions: bool = False,
     dimension_names: tuple[str, ...] = ("o", "v"),
+    dynamic_node_number: bool = False,
 ) -> str:
+    """Emit node arithmetic, optionally binding its diagnostic ID at launch."""
+    diagnostic_node = "node_number" if dynamic_node_number else number
+    diagnostic_error = "node_number+1" if dynamic_node_number else number + 1
     size = _device_size(node.spec)
     arguments = [
         f"const {'std::int64_t' if source.spec.dtype == 'int64' else 'double'}* a{i}"
@@ -1678,9 +1685,16 @@ def _cuda_kernel(
     if batch_dim:
         arguments.append("std::size_t q")
     arguments.append("int* error")
+    if dynamic_node_number:
+        arguments.append("int node_number")
     if parallel_scalar_reductions:
         parallel = _parallel_scalar_reduction_kernel(
-            node, number, prefix, arguments, batch_dim=batch_dim
+            node,
+            number,
+            prefix,
+            arguments,
+            batch_dim=batch_dim,
+            dynamic_node_number=dynamic_node_number,
         )
         if parallel is not None:
             return parallel
@@ -1721,7 +1735,7 @@ def _cuda_kernel(
                 expression = f"__fadd_rn({expression},{term})"
         lines += [
             f"    const double value={expression};",
-            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{diagnostic_node});",
         ]
     elif node.op == "divide":
         denominator = "a1[flat]"
@@ -1731,15 +1745,17 @@ def _cuda_kernel(
                 "flat,o,v,canonical_eps,canonical_level_shift) : a1[flat])"
             )
         lines += [
-            f"    out[flat]=generativeqc_tensor::quotient(a0[flat],{denominator},error,{number});"
+            f"    out[flat]=generativeqc_tensor::quotient(a0[flat],{denominator},error,{diagnostic_node});"
         ]
     elif node.op == "multiply":
         lines.append(
-            f"    out[flat]=generativeqc_tensor::finite(__dmul_rn(a0[flat],a1[flat]),error,{number});"
+            f"    out[flat]=generativeqc_tensor::finite(__dmul_rn(a0[flat],a1[flat]),error,{diagnostic_node});"
         )
     elif node.op == "scaled_bilinear":
         args = ",".join(f"a{i}[flat]" for i in range(6))
-        lines.append(f"    out[flat]=triples_scaled_bilinear({args},error,{number});")
+        lines.append(
+            f"    out[flat]=triples_scaled_bilinear({args},error,{diagnostic_node});"
+        )
     elif node.op in (
         "broadcast",
         "reduce",
@@ -1757,7 +1773,7 @@ def _cuda_kernel(
         if node.op == "broadcast":
             index = _flat_coords([coords[axis] for axis in axes], source.spec)
             lines.append(
-                f"    out[flat]=generativeqc_tensor::finite(a0[{index}],error,{number});"
+                f"    out[flat]=generativeqc_tensor::finite(a0[{index}],error,{diagnostic_node});"
             )
         elif node.op == "reduce":
             remaining = iter(coords)
@@ -1775,7 +1791,7 @@ def _cuda_kernel(
             lines.append(f"    sum=__dadd_rn(sum,a0[{index}]);")
             lines += ["    }"] * len(axes)
             lines.append(
-                f"    out[flat]=generativeqc_tensor::finite(sum,error,{number});"
+                f"    out[flat]=generativeqc_tensor::finite(sum,error,{diagnostic_node});"
             )
         elif node.op == "runtime_indexed_select":
             remaining = iter(coords[1:])
@@ -1793,8 +1809,8 @@ def _cuda_kernel(
                     source_coords.append(next(remaining))
             index = _flat_coords(source_coords, source.spec)
             lines += [
-                f"    if(!valid){{atomicCAS(error,0,{number + 1});out[flat]=0.0;continue;}}",
-                f"    out[flat]=generativeqc_tensor::finite(a0[{index}],error,{number});",
+                f"    if(!valid){{atomicCAS(error,0,{diagnostic_error});out[flat]=0.0;continue;}}",
+                f"    out[flat]=generativeqc_tensor::finite(a0[{index}],error,{diagnostic_node});",
             ]
         else:
             # One writer per destination, reducing matching lanes in source order.
@@ -1817,10 +1833,10 @@ def _cuda_kernel(
                     f"      match=match && static_cast<std::size_t>(m{axis})==c{axis};",
                 ]
             lines += [
-                f"      if(!valid){{atomicCAS(error,0,{number + 1});continue;}}",
+                f"      if(!valid){{atomicCAS(error,0,{diagnostic_error});continue;}}",
                 f"      if(match) sum=__dadd_rn(sum,a0[{index}]);",
                 "    }",
-                f"    out[flat]=generativeqc_tensor::finite(sum,error,{number});",
+                f"    out[flat]=generativeqc_tensor::finite(sum,error,{diagnostic_node});",
             ]
     elif node.op == "einsum":
         labels = node.attrs["labels"]
@@ -1856,7 +1872,7 @@ def _cuda_kernel(
         coefficient = _fraction(node.attrs["coefficient"])
         lines += [
             f"    const double value=__dmul_rn({coefficient},sum);",
-            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{diagnostic_node});",
         ]
     elif node.op == "slice":
         source = node.inputs[0]
@@ -1879,7 +1895,7 @@ def _cuda_kernel(
         source_index = _flat_coords(coords, source.spec)
         lines += [
             f"    const double value=a0[{source_index}];",
-            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{diagnostic_node});",
         ]
     elif node.op == "scatter_add":
         source = node.inputs[0]
@@ -1908,7 +1924,7 @@ def _cuda_kernel(
             "      out[flat]=0.0;",
             "    }else{",
             f"      const double value=a0[{source_index}];",
-            f"      out[flat]=generativeqc_tensor::finite(value,error,{number});",
+            f"      out[flat]=generativeqc_tensor::finite(value,error,{diagnostic_node});",
             "    }",
         ]
     elif node.op == "transpose":
@@ -1937,7 +1953,7 @@ def _cuda_kernel(
             index = f"({index}*{_dim(spec_index)}+{coord})"
         lines += [
             f"    const double value=a0[{index}];",
-            f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
+            f"    out[flat]=generativeqc_tensor::finite(value,error,{diagnostic_node});",
         ]
     else:
         raise ValueError(f"unsupported native RCCSD CUDA op {node.op}")
@@ -2051,6 +2067,45 @@ def _packed_batched_matrix_gemm(
     )
 
 
+class CudaKernelPool:
+    """Intern exact emitted kernels within one CUDA translation unit/namespace.
+
+    Only the entry symbol and diagnostic node number are abstracted. The full
+    emitted signature/body still authenticates dimensions, dtype, indexing,
+    coefficients, reduction order and error checks. Runners retain every launch
+    and pass their original node number, so sharing changes compilation work,
+    not graph work, arena lifetimes or failure attribution.
+    """
+
+    def __init__(self) -> None:
+        self._symbols: dict[str, str] = {}
+
+    def emit(
+        self,
+        node: typing.Any,
+        *,
+        batch_dim: bool = False,
+        parallel_scalar_reductions: bool = False,
+        dimension_names: tuple[str, ...] = ("o", "v"),
+    ) -> tuple[str, str]:
+        """Return a launch symbol and its definition only on first use."""
+        source = _cuda_kernel(
+            node,
+            0,
+            "shared",
+            {},
+            batch_dim=batch_dim,
+            parallel_scalar_reductions=parallel_scalar_reductions,
+            dimension_names=dimension_names,
+            dynamic_node_number=True,
+        )
+        if source in self._symbols:
+            return self._symbols[source], ""
+        symbol = "shared_node_" + sha256(source.encode("utf-8")).hexdigest()
+        self._symbols[source] = symbol
+        return symbol, source.replace("shared_node_0(", f"{symbol}(", 1)
+
+
 def _cuda_program(
     program: Program,
     prefix: str,
@@ -2072,7 +2127,11 @@ def _cuda_program(
     reuse_storage_nodes: tuple[typing.Any, ...] | None = None,
     retained_arena_field: str | None = None,
     dimension_names: tuple[str, ...] = ("o", "v"),
+    kernel_pool: CudaKernelPool | None = None,
 ) -> str:
+    """Emit every scheduled launch, optionally reusing locally owned kernels."""
+    if kernel_pool is not None and (not emit_kernels or kernel_prefix is not None):
+        raise ValueError("shared kernels require locally emitted kernel ownership")
     dtypes = {node.spec.dtype for node in program.live_nodes} - {"int64"}
     if len(dtypes) != 1 or not dtypes <= {"float32", "float64"}:
         raise ValueError("native CUDA schedules require uniform floating storage")
@@ -2117,6 +2176,7 @@ def _cuda_program(
     )
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
+    kernel_symbols = {}
     kernel_name = prefix if kernel_prefix is None else kernel_prefix
     for number, node in enumerate(_execution_nodes(program)):
         if (
@@ -2130,17 +2190,28 @@ def _cuda_program(
                 )
             )
         ):
-            kernels.append(
-                _cuda_kernel(
+            if kernel_pool is not None:
+                symbol, definition = kernel_pool.emit(
                     node,
-                    number,
-                    kernel_name,
-                    names,
                     batch_dim=batch_dim,
                     parallel_scalar_reductions=parallel_scalar_reductions,
                     dimension_names=dimension_names,
                 )
-            )
+                kernel_symbols[number] = symbol
+                if definition:
+                    kernels.append(definition)
+            else:
+                kernels.append(
+                    _cuda_kernel(
+                        node,
+                        number,
+                        kernel_name,
+                        names,
+                        batch_dim=batch_dim,
+                        parallel_scalar_reductions=parallel_scalar_reductions,
+                        dimension_names=dimension_names,
+                    )
+                )
     uses_complete_orbital = any(
         _dim(index) == "n"
         for node in _execution_nodes(program)
@@ -2260,10 +2331,12 @@ def _cuda_program(
                 ),
                 *(["s.q"] if batch_dim else []),
                 "s.error",
+                *([str(number)] if kernel_pool is not None else []),
             ]
         )
+        launch_symbol = kernel_symbols.get(number, f"{kernel_name}_node_{number}")
         lines += [
-            f"  if({count}) {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
+            f"  if({count}) {launch_symbol}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
     if prepared_contractions:
         # Build descriptors once per owner and batch/tail shape, never in run().

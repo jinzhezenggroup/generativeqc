@@ -36,6 +36,7 @@ from generativeqc_compiler.tensor import Program, prepare_for_backend, transpose
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 from tools.generate_rccsd_native import (
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _dim,
@@ -307,7 +308,7 @@ def response_header() -> str:
 
 
 def cuda_source() -> str:
-    """Emit independent-spin CUDA graphs and their bounded synchronous owner."""
+    """Emit independent-spin graphs with exact workers shared across responses."""
     dimensions = (*DIMENSIONS, "na", "nb", "tile_extent")
     programs = {name: _prepared(value) for name, value in response_programs().items()}
     lines = [
@@ -324,6 +325,7 @@ def cuda_source() -> str:
         "std::map<std::string,const double*> inputs;",
         "};",
     ]
+    kernel_pool = CudaKernelPool()
     for name, program in programs.items():
         names = {
             node.attrs["name"] for node in program.live_nodes if node.op == "input"
@@ -338,6 +340,7 @@ def cuda_source() -> str:
                 state_type="UccCudaState",
                 output_fields=tuple(program.outputs),
                 dimension_names=dimensions,
+                kernel_pool=kernel_pool,
             )
         )
     lines += [
