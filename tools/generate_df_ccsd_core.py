@@ -73,7 +73,7 @@ def programs() -> dict[str, Program]:
 
 
 def cpu_header() -> str:
-    """Runtime-shape core actions; outputs borrow the supplied arena."""
+    """Share core admission metadata, retaining borrowed replay only for C++."""
     from tools.generate_rccsd_native import (
         canonical_denominators_cpp,
         restricted_pairs_cpp,
@@ -99,12 +99,14 @@ def cpu_header() -> str:
             f'inline constexpr const char* {name}_equation_hash = "{program.logical_hash}";',
             f"inline constexpr std::size_t {name}_operation_count = {sum(n.op != 'input' for n in program.live_nodes)};",
             _required_function(program, f"{name}_arena_elements"),
+            "#ifndef __CUDACC__",
             _cpu_function(
                 program,
                 f"run_{name}_cpu",
                 "IterationOutputs" if name == "iteration" else "ReplayOutputs",
                 input_overrides={key: f"inputs.{key}" for key in INPUTS},
             ),
+            "#endif",
         ]
     return "\n".join(
         [*lines, "}  // namespace generativeqc::cc::generated::dfcore", ""]

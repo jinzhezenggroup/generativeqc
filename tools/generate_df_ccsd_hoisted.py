@@ -120,7 +120,7 @@ def auxiliary_accumulation() -> tuple[str, str]:
 
 
 def cpu_header() -> str:
-    """Queries and borrowed CPU actions for complete owner admission."""
+    """Expose owner admission to CUDA without its unused CPU replay bodies."""
     lines = [
         "// Generated DF auxiliary-reduction schedule; do not edit.",
         "#pragma once",
@@ -141,6 +141,7 @@ def cpu_header() -> str:
             f"inline constexpr std::size_t {name}_operation_count = {sum(n.op != 'input' for n in program.live_nodes)};",
             _required_function(program, f"{name}_arena_elements"),
             contraction_query(program, f"{name}_contraction_terms"),
+            "#ifndef __CUDACC__",
             _cpu_function(
                 program,
                 f"run_{name}_cpu",
@@ -148,6 +149,7 @@ def cpu_header() -> str:
                 input_overrides={key: f"inputs.{key}" for key in INPUTS},
                 output_fields=fields,
             ),
+            "#endif",
         ]
         packed = packed_programs()[name]
         dimensions = sorted(

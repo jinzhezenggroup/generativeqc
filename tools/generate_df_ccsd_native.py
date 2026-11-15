@@ -122,7 +122,7 @@ def _batch_accumulation() -> tuple[str, str]:
 
 
 def cpu_header() -> str:
-    """CPU actions and shared exact runtime-shape arena queries."""
+    """Keep admission queries shared without parsing CPU actions in CUDA."""
     lines = [
         "// Generated DF RCCSD one-auxiliary-slice equations; do not edit.",
         "#pragma once",
@@ -156,6 +156,7 @@ def cpu_header() -> str:
             )
             if backend == "cpu":
                 output_type, fields = OUTPUTS[name]
+                lines.append("#ifndef __CUDACC__")
                 lines.append(
                     _cpu_function(
                         program,
@@ -165,6 +166,7 @@ def cpu_header() -> str:
                         output_fields=fields,
                     )
                 )
+                lines.append("#endif")
     packed = packed_replay_program()
     dimensions = sorted(
         {
@@ -217,6 +219,7 @@ def cpu_header() -> str:
             if node.op == "transpose"
         ),
         "return total; }",
+        "#ifndef __CUDACC__",
         _cpu_function(
             batched,
             "run_virtual_batch_cpu",
@@ -225,6 +228,7 @@ def cpu_header() -> str:
             input_overrides={key: f"inputs.{key}" for key in INPUTS},
             output_fields=OUTPUTS["virtual"][1],
         ),
+        "#endif",
         "}  // namespace generativeqc::cc::generated::df",
         "",
     ]
