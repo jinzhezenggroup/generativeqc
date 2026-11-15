@@ -1172,6 +1172,7 @@ def _independent_cpu(
 
 
 def cpu_header() -> str:
+    """Share admission metadata with CUDA, but keep host evaluators CPU-only."""
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
     iteration_reuse = _iteration_reuse_plan(iteration)
     iteration_cuda = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
@@ -1415,6 +1416,7 @@ def cpu_header() -> str:
             _required_function(
                 triples_response, "triples_response_arena_elements", batch_dim=True
             ),
+            "#ifndef __CUDACC__",
             _cpu_function(iteration, "run_iteration_cpu", "IterationOutputs"),
             _cpu_function(
                 iteration,
@@ -1548,6 +1550,7 @@ def cpu_header() -> str:
                 },
                 batch_dim=True,
             ),
+            "#endif",
             "}",
             "",
         ]
@@ -2812,6 +2815,7 @@ def triples_fock_cpu_header() -> str:
             [
                 f'inline constexpr const char* {name}_program_hash="{program.logical_hash}";',
                 _required_function(program, name + "_arena_elements", batch_dim=True),
+                "#ifndef __CUDACC__",
                 _cpu_function(
                     program,
                     "run_" + name + "_cpu",
@@ -2824,6 +2828,7 @@ def triples_fock_cpu_header() -> str:
                     },
                     batch_dim=True,
                 ),
+                "#endif",
             ]
         )
     return "\n".join([*parts, "}", ""])

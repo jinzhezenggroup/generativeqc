@@ -108,3 +108,60 @@ authorized available scheduler allocation before treating this as fully qualifie
 Revisit with complete wheel cache/resource diagnostics and scheduled-device
 scientific plus complete-endpoint timing. Do not infer wheel success or runtime
 speedup from source sharing, caller registers or one compiler's maximum RSS.
+
+## Subsequent scheduled primitive qualification
+
+After the initial local scheduler attempt, authorized host `n1` is available.
+Slurm job **17485** on its `main` partition, node `node1`, requests one
+`gpu:5090:1` with an explicit five-minute limit. Its assigned
+`CUDA_VISIBLE_DEVICES=0` is preserved. No GPU work runs on maintained/drained
+node `n3`, and the scheduler is not bypassed.
+
+The previously compiled baseline and candidate `sm_120` shared probes execute
+**186 before/after comparisons** against independently normalized Libcint
+derivatives. The eight shell classes are pppp, dspp, dsds, dpps, ddss, dppp, dpds
+and ddps. Cases include ordinary, coincident-bra and all-coincident centers,
+dense and zero weights, strict FP64, relative-response FP64, mixed FP32, and
+pair-separable weights where that entry is present. All pass their original
+precision-specific acceptance gates.
+
+| Arithmetic mode | Cases | Maximum baseline/candidate delta | Maximum Libcint absolute delta |
+| --- | ---: | ---: | ---: |
+| Strict FP64 | 48 | 2.22e-16 | 3.51e-14 |
+| Relative FP64 | 48 | 4.44e-16 | 3.46e-14 |
+| Mixed FP32 | 48 | 2.38e-7 | 2.63e-7 |
+| Pair separable | 42 | 0 | 3.86e-14 |
+
+The probe libraries are verified by SHA-256 before loading; the serialized
+report records their identities, allocation, assigned visibility and each case.
+The retained local report `remote-gpu-numerics.json` has SHA-256
+`88bffa6bce58435363074169638a6c5037faace251232e50289f16333446aa72`.
+References are prepared independently on the CPU, and a standard-library-only
+remote runner invokes both actual CUDA libraries inside `srun`.
+
+This closes the initial **primitive arithmetic device-numerics** gap, not the
+complete Direct endpoint/runtime qualification. It does not exercise complete
+shell scheduling, density preparation, screening/retry behavior, high-order
+range endpoint combinations, or a full HF force calculation. It provides no
+complete-endpoint timing or runtime nonregression claim. Those gates and full
+three-architecture manylinux wheel acceptance remain open.
+
+## Subsequent complete three-architecture object qualification
+
+The complete production Direct fallback request now finishes with exit status
+zero, retaining `sm_80`, `sm_90`, `sm_120` CUBINs and `compute_80` PTX in the
+same object. NVCC 12.9.86 uses the production optimization/RDC/strict flags and
+verified sccache 0.16.0. The source/header closure stays unchanged throughout.
+
+The owned compiler server reports a 47:42.58 lifetime and maximum reaped-worker
+RSS of 6,389,420 KiB (about 6.09 GiB). The client observes 2,863 seconds. There
+are three stage hits and five misses: CUBIN/device-code/PTX hits reuse existing
+work; two CUBINs, two PTX stages and one CUDA stage miss. This is a complete
+multiarchitecture **compilation acceptance**, not a fully cold timing sample or
+a comparison with the earlier single-architecture baseline.
+
+The local request does not run inside the wheel's 12-GiB cgroup. One compiler's
+6.09-GiB maximum does not establish that two simultaneous heavy compilations
+fit that container, and a complete object does not prove device link, manylinux
+repair, installed-wheel smoke checks or payload acceptance. Retain the complete
+wheel gate and resource/cache diagnostics rather than extrapolating success.
