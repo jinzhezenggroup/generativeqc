@@ -5,7 +5,9 @@
     "manifest": "benchmarks/results/cuda-aot-policy-20261115/production-shell-classes.json",
     "sha256": "a5df01c89d396a8b9411654cd47d464cc8a4fee3fd04fc655a76bce86de9638b",
     "source_commit": "44f34575f0c91b846c7265e5c388f068de09826c",
-    "status": "retained-existing-defaults-not-renewed-qualification"
+    "status": "retained-existing-defaults-not-renewed-qualification",
+    "effective_policies": "benchmarks/results/cuda-aot-policy-20261115/effective-defaults.json.xz",
+    "effective_policies_sha256": "f45da58733197c62acfb5a330fc0599df426b6119ffc8fe9aed1d3aefa5a68ed"
   },
   "promotions": []
 }

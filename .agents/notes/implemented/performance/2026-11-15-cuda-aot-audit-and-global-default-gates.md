@@ -41,6 +41,12 @@ of resources, peak storage, first module use and package bytes. Check actual
 raw cubin output with the existing resource parser, bind acquisition records to
 the measured run, and verify retained input/reference/build artifacts.
 
+Freeze effective semantic policies as well as the original manifest: resolving
+an old manifest with a new compiler could apply a changed implicit choice to
+both sides and conceal the default change. A new target starts from an empty
+AOT inventory and explicit bounded native fallback, not an assumed portable
+qualification. The snapshot is declarative policy, never generated source text.
+
 The local HF warm gate and ordinary `auto` resolution remain unchanged.
 Refreshing static audit JSON is deliberately incapable of accepting a
 promotion. Control discovery still owns native control boundaries; the separate
@@ -71,12 +77,15 @@ RTX5090 and RTX PRO 6000 Blackwell GPUs; a finite n2 discovery job reports
 compute capability 12.0 for the PRO 6000. That observation is not a performance
 equivalence claim or an A100/H100 numerical run.
 
-The focused implementation suite passes 485 tests, with one existing skip and
+The focused implementation suite passes 491 tests, with one existing skip and
 one full-native-library identity test deselected. This includes negative
 qualification cases, the complete raw receipt chain, nonzero C ABI route masks
 and the original build/profile resolver checks. Compiler structure, native API
 contracts/boundaries, Libxc retained-evidence revalidation and control inventory
 checks pass without changing scientific source identities or historical outcomes.
+The additional regressions cover frozen baseline semantics, new explicit and
+wildcard compatibility domains, and an opt-in named experiment that leaves
+ordinary auto selection unchanged.
 
 This work does not change methods, quadrature, thresholds or numerical
 precision to manufacture a win. It does not dismiss #3084 review objections,

@@ -261,7 +261,11 @@ def fixture_root(tmp_path: Path) -> dict:
     inventory = json.loads(
         (ROOT / "manifests/maintenance/cuda_aot_default_decisions.json").read_text()
     )
-    for relative in (MANIFEST, Path(inventory["retained_baseline"]["manifest"])):
+    for relative in (
+        MANIFEST,
+        Path(inventory["retained_baseline"]["manifest"]),
+        Path(inventory["retained_baseline"]["effective_policies"]),
+    ):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
@@ -513,3 +517,43 @@ def test_unconverged_independent_reference_cannot_qualify_a_default() -> None:
     payload["oracle"]["geometries"]["moved"]["converged"] = False
     with pytest.raises(ValueError, match="independent reference is unconverged"):
         gate(payload)
+
+
+def test_implicit_compiler_default_change_cannot_rewrite_its_own_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tools.generativeqc_validation import cuda_aot_policy
+
+    inventory = fixture_root(tmp_path)
+    actual = default_policies(tmp_path / MANIFEST)
+    actual["sm_80"]["default_preferences"]["streaming_fock"] ^= 1
+    monkeypatch.setattr(cuda_aot_policy, "default_policies", lambda *_: actual)
+    with pytest.raises(ValueError, match="fresh global-default"):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+@pytest.mark.parametrize("capability", ("8.1", "sm_81", "13.x", "sm_13x"))
+def test_new_compatibility_domains_cannot_escape_the_default_gate(
+    tmp_path: Path, capability: str
+) -> None:
+    inventory = fixture_root(tmp_path)
+    path = tmp_path / MANIFEST
+    payload = json.loads(path.read_text())
+    payload["architectures"]["sm_120"]["compatible_compute_capabilities"] = [capability]
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+def test_named_experiment_does_not_promote_an_auto_default(tmp_path: Path) -> None:
+    inventory = fixture_root(tmp_path)
+    path = tmp_path / MANIFEST
+    payload = json.loads(path.read_text())
+    experiment = copy.deepcopy(payload["architectures"]["sm_120"])
+    experiment["compatible_architectures"] = ["sm_120"]
+    experiment["prefer_rys_task_fock"] = False
+    payload["architectures"]["sm_120_experimental"] = experiment
+    path.write_text(json.dumps(payload))
+    assert check_defaults(tmp_path, inventory, source_identity=SOURCE)[
+        "retained_defaults"
+    ]

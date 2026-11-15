@@ -7,6 +7,7 @@ autotuning has a deliberately narrower contract and does not call this gate.
 from __future__ import annotations
 
 import json
+import lzma
 import math
 import re
 import statistics
@@ -78,9 +79,7 @@ def _path(root: Path, relative: str) -> Path:
     return path
 
 
-def default_policies(
-    manifest: Path, extra_architectures: tuple[str, ...] = ()
-) -> dict[str, dict]:
+def default_policies(manifest: Path) -> dict[str, dict]:
     """Compare semantic stock defaults, never generated-source spelling.
 
     Named target and explicit compatibility additions also need a decision.
@@ -88,11 +87,23 @@ def default_policies(
     """
     payload = json.loads(manifest.read_text())
     architectures = {"sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120"}
-    architectures.update(extra_architectures)
     for name, profile in payload["architectures"].items():
-        if name.startswith("sm_"):
+        if re.fullmatch(r"sm_\d+", name):
             architectures.add(name)
         architectures.update(profile.get("compatible_architectures", ()))
+        for capability in profile.get("compatible_compute_capabilities", ()):
+            if not isinstance(capability, str):
+                continue
+            numeric = re.fullmatch(r"(\d+)\.([0-9]|x)", capability)
+            wildcard = re.fullmatch(r"sm_(\d+)x", capability)
+            if numeric:
+                architectures.add(
+                    f"sm_{numeric[1]}{numeric[2] if numeric[2] != 'x' else '0'}"
+                )
+            elif wildcard:
+                architectures.add(f"sm_{wildcard[1]}0")
+            elif re.fullmatch(r"sm_\d+", capability):
+                architectures.add(capability)
     result = {}
     for architecture in sorted(architectures):
         profile = resolve_production_profile(manifest, architecture)
@@ -688,16 +699,36 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
         "retained baseline integrity mismatch",
     )
     _require(len(retained["source_commit"]) == 40, "baseline source commit required")
-    before, after = default_policies(reference), default_policies(root / MANIFEST)
-    targets = tuple(sorted(set(before) | set(after)))
-    before, after = (
-        default_policies(reference, targets),
-        default_policies(root / MANIFEST, targets),
+    snapshot = _path(root, retained["effective_policies"])
+    _require(
+        file_hash(snapshot) == retained["effective_policies_sha256"],
+        "retained effective-policy integrity mismatch",
+    )
+    # Re-resolving the old manifest with today's compiler would apply today's
+    # implicit choices to both sides, hiding an implementation-driven promotion.
+    before = json.loads(lzma.decompress(snapshot.read_bytes()))
+    after = default_policies(root / MANIFEST)
+    for target in set(after) - set(before):
+        before[target] = {
+            "target": after[target]["target"],
+            "compiled_masks": dict.fromkeys(after[target]["compiled_masks"], 0),
+            "default_preferences": dict.fromkeys(
+                after[target]["default_preferences"], 0
+            ),
+            "packaging": {
+                "optional_fock_variants": False,
+                "compile_derivative_shells": False,
+            },
+            "selections": [],
+        }
+    _require(
+        set(before) <= set(after),
+        "removing a target requires an explicit retained fallback decision",
     )
     changed = sorted(
         target
         for target in set(before) | set(after)
-        if before.get(target) != after.get(target)
+        if canonical_hash(before.get(target)) != canonical_hash(after.get(target))
     )
     reports = {}
     for target in changed:

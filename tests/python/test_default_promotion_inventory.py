@@ -44,10 +44,11 @@ def _check_aot_decisions(root: Path) -> None:
     inventory = json.loads(
         (ROOT / "manifests/maintenance/cuda_aot_default_decisions.json").read_text()
     )
-    relative = inventory["retained_baseline"]["manifest"]
-    destination = root / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(ROOT / relative, destination)
+    for field in ("manifest", "effective_policies"):
+        relative = inventory["retained_baseline"][field]
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
     check_defaults(root, inventory, source_identity="0" * 64)
 
 

@@ -5,6 +5,13 @@
 Its identity is retained in
 `manifests/maintenance/cuda_aot_default_decisions.json`.
 
+`effective-defaults.json.xz` retains the corresponding semantic resolution for
+the audited stock targets: schedules, recurrences, consumer/route masks,
+preferences, packaging and target facts. The gate compares current resolution
+with this immutable data rather than re-resolving the old manifest under the
+new compiler, which could otherwise hide implicit policy changes. This is a
+policy contract, not a generated-source or function-body fingerprint.
+
 This is an immutable historical **input**, not a newly qualified result, new
 benchmark campaign, or authority to promote additional defaults. It preserves
 the existing tuned/portable decisions while the checker evaluates future

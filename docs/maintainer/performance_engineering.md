@@ -28,6 +28,9 @@ retain an integrity-checked historical manifest. The checker compares effective
 per-target schedules, recurrences, capabilities, preferences, target resources
 and packaging, not production function bodies or generated-source fingerprints.
 Formatting or an inert preference flag is not a default promotion.
+An immutable effective-policy snapshot prevents a new compiler from silently
+re-resolving both the old and new manifests with the same changed defaults.
+New targets compare against an empty AOT inventory with bounded native fallback.
 
 A semantic stock-policy change needs one source-matched campaign for every
 affected target, including newly auto-admitted targets. Record raw acquisition,
