@@ -74,6 +74,12 @@ class DeviceDescriptor(ctypes.Structure):
                 "portable",
             )
         ],
+        ("registry_status", ctypes.c_char * 32),
+        ("tuned", ctypes.c_int32),
+        ("compatible", ctypes.c_int32),
+        ("enabled_force_shell_class_mask", ctypes.c_uint64),
+        ("enabled_fock_shell_class_mask", ctypes.c_uint64),
+        ("enabled_mixed_fock_shell_class_mask", ctypes.c_uint64),
     ]
 
 
@@ -128,7 +134,17 @@ def compatibility_identity(probe: dict) -> dict:
         "device": {
             k: v
             for k, v in probe["device"].items()
-            if k not in ("official_profile", "portable")
+            if k
+            not in (
+                "official_profile",
+                "portable",
+                "registry_status",
+                "tuned",
+                "compatible",
+                "enabled_force_shell_class_mask",
+                "enabled_fock_shell_class_mask",
+                "enabled_mixed_fock_shell_class_mask",
+            )
         },
     }
 

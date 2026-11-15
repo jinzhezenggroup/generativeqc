@@ -133,10 +133,5 @@ added functionals: none
 removed functionals: none
 identity changes: none
 promotions: none
-demotions:
-  compiled-cpu: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  compiled-cuda: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  gpu-runtime: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  molecular-scf: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  forces: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
+demotions: none
 ```
