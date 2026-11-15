@@ -179,6 +179,46 @@ relabel outcomes to conceal that interpreter dependency. Use explicit
 synthetic exact-cancellation regressions and both interpreters. No raw forces,
 independent references, production kernels or scientific limits change.
 
+## Mainline LAPACKE integration and fresh source qualification
+
+Accepted master `b06042c744ef2f546599c5085a88d3a3ef1cc1d6` changes actual
+CPU linalg/CMake inputs through independent fix #3085. Unlike a tree-identical
+squash or documentation-only change, it requires new source identity and
+targeted fresh execution. Do not apply the old ancestry-only ours proof or
+relabel the earlier `038aedecc` / `6f7a59a0` binary measurements.
+
+Fresh acquisition source `6c0e89cfff07881d76f10f27de79b7bc509dd0d1` has native
+identity `788daab81655bece6d505d8aefe0efaf20bf56b69f3f70abf985292ca1cb0e1a`.
+Finite n1 job 17486 builds both Release libraries with LAPACKE actually enabled;
+both native profile contracts pass with matched nonempty registries. Finite n2
+job 5316 actually compiles all 88 primary SM80/SM90 audit units and retains its
+completed controller receipt. This still supplies no A100/H100 execution or
+optional/exact-package numerical qualification.
+
+Finite n1 job 17487 rechecks actual CMake global ON/OFF routing, both loaded ABI
+contracts and 16 stock endpoint processes. Finite n2 job 5317 loads the exact
+same two new ELFs under the independently verified private runtime and repeats
+the 16 processes. Across 128 complete phases, all 64 SVP and 32 moved-TZVP
+observations pass; all 32 TZVP cold/warm observations still fail the unchanged
+1e-7 force gate at approximately 6.758e-7. All energy/translation gates pass.
+The acquisition jobs correctly return one for scientific failure, not zero.
+The mainline LAPACKE repair does not resolve independent stock-force issue
+#3092 or establish a portable-only, 5090-only, or cross-SM performance cause.
+
+Keep every previous positive/negative capsule at published revision
+`a6b15115a63c83df224045337826787f409e35cf` with its original hash/history chain.
+Only the exact byte-identical custom CMake manifest input is shared with the
+older ec205 capsule; all generated results, source and scheduler identities
+remain new. No source identity can be inherited merely because that input is
+unchanged. Independently staged and committed storage checks remain necessary;
+their index-based implementation does not validate unstaged replacement bytes.
+
+Independent CI-budget repair #3098 changes only workflow/tests/rationale and
+preserves the recomputed native identity above. It therefore does not require
+pretending a newer Git head was the actual acquisition source. Its cancelled
+GCC predecessor remains a failed gate despite 142 passed CTest lines; the new
+complete current-head workflow, not an old success or repeated retry, is required.
+
 ## Revisit when
 
 Fresh source/device-matched raw evidence qualifies an explicitly proposed
