@@ -66,6 +66,22 @@ inventory checks passed. Replace Rys preference Python-spelling ratchets with
 manifest-policy audits and existing executable preference/resource tests; retain
 the measured-domain policy ratchet without requiring a particular function body.
 
+## Deliberate resource-ledger metadata requalification
+
+The added explicit manifest dimensions change the full manifest SHA even though
+generated kernels remain byte-identical. CI run 43694879552, job 132753210613,
+actually rebuilt the qualified SM120 release shard with CUDA 12.9. Its original
+report fails solely on that manifest identity. All other generated/preprocessed
+source, header, ABI, compiler/image and release-flag identities match the prior
+ledger exactly, as do every REG/STACK/SHARED/LOCAL field of all 102 kernels.
+
+Retain the original failed report, original/new ledgers, raw CUOBJDump/compiler
+receipts and run identity in
+`benchmarks/results/cuda-aot-policy-20261115/resource-manifest-requalification.json.xz`.
+The existing strict checker accepts the measured ledger after updating only the
+manifest SHA. Do not remove the manifest integrity check, reset resources without
+measurement, or claim numerical/default qualification from this metadata update.
+
 ## Revisit when
 
 New compiled routes need independently modeled packaging/admission, or a proposed
