@@ -11,7 +11,9 @@ compiling `src/scf/cuda/one_electron_derivatives.cu`, object 708/1122. The
 retained container reports `OOMKilled=true` with a 12 GiB no-swap limit.
 The concurrent one-electron values compilation subsequently completes.
 
-The production g-capable derivative header contains 43,685,629 bytes.
+The production maximum-g switch arrived in #3057 (`f590a214be`,
+2026-11-12 UTC). It expands the default maximum-f derivative header from
+7,647,704 to 43,685,629 bytes, about 5.7 times the generated source.
 Both the SCF gradient owner and `cuda_cosx_derivative.cu` include it. An
 isolated three-architecture compile retains a reaped-worker maximum RSS
 of 14,256,840 KiB and fails its finite 3,600-second bound before completing
@@ -104,11 +106,22 @@ large units and the complete wheel remain resource-acceptance gates.
   timings include preparation separately and actual iteration/Fock counts.
   This is a frozen earlier baseline qualification, not a newly rebuilt
   whole-library qualification of this g lowering.
+- The subsequent complete sm120 Release build at `10541ecd8`, containing
+  both this lowering and the DF Lambda pool, also succeeds. Slurm job 17500
+  repeats all 16 independent Direct-HF endpoints. Maximum energy/force errors
+  are 6.22e-14 Hartree and 8.04e-11 Hartree/Bohr; every endpoint retains its
+  baseline iteration and Fock-build counts. The complete shared library shrinks
+  from 1,380,611,768 to 1,329,973,496 bytes. Its incremental rebuild is not a
+  cold timing comparison: retain its 21 cache hits and 77 misses, rather than
+  comparing its duration to the original full build.
 
 The focused suites pass 357 tests, with 57 unchanged explicit-GPU skips.
-The 604-module compiler ownership check passes. Full native-library,
-manylinux link/repair and installed-wheel acceptance remain distinct gates.
+The 604-module compiler ownership check passes. Complete native-library
+qualification does not replace manylinux link/repair or installed-wheel gates.
 Another 203 catalog, dependency, CI-budget and compiler-structure tests pass.
+The pinned CI checker `ty==0.0.82` passes after explicitly unpacking the
+two-element angular pair; the complete emitted header remains byte-identical
+to the compiled and GPU-qualified artifact in a one-off preservation proof.
 Official snapshot regeneration changes only current source identities and
 28 changed-input lists. Historical measurements, summaries, qualification
 claims and acceptance records are unchanged; retain the added source inputs.
@@ -138,7 +151,8 @@ The frozen local investigation directory is
 complete-object commands/stats, original completed images, generated
 case-preservation proofs, independent oracle inputs, native-owner/DSO
 hashes, Slurm reports and complete-gradient timings. The complete baseline
-build and Direct-HF report live in `/tmp/gqc-wheel-native-endpoint/`.
+build and Direct-HF reports live in `/tmp/gqc-wheel-native-endpoint/`;
+the original `cc0e4dd9a` artifact/report are preserved in its `baseline/`.
 
 Generate the current source with
 `python tools/generate_one_electron_kernels.py --derivatives --max-angular-momentum 4 --output /tmp/generated_one_electron_derivatives.cuh`.

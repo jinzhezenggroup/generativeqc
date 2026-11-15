@@ -222,8 +222,8 @@ def _emit_gradient_helpers(
     maximum_boys_order = 2 * maximum + 1
     name = "attraction_gradient" if attraction else "overlap_kinetic_gradient"
     lines = [
-        _emit_gradient_shell_helper(bool(attraction), angular)
-        for angular in product(range(maximum + 1), repeat=2)
+        _emit_gradient_shell_helper(bool(attraction), (first, second))
+        for first, second in product(range(maximum + 1), repeat=2)
     ]
     external = (
         ", double c_x, double c_y, double c_z, const double* boys" if attraction else ""
