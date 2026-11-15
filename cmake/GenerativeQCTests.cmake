@@ -771,9 +771,15 @@ macro(generativeqc_add_native_tests)
     endif()
   endif()
 
-  if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_AOT_SHELLS)
+  if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_aot_profile_tests tests/native/test_aot_profile.cpp
                        LIBRARIES CUDA::cudart)
+    target_compile_definitions(generativeqc_aot_profile_tests PRIVATE
+      GENERATIVEQC_TEST_AOT_SHELLS=$<BOOL:${GENERATIVEQC_ENABLE_AOT_SHELLS}>)
+    if(GENERATIVEQC_ENABLE_AOT_SHELLS)
+      target_include_directories(generativeqc_aot_profile_tests PRIVATE
+        "${GENERATIVEQC_AOT_GENERATED_DIRECTORY}")
+    endif()
   endif()
   generativeqc_add_ordered_gram_host_admission_test()
 endmacro()

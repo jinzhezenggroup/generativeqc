@@ -38,6 +38,15 @@ generativeqc_status generativeqc_cuda_tuning_device(
   const auto& profile = generativeqc::scf::generated::selected_profile();
   std::snprintf(output->official_profile, sizeof(output->official_profile), "%s", profile.name);
   output->portable = profile.portable ? 1 : 0;
+  output->tuned = profile.tuned ? 1 : 0;
+  output->compatible = profile.compatible ? 1 : 0;
+  std::snprintf(output->registry_status, sizeof(output->registry_status), "%s",
+                generativeqc::scf::generated::selected_registry_status());
+  output->enabled_force_shell_class_mask = generativeqc::scf::generated::enabled_shell_class_mask();
+  output->enabled_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_fock_shell_class_mask();
+  output->enabled_mixed_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_mixed_fock_shell_class_mask();
   const cudaError_t restored = cudaSetDevice(previous);
   if (runtime != cudaSuccess || driver != cudaSuccess || restored != cudaSuccess)
     return GENERATIVEQC_STATUS_CUDA_ERROR;

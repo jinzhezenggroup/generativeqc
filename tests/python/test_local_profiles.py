@@ -121,6 +121,34 @@ def bundle(tmp_path: typing.Any, probe: typing.Any) -> typing.Any:
 
 @pytest.mark.parametrize(
     "field,value",
+    (
+        ("official_profile", "generic_cuda"),
+        ("portable", 0),
+        ("tuned", 1),
+        ("compatible", 1),
+        ("registry_status", "no_matching_kernel_set"),
+        ("enabled_force_shell_class_mask", 0),
+        ("enabled_fock_shell_class_mask", 0),
+        ("enabled_mixed_fock_shell_class_mask", 0),
+    ),
+)
+def test_selection_diagnostics_are_not_hardware_identity(
+    probe: typing.Any, field: str, value: typing.Any
+) -> None:
+    """Environment masks and the incumbent profile do not invalidate local reuse."""
+    changed = copy.deepcopy(probe)
+    changed["device"][field] = value
+    assert profiles.compatibility_identity(changed) == profiles.compatibility_identity(
+        probe
+    )
+    changed["device"]["major"] = 9
+    assert profiles.compatibility_identity(changed) != profiles.compatibility_identity(
+        probe
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
     [
         ("major", 13),
         ("sm_count", 171),
