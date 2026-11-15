@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import lzma
 from collections import Counter
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -29,6 +30,12 @@ from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 from tools.generate_build_identity import _inventory, _source_identity
+from tools.generativeqc_validation.libxc_dependencies import SCHEMA as DEPENDENCY_SCHEMA
+from tools.generativeqc_validation.libxc_dependencies import (
+    authenticated_inputs,
+    changed_inputs,
+    native_inventory,
+)
 from tools.generativeqc_validation.libxc_native_domain import native_domain_stage
 from tools.qualify_libxc_forces import force_stage_evidence
 
@@ -38,8 +45,8 @@ if TYPE_CHECKING:
 
 SCHEMA = "generativeqc.libxc-native-catalog.v1"
 BUNDLE_SCHEMA = "generativeqc.libxc-native-campaign.v1"
-# These are input dependencies for stale-evidence detection, not source spelling
-# tests. A change may deliberately demote claims, with an exact transition ack.
+# The broad census authenticates historical execution. Scoped dependency checks,
+# not this whole-tree digest, determine whether a qualification needs a rerun.
 SOURCE_DIRS = (
     "src",
     "include",
@@ -134,11 +141,22 @@ def _work(row: Mapping[str, Any], *, backend: str) -> None:
 
 
 def validate_cpu(
-    name: str, record: Mapping[str, Any], library: Mapping[str, Any]
+    name: str,
+    record: Mapping[str, Any],
+    library: Mapping[str, Any],
+    *,
+    measured_subject: str | None = None,
+    measured_catalog_hash: str | None = None,
 ) -> list[dict[str, Any]]:
     """Revalidate the existing independent full-vector CPU force producer."""
     result = record["result"]
-    envelope = force_stage_evidence(name, result, evidence=record["evidence"])
+    envelope = force_stage_evidence(
+        name,
+        result,
+        evidence=record["evidence"],
+        measured_subject=measured_subject,
+        measured_catalog_hash=measured_catalog_hash,
+    )
     require(envelope["status"] == "pass", str(envelope["reason"]))
     require(
         result["library_identity"] == library["sha256"],
@@ -164,6 +182,13 @@ def validate_cpu(
                 all(actual[key] == library[key] for key in ("sha256", "bytes")),
                 "CPU executed object mismatch",
             )
+    return _cpu_contexts(result, library)
+
+
+def _cpu_contexts(
+    result: Mapping[str, Any], library: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Describe requested receipt scope; callers separately establish validation."""
     return [
         {
             "backend": "cpu",
@@ -339,6 +364,14 @@ def validate_cuda(
         for field in ("native_fd", "independent_fd", "analytic_directions"):
             _close(row[field], projected, 3e-5, f"CUDA {field}")
         _close(forces.sum(axis=0), np.zeros(3), 2e-8, "CUDA translation")
+    return _cuda_context(record, library)
+
+
+def _cuda_context(
+    record: Mapping[str, Any], library: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Describe original CUDA scope without interpreting it as current evidence."""
+    context, rows = record["context"], record["rows"]
     return {
         **dict(context),
         "backend": "cuda",
@@ -379,11 +412,18 @@ def _envelope(
     return result
 
 
-def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
-    """Build the canonical DAG inventory from real receipts, demoting stale input.
+def ingest(
+    bundle: Mapping[str, Any],
+    root: Path,
+    *,
+    measured_inputs: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the DAG from authentic receipts with context-local invalidation.
 
-    Malformed retained data is an error. A well-formed receipt for older inputs
-    becomes an explicit blocker; its original identity is never overwritten.
+    Whole-source and ELF identities remain immutable execution provenance.
+    Unchanged dependencies inherit historical evidence, not a claim that the
+    current binary was measured. Changed contexts get an explicit rerun plan.
+    Without a measured dependency census, only exact-source replay is allowed.
     """
     require(bundle["schema"] == BUNDLE_SCHEMA, "native campaign schema mismatch")
     require(
@@ -410,11 +450,17 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
         verification["source_identity"] == verification["measured_input_identity"],
         "native embedded build/source mismatch",
     )
-    stale = (
+    source_changed = (
         bundle["source_input_count"] != len(live)
         or bundle["source_identity"] != canonical_hash(live)
         or verification["source_identity"] != native_identity
     )
+    inputs = measured_inputs or bundle.get("dependency_inputs")
+    if inputs is not None:
+        measured = authenticated_inputs(bundle, inputs)
+        current_inputs = {**live, **native_inventory(root)}
+    else:
+        measured = current_inputs = None
     build = bundle["build"]
     require(
         build["source_identity"] == bundle["source_identity"],
@@ -455,6 +501,7 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
             )
     capabilities = {c.name: c for c in available_capabilities()}
     evidence, endpoints, blockers, observed = {}, [], [], []
+    revalidation_plan, identity_transitions = [], []
     blockers.extend(
         {"name": row["name"], "backend": row["stage"], "reason": row["reason"]}
         for row in bundle["failures"]
@@ -469,10 +516,32 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
         reference = f"native-catalog:{name}#sha256={canonical_hash(data)}"
         stages: dict[str, Any] = {}
         evidence[name] = stages
-        if stale or data["subject_identity"] != capability.identity:
-            reason = (
-                "stale native/compiler/Graph/domain/ABI inputs; rerun qualification"
-            )
+        subject_changed = data["subject_identity"] != capability.identity
+        domain = data.get("production-domain")
+        reason = None
+        transported_subject = data["subject_identity"] if inputs is not None else None
+        if inputs is None and source_changed:
+            reason = "missing authenticated dependency inventory for changed source"
+        elif subject_changed and (inputs is None or domain is None):
+            reason = "changed Graph/domain identity without equivalence proof"
+        elif domain is not None:
+            try:
+                stages["production-domain"] = native_domain_stage(
+                    name, domain, measured_subject=transported_subject
+                )
+            except ValueError as exc:
+                if (
+                    inputs is None
+                    or not subject_changed
+                    or str(exc)
+                    not in (
+                        "native production-domain worker/domain/derivative ABI changed",
+                        "native production-domain profile changed",
+                    )
+                ):
+                    raise
+                reason = "changed emitted Graph/derivative/domain contract"
+        if reason is not None:
             for stage in (
                 "compiled-cpu",
                 "compiled-cuda",
@@ -485,10 +554,27 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
                     capability.identity, stage, reference, [], reason
                 )
             blockers.append({"name": name, "backend": "all", "reason": reason})
+            for backend in ("cpu", "cuda"):
+                if data.get(backend):
+                    revalidation_plan.append(
+                        {
+                            "name": name,
+                            "backend": backend,
+                            "products": ["energy", "forces"],
+                            "reason": reason,
+                            "changed_inputs": [],
+                        }
+                    )
             continue
-        domain = data.get("production-domain")
-        if domain is not None:
-            stages["production-domain"] = native_domain_stage(name, domain)
+        if subject_changed:
+            identity_transitions.append(
+                {
+                    "name": name,
+                    "measured_subject_identity": data["subject_identity"],
+                    "current_subject_identity": capability.identity,
+                    "proof": "authenticated source census and identical emitted point bytes/layout/domain; endpoint dependencies checked separately",
+                }
+            )
         coverage = []
         for backend in ("cpu", "cuda"):
             records = data.get(backend)
@@ -501,8 +587,53 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
                     }
                 )
                 continue
+            changes = {
+                product: changed_inputs(
+                    measured, current_inputs, backend=backend, product=product
+                )
+                if measured is not None
+                else []
+                for product in ("energy", "forces")
+            }
+            if changes["energy"]:
+                reason = "changed endpoint dependencies; targeted numerical regression required"
+                compile_changes = changed_inputs(
+                    measured, current_inputs, backend=backend, product="compiled"
+                )
+                for stage in (
+                    f"compiled-{backend}",
+                    *(("gpu-runtime",) if backend == "cuda" else ()),
+                ):
+                    stages[stage] = _envelope(
+                        capability.identity,
+                        stage,
+                        reference,
+                        [],
+                        reason if compile_changes else None,
+                    )
+                blockers.append({"name": name, "backend": backend, "reason": reason})
+                revalidation_plan.append(
+                    {
+                        "name": name,
+                        "backend": backend,
+                        "products": ["energy", "forces"],
+                        "reason": reason,
+                        "changed_inputs": changes["forces"],
+                    }
+                )
+                continue
             if backend == "cpu":
-                current = validate_cpu(name, records, build["library"])
+                current = validate_cpu(
+                    name,
+                    records,
+                    build["library"],
+                    measured_subject=transported_subject,
+                    measured_catalog_hash=measured.get(
+                        "python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
+                    )
+                    if measured is not None
+                    else None,
+                )
             else:
                 for record in records:
                     require(
@@ -520,9 +651,31 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
                     "duplicate CUDA spin receipt",
                 )
                 current = [
-                    validate_cuda(name, r, build["library"], capability.identity)
+                    validate_cuda(name, r, build["library"], data["subject_identity"])
                     for r in records
                 ]
+            if changes["forces"]:
+                current = [{**scope, "products": ["energy"]} for scope in current]
+                reason = (
+                    "changed force dependencies; targeted force regression required"
+                )
+                blockers.append(
+                    {
+                        "name": name,
+                        "backend": backend,
+                        "product": "forces",
+                        "reason": reason,
+                    }
+                )
+                revalidation_plan.append(
+                    {
+                        "name": name,
+                        "backend": backend,
+                        "products": ["forces"],
+                        "reason": reason,
+                        "changed_inputs": changes["forces"],
+                    }
+                )
             coverage.extend(current)
             stages[f"compiled-{backend}"] = _envelope(
                 capability.identity, f"compiled-{backend}", reference, current
@@ -533,8 +686,28 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
                 )
         if coverage:
             for stage in ("molecular-scf", "forces"):
+                applicable = [
+                    scope
+                    for scope in coverage
+                    if stage != "forces" or "forces" in scope["products"]
+                ]
                 stages[stage] = _envelope(
-                    capability.identity, stage, reference, coverage
+                    capability.identity,
+                    stage,
+                    reference,
+                    applicable,
+                    None
+                    if applicable
+                    else "no current force contexts; see targeted revalidation plan",
+                )
+        else:
+            for stage in ("molecular-scf", "forces"):
+                stages[stage] = _envelope(
+                    capability.identity,
+                    stage,
+                    reference,
+                    [],
+                    "no dependency-current endpoint contexts; see targeted revalidation plan",
                 )
         for scope in coverage:
             observed.append({"name": name, "family": capability.family, **scope})
@@ -578,7 +751,27 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
         "source_identity": canonical_hash(live),
         "measured_source_identity": bundle["source_identity"],
         "native_source_identity": native_identity,
-        "stale": stale,
+        "source_changed": source_changed,
+        "stale": bool(revalidation_plan),
+        "revalidation_plan": [
+            {
+                **row,
+                "measured_source_commit": bundle["source_commit"],
+                "native_library_sha256": build["library"]["sha256"],
+                "contexts": _cpu_contexts(
+                    bundle["functionals"][row["name"]]["cpu"]["result"],
+                    build["library"],
+                )
+                if row["backend"] == "cpu"
+                else [
+                    _cuda_context(record, build["library"])
+                    for record in bundle["functionals"][row["name"]]["cuda"]
+                ],
+            }
+            for row in revalidation_plan
+        ],
+        "identity_transitions": identity_transitions,
+        "dependency_policy": DEPENDENCY_SCHEMA,
         "structurally_selectable": len(AUTO_BULK_COMPONENTS),
         "unmeasured_functionals": sorted(
             set(capabilities) - set(bundle["functionals"])
@@ -599,6 +792,216 @@ def ingest(bundle: Mapping[str, Any], root: Path) -> dict[str, Any]:
             for k, v in sorted(counts.items())
         ],
     }
+
+
+def merge_catalogs(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Supplement current contexts with independently validated incremental batches.
+
+    Do not synthesize endpoints by combining incomplete receipts across batches.
+    New backend/registration measurements cannot replace unrelated evidence;
+    stale batches and all original binary/execution identities remain visible.
+    """
+    require(bool(reports), "missing native campaigns")
+    if len(reports) == 1:
+        return reports[0]
+    result = deepcopy(reports[0])
+
+    def unique(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return list({canonical_hash(row): row for row in rows}.values())
+
+    for field in (
+        "endpoints",
+        "observed_endpoints",
+        "blockers",
+        "revalidation_plan",
+        "identity_transitions",
+    ):
+        result[field] = unique([row for report in reports for row in report[field]])
+
+    def context_identity(name: str, scope: dict[str, Any]) -> str:
+        fields = (
+            "backend",
+            "spin",
+            "precision",
+            "integrals",
+            "ecp",
+            "basis",
+            "basis_max_l",
+            "grid",
+            "elements",
+            "charge",
+            "multiplicity",
+            "tile_points",
+            "partition_iterations",
+            "point_domain",
+        )
+        return canonical_hash(
+            {
+                "name": name,
+                **{key: scope[key] for key in fields},
+                "coordinates": sorted(
+                    {canonical_hash(geometry) for geometry in scope["coordinates"]}
+                ),
+            }
+        )
+
+    covered = {
+        (context_identity(row["name"], row), row["product"])
+        for row in result["endpoints"]
+    }
+    pending, resolved = [], []
+    for request in result["revalidation_plan"]:
+        missing = [
+            product
+            for product in request["products"]
+            if any(
+                (context_identity(request["name"], scope), product) not in covered
+                for scope in request["contexts"]
+            )
+        ]
+        if missing:
+            pending.append({**request, "products": missing})
+        else:
+            resolved.append(request)
+    result["revalidation_plan"] = pending
+    result["superseded_revalidation"] = resolved
+    pending_blockers = {(row["name"], row["backend"], row["reason"]) for row in pending}
+    resolved_blockers = {
+        (row["name"], row["backend"], row["reason"]) for row in resolved
+    } - pending_blockers
+    paired_contexts = {}
+    for row in result["endpoints"]:
+        identity = canonical_hash(
+            {
+                key: value
+                for key, value in row.items()
+                if key not in ("product", "resolution")
+            }
+        )
+        paired_contexts.setdefault(identity, (row, set()))[1].add(row["product"])
+    measured_spins = {}
+    for row, products in paired_contexts.values():
+        if {"energy", "forces"} <= products:
+            measured_spins.setdefault((row["name"], row["backend"]), set()).add(
+                row["spin"]
+            )
+    # A checkpoint's absent backend is a batch-local gap, not a permanent veto
+    # after another batch provides complete paired receipts in both spin layouts.
+    # Preserve those original gaps alongside every campaign's execution metadata.
+    result["superseded_blockers"] = [
+        row
+        for row in result["blockers"]
+        if row["reason"] == "missing native endpoint receipts"
+        and {"unpolarized", "polarized"}
+        <= measured_spins.get((row["name"], row["backend"]), set())
+    ]
+    result["blockers"] = [
+        row
+        for row in result["blockers"]
+        if (row["name"], row["backend"], row["reason"]) not in resolved_blockers
+        and row not in result["superseded_blockers"]
+    ]
+    evidence = {}
+    for name in sorted({name for report in reports for name in report["evidence"]}):
+        inventories = [
+            report["evidence"][name] for report in reports if name in report["evidence"]
+        ]
+        stages = {}
+        for stage in sorted(
+            {stage for inventory in inventories for stage in inventory}
+        ):
+            candidates = [
+                inventory[stage] for inventory in inventories if stage in inventory
+            ]
+            passed = [
+                candidate for candidate in candidates if candidate["status"] == "pass"
+            ]
+            combined = deepcopy((passed or candidates)[-1])
+            if passed:
+                require(
+                    len({candidate["subject_identity"] for candidate in passed}) == 1,
+                    "incremental scientific subject mismatch",
+                )
+                qualifications = [
+                    candidate["qualification"]
+                    for candidate in passed
+                    if "qualification" in candidate
+                ]
+                if (
+                    qualifications
+                    and qualifications[0].get("schema") == ENDPOINT_COVERAGE_SCHEMA
+                ):
+                    require(
+                        all(
+                            qualification.get("schema") == ENDPOINT_COVERAGE_SCHEMA
+                            for qualification in qualifications
+                        ),
+                        "incremental qualification schema mismatch",
+                    )
+                    combined["qualification"] = {
+                        "schema": ENDPOINT_COVERAGE_SCHEMA,
+                        "coverage": unique(
+                            [
+                                scope
+                                for qualification in qualifications
+                                for scope in qualification["coverage"]
+                            ]
+                        ),
+                    }
+                elif qualifications:
+                    require(
+                        len(
+                            {
+                                canonical_hash(qualification)
+                                for qualification in qualifications
+                            }
+                        )
+                        == 1,
+                        "incremental domain profile mismatch",
+                    )
+                    combined["qualification"] = qualifications[0]
+                combined["supporting_evidence"] = sorted(
+                    {candidate["evidence"] for candidate in passed}
+                )
+            stages[stage] = combined
+        evidence[name] = stages
+    result["evidence"] = evidence
+    result["summary"] = capability_summary(evidence)
+    result["stale"] = bool(result["revalidation_plan"])
+    result["unmeasured_functionals"] = sorted(
+        set.intersection(*(set(report["unmeasured_functionals"]) for report in reports))
+    )
+    counts: dict[tuple[str, str, str, str], set[str]] = {}
+    for row in result["endpoints"]:
+        counts.setdefault(
+            tuple(row[key] for key in ("family", "backend", "spin", "product")), set()
+        ).add(row["name"])
+    result["endpoint_counts"] = [
+        {
+            "family": key[0],
+            "backend": key[1],
+            "spin": key[2],
+            "product": key[3],
+            "count": len(names),
+        }
+        for key, names in sorted(counts.items())
+    ]
+    result["campaigns"] = [
+        {
+            key: report[key]
+            for key in (
+                "measured_source_commit",
+                "measured_source_identity",
+                "native_library",
+                "execution_identity",
+                "executions",
+                "blockers",
+            )
+        }
+        for report in reports
+    ]
+    result["execution_identity"] = canonical_hash(result["campaigns"])
+    return result
 
 
 def resolve_context(
