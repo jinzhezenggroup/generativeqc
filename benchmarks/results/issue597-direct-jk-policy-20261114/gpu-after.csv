@@ -1,0 +1,2 @@
+name, uuid, driver_version, memory.total [MiB], pstate, clocks.current.sm [MHz], clocks.current.memory [MHz], power.limit [W]
+NVIDIA GeForce RTX 5090, GPU-c17495e9-988d-0626-8bdd-95d0d1b47f36, 570.86.16, 32607 MiB, P0, 2887 MHz, 14001 MHz, 575.00 W
