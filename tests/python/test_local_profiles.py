@@ -130,6 +130,14 @@ def bundle(tmp_path: typing.Any, probe: typing.Any) -> typing.Any:
         ("enabled_force_shell_class_mask", 0),
         ("enabled_fock_shell_class_mask", 0),
         ("enabled_mixed_fock_shell_class_mask", 0),
+        ("enabled_rys_value_fock_shell_class_mask", 0),
+        ("enabled_k_block_fock_shell_class_mask", 0),
+        ("enabled_rys_task_fock_shell_class_mask", 0),
+        ("enabled_shared_rys_xy_fock_shell_class_mask", 0),
+        ("enabled_shared_rys_weighted_z_fock_shell_class_mask", 0),
+        ("preferred_streaming_fock_shell_class_mask", 0),
+        ("preferred_rys_task_fock_shell_class_mask", 0),
+        ("available_shared_rys_xy_streaming_fock_shell_class_mask", 0),
     ),
 )
 def test_selection_diagnostics_are_not_hardware_identity(

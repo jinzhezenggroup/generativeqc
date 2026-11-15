@@ -398,16 +398,13 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
     preference_relative = Path(
         "python/generativeqc_compiler/integral/production_rys_tasks.py"
     )
-    preference = _read(root / preference_relative)
     manifest_relative = Path(
         "python/generativeqc_compiler/integral/production_shell_classes.json"
-    )
-    profile_relative = Path(
-        "python/generativeqc_compiler/integral/production_profile.py"
     )
     manifest = json.loads(_read(root / manifest_relative))
     profiles = manifest.get("architectures")
     qualified: dict[str, set[str]] = {}
+    preference_enabled: set[str] = set()
     if not isinstance(profiles, dict):
         raise TypeError("Rys-task default target/class admission drifted")
     for name, profile in profiles.items():
@@ -422,41 +419,26 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
             raise ValueError("Rys-task default target/class admission drifted")
         if "preferred_rys_task_fock_shell_classes" in profile:
             qualified[name] = set(classes)
-    resolution = _read(root / profile_relative)
-    preferred = re.search(r"preferred = (\{[^\n]+\})", preference)
-    if (
-        preferred is None
-        or ast.literal_eval(preferred.group(1))
-        != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-        or qualified
-        != {
-            "sm_120": {
-                "psps",
-                "ppps",
-                "dsss",
-                "dpss",
-                "dsps",
-                "ddss",
-                "dsds",
-                "dpps",
-                "dspp",
-            }
+        enabled = profile.get("prefer_rys_task_fock", False)
+        if not isinstance(enabled, bool):
+            raise TypeError("Rys-task default target/class admission drifted")
+        if enabled:
+            preference_enabled.add(name)
+    # Audit the stock policy data, not Python spelling. Executable compiler and
+    # host-registry tests own resource refusal, replacement and filter semantics.
+    if preference_enabled != {"sm_120"} or qualified != {
+        "sm_120": {
+            "psps",
+            "ppps",
+            "dsss",
+            "dpss",
+            "dsps",
+            "ddss",
+            "dsds",
+            "dpps",
+            "dspp",
         }
-        or "if profile.portable:" not in preference
-        or "schedule_candidates(integral, profile.target)" not in preference
-        or "if schedule is None:" not in preference
-        or 'profile.target.architecture != "sm_120"' in preference
-        or "override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None"
-        not in preference
-        or "if override is not None:" not in preference
-        or "preferred = set(override)" not in preference
-        or "missing = preferred - available" not in preference
-        or "match == ProfileMatch.EXACT" not in resolution
-        or '_profile_kind(profile_name, profile_payload) == "tuned"' not in resolution
-        or "return tuple(raw) if tuned else None" not in resolution
-        or 'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return None'
-        not in resolution
-    ):
+    }:
         raise ValueError("Rys-task default target/class admission drifted")
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
     lowering = _read(root / lowering_relative)
