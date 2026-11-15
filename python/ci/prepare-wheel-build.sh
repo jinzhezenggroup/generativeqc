@@ -4,6 +4,7 @@ project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 
 export CCACHE_DIR="${CCACHE_DIR:-$project_dir/build/ccache}"
 bash "$project_dir/python/ci/install-ccache.sh"
+ccache --show-stats --verbose
 
 # Optional trusted snapshot provenance. Record the tools actually selected by
 # the container; an incompatible/missing receipt only disables publication.
