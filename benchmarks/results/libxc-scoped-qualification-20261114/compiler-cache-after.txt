@@ -1,0 +1,44 @@
+Compile requests                        86777
+Compile requests executed              246740
+Cache hits                              46802
+Cache hits (C/C++)                       6811
+Cache hits (CUBIN)                      17268
+Cache hits (CUDA)                       10181
+Cache hits (CUDA (Device code))          6307
+Cache hits (PTX)                         6235
+Cache misses                           159824
+Cache misses (C/C++)                    39734
+Cache misses (CUBIN)                    22751
+Cache misses (CUDA)                     29830
+Cache misses (CUDA (Device code))       33716
+Cache misses (PTX)                      33793
+Cache hits rate                         22.65 %
+Cache hits rate (C/C++)                 14.63 %
+Cache hits rate (CUBIN)                 43.15 %
+Cache hits rate (CUDA)                  25.45 %
+Cache hits rate (CUDA (Device code))    15.76 %
+Cache hits rate (PTX)                   15.58 %
+Cache timeouts                              0
+Cache read errors                           0
+Forced recaches                             4
+Cache write errors                          0
+Cache errors                               72
+Cache errors (C/C++)                       16
+Cache errors (CUBIN)                       27
+Cache errors (CUDA)                        29
+Compilations                           199835
+Compilation failures                       82
+Non-cacheable compilations              40011
+Non-cacheable calls                         0
+Non-compilation calls                     145
+Unsupported compiler calls                  0
+Average cache write                     0.005 s
+Average compiler                       12.790 s
+Average cache read hit                  0.004 s
+Failed distributed compilations             0
+Cache location                       Local disk: "/home/jzzeng/.cache/sccache"
+Base directories                     (none)
+Use direct/preprocessor mode?        yes
+Version (client)                     0.16.0
+Cache size                                 10 GiB
+Max cache size                             10 GiB
