@@ -31,6 +31,8 @@ from tools.generativeqc_validation.libxc_catalog import (
     source_inventory,
     write_json,
 )
+from tools.generativeqc_validation.libxc_dependencies import SCHEMA as DEPENDENCY_SCHEMA
+from tools.generativeqc_validation.libxc_dependencies import native_inventory
 from tools.generativeqc_validation.libxc_native_domain import (
     native_domain_stage,
     qualify_native_domain,
@@ -194,8 +196,8 @@ def main() -> int:
         return 0
     sources = source_inventory(ROOT)
     source_id = canonical_hash(sources)
-    # The full census is a local diagnostic. Published receipts need its count
-    # and digest; live ingestion recomputes those from the measured source.
+    # Embed the authenticated census in the campaign as well as keeping this
+    # diagnostic copy, so later checkouts can compare individual dependencies.
     write_json(args.output / "source-inputs.json.xz", sources)
     build = (
         load_json(args.build_receipt)
@@ -221,6 +223,11 @@ def main() -> int:
         "source_commit": args.source_commit,
         "source_input_count": len(sources),
         "source_identity": source_id,
+        "dependency_inputs": {
+            "schema": DEPENDENCY_SCHEMA,
+            "sources": sources,
+            "native_sources": native_inventory(ROOT),
+        },
         "build": build,
         "native_build_verification": native_verification,
         "executions": [
