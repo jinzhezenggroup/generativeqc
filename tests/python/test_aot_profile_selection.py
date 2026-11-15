@@ -13,6 +13,7 @@ import pytest
 from generativeqc import profiles
 from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.production_emission import emit_profile_shard
+from generativeqc_compiler.integral.production_policy import resolved_profile_inventory
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.production_registry import (
     emit_multi_registry_header,
@@ -28,21 +29,26 @@ MANIFEST = ROOT / "python/generativeqc_compiler/integral/production_shell_classe
 
 
 def _registry_sources(
-    directory: Path, targets: tuple[tuple[str, str], ...]
+    directory: Path,
+    targets: tuple[tuple[str, str], ...],
+    *,
+    optional_routes: bool = False,
 ) -> list[Path]:
     """Keep actual profile resolution and dispatch, replacing only GPU bodies."""
     profiles = []
     wrappers = []
     for architecture, intent in targets:
         resolved = resolve_production_profile(MANIFEST, architecture, profile=intent)
-        selection = next(
-            item for item in resolved.selections if item.spec.name == "ssss"
-        )
+        names = {"ssss", "psps", "dppp", "pppp"} if optional_routes else {"ssss"}
         resolved = replace(
             resolved,
-            selections=(selection,),
-            optional_fock_variants=False,
-            preferred_rys_task_fock_shell_classes=(),
+            selections=tuple(
+                item for item in resolved.selections if item.spec.name in names
+            ),
+            optional_fock_variants=resolved.optional_fock_variants
+            if optional_routes
+            else False,
+            preferred_rys_task_fock_shell_classes=("psps",) if optional_routes else (),
         )
         profiles.append(resolved)
         emitted = emit_profile_shard(resolved, resolved.selections)
@@ -56,7 +62,21 @@ def _registry_sources(
         emit_multi_registry_header(profiles)
     )
     registry = directory / "registry.cpp"
-    registry.write_text(emit_multi_registry_source(profiles))
+    source = emit_multi_registry_source(profiles)
+    registry.write_text(source)
+    if optional_routes:
+        # Only GPU bodies are replaced. Real registry admission and every
+        # public route mask execute, including resource-gated availability.
+        wrappers = [
+            f"{signature} {{ return cudaSuccess; }}"
+            for signature in re.findall(
+                r'(extern "C" cudaError_t \w+\([^;]*?\));', source, re.DOTALL
+            )
+        ]
+        wrappers.extend(
+            f"{signature} {{ return true; }}"
+            for signature in re.findall(r'(extern "C" bool \w+\(\));', source)
+        )
     wrapper = directory / "wrappers.cpp"
     wrapper.write_text('#include "scf/aot_shell_registry.hpp"\n' + "\n".join(wrappers))
     return [registry, wrapper]
@@ -168,6 +188,7 @@ def test_native_profile_contract_accepts_compiled_profile(
 @pytest.mark.parametrize(
     "architecture,targets,expected_profile,expected_status", SELECTION_CASES
 )
+@pytest.mark.parametrize("optional_routes", (False, True))
 def test_public_profile_diagnostics_match_dispatch(
     tmp_path: Path,
     native_cxx: NativeCxx,
@@ -176,6 +197,7 @@ def test_public_profile_diagnostics_match_dispatch(
     targets: tuple[tuple[str, str], ...] | None,
     expected_profile: str,
     expected_status: str,
+    optional_routes: bool,
 ) -> None:
     """Compile the real C API and check ctypes layout, masks and device restore.
 
@@ -184,7 +206,7 @@ def test_public_profile_diagnostics_match_dispatch(
     """
     _cuda_stub(tmp_path, architecture)
     sources = (
-        _registry_sources(tmp_path, targets)
+        _registry_sources(tmp_path, targets, optional_routes=optional_routes)
         if targets is not None
         else [ROOT / "src/scf/aot_shell_registry_stub.cpp"]
     )
@@ -256,15 +278,54 @@ extern "C" int dispatch_fock() {
         int(architecture.removeprefix("sm_")), 10
     )
     assert library.current_device() == 1
-    # The compiled fixture has precisely the ssss class in both consumers.
+    # All fixture classes have both consumers; optional routes retain their
+    # independent compiled admission instead of inheriting the primary mask.
+    names = {"ssss", "psps", "dppp", "pppp"} if optional_routes else {"ssss"}
     expected_mask = (
-        1 << shell_class_index(FUSED_SHELL_SPEC_BY_NAME["ssss"])
+        sum(1 << shell_class_index(FUSED_SHELL_SPEC_BY_NAME[name]) for name in names)
         if expected_status == "matched"
         else 0
     )
     for field in ("enabled_force_shell_class_mask", "enabled_fock_shell_class_mask"):
         assert device[field] == expected_mask
-    assert device["enabled_mixed_fock_shell_class_mask"] == 0
+    if expected_status == "matched":
+        selected = resolve_production_profile(MANIFEST, architecture, targets[0][1])
+        selected = replace(
+            selected,
+            selections=tuple(
+                item for item in selected.selections if item.spec.name in names
+            ),
+            optional_fock_variants=selected.optional_fock_variants
+            if optional_routes
+            else False,
+            preferred_rys_task_fock_shell_classes=("psps",) if optional_routes else (),
+        )
+        expected = resolved_profile_inventory(selected)
+        for field, route in (
+            ("enabled_mixed_fock_shell_class_mask", "mixed_fock"),
+            ("enabled_rys_value_fock_shell_class_mask", "rys_value_fock"),
+            ("enabled_k_block_fock_shell_class_mask", "k_block_fock"),
+            ("enabled_rys_task_fock_shell_class_mask", "rys_task_fock"),
+            ("enabled_shared_rys_xy_fock_shell_class_mask", "shared_rys_xy_fock"),
+            (
+                "enabled_shared_rys_weighted_z_fock_shell_class_mask",
+                "shared_rys_weighted_z_fock",
+            ),
+            (
+                "available_shared_rys_xy_streaming_fock_shell_class_mask",
+                "shared_rys_xy_streaming_fock",
+            ),
+        ):
+            assert device[field] == expected["compiled_masks"][route]
+        for field, route in (
+            ("preferred_streaming_fock_shell_class_mask", "streaming_fock"),
+            ("preferred_rys_task_fock_shell_class_mask", "rys_task_fock"),
+        ):
+            assert device[field] == expected["default_preferences"][route]
+        if optional_routes and selected.tuned:
+            assert device["enabled_rys_task_fock_shell_class_mask"] > 0
+        if optional_routes and architecture in ("sm_80", "sm_90"):
+            assert device["enabled_shared_rys_xy_fock_shell_class_mask"] > 0
     assert library.dispatch_fock() == (0 if expected_mask else 1)
     obsolete = profiles.DeviceDescriptor()
     obsolete.struct_size = profiles.DeviceDescriptor.registry_status.offset
@@ -284,7 +345,7 @@ extern "C" int dispatch_fock() {
     monkeypatch.setenv("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES", "ssss")
     restricted = profiles.probe_device(library)["device"]
     assert restricted["enabled_force_shell_class_mask"] == 0
-    assert restricted["enabled_fock_shell_class_mask"] == expected_mask
+    assert restricted["enabled_fock_shell_class_mask"] == (expected_mask & 1)
     monkeypatch.setenv("GENERATIVEQC_AOT_FOCK_SHELL_CLASSES", "none")
     masked = profiles.probe_device(library)["device"]
     assert masked["registry_status"] == expected_status

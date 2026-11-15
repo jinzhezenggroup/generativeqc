@@ -464,64 +464,20 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
 
 
 @pytest.mark.parametrize(
-    "relative,before,after",
-    [
-        (
-            "production_rys_tasks.py",
-            "if profile.portable:",
-            "if False:",
-        ),
-        (
-            "production_rys_tasks.py",
-            "schedule_candidates(integral, profile.target)",
-            "schedule_candidates(integral, fallback_target)",
-        ),
-        ("production_rys_tasks.py", "if schedule is None:", "if False:"),
-        (
-            "production_rys_tasks.py",
-            "if profile.portable:",
-            'if profile.target.architecture != "sm_120" or profile.portable:',
-        ),
-        ("production_rys_tasks.py", '"psps", "ppps",', '"ssss", "psps", "ppps",'),
-        ("production_rys_tasks.py", "if profile.tuned else None", "if True else None"),
-        ("production_rys_tasks.py", "if override is not None:", "if override:"),
-        (
-            "production_rys_tasks.py",
-            "preferred = set(override)",
-            "preferred |= set(override)",
-        ),
-        (
-            "production_rys_tasks.py",
-            "missing = preferred - available",
-            "missing = set()",
-        ),
-        (
-            "production_profile.py",
-            "match == ProfileMatch.EXACT",
-            "match != ProfileMatch.PORTABLE",
-        ),
-        (
-            "production_profile.py",
-            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return None',
-            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return ()',
-        ),
-        (
-            "production_profile.py",
-            "return tuple(raw) if tuned else None",
-            "return tuple(raw)",
-        ),
-    ],
+    "profile,value", (("portable_cuda", True), ("sm_120", False), ("sm_120", 1))
 )
-def test_rys_task_defaults_and_override_admission_are_audited(
-    tmp_path: Path, relative: str, before: str, after: str
+def test_rys_task_default_preference_requires_an_audited_decision(
+    tmp_path: Path, profile: str, value: object
 ) -> None:
-    """Retain shared capability gates and exact-tuned replacement semantics."""
+    """A label cannot broaden the retained stock default policy."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / "python/generativeqc_compiler/integral" / relative
-    original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
+    source = (
+        tmp_path / "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
+    manifest = json.loads(source.read_text())
+    manifest["architectures"][profile]["prefer_rys_task_fock"] = value
+    source.write_text(json.dumps(manifest))
     assert any(
         "Rys-task default target/class admission drifted" in error
         for error in validate_inventory(payload, root=tmp_path)

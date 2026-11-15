@@ -304,7 +304,7 @@ def test_non_tuned_profile_ignores_inapplicable_override(
     }
 
 
-def test_portable_profile_never_acquires_override_preference(tmp_path: Path) -> None:
+def test_preference_policy_is_independent_of_portable_label(tmp_path: Path) -> None:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     payload["architectures"]["portable_cuda"][
         "preferred_rys_task_fock_shell_classes"
@@ -314,8 +314,12 @@ def test_portable_profile_never_acquires_override_preference(tmp_path: Path) -> 
     portable = resolve_production_profile(path, "sm_120", "portable_cuda")
     assert portable.preferred_rys_task_fock_shell_classes is None
     assert preferred_rys_task_candidates(portable) == ()
+    relabeled = replace(PROFILE, match=ProfileMatch.PORTABLE)
+    assert preferred_rys_task_candidates(relabeled) == preferred_rys_task_candidates(
+        PROFILE
+    )
     assert (
-        preferred_rys_task_candidates(replace(PROFILE, match=ProfileMatch.PORTABLE))
+        preferred_rys_task_candidates(replace(relabeled, prefer_rys_task_fock=False))
         == ()
     )
 

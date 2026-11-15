@@ -111,7 +111,11 @@ def test_compiled_fatbinary_selector_keeps_portable_targets_bounded(
                     "schema_version": 2,
                     "default_architecture": accepted_target,
                     "architectures": {
-                        accepted_target: {"kind": "tuned", "kernels": [kernel]}
+                        accepted_target: {
+                            "kind": "tuned",
+                            "compile_derivative_shells": True,
+                            "kernels": [kernel],
+                        }
                     },
                 }
             )
