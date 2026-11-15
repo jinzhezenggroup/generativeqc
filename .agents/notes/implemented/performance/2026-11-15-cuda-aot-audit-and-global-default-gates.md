@@ -95,6 +95,41 @@ This work does not change methods, quadrature, thresholds or numerical
 precision to manufacture a win. It does not dismiss #3084 review objections,
 merge PRs, publish a release, or relabel earlier benchmark populations.
 
+## Additional source-matched compile observations
+
+The P1b native source identity
+`56fde0d6534cbfd3c003df9ca385c08e50f46c4ae0d3586d45eee31f76288eef`
+compiled all 44 primary selections, audit-only, for each of SM80 and SM90
+under finite Slurm job 5297 on n2. All 88 translation units compiled; raw
+CUOBJDump observations are retained in the policy evidence directory. This
+includes declared mixed/streaming primary companions but not optional
+competitors or exact SR/LR derivative packages. The compile host's SM120
+PRO 6000 GPU was not used to execute the candidates and cannot qualify
+A100/H100 science or performance.
+
+The current-source table may attach only covered compiler/resource observations;
+on a source change they become historical automatically. Exact raw compiler
+inputs and objects remain in ignored acquisition storage, with their identities
+and deterministic source/emission contract retained. Input regeneration is an
+explicit opt-in check rather than a permanent refactor blocker. This preserves
+provenance without adding an entire generated-source bundle to the repository's
+bounded evidence budget. The initial unavailable-GCC12-host-toolchain failure
+remains separate from the corrected GCC11 acquisition. No default is promoted.
+
+Two source-matched SM120 Release libraries now pass the actual native profile
+test, including the formerly rejected forced-portable case, plus loaded-source
+and invalid-descriptor ABI checks. Finite Slurm job 17464 retains 16 distinct
+RHF processes on one RTX 5090, independent Cartesian PySCF references and all
+four endpoint phases. SVP passes all 32 phase observations. TZVP cold/warm fails
+the unchanged force gate in both profiles (about 6.76e-7); moved phases pass.
+These failed stock outcomes are executable evidence, not overwritten metadata.
+Separate explicitly nondefault SCF-convergence diagnostics reduce both profiles'
+force errors to about 1.12e-10 while increasing cold iterations from 9 to 16.
+That supports a convergence-limited discrepancy, not a portable-only force bug;
+it does not justify a production tolerance change or replace stock acceptance.
+The route-level smoke lacks per-shell execution and valid quartet counts and
+therefore cannot become a global-default promotion or #3084 cohort substitute.
+
 ## Revisit when
 
 Fresh source/device-matched raw evidence qualifies an explicitly proposed

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "cuda-aot-policy-20261115",
+  "owner": "CUDA AOT profile, capability and global-default audit (#3086)",
+  "reason": "Compact source-matched inputs for executable reference replay retain both profile/ABI successes and stock full-force failures, distinct process ownership, independent PySCF results, binary/build identities and raw compiler resources. Nondefault convergence diagnostics cannot replace failed stock acceptance. Generated input bundles, binaries and full build logs remain ignored; no storage budget, numerical gate or global-default policy is weakened.",
+  "review_document": "benchmarks/results/cuda-aot-policy-20261115/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-endpoint-smoke.json.xz",
+      "family": "cuda-aot-policy-20261115",
+      "classification": "test-reference-input",
+      "role": "Raw positive and negative endpoint/ABI reference replay, not per-shell or global-default acceptance",
+      "bytes": 147476,
+      "sha256": "62067af9a35598eaf21d5a0cfe26b5ff4c21fb51ad5e98aaa13543663dbce77d"
+    }
+  ]
+}

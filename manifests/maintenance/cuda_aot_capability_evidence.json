@@ -1,0 +1,9 @@
+{
+  "endpoint_smoke": {
+    "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-endpoint-smoke.json.xz",
+    "sha256": "62067af9a35598eaf21d5a0cfe26b5ff4c21fb51ad5e98aaa13543663dbce77d"
+  },
+  "path": "benchmarks/results/cuda-aot-policy-20261115/sm80-sm90-compile.json.xz",
+  "schema_version": 1,
+  "sha256": "a9bac1db6b7bb577682e8fcc6ed6b5147c3996f7a3e3aec50c0af3654f260431"
+}
