@@ -1,8 +1,8 @@
 # Retained CUDA AOT default-policy input
 
-`production-shell-classes.json` is the exact stock manifest from
+`production-shell-classes.json.xz` losslessly retains the exact stock manifest from
 `44f34575f0c91b846c7265e5c388f068de09826c` (the P1b policy-dimension repair).
-Its identity is retained in
+Both its stored and original uncompressed identities are retained in
 `manifests/maintenance/cuda_aot_default_decisions.json`.
 
 `effective-defaults.json.xz` retains the corresponding semantic resolution for
@@ -32,19 +32,19 @@ not certified merely because they are present in this manifest.
 
 `sm80-sm90-compile.json.xz` retains input identities, compiler logs, CUOBJDump resource
 text, toolchain versions and acquisition index for 88 translation units built
-from the P1b source above, native source identity
-`56fde0d6534cbfd3c003df9ca385c08e50f46c4ae0d3586d45eee31f76288eef`.
+from P1b source `cacd7164584993ee789b4d97c789ed840a962110`, native source identity
+`8e117f84a925090780f18408bc396236cc3e13cc39270e3cab276c1cdb698b9f`.
 All 44 stock SM120 primary selections were retargeted, audit-only, to SM80 and
 SM90. Compilation succeeded for all 88 units. The generated primary full-range
 Fock/force and declared mixed/streaming wrappers were included; optional
 competitors and exact SR/LR derivative packages were not.
 
 The acquisition used CUDA 12.9.86, GCC 11.4, C++20, the compiler adapter's release
-optimization and sccache 0.16.0 on n2, through finite Slurm job 5297
+optimization and sccache 0.16.0 on n2, through finite Slurm job 5298
 (`main`, `gpu:pro6000:1`, one hour requested, visibility `0`). This node's actual
 device is RTX PRO 6000 Blackwell/SM120: this was **not A100 or H100 execution**.
 No candidate was enabled in production or executed on a GPU. Resources are
-observations, not a resource-admission/nonregression result. The initial GCC12
+observations, not a resource-admission/nonregression result. An earlier-source GCC12
 attempt failed because its host `cc1plus` was unavailable; that infrastructure
 failure remains separately retained locally and is not a CUDA correctness
 failure. Completed-job controller accounting is unavailable on this cluster;
@@ -68,15 +68,15 @@ fingerprint on future refactors. It never promotes a default.
 ## Source-matched SM120 endpoint diagnostics
 
 `sm120-endpoint-smoke.json.xz` retains both Release build contracts, native
-profile/ABI receipts, CUOBJDump text, acquisition scripts, independent PySCF
+profile/ABI receipts, acquisition scripts, independent PySCF
 2.14.0 Cartesian reference results and all raw stock RHF E+analytic-force
-process records. Both binaries use the same P1b source identity above. Only the
+process records. Both binaries use the current P1b acquisition identity above. Only the
 AOT profile differs. The native profile test passes for both auto (`sm_120`)
 and forced portable (`portable_cuda`), with a matched nonempty registry.
 The common bounded build disables Hessian AOT leaves and CPU stationary-force
 AOT; it is not a claim about a release distribution's full package/startup cost.
 
-Finite Slurm job 17464 (`main`, `gpu:5090:1`, 30 minutes) runs four fresh
+Finite Slurm job 17469 (`main`, `gpu:5090:1`, 30 minutes) runs four fresh
 processes per arm for each basis, balanced in order, on the same physical
 RTX 5090 UUID. Each process executes cold, warm, moved and moved-warm endpoints.
 Cold includes import, profile probe, construction, preparation and force host
@@ -93,7 +93,7 @@ unavailable counters must not be invented or relabeled as zero work.
 
 All energy and translation gates pass. The failed TZVP stock results remain
 failed; they do not establish a portable-only defect. A separate, explicitly
-nondefault diagnostic in finite job 17467 tightens SCF convergence identically
+nondefault diagnostic in finite job 17470 tightens SCF convergence identically
 in both arms (`energy_tolerance=1e-12`, `density_tolerance=1e-10`). Initial SCF
 iterations increase from 9 to 16 and maximum force errors fall to about 1.12e-10.
 This supports a convergence-limited stock force discrepancy rather than an
@@ -108,3 +108,32 @@ validation or declaring a default qualified. No per-shell execution coverage,
 A100/H100 numerics, RTX PRO 6000 endpoint equivalence, full #3084 cohort rerun,
 or global-default performance win is claimed. Small-water timings cannot settle
 the production workload's portable-profile slowdown.
+
+## Same-binary second-card diagnostic
+
+`sm120-pro6000-endpoint-smoke.json.xz` retains finite job 5300 on n2
+(`main`, `gpu:pro6000:1`, 30 minutes): another 16 fresh processes and 64 complete
+phase observations. The RTX PRO 6000 Blackwell is a different physical card,
+also SM120. Both ELF hashes exactly match n1; this is not a rebuild. All SVP
+phases pass. TZVP cold/warm fails in both profiles at about 6.76e-7; moved phases
+pass. This reproduces the discrepancy on both cards, not just the RTX 5090,
+but supplies no SM80/SM90 execution or GPU-only performance attribution.
+
+The initial n2 loader attempt, job 5299, fails before any endpoint because its
+system glibc 2.35 cannot load the n1-built ELF's glibc 2.38 requirement. Its raw
+failure remains retained. Job 5300 uses a private copy of n1's glibc 2.39 loader
+and runtime for Python and every child, with recorded commands and library
+hashes. It changes neither system libraries nor Slurm device visibility.
+Different host/Python environments still prohibit a card-only speed comparison.
+
+## Bounded retention
+
+Identical n1 build receipts are stored once; n2 references that bundle and
+checksums each transferred receipt. Heavy raw compile-command and CUOBJDump
+files remain in ignored acquisition storage, identified by path, size and hash.
+The complete earlier-source endpoint and compile bundles are recoverable at
+Git commit `3958635e7687537d50ae3f61689ba257416b872c`, using the same paths;
+their original hashes are recorded in the current bundles. Historical failures
+and the old convergence diagnostic are not rewritten as current acceptance.
+The frozen manifest is losslessly compressed with both stored and original
+byte identities checked. No storage or scientific limit is increased.

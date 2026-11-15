@@ -130,6 +130,43 @@ it does not justify a production tolerance change or replace stock acceptance.
 The route-level smoke lacks per-shell execution and valid quartet counts and
 therefore cannot become a global-default promotion or #3084 cohort substitute.
 
+## Current inventory and second-card requalification
+
+After master expanded the source inventory, the earlier acquisition became
+historical rather than being relabeled. Fresh P1b commit
+`cacd7164584993ee789b4d97c789ed840a962110` has native identity
+`8e117f84a925090780f18408bc396236cc3e13cc39270e3cab276c1cdb698b9f`.
+Finite n1 job 17468 rebuilds both Release profiles and passes both native
+profile tests; job 17469 replays the full 16-process endpoint smoke. Finite n2
+job 5298 recompiles all 88 SM80/SM90 audit units successfully. These are actual
+new acquisitions, not metadata edits to earlier binaries or compiler reports.
+
+Finite n2 job 5300 loads the exact same two ELF files on RTX PRO 6000 Blackwell,
+also SM120, and repeats all 16 fresh processes. Both cards reproduce the same
+stock TZVP cold/warm force failures in both profiles; both pass SVP and moved
+TZVP phases. This excludes a 5090-only observation for that discrepancy, not
+an SM120-versus-other-architecture cause or a card-only performance attribution.
+The source-matched n1 diagnostic in job 17470 still reaches roughly 1.12e-10
+with explicit tighter SCF requests and is not stock acceptance.
+
+The first n2 load fails in job 5299: its system glibc 2.35 cannot satisfy the
+n1 ELF's glibc 2.38 requirement. Preserve that environmental failure. Use a
+private, checksum-recorded n1 glibc 2.39 runtime and explicit loader invocation
+for Python and every native/reference child; never replace system libraries or
+override scheduler visibility. Shared source/binary identity does not erase
+different host/Python conditions, so these diagnostics establish no GPU-only
+speed ranking. Available authorized n4/n5 resources are also RTX5090/SM120;
+there remains no authorized A100/H100 execution in this campaign.
+
+Master's additional evidence leaves insufficient room for duplicated receipts.
+Losslessly compress the frozen manifest, check its original byte identity,
+retain replay-consumed raw results, and deduplicate transferred build receipts
+against their hashed n1 origin. Heavy unused raw command/resource text remains
+in ignored acquisition storage with hashes. Earlier complete bundles remain at
+published commit `3958635e7687537d50ae3f61689ba257416b872c`, not a new external
+archive. Preserve all positive and negative outcomes without raising budgets,
+dropping reference tests or manufacturing default qualification.
+
 ## Revisit when
 
 Fresh source/device-matched raw evidence qualifies an explicitly proposed

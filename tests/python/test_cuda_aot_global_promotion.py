@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import lzma
 import shutil
 from pathlib import Path
 
@@ -346,6 +347,17 @@ def test_retained_baseline_identity_is_a_real_integrity_check(tmp_path: Path) ->
         check_defaults(tmp_path, inventory, source_identity=SOURCE)
 
 
+def test_repacking_a_different_baseline_cannot_change_retained_identity(
+    tmp_path: Path,
+) -> None:
+    inventory = fixture_root(tmp_path)
+    baseline = tmp_path / inventory["retained_baseline"]["manifest"]
+    baseline.write_bytes(lzma.compress(b"{}"))
+    inventory["retained_baseline"]["sha256"] = file_hash(baseline)
+    with pytest.raises(ValueError, match="baseline uncompressed integrity"):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
 def test_audit_covers_all_extra_and_precision_consumers_without_promoting() -> None:
     report = capability_audit(ROOT / MANIFEST)
     tuned = resolve_production_profile(ROOT / MANIFEST, "sm_120")
@@ -398,9 +410,13 @@ def retained_campaign(
     manifest = json.loads(path.read_text())
     manifest["architectures"]["sm_120"]["prefer_rys_task_fock"] = False
     path.write_text(json.dumps(manifest))
-    baseline = default_policies(tmp_path / inventory["retained_baseline"]["manifest"])[
-        "sm_120"
-    ]
+    baseline = json.loads(
+        lzma.decompress(
+            (
+                tmp_path / inventory["retained_baseline"]["effective_policies"]
+            ).read_bytes()
+        )
+    )["sm_120"]
     candidate = default_policies(path)["sm_120"]
     policies = {"baseline": baseline, "candidate": candidate}
     payload = campaign()

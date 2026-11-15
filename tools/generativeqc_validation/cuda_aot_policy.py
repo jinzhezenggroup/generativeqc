@@ -6,6 +6,7 @@ autotuning has a deliberately narrower contract and does not call this gate.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import lzma
 import math
@@ -703,6 +704,11 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
     _require(
         file_hash(reference) == retained["sha256"],
         "retained baseline integrity mismatch",
+    )
+    _require(
+        hashlib.sha256(lzma.decompress(reference.read_bytes())).hexdigest()
+        == retained["uncompressed_sha256"],
+        "retained baseline uncompressed integrity mismatch",
     )
     _require(len(retained["source_commit"]) == 40, "baseline source commit required")
     snapshot = _path(root, retained["effective_policies"])

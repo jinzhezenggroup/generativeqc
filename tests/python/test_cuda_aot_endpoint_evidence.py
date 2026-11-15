@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tools.generativeqc_validation.cuda_aot_evidence import apply_endpoint_evidence
+from tools.generativeqc_validation.cuda_aot_evidence import (
+    apply_card_comparison_evidence,
+    apply_endpoint_evidence,
+)
 from tools.generativeqc_validation.cuda_aot_policy import ROOT
 
 if TYPE_CHECKING:
@@ -83,6 +86,8 @@ def test_endpoint_source_changes_leave_only_historical_observations(
         "pid-reuse",
         "device",
         "source",
+        "commit",
+        "device-description",
         "profile",
         "partial",
         "cpu",
@@ -117,6 +122,8 @@ def test_endpoint_integrity_and_negative_qualification_boundaries(
         bundle["control"]["scontrol.txt"] = "JobId=17464 TimeLimit=UNLIMITED"
     elif mutation == "missing-process":
         index["rows"].pop()
+    elif mutation == "commit":
+        index["source_commit"] = "1" * 40
     else:
         if mutation == "pid-reuse":
             sample["pid"] = json.loads(files[index["rows"][1]["file"]])["pid"]
@@ -124,6 +131,8 @@ def test_endpoint_integrity_and_negative_qualification_boundaries(
             sample["device_uuid"] = "other-physical-device"
         elif mutation == "source":
             sample["probe"]["source_identity"] = "0" * 64
+        elif mutation == "device-description":
+            sample["probe"]["device"]["major"] = 9
         elif mutation == "profile":
             sample["probe"]["device"]["official_profile"] = "portable_cuda"
         elif mutation == "partial":
@@ -139,3 +148,81 @@ def test_endpoint_integrity_and_negative_qualification_boundaries(
     files["index.json"] = json.dumps(index)
     with pytest.raises(ValueError):
         replay(bundle, tmp_path)
+
+
+@pytest.mark.parametrize("historical", (False, True))
+@pytest.mark.parametrize(
+    "mutation", (None, "same-card", "binary", "source", "build-origin", "build-receipt")
+)
+def test_same_binary_card_comparison_preserves_qualification_boundaries(
+    endpoint_bundle: dict, tmp_path: Path, historical: bool, mutation: str | None
+) -> None:
+    identity = "0" * 64 if historical else endpoint_bundle["native_source_identity"]
+    primary = copy.deepcopy(endpoint_bundle)
+    primary["build_receipts"] = {
+        "fixture.txt": "Synthetic shared-receipt checker input"
+    }
+    report = replay(primary, tmp_path, identity)
+    secondary = copy.deepcopy(endpoint_bundle)
+    secondary["build_receipts"] = {
+        "retained_bundle": {
+            "path": "endpoint.json.xz",
+            "sha256": hashlib.sha256(
+                (tmp_path / "endpoint.json.xz").read_bytes()
+            ).hexdigest(),
+        },
+        "section": "build_receipts",
+        "file_sha256": {
+            name: hashlib.sha256(text.encode()).hexdigest()
+            for name, text in primary["build_receipts"].items()
+        },
+    }
+    if mutation == "build-origin":
+        secondary["build_receipts"]["retained_bundle"]["sha256"] = "0" * 64
+    elif mutation == "build-receipt":
+        secondary["build_receipts"]["file_sha256"]["fixture.txt"] = "0" * 64
+    if mutation == "source":
+        secondary["native_source_identity"] = "1" * 64
+    for files in secondary["campaigns"].values():
+        index = json.loads(files["index.json"])
+        index["native_source_identity"] = secondary["native_source_identity"]
+        for row in index["rows"]:
+            sample = json.loads(files[row["file"]])
+            sample["probe"]["source_identity"] = secondary["native_source_identity"]
+            if mutation != "same-card":
+                sample["device_uuid"] = "distinct-physical-card"
+                sample["probe"]["device"]["name"] = "NVIDIA RTX PRO 6000"
+            if mutation == "binary" and row["arm"] == "auto":
+                old_digest = row["library_sha256"]
+                secondary["control"]["library-sha256.txt"] = secondary["control"][
+                    "library-sha256.txt"
+                ].replace(old_digest, "2" * 64)
+                row["library_sha256"] = "2" * 64
+            files[row["file"]] = json.dumps(sample)
+            row["artifact_sha256"] = hashlib.sha256(
+                files[row["file"]].encode()
+            ).hexdigest()
+        files["index.json"] = json.dumps(index)
+    path = tmp_path / "secondary.json.xz"
+    path.write_bytes(lzma.compress(json.dumps(secondary).encode()))
+    declaration = {
+        "path": path.name,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+    if mutation:
+        with pytest.raises(ValueError, match="card comparison"):
+            apply_card_comparison_evidence(report, tmp_path, declaration, identity)
+        return
+    apply_card_comparison_evidence(report, tmp_path, declaration, identity)
+    comparison = report["same_binary_card_comparison"]
+    assert comparison["primary_device_uuid"] != comparison["secondary"]["device_uuid"]
+    assert comparison["secondary"]["source_status"] == (
+        "historical-source-only" if historical else "current-source"
+    )
+    assert (
+        comparison["secondary"]["results"]["def2-tzvp"]["auto"]["phases"]["cold"][
+            "status"
+        ]
+        == "failed-scientific-gate"
+    )
+    assert report["rows"] == [{"full_endpoint": "not-run-for-this-audit"}]

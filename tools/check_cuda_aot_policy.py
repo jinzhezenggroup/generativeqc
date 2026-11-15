@@ -12,6 +12,7 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from tools.generate_build_identity import _inventory, _source_identity
 from tools.generativeqc_validation.cuda_aot_evidence import (
+    apply_card_comparison_evidence,
     apply_compile_evidence,
     apply_endpoint_evidence,
 )
@@ -55,6 +56,13 @@ def main() -> int:
                 apply_endpoint_evidence(
                     report, ROOT, evidence["endpoint_smoke"], source_identity
                 )
+            if "same_binary_card_comparison" in evidence:
+                apply_card_comparison_evidence(
+                    report,
+                    ROOT,
+                    evidence["same_binary_card_comparison"],
+                    source_identity,
+                )
         rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
         if args.write_audit:
             AUDIT.write_text(rendered)
@@ -81,6 +89,11 @@ def main() -> int:
         )
         print(
             f"CUDA AOT diagnostic endpoints: {smoke['source_status']}, {failed} failed arm/phase groups retained; not global-default qualification"
+        )
+    if comparison := report.get("same_binary_card_comparison"):
+        secondary = comparison["secondary"]
+        print(
+            f"CUDA AOT same-binary card diagnostic: {secondary['device_name']}, {secondary['source_status']}; not cross-SM or performance qualification"
         )
     return 0
 

@@ -206,7 +206,13 @@ def apply_endpoint_evidence(
         bundle["schema"] == "generativeqc.cuda-aot-retained-endpoint-smoke/v1",
         "unsupported endpoint smoke bundle",
     )
+    _require(
+        bool(re.fullmatch(r"[0-9a-f]{40}", bundle["source_commit"]))
+        and bool(re.fullmatch(r"[0-9a-f]{64}", bundle["native_source_identity"])),
+        "missing endpoint source identity",
+    )
     device_uuids, process_ids, artifact_hashes = set(), set(), set()
+    device_names, compute_capabilities = set(), set()
     libraries = {}
     results = {}
     controller = bundle["control"]["scontrol.txt"]
@@ -217,6 +223,10 @@ def apply_endpoint_evidence(
     )
     for basis, files in bundle["campaigns"].items():
         index = json.loads(files["index.json"])
+        _require(
+            index["source_commit"] == bundle["source_commit"],
+            "endpoint source commit mismatch",
+        )
         reference = json.loads(files["reference.json"])
         _require(
             _sha256(files["reference.json"]) == index["reference_sha256"],
@@ -252,6 +262,8 @@ def apply_endpoint_evidence(
             device_uuids.add(data["device_uuid"])
             probe = data["probe"]
             device = probe["device"]
+            device_names.add(device["name"])
+            compute_capabilities.add((device["major"], device["minor"]))
             _require(
                 probe["source_identity"]
                 == index["native_source_identity"]
@@ -380,6 +392,12 @@ def apply_endpoint_evidence(
         len(device_uuids) == 1 and bool(next(iter(device_uuids))),
         "endpoint crossed physical GPUs",
     )
+    _require(
+        len(device_names) == 1
+        and bool(next(iter(device_names)))
+        and compute_capabilities == {(12, 0)},
+        "endpoint device description mismatch",
+    )
     for arm, digest in libraries.items():
         _require(
             any(
@@ -391,12 +409,65 @@ def apply_endpoint_evidence(
     report["endpoint_smoke_evidence"] = {
         "path": declaration["path"],
         "sha256": declaration["sha256"],
+        "source_commit": bundle["source_commit"],
         "native_source_identity": bundle["native_source_identity"],
         "source_status": "current-source"
         if bundle["native_source_identity"] == source_identity
         else "historical-source-only",
         "device_uuid": next(iter(device_uuids)),
+        "device_name": next(iter(device_names)),
+        "compute_capability": list(next(iter(compute_capabilities))),
         "library_sha256": libraries,
         "results": results,
         "qualification_boundary": "Diagnostic water/RHF route smoke only; no per-shell numerical coverage, no valid quartet counters, no default promotion or performance ranking. Failed stock gates remain failed.",
+    }
+
+
+def apply_card_comparison_evidence(
+    report: dict, root: Path, declaration: dict, source_identity: str
+) -> None:
+    """Bind a second card only when both acquisitions load identical binaries.
+
+    Matching compute capabilities do not identify a card or establish equal
+    performance. Replay each independent oracle campaign, then enforce the
+    source/image controls needed for a same-binary, cross-card diagnostic.
+    """
+    secondary_report = {}
+    apply_endpoint_evidence(secondary_report, root, declaration, source_identity)
+    primary = report["endpoint_smoke_evidence"]
+    secondary = secondary_report["endpoint_smoke_evidence"]
+    secondary_bundle = _retained_bundle(root, declaration)
+    shared = secondary_bundle.get("build_receipts", {})
+    if "retained_bundle" in shared:
+        _require(
+            shared["retained_bundle"]
+            == {name: primary[name] for name in ("path", "sha256")}
+            and shared["section"] == "build_receipts",
+            "card comparison shared build origin mismatch",
+        )
+        build_receipts = _retained_bundle(root, shared["retained_bundle"])[
+            "build_receipts"
+        ]
+        _require(
+            bool(shared["file_sha256"])
+            and all(
+                _sha256(build_receipts[name]) == digest
+                for name, digest in shared["file_sha256"].items()
+            ),
+            "card comparison shared build receipt mismatch",
+        )
+    _require(
+        primary["native_source_identity"] == secondary["native_source_identity"]
+        and primary["library_sha256"] == secondary["library_sha256"],
+        "card comparison requires identical source and binaries",
+    )
+    _require(
+        primary["compute_capability"] == secondary["compute_capability"]
+        and primary["device_uuid"] != secondary["device_uuid"],
+        "card comparison requires distinct devices with the same SM",
+    )
+    report["same_binary_card_comparison"] = {
+        "primary_device_uuid": primary["device_uuid"],
+        "secondary": secondary,
+        "qualification_boundary": "Same-binary, same-SM diagnostic only. Different host/runtime environments preclude isolating GPU-only performance; neither card supplies SM80/SM90 execution or global-default acceptance.",
     }
