@@ -1,0 +1,141 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Original process records underlying the approved rtx5090 HF/DFT figure",
+  "inputs_hash": "5c7095ceee5dc10c4fd4dec152d30797c6d857bbfdd02a87876d6dee605e97f7",
+  "revision": "4b8b103a57fbd4fd794e17dab405b6940b3adcea",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "e7335217cc4d94a4b450e1455d5164330441a02b1a6da98b822fe5c78e0726f9",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Multiple existing HF/DFT equations; no new common equation artifact",
+    "ir": "No common IR serialization was acquired",
+    "schedule": "No global schedule promotion; actual build policy and complete process commands retained"
+  },
+  "device": {
+    "backend": "cuda",
+    "device_id": 0,
+    "pci_bus_id": "0000:41:00.0",
+    "name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "total_global_memory_bytes": 33668726784,
+    "multiprocessor_count": 170,
+    "clock_rate_khz": 2407000,
+    "driver_version": 13000,
+    "runtime_version": 12090,
+    "nvidia_smi": {
+      "performance_state": "P0",
+      "power_draw_watts": 93.12,
+      "power_limit_watts": 575.0,
+      "sm_clock_mhz": 2902.0,
+      "memory_clock_mhz": 14001.0,
+      "temperature_celsius": 54.0,
+      "uuid": "GPU-5430ba2e-194a-b6d1-f12c-6b99f6d34efd",
+      "sampling_point": "before benchmark measurements",
+      "timestamp_utc": "2026-11-15T06:25:58.693844+00:00"
+    }
+  },
+  "toolchain": {
+    "standard": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.9.0",
+      "cupy": "13.6.0",
+      "numpy": "2.5.4"
+    },
+    "gpu4pyscf": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.9.0",
+      "cupy": "13.6.0",
+      "numpy": "2.5.4"
+    }
+  },
+  "settings": {
+    "independent_cold_processes": 3,
+    "warm_calls_per_process": 3,
+    "statistics": "cold median/min-max of three processes; warm median/min-max of three within-process medians",
+    "timing_filtering": false,
+    "accuracy_filtering": false
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Real allocation, physical GPU and package identities are retained in original process receipts and shared build provenance"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": "All formal raw fields and original-byte restoration retained, including force vectors, controls and semantic work"
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Actual loaded native/recorder identities; durable public Git base plus literal measured source reconstruction"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "Completed original source-matched Release/AOT build; flags, image identity and stage outcomes retained"
+    },
+    "numerical": {
+      "status": "fail",
+      "reason": "Unchanged independent dense-Direct references retain348 qualified and36 legacy failed process results; no overall numerical acceptance"
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "384 fresh formal processes and1536 complete converged E+F calls, separate from128 prewarms"
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "Archival source-bound figure data only; experimental RTX source is not promoted to master"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "No complete peak-allocation measurement was acquired"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Build stage times are retained; full consumer/JIT compilation cost was not separately measured"
+  },
+  "residuals": {},
+  "block_errors": {},
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "attachments": [
+    {
+      "path": "samples.json.xz",
+      "sha256": "081ed34128c6822768e59cef278cc84736dd59507dba89983717608dab99e9f5"
+    },
+    {
+      "path": "timings.csv",
+      "sha256": "4815e7d17bfe0472b97b15b6d61f8c232539b144f60746952f3d1ee7a942e0fe"
+    },
+    {
+      "path": "summary.csv",
+      "sha256": "ad26e390cd999debeff156b9a31a7f1e765232e0b6a0645b25abaa9a43a12375"
+    },
+    {
+      "path": "inputs.json.xz",
+      "sha256": "0af4f6fd864abba07bb3aab529deaedf2541251844b5eb73273fd2cfdaf476c0"
+    },
+    {
+      "path": "provenance.json.xz",
+      "sha256": "c49ec57ba0f98ff443e446d0690ffadc1c57fe0257e31c5f2f6b4473abe72ae9"
+    },
+    {
+      "path": "measured-source.json.xz",
+      "sha256": "44936b8acdaa5680141136d15b594ab94acca747c95b09f50a419b36c407ae18"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Descriptive n3 timing observations, not statistical or global-default promotion"
+  }
+}

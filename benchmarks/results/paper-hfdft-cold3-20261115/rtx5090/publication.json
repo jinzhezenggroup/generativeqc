@@ -1,0 +1,65 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "4b8b103a57fbd4fd794e17dab405b6940b3adcea",
+    "dirty": true
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.paper_hfdft_replay",
+      "--verify-only"
+    ]
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Source-bound descriptive three-process figure observations retained; no global performance or overall numerical acceptance"
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "bytes": 989968,
+      "sha256": "081ed34128c6822768e59cef278cc84736dd59507dba89983717608dab99e9f5"
+    },
+    {
+      "path": "timings.csv",
+      "role": "samples",
+      "bytes": 40787,
+      "sha256": "4815e7d17bfe0472b97b15b6d61f8c232539b144f60746952f3d1ee7a942e0fe"
+    },
+    {
+      "path": "summary.csv",
+      "role": "summary",
+      "bytes": 21691,
+      "sha256": "ad26e390cd999debeff156b9a31a7f1e765232e0b6a0645b25abaa9a43a12375"
+    },
+    {
+      "path": "inputs.json.xz",
+      "role": "input",
+      "bytes": 3252,
+      "sha256": "0af4f6fd864abba07bb3aab529deaedf2541251844b5eb73273fd2cfdaf476c0"
+    },
+    {
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "bytes": 7044,
+      "sha256": "c49ec57ba0f98ff443e446d0690ffadc1c57fe0257e31c5f2f6b4473abe72ae9"
+    },
+    {
+      "path": "measured-source.json.xz",
+      "role": "source-patch",
+      "bytes": 14904,
+      "sha256": "44936b8acdaa5680141136d15b594ab94acca747c95b09f50a419b36c407ae18"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 4710,
+      "sha256": "5e78856dd4e5774bdb60b65982518f130d4fce3ec756c828ebf7e98dcdb1db8a"
+    }
+  ]
+}
