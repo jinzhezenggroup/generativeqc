@@ -457,6 +457,9 @@ def test_openblas_incomplete_batch_falls_back(
         ROOT / "cmake/GenerativeQCCpuLinalg.cmake",
         module_dir / "GenerativeQCCpuLinalg.cmake",
     )
+    adapter = module_root / "src/tensor/openblas_lapacke.hpp"
+    adapter.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "src/tensor/openblas_lapacke.hpp", adapter)
     helper = module_dir / "GenerativeQCOpenBLASProbeBatch.cmake"
     if hook_behavior == "bypass":
         helper.write_text("# A replacement hook does not validate the batch.\n")
