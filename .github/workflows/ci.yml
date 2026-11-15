@@ -229,11 +229,11 @@ jobs:
       actions: read
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
-    # Run 43146888679 passed GCC but exhausted Clang's former 20-minute job
-    # during a progressing Gaussian-ECP build. The matched prior-build tail
-    # estimates 22.5-24 minutes total, so reserve a finite 30-minute Clang
-    # ceiling for build/test variation. Keep the existing GCC 25-minute ceiling.
-    timeout-minutes: ${{ matrix.compiler == 'clang' && 30 || 25 }}
+    # Run 43751061186 exhausted GCC's 25-minute job after a 22-minute cold
+    # build and full CTest execution, skipping the ownership receipt. Give
+    # both compilers finite headroom for complete build/test/receipt work;
+    # cache availability must not determine whether qualification can finish.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
