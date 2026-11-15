@@ -6,7 +6,7 @@
     "scope": "audit-only primary full-range Fock/force and declared mixed/streaming wrappers; no optional competitors or exact SR/LR packages; no device execution or endpoint qualification",
     "sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
     "source_commit": "6c0e89cfff07881d76f10f27de79b7bc509dd0d1",
-    "status": "current-source-compile-only",
+    "status": "historical-source-only",
     "translation_units": 88
   },
   "endpoint_smoke_evidence": {
@@ -147,7 +147,7 @@
     },
     "sha256": "ebacbaaf69169d8a5e9251f7cf02711445bc85460fea610e81120cc3a16387d7",
     "source_commit": "6c0e89cfff07881d76f10f27de79b7bc509dd0d1",
-    "source_status": "current-source"
+    "source_status": "historical-source-only"
   },
   "historical_context": [
     {
@@ -172,7 +172,7 @@
     }
   ],
   "manifest_sha256": "a5df01c89d396a8b9411654cd47d464cc8a4fee3fd04fc655a76bce86de9638b",
-  "native_source_identity": "788daab81655bece6d505d8aefe0efaf20bf56b69f3f70abf985292ca1cb0e1a",
+  "native_source_identity": "e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7",
   "qualification_boundary": "Static legality is not compile, numerical or endpoint qualification; historical evidence must retain its own source/device identity.",
   "route_features": [
     {
@@ -2159,20 +2159,7 @@
             "status": "target-plan-accepted",
             "threads": 384
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "8b44ba661ab035f358b4a1c4ab696f110fce130ed66d445235328fe72ee3b1dc",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 504,
-              "STACK": 144
-            },
-            "resource_sha256": "e8e05f10ba353dde823ed4a7afa81a376268c942c8c3f38d7819e1c7a190db40",
-            "source_sha256": "c23254483972085bc38f83ceffc9832be4a8a243ae7d3c78254529795c7a3cd9",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2189,20 +2176,7 @@
             "status": "target-plan-accepted",
             "threads": 384
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "e51f0e836c40a7ab1dc357c69db3535dda81d6ffdf492dd16b13a83bca13347d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 1528,
-              "STACK": 144
-            },
-            "resource_sha256": "edb92bea0c09f6b63e96a6cb4a220f0a4e44d8e5cae0a24b517850abe431309a",
-            "source_sha256": "b1e9218881a0ed670188fc548d6760f45c2c04c9aa80d9b14185301f28ac657b",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2245,20 +2219,7 @@
             "status": "target-plan-accepted",
             "threads": 608
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "ff412bea5cfa7df345c46c14bba742c3f750e803192875e187ab4bba8f97cbc7",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 520,
-              "STACK": 192
-            },
-            "resource_sha256": "cdcd567502eb1e2048c1f25070f6ba63901daafa25ffdbe56e565fe8557074ae",
-            "source_sha256": "7225ff37eda85b4db88d3eb7e9c57734f73e3aad3b88b61bd548c9b8b3664102",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2275,20 +2236,7 @@
             "status": "target-plan-accepted",
             "threads": 608
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "bcb4e0f805eaeb84cc15de9d80c29d828ee6320b6e00686e909f8b831cef812a",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 1544,
-              "STACK": 192
-            },
-            "resource_sha256": "fe4dac8e26a78369641ae2890dec1eecc61a98d58101fe4a56d0216ff56ab2ac",
-            "source_sha256": "b710ecd13947ab52f10a2e8e7834300bcf5a2ca620995c595fdc93fbc538650c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2331,20 +2279,7 @@
             "status": "target-plan-accepted",
             "threads": 544
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "85845cc76ae1dfcefea1e7d590b315ce25472a5d229bc977fcefa01f00627348",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 504,
-              "STACK": 144
-            },
-            "resource_sha256": "b6b1c8517c915c564d9ca7b1eff7d559ab3216eabb3876d385a00c73372e4a56",
-            "source_sha256": "62ec6340c437d1ec2992383fa306719613fd69b23d0b939dec67aabc02bd936f",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2361,20 +2296,7 @@
             "status": "target-plan-accepted",
             "threads": 544
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "aaffa47268c488e63d6ab9e385c4ca04f15fc58f6a07d1f70d48a7e1e2ad960e",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 1528,
-              "STACK": 144
-            },
-            "resource_sha256": "08f8ecf245f1c1a35b293cfc46a8ed57b1b3651061a98add9b26ef9ee25f07ce",
-            "source_sha256": "70de073bf2cf94933321d703cb60e9b8bfcbb4cda6d88c90c3914f2871be35ef",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2417,20 +2339,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "6b5cd20767dbe57291b3c31df29105d8e0374f8ed8f05ebfb547e0cb4da20a35",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 250,
-              "SHARED": 504,
-              "STACK": 96
-            },
-            "resource_sha256": "f6d568348adb9f35c59df695b7df6597984954b9364fa2bee784ec936e581bc1",
-            "source_sha256": "19552b8550fa36f0ba979a21775c20d3f58868a03df2caa68acee301e8e0c79c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2447,20 +2356,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "6f039dd3ca3dcb7818f1e4fe02e2d3e7aa517c9a2983ee0613928777d4a4828a",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1528,
-              "STACK": 96
-            },
-            "resource_sha256": "625adcd360dc97ef0a409e03eaa69fd97a2edaabb0b8372130eb4966f0b63bb1",
-            "source_sha256": "ede784b5aa7a54ca948b4fa4e3279c4e7ef2e34a3c754d77094682cf1ace9142",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2503,20 +2399,7 @@
             "status": "target-plan-accepted",
             "threads": 64
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "9f236ec6444661f9d128da5db33075ed647bd33158aaa198f7832298eeda1ccb",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 242,
-              "SHARED": 488,
-              "STACK": 48
-            },
-            "resource_sha256": "cbfe6ca17f00553b4ee19f2564d6bdd62cd5fe6bb6ab3d648253b23b251c3633",
-            "source_sha256": "7194fcf67a4b202013a399a251dbbf2fa76750f5b375d4af0d15ffb90447666a",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2533,20 +2416,7 @@
             "status": "target-plan-accepted",
             "threads": 64
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "db822491021a10293e63ee8655a408ad3ac072bb279e2fb3ed49d90d4d9663d3",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1512,
-              "STACK": 48
-            },
-            "resource_sha256": "00ac2957a97a13ab67233d87ca64b85b95ca6b3eb55371fb679305f21dbed424",
-            "source_sha256": "fcd66a92692a58e01023e641b99b597d333f3bcc494622b16690ceb228a418ff",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2589,20 +2459,7 @@
             "status": "target-plan-accepted",
             "threads": 608
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "038721fe2fc3be74ed7fd8442970d6689954eb78a86a51b2d36df106f70fb9e9",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 520,
-              "STACK": 168
-            },
-            "resource_sha256": "caf0a1019420ed884732699b98d35cff2cf20dd19a30efcbac4c209a882704d0",
-            "source_sha256": "2d728f5e394562d8d4a21dccb7385a9fe63970225ea0deeda8f881790f91b57e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2619,20 +2476,7 @@
             "status": "target-plan-accepted",
             "threads": 608
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "f290f935e01c7aae395839dc1daceb3f040361b9e8d04b2b377d55b88ff63ea9",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 1544,
-              "STACK": 168
-            },
-            "resource_sha256": "bd4fcf51fa85729c1b57d5fa47bee71b853708d6e796f758c52964e52a9cc1ec",
-            "source_sha256": "0e4916b99b5d6e3a906188822b636b901bad789e95026e149f92ce33a894a3c8",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2675,20 +2519,7 @@
             "status": "target-plan-accepted",
             "threads": 1024
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "f9f8e9645d0e241c31a3402063ab87afcab1859bb5244e5c3b20ffd8d87f497c",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 520,
-              "STACK": 304
-            },
-            "resource_sha256": "278e5cda0e6bf29a6278667e8aff8b3d5204d351c35cd5095df7bc4543b37df9",
-            "source_sha256": "585a1491f441d187022be6a9a85fb587583812e08994f8a9aa566c675f8a229c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2705,20 +2536,7 @@
             "status": "target-plan-accepted",
             "threads": 1024
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "1e8fb0aaa37bc157f208935738f4cd7802941ee7074f895684450ba4fb915efe",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 1544,
-              "STACK": 304
-            },
-            "resource_sha256": "40604e6b58a2d6fe6a72b5fd56ee69d80aaaf470f14645f99e2dea445f266581",
-            "source_sha256": "f33b8e640053536d03d9da1a409e3057932071aaeea4aa01210c279ca3a81569",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2761,20 +2579,7 @@
             "status": "target-plan-accepted",
             "threads": 928
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "700d78a9fbd8ac691db0500a999fc8b899085a7039724d403f4624a980c9fbc9",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 520,
-              "STACK": 280
-            },
-            "resource_sha256": "e29cb1a0d818ecca11613d1d139aac213a3a14de789872d74a9d1da1fa867177",
-            "source_sha256": "67650e50441448cab6b28202e3ab592049b05153a67c11b3c6f46788ae9c6b80",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2791,20 +2596,7 @@
             "status": "target-plan-accepted",
             "threads": 928
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "71399ecf3be2618f9f2e980e805515b122ccad7406b6a27a92a177d6560a4c50",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 1544,
-              "STACK": 232
-            },
-            "resource_sha256": "2f22d2ef9551b3281a7905237d300a5f8f1f915041254352347d11ef0535046c",
-            "source_sha256": "e97ea49e86f5e04a04cb55fb240f41f297692a4b91556789dce786834e6091ee",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2847,20 +2639,7 @@
             "status": "target-plan-accepted",
             "threads": 320
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "610a4686b4a8f2783c2e688a9865d5a8f1e29298c73915133b5fdf1103509c68",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 504,
-              "STACK": 112
-            },
-            "resource_sha256": "7a6418d304462a4ad2fceaec3701646737927baa1a189ee3a374257df722043c",
-            "source_sha256": "3ea8ea55893307c93b75c4456d03c5afa9a5e4463812704a008bdc0ce1bae389",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2877,20 +2656,7 @@
             "status": "target-plan-accepted",
             "threads": 320
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "9f9104d68559cad6549a83dea9e9a2ee61b1638dbe2d4f0cfba274544a764fb3",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 1528,
-              "STACK": 112
-            },
-            "resource_sha256": "d1540ffa4b5884aa4ff4a19b582306823c68a48a0d6f9a03afe87bd958523cf4",
-            "source_sha256": "f2778f3766e63e98ec26a5976fcc8cefc00d7fd174136f0d236fb090272e1d38",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -2933,20 +2699,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "234434d434302abcdb227d09d2de237c57211f7eff70e6265295914dfd2cb323",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 250,
-              "SHARED": 504,
-              "STACK": 56
-            },
-            "resource_sha256": "189c59d394c0c7e3529c292de465f2dcfcde4c082ea7e0849373b39417a666ed",
-            "source_sha256": "d30ceee70f2a9b33a85380db2e0d5b4461e1320d4011f9ffce89a9deeb41f1cc",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -2963,20 +2716,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "e80387e275226caaa46c3c54e11ad4091ad67a604064dcd64236241a6d3a8572",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1528,
-              "STACK": 56
-            },
-            "resource_sha256": "2c847e33d86dbf37a9f2cf6c097c8fad5552b77f708e940aef5a3f5acf3d0c49",
-            "source_sha256": "b45965729489db4f9d6b1c5a2623fbce824cc50f0ab6dd554829d6e2f0f4963e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3019,20 +2759,7 @@
             "status": "target-plan-accepted",
             "threads": 544
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "0cad9543c79359d56dcfc6005b2923cdbca86de1f9f11652c22cf7ab6f74cd8c",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 504,
-              "STACK": 160
-            },
-            "resource_sha256": "78e4f261d3fa4f71035f567c7cc86733d00d88fc6655b9f63e1d3f46ffbe6017",
-            "source_sha256": "7ffa7d1fcd3da592af92d10a07c48d5cbda80054e7f6a7ee83527e9f97ab1300",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3049,20 +2776,7 @@
             "status": "target-plan-accepted",
             "threads": 544
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "ec324688154563f5f66ea33adc26a3d19db9cf539a68295be1747dad24133cd1",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 96,
-              "SHARED": 1528,
-              "STACK": 160
-            },
-            "resource_sha256": "530abdb966ac23cfe3833d93b4aa315c5707ae4b0effd5354530abec78138f77",
-            "source_sha256": "2a3eb36829e4fc0791bf7d706ef559acd28993633f6de99fd3725f6988c30b4e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3105,20 +2819,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "6b479631fbb656224009d7edea1ac30018b90a85642986d3feaa34acdc8f7c08",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 252,
-              "SHARED": 504,
-              "STACK": 120
-            },
-            "resource_sha256": "212dc06e9af02caaed056b574fff032b6174ec5066720baef25054a611511c4d",
-            "source_sha256": "1cc2b160f68abdb71d10b939097889c3b9eb478ea994e67902716771cc012156",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3135,20 +2836,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "a3eadeb65778bb16b3d4e3782a8b15db0837e0b081c60b6a38fa7846ed9b0018",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1528,
-              "STACK": 120
-            },
-            "resource_sha256": "74b032aebf73e20db85cdf960fe1e740ce0106bc740d5c4c6d214a9d48ed1a73",
-            "source_sha256": "8d1ed16f915375b52f4fdb86df7dadcb0fef0c7317a58d77b6f04eeb64285c5c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3191,20 +2879,7 @@
             "status": "target-plan-accepted",
             "threads": 928
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "a752e72a6f20969630873649209ef8c4f58fcfea8dc3eb51914be15ebf2bed7c",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 520,
-              "STACK": 304
-            },
-            "resource_sha256": "071711ced4478d71b4e3ee2ec91f97443cf7a9ffc1eaaad20f94fe187e25ecb8",
-            "source_sha256": "58797e9ea28392545e9a80e9bfa3fcf629edf546c7f96022c03cdc5135f86faf",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3221,20 +2896,7 @@
             "status": "target-plan-accepted",
             "threads": 928
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "15c86a944969b00f629451c253fde35b30511d9efa6b786a9953f963c8359ecb",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 64,
-              "SHARED": 1544,
-              "STACK": 264
-            },
-            "resource_sha256": "1728edc0944bae5a01a6811cf321968127f6f287b2eff1d46973dd87a33d7cea",
-            "source_sha256": "daa801c466e6ddeb1c37b07a5b4537f05f6822923c631075cc3ad7ccb893d0b6",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3277,20 +2939,7 @@
             "status": "target-plan-accepted",
             "threads": 320
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "bf2993bbaab1f26d48b4df9c3b0db8fab945ae1cf2487b3deb6d09734a032771",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 504,
-              "STACK": 160
-            },
-            "resource_sha256": "87d7d71bfb0435775c77e0d913087a330c0237d1ff07a4cd30cefc2cbb27e22b",
-            "source_sha256": "bcbfe45a669b118d8c8c90410d7a6b422fc0b3ecbf6740d0e12515d5f89069f1",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3307,20 +2956,7 @@
             "status": "target-plan-accepted",
             "threads": 320
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "98009f48a78cc31fad0c929256d88355194703cffc7769726ea0ec5e048641ee",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 1528,
-              "STACK": 160
-            },
-            "resource_sha256": "9db68ffc3eaf6c0f842f2c246e060fe77fffef4447ff93bed643223e40559319",
-            "source_sha256": "1c9947c9501c2422e2862528c0af7b8db310012a9db1a5f099b9ba964f5a6994",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3363,20 +2999,7 @@
             "status": "target-plan-accepted",
             "threads": 288
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "e370c843111dcd3d438980f4e4e09c65a95330a17480d9667dfa86ce0befad61",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 504,
-              "STACK": 120
-            },
-            "resource_sha256": "b04b211c602ac939584e174eeff3b61c42501e587d0780cfaa60696ae1f20d80",
-            "source_sha256": "bc073a26a7a37ce4e0fc6205992f5f28aeacfb53bb1a5652729eba7f528e4444",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3393,20 +3016,7 @@
             "status": "target-plan-accepted",
             "threads": 288
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "87cd79db10d016d76e2bebe50a40b4862e74019cf7d9e781789eeba5389580e0",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 1528,
-              "STACK": 120
-            },
-            "resource_sha256": "c25f757c3f73311cdaff550c0ef0b5afd4a6e7c9e08ca260060df9a3275e26a0",
-            "source_sha256": "17dd2d5dbf9f59430a91c4f6a4c896c3aa6ef63eb7c40648abf69f2736db8d01",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3449,20 +3059,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "143692894b79162a9571b31b05affc894ecaceb6d2b8a4e2589bb04ed6a534e0",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 243,
-              "SHARED": 488,
-              "STACK": 40
-            },
-            "resource_sha256": "6b5564bc7ff697ce6ea4e688bdf880ebfa5b21ea031e8f6966052df8530c160e",
-            "source_sha256": "226084dddeeccda3687251efd52588dc0e668ec42e6dc4a21421fcc4345da8c6",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3479,20 +3076,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "6fda4bf18e3bc26c43dfa7d1562a6461f4f5790d650003f38e6934e5ff2dc075",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1512,
-              "STACK": 40
-            },
-            "resource_sha256": "626d72ddf714426f26785c54dedc5e0e69aea0f152fe98a00135b1dbb18a29fd",
-            "source_sha256": "dade3597a4aa6d19486c292a3a51474ad10f6ce7df45168824b83210f0df2f32",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3535,20 +3119,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "038903cbc25649641d21adc48b8822e949ceb6a9f5b1655a4015bb1279029855",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 250,
-              "SHARED": 504,
-              "STACK": 128
-            },
-            "resource_sha256": "63e7c6291c3d60af81234d5521a56b7728f41364bfcd16bfa5a6872d774f99fc",
-            "source_sha256": "e15cd11bd20100303324a5a72cf31dfef9e9cb3a04ac58b4b6d9e4f659f3f712",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3565,20 +3136,7 @@
             "status": "target-plan-accepted",
             "threads": 192
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "b3eeff54cfd780330bd310d47a6162f8853132016f42bd41fd70c87e0d7a99ac",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1528,
-              "STACK": 128
-            },
-            "resource_sha256": "84cfbeb672e04f253587a586bc02c85929e01fc31fff466c0c8e32bb7ab3de27",
-            "source_sha256": "e4a13f33218c6bde3218b31fd1d9531059693103eb1f8f911d17b18a5572a9c3",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3621,20 +3179,7 @@
             "status": "target-plan-accepted",
             "threads": 64
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "866163ffce19a90805e4030420503d51be70a66a553dda3fdde8bcf502948c2d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 242,
-              "SHARED": 488,
-              "STACK": 96
-            },
-            "resource_sha256": "8492ef65e7beeb178c30be7218d4fe4a52c652f9ece43f7addb19fb4ce16a36d",
-            "source_sha256": "95c5691794e1a398379f78fe1ae8232e74e84ffac99148409ad4c4abeab33e19",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3651,20 +3196,7 @@
             "status": "target-plan-accepted",
             "threads": 64
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "a78c7cfc829e045467e08676248021aa91c25b1e8d770425d068aa0b9a72b62d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1512,
-              "STACK": 96
-            },
-            "resource_sha256": "935d3ab5e88bb612b3d1ab67899c7df9e7315af9925d543d066097f16895f5ef",
-            "source_sha256": "2842a404fb5780f17843b2e934c79e06b233016e970fecd25bc4a66c5b1d7691",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3707,20 +3239,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "79db9e8cc54e76b6749ab279bc31974fdeb7c5c3a86109c7f0f41d112e2010ef",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 246,
-              "SHARED": 504,
-              "STACK": 128
-            },
-            "resource_sha256": "dc28c26959f4c8d7e159da987730a0300e6ad1f7c924b247e1954ea3b125de13",
-            "source_sha256": "83fb96120a73eb29a4151fea13c70b86bc9b3fef90fbe13ba06e2b4bdfad8edb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3737,20 +3256,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "be1061ec0ba13ecad3e9a402b743806c52ff72883a7a0057b1f367de8208c675",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1528,
-              "STACK": 128
-            },
-            "resource_sha256": "c03c1e0d25f73792f847c435df80701263bbccf0c68bf86b214f3c1a0d038814",
-            "source_sha256": "b754e12d8ebd82d0e79cc4ba12eedf26d8bf13a12327d4b19ce31250325a5ee7",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3793,20 +3299,7 @@
             "status": "target-plan-accepted",
             "threads": 96
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "c420959940bc33dda98ba69622281146ab43bfff8e107a222ba1a408b1ae1f3a",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 246,
-              "SHARED": 488,
-              "STACK": 96
-            },
-            "resource_sha256": "6493461ecd1f6ef1fda9a2c0dbcf757cfbe59cc8744fed4422f82d97188769f5",
-            "source_sha256": "c71131ed503ca43f421079e4853af243a1f58a08905dc43b313d1834b17df5f5",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3823,20 +3316,7 @@
             "status": "target-plan-accepted",
             "threads": 96
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "531308a44c4e92a96042f361602f944c92039840cc1bc791f08cc06c4608dd67",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1512,
-              "STACK": 96
-            },
-            "resource_sha256": "eb51b0540ab99278073742573c1d82c2390f39e0447ad8e2575888bda66ae729",
-            "source_sha256": "2dff4b738f99708f3cee831372b22c82411b6c06c54bb227a3ddf052d064b2c3",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3879,20 +3359,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "89b97133faa745c71aab433b9b0b33ff91b0fd0ff8a32f117797aded7ab3bb82",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 243,
-              "SHARED": 488,
-              "STACK": 64
-            },
-            "resource_sha256": "ed93dfa460f82311f614e221ca37d4ad3aec33dc4768ba978c19f4ae35207824",
-            "source_sha256": "42c9376a31207f4f4255817b61d12aa5a54108aaffbedd4bebe777d624d0c507",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3909,20 +3376,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "fe67a8a0eac8968633bd8ae7c27573e442ef027e7bebf307b77df6e38224bd65",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 1512,
-              "STACK": 64
-            },
-            "resource_sha256": "2445ecd31ad7fd5a6f559c063251909490de449c1908119c2750ec49c09c354d",
-            "source_sha256": "7ffb586924619b0e3437e65dd49daf28e499f20f9b563d7ff209fc8ecafe4453",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -3965,20 +3419,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "5b70ef5d2f0a8c5d2b07cdc18850881eb1d2dbc25194d727f2f04292de8586df",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 192,
-              "SHARED": 472,
-              "STACK": 32
-            },
-            "resource_sha256": "34dc7854e97353beb8d02d4b19b3f95bd09e1512a0cc278cd62748752fd7b373",
-            "source_sha256": "54f88f4d1c394586cd93f1bbfdca41bb134412a68ccc18de94828b874169a709",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -3995,20 +3436,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "e6460736970b6b4d354e38ce2828c1380cbe106008abcc07887e20629927dfa2",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 190,
-              "SHARED": 1496,
-              "STACK": 32
-            },
-            "resource_sha256": "f411249e78dd879c685b7a7187922bcd96b8bfb8c06359ab57c9910073bed2e5",
-            "source_sha256": "3ac42ff2404c2b35389b85aae21c5553d6234ec67dc276a50ba4ecc807c15ed5",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4051,20 +3479,7 @@
             "status": "target-plan-accepted",
             "threads": 96
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "13ce0cfd9204b02c1cce6c65d2562b264fe378ee5f9035e49c5c2ca285988fa1",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 1720,
-              "STACK": 80
-            },
-            "resource_sha256": "9ef9f5d7c95a48fde600bba6041d2359a292d4d0ffecb54318977aeca76aff2d",
-            "source_sha256": "99b9063f6552ce1e732cc5ef08a258b96b10528bd4b38fc6eedd0f948fd9203c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4081,20 +3496,7 @@
             "status": "target-plan-accepted",
             "threads": 96
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 4,
-            "object_sha256": "3204123a02160d2cf66e4570b83a41f711de80465337498bea213803ee6e6cb7",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 2744,
-              "STACK": 80
-            },
-            "resource_sha256": "0eb51d44e1e2c5942a6035f6a687ed4a8a2650d103a48295401d991dbbf2f357",
-            "source_sha256": "1e7251442b99e2846314e2339aa0c71f2f1ce467c98164c94b557e9f688abf60",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4137,20 +3539,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "f6329128cffd56e294d10bad2cf1394d8fb7e0a7ce21d04b11ad76a71156a646",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 37640,
-              "STACK": 3312
-            },
-            "resource_sha256": "6549fd35619a736a20a079a4f3160341631afc9ec65544a0705110b34245a59d",
-            "source_sha256": "b23ac85a0694c90bf197e2b74bf3c28034993a68888e5c9fff48f276ea6b5db4",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4167,20 +3556,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "28abb49638e119ee7dc8a468dc942cc746a9fcf5b1d8ec65bd33dcb9d8773690",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 38664,
-              "STACK": 3304
-            },
-            "resource_sha256": "4851b82fe488f0480ab07be4a012ec169f0daa7cf612d275a92b6ca35bf598cd",
-            "source_sha256": "3647717e48b88eec2d72793bca1f7255bf1a275c5cd0398fc15804386f42f3eb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4223,20 +3599,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "346fd49b3b804044cb683d79db97cdf37abbe468db8c4c77950883ffc8947886",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 29320,
-              "STACK": 400
-            },
-            "resource_sha256": "b19bb160ff605f33a0b0bbb9d12d83f8647a0682607f83953372927dc2251d6a",
-            "source_sha256": "4d71a2feabc649724ba8b52ca7184d4a719c3b8f5a9c2e2aa58875db60d7efc6",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4253,20 +3616,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "17e3f5449c320401b8e0c7eac8f1a5dc3f662705a6ccb3ce3612521baeffd2fb",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 30344,
-              "STACK": 288
-            },
-            "resource_sha256": "0e668e1b4c6ef52a88287fc8c36596f442894b9233ff2d37d1f56a04bff80499",
-            "source_sha256": "6e93c9fb4f10bfc88f9e3ff034a3dd646079403184d95dda58cc8037660d1beb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4309,20 +3659,7 @@
             "status": "target-plan-accepted",
             "threads": 352
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "b638bb288a76e008336ce8f17f34dca1cd3cb1f8bf693ac0216c883c3fd27581",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 37128,
-              "STACK": 1216
-            },
-            "resource_sha256": "24d8cea0d8629213333bc9dac71828db3c94291cd5273bfc6f0cf46bcc8f1336",
-            "source_sha256": "743825106625256aae6024a41795efc6ae7fc76f18101639bd519bab95bd1db6",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4339,20 +3676,7 @@
             "status": "target-plan-accepted",
             "threads": 352
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "347c5b74452cbac4bf16f61bdba076540b0bfe7c9119964580e466a007335b42",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 38152,
-              "STACK": 1272
-            },
-            "resource_sha256": "f4382375f5530818abe394965278a9c4737b9bc871d2581763bcebbef811c13a",
-            "source_sha256": "945bd3729a09496390c4f839bf212ea436bf5a5d9a218c457cc012557c91f8ad",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4395,20 +3719,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "ecd99e8a52950242d0f0e5ebbdd0c30ca285b969b30934eb758a2ca2b192cc0b",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 246,
-              "SHARED": 40552,
-              "STACK": 224
-            },
-            "resource_sha256": "eb47e2f56036cb98823c38bbbe173edf4bcfc9ada4d15d8eb2eba1246eebba55",
-            "source_sha256": "49f29460838ac8ab70d2bcdb765b4094546fbd95b3144f4740df1889ed38d874",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4425,20 +3736,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "b64c7eafc0cc1d9c9aaa50e7bce587f1bbc58f4d669fb5b77a19e305c58902fa",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 41576,
-              "STACK": 320
-            },
-            "resource_sha256": "d102dfd9fcbfa048de70c59da530b3c60207249337158a5884695c4a52f941ae",
-            "source_sha256": "41132705430ee01612b02f20eac5c39615598a00394fcb0c687d1e159719d0f7",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4481,20 +3779,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3477d8ca52c127ba75dbf87d1ceba7df0b2454a323d7325c49f27e09c8ec6fec",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 28008,
-              "STACK": 128
-            },
-            "resource_sha256": "c305a2e099e62c989d7d5dc7bbc1f0acd7abdeb9412ea69bc057adb279cd6eaf",
-            "source_sha256": "608944d342f98c83306024437f6a672db07fb97920caf61dd975ea69333e6204",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4511,20 +3796,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3f94e46997c949671a7af682a5300cba7dd6faca2114d0c0b7c0c70be3b104ae",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 29032,
-              "STACK": 160
-            },
-            "resource_sha256": "826128ee4ad61953b23688d472daa21479ae2318cb9ce94b5e70061ecb843f87",
-            "source_sha256": "7e51ebc740b7ecab8336d06b5eaa73ec5545a90e8f8e5834b796d83fabdb200e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4567,20 +3839,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "fd4e5b66a801ea2dd70d27495f732d49c3806106269759db9af33b96845424b8",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 37128,
-              "STACK": 1024
-            },
-            "resource_sha256": "f3931a7683b88a85ffbd98a372ff1aedd6647c679debf91b784a95d7c77dc85f",
-            "source_sha256": "55529f3d6085f944e6609fcf2ecc4d7cc5c1de6d072c9d1028079bbac620b0a2",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4597,20 +3856,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "1789235fdf10125b39faed795419a75d7e09b946960ff613da538fcfbfe63155",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 38152,
-              "STACK": 1064
-            },
-            "resource_sha256": "567fee8dd1b38fe828c9f27527b7caa09ac18ae7a5f1533d64a3be2ca5dd38e9",
-            "source_sha256": "28dc1197aef4f4474259782fadc4e6634084d857a4bbbf16db4581fd9c4caa02",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4653,20 +3899,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "91c177f793e42f576c6350187f16519665a80677c86299c0e2ebefedd3d84975",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 246,
-              "SHARED": 40552,
-              "STACK": 272
-            },
-            "resource_sha256": "69ec5cd8c656bf6842d137ac78be6ed25e135d4ee107770424f8517c79687896",
-            "source_sha256": "21050b326f5041ec30d09f4cc304d93953094ec2b11b05c7f19b72fa4e632729",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4683,20 +3916,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "bd17377b85f82d68c674289c3d229fd610880214bfbeac2f0c04b2ae45b3b666",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 41576,
-              "STACK": 280
-            },
-            "resource_sha256": "fbd2959eea81af13e8f6bf96bf442e8741543c31fdc8a5fccc6b8e9d0c5268e1",
-            "source_sha256": "0beb6289f03084809e743e906ac9a4547e3930c7de8dfb42aff70512b5783359",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4739,20 +3959,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "63784741f04621aa6b6dbe452a2335024e01668664004c8e2fa26b7f25042085",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 47464,
-              "STACK": 2656
-            },
-            "resource_sha256": "a956c543dc677f13cd55f17063b478f0d29123458d3fc174fb57154f7ed88af6",
-            "source_sha256": "baea1c2028ccbf81fd7792e05fe3d1d8013eac259abe59ecfadf38210dbbc31c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4769,20 +3976,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "1623e30478eb70593c29b6817403f6cc8e4a16d8e6a76e788505e82733b94957",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 48488,
-              "STACK": 2664
-            },
-            "resource_sha256": "f3be98bd4b962519b5fcde988d08773e545aeea0ecd942ecf9c902136d225fc8",
-            "source_sha256": "a1f7d4d25c54e98bc5207ed000fc7f39db5934b1b457e32ea9f09d47d435668f",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4825,20 +4019,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3b4cc920c97c4701a47bbe715b171bd1ea13105c80d6cfb71ab93f94a5c59705",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 214,
-              "SHARED": 30312,
-              "STACK": 416
-            },
-            "resource_sha256": "f30a445d2717c70f7bb668bed10e505b168d50b1d4a28043225e8b687be44a7b",
-            "source_sha256": "b3768b02531d393e47459981aded91fd4c83e79eb6654966e1446bd0df55b343",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4855,20 +4036,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "8fc35dc6cdd109789f4dc6b14a63a9bebd71c7c020b8546e055c33db4bf341d6",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 218,
-              "SHARED": 31336,
-              "STACK": 224
-            },
-            "resource_sha256": "02abecc16b410a749729b0f5657f7a1d57b902c5a99c1df6501b1407efb0a13a",
-            "source_sha256": "d35d23b0de06947fd9d595f4ca5843c5dccae955c55de43793713920de6b5147",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4911,20 +4079,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "81478d9a2c2fe2f4ab508a40d547d4132d74bfd8c849e09786b748d77bcf0f9b",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 46248,
-              "STACK": 56
-            },
-            "resource_sha256": "89722eaf235f1d4bb63a9feb789d1bfdf4e9a9f9487ec23a1ba16c131f01a0b3",
-            "source_sha256": "70dc9938405cc5c786508d4f749ac060598df44626f91fead062c48f27a9133f",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -4941,20 +4096,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "aa81a25542273bc6fa8f1bf472b5f31752a614fc6dc0c76b8e10d1c9e9b693ad",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 252,
-              "SHARED": 47272,
-              "STACK": 48
-            },
-            "resource_sha256": "18939a5d740d1aa687e0b3b17a31e47de51a0824979efb30c5177c45a005ffe1",
-            "source_sha256": "453bf22e5628778919cee4106047a5504858ab6e66895c76e91d4f004e744939",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -4997,20 +4139,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "000f8bb36e58fdf024b4976ddf1609de18083123847103301c3268d24dc1c9b2",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 28008,
-              "STACK": 144
-            },
-            "resource_sha256": "59752e3bce98629a12537dbdfd7c3b2f86cbe0ed6fa928127b0914687689a0cf",
-            "source_sha256": "7eae0a1a4b0733d71024ba9a8d9602ddede86c9974ff76ec602c29ff810d2f49",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5027,20 +4156,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "838dee8e1df1a5f6c44dffac13218890ac5bcbc0d44ed17ed5ba158280778ab0",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 29032,
-              "STACK": 144
-            },
-            "resource_sha256": "55384414e43cab855202097581d928be16708d75c5615e1754cd4d19e7775a74",
-            "source_sha256": "1e1da68c2598226f0cd8dcab6d3947f3d087b7dcee87863edbd67fd6c2492d1a",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5083,20 +4199,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "33a4fc7dd8f21f188b92a730a84366b963d13ed5c09cd63786c18212ed42fa2f",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 30312,
-              "STACK": 232
-            },
-            "resource_sha256": "5268a4ec622f0b33be3c405eb86364fbc13e3fc9c2f4025872f8d76964439edd",
-            "source_sha256": "206bc253592a83a0a395fa1b14191a35e953c6fd4bfc93232785fc66d1a36c97",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5113,20 +4216,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "b99ecb0d892ab74d5d8403d52b2a333acc5f1aef01156e0f0819088c76064657",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 31336,
-              "STACK": 112
-            },
-            "resource_sha256": "1b8df3b5e5c72c19bc996cef3bebfe5d27b0e7751bcf498772723737ac621694",
-            "source_sha256": "5a65d62a08ce95e8aaec04651049510172df2377c60e7b8a411868885a138709",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5169,20 +4259,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 14,
-            "object_sha256": "996e25d1934c8adcd5641c0080d9a7c4a20035d1543766c00f2d37e3195cc83c",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 46248,
-              "STACK": 120
-            },
-            "resource_sha256": "60c5203f3f4c5e6bd97a680e33e32c71266abde6224d2aebe07a672b681dce69",
-            "source_sha256": "8ff943b062af043ddcc9eb191f17292624acabf4bf7df3ec5ea0387e59abc5c3",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5199,20 +4276,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 14,
-            "object_sha256": "9d1a6612ab7f21cd2293512e35d2ae28dab7669c45708c60a64224cae2d4018f",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 252,
-              "SHARED": 47272,
-              "STACK": 128
-            },
-            "resource_sha256": "20a91da17d6d4d9c836390d01d0a370a243836dfd6f52588a8482f9b6b766fd4",
-            "source_sha256": "f7c8933f56b7843794320a1c33da9506e8a8281ad8cd10f15b65ae61a626aa5c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5255,20 +4319,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "5b7ab93ff960014ced4866132a316d528f226ab6f002a7ec7397059174bba7da",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 28712,
-              "STACK": 1096
-            },
-            "resource_sha256": "fac98d7bfa117ade5c09025e3ad5dabb214a7d41ab17ab5886f6f1ad744df816",
-            "source_sha256": "fb43f3b7d36cb88f02d26d2b978f894ff538abadd3f1cc56beef2b3f95af4288",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5285,20 +4336,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "a9c500bc94cf0e14521afb05ff502b5688b7dce3ea3767607e2f7f5dde29060a",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 29736,
-              "STACK": 1112
-            },
-            "resource_sha256": "a263d27f70508f30b4f9ab53a66126e1f3943eeb1eea73631d0ac13b1f886f9c",
-            "source_sha256": "52b17839c0daa0ce49b454a45947e5a8ba160d89937b78f1b742a1187435bac8",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5341,20 +4379,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "cc80bf41d9d482af190bb06e444eb6f9460d940c51c1d176c8107cfb83b94a1d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 26888,
-              "STACK": 792
-            },
-            "resource_sha256": "d40f64c1ac19dcb12ffd444316dd367780732fdfd4f192590bbf4681ddd5bcc0",
-            "source_sha256": "c227e94aa4e0d92da284f6002ed4c5282ff8be1768bc95bb0255684821de74ba",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5371,20 +4396,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "61e9dba67f324d97912ecf2420766ffe78c63ebabda98e0c2683a203fe4585f4",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 27912,
-              "STACK": 824
-            },
-            "resource_sha256": "470666cb44ef76d1635b7f2366f81dfd21c4ab71704b3428f5ad310fc6ec40cb",
-            "source_sha256": "74466e57692d818b7bbd1de1826905e94c2b0ae92e5102c44d7246cf657bfc22",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5427,20 +4439,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 18,
-            "object_sha256": "39512ee4f1d315f43424bfd1be9605977ef1d209e893d97952d4d418afd777d8",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 48552,
-              "STACK": 184
-            },
-            "resource_sha256": "9c190ba89fc400e6e64048367647cb68911dd81494af3a9d124c6f6796ae95bd",
-            "source_sha256": "87e7585f73a1db1d6429f6033d19e7e5783f04fefe69f0a26d315e94311ac009",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5457,20 +4456,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 18,
-            "object_sha256": "213bac88c72e9ceb503fb255f479814989b3a33bd5c448c16dc28d49dfca7a31",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 49576,
-              "STACK": 320
-            },
-            "resource_sha256": "c5746ccc6a1aae854cab71e3ea223df02d661b21bc318576d3874c777662f4c8",
-            "source_sha256": "7ceccf4cbd3c72c6c503237f8686ad91fbdb7079a485dd619010a74c9282e9cb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5513,20 +4499,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "1f1b041ca8a262b61d635eb4d5b9ea4907842ad4c4cee3d63dad2a5f43a5dfa2",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 221,
-              "SHARED": 28712,
-              "STACK": 0
-            },
-            "resource_sha256": "436a7d1a4cb780753f4e11705a06cd0c6d8bc92df28fad6cbb828d06955c5342",
-            "source_sha256": "4d13a1d928b461102f5d4f3421190127d8a2017ef354a509318bda8b387e94a0",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5543,20 +4516,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "c3e6cf1131873cd5ade2b69342a497cd6cfed55a5595c8b8f6c62e0ade210e87",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 224,
-              "SHARED": 29736,
-              "STACK": 0
-            },
-            "resource_sha256": "1954630b61639e5c4c24ce224a936e3e6106edd2b63c8158fed57acca5e71c7b",
-            "source_sha256": "3a03d49405000885b7e17e57e6f62c5465c418cf4ec9c2325ebb4e5c46beb611",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5599,20 +4559,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "8e0c69f6cab7601363984419a0865f37e26761fd601d757934dd0705be3dae62",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 221,
-              "SHARED": 16392,
-              "STACK": 600
-            },
-            "resource_sha256": "fda7a78efbaa9cfb2acf7b6c7a8db70b26e8508390cca10afd2e12c2cb32b2e1",
-            "source_sha256": "8c2be4037c3eacbeb8b8f35b1565a0b83f4aa38b1991f859b5712969194fa007",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5629,20 +4576,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 10,
-            "object_sha256": "12dc76f0d52116a9bc4c374f45e40d9ef4e7ad7647a83328628e92778a2ae202",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 224,
-              "SHARED": 17416,
-              "STACK": 592
-            },
-            "resource_sha256": "f95a0b873cbf8c3aecd84c48d48680188c5d31e32c1eb8102c281b6377a9d370",
-            "source_sha256": "cba135cd5db2f4f4544dd4d3abb1224cae63f62eded3829fd28df2864e4e17f7",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5685,20 +4619,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "11f5b6af2db027c2a78665e1c365ca71944f7e917fc82c55f56c6c1df85dccf2",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 128,
-              "SHARED": 15112,
-              "STACK": 72
-            },
-            "resource_sha256": "b2303ffda8c11a27a84cfb70ec995660ac6b40a5d472fc274ebf59bc85c79975",
-            "source_sha256": "8e50c63dd0deae5214b884049c886aef0ee7c874c292146947ce5e37bada069e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5715,20 +4636,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "9f516ebcd6864ad626a8a6741aad7ec3e92677b72297311d49ace884ecae3e8d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 128,
-              "SHARED": 16136,
-              "STACK": 72
-            },
-            "resource_sha256": "c08f20fe9eec52d0115fb3343662df720d6e9a59c4d08648d3db77774ef34859",
-            "source_sha256": "09b94b9607a33d7f7acd4724372c65a7d7155e08475c629952c1a9a1c0f1520c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5771,20 +4679,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "3d36339fd54ad1cb79c932672f67d5242d4de84359b6cb864c5fa8359c57aacc",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 116,
-              "SHARED": 26152,
-              "STACK": 72
-            },
-            "resource_sha256": "3bc4a1ed5f9f2a776c26f7d7b81d45bc26e09176283a5595896b306e5c9df1ca",
-            "source_sha256": "ac612d1edd7477718f2da8b6ccc4536643fe0116c4f0dbc2022b02628b11741e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5801,20 +4696,7 @@
             "status": "target-plan-accepted",
             "threads": 32
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 12,
-            "object_sha256": "71ac518a9f11243ea129fdef2176b726b3b3797ec4b683b49507765d53a9a1d7",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 113,
-              "SHARED": 27176,
-              "STACK": 72
-            },
-            "resource_sha256": "3d246e8c71ff4d4a3b556ed108cd28c5d44fcb51b7e4b6828bf09f97e898bc12",
-            "source_sha256": "7f8428b6c7e737cc9982c27d6f9ca132d60eb731fc784d950f7daa2313a0addc",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5857,20 +4739,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "346fd49b3b804044cb683d79db97cdf37abbe468db8c4c77950883ffc8947886",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 29320,
-              "STACK": 400
-            },
-            "resource_sha256": "b19bb160ff605f33a0b0bbb9d12d83f8647a0682607f83953372927dc2251d6a",
-            "source_sha256": "4d71a2feabc649724ba8b52ca7184d4a719c3b8f5a9c2e2aa58875db60d7efc6",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5887,20 +4756,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "17e3f5449c320401b8e0c7eac8f1a5dc3f662705a6ccb3ce3612521baeffd2fb",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 30344,
-              "STACK": 288
-            },
-            "resource_sha256": "0e668e1b4c6ef52a88287fc8c36596f442894b9233ff2d37d1f56a04bff80499",
-            "source_sha256": "6e93c9fb4f10bfc88f9e3ff034a3dd646079403184d95dda58cc8037660d1beb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -5943,20 +4799,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "ecd99e8a52950242d0f0e5ebbdd0c30ca285b969b30934eb758a2ca2b192cc0b",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 246,
-              "SHARED": 40552,
-              "STACK": 224
-            },
-            "resource_sha256": "eb47e2f56036cb98823c38bbbe173edf4bcfc9ada4d15d8eb2eba1246eebba55",
-            "source_sha256": "49f29460838ac8ab70d2bcdb765b4094546fbd95b3144f4740df1889ed38d874",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -5973,20 +4816,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "b64c7eafc0cc1d9c9aaa50e7bce587f1bbc58f4d669fb5b77a19e305c58902fa",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 41576,
-              "STACK": 320
-            },
-            "resource_sha256": "d102dfd9fcbfa048de70c59da530b3c60207249337158a5884695c4a52f941ae",
-            "source_sha256": "41132705430ee01612b02f20eac5c39615598a00394fcb0c687d1e159719d0f7",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6029,20 +4859,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3477d8ca52c127ba75dbf87d1ceba7df0b2454a323d7325c49f27e09c8ec6fec",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 28008,
-              "STACK": 128
-            },
-            "resource_sha256": "c305a2e099e62c989d7d5dc7bbc1f0acd7abdeb9412ea69bc057adb279cd6eaf",
-            "source_sha256": "608944d342f98c83306024437f6a672db07fb97920caf61dd975ea69333e6204",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6059,20 +4876,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3f94e46997c949671a7af682a5300cba7dd6faca2114d0c0b7c0c70be3b104ae",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 29032,
-              "STACK": 160
-            },
-            "resource_sha256": "826128ee4ad61953b23688d472daa21479ae2318cb9ce94b5e70061ecb843f87",
-            "source_sha256": "7e51ebc740b7ecab8336d06b5eaa73ec5545a90e8f8e5834b796d83fabdb200e",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6115,20 +4919,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "3b4cc920c97c4701a47bbe715b171bd1ea13105c80d6cfb71ab93f94a5c59705",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 214,
-              "SHARED": 30312,
-              "STACK": 416
-            },
-            "resource_sha256": "f30a445d2717c70f7bb668bed10e505b168d50b1d4a28043225e8b687be44a7b",
-            "source_sha256": "b3768b02531d393e47459981aded91fd4c83e79eb6654966e1446bd0df55b343",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6145,20 +4936,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "8fc35dc6cdd109789f4dc6b14a63a9bebd71c7c020b8546e055c33db4bf341d6",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 218,
-              "SHARED": 31336,
-              "STACK": 224
-            },
-            "resource_sha256": "02abecc16b410a749729b0f5657f7a1d57b902c5a99c1df6501b1407efb0a13a",
-            "source_sha256": "d35d23b0de06947fd9d595f4ca5843c5dccae955c55de43793713920de6b5147",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6201,20 +4979,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "000f8bb36e58fdf024b4976ddf1609de18083123847103301c3268d24dc1c9b2",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 168,
-              "SHARED": 28008,
-              "STACK": 144
-            },
-            "resource_sha256": "59752e3bce98629a12537dbdfd7c3b2f86cbe0ed6fa928127b0914687689a0cf",
-            "source_sha256": "7eae0a1a4b0733d71024ba9a8d9602ddede86c9974ff76ec602c29ff810d2f49",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6231,20 +4996,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "838dee8e1df1a5f6c44dffac13218890ac5bcbc0d44ed17ed5ba158280778ab0",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 166,
-              "SHARED": 29032,
-              "STACK": 144
-            },
-            "resource_sha256": "55384414e43cab855202097581d928be16708d75c5615e1754cd4d19e7775a74",
-            "source_sha256": "1e1da68c2598226f0cd8dcab6d3947f3d087b7dcee87863edbd67fd6c2492d1a",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6287,20 +5039,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 14,
-            "object_sha256": "996e25d1934c8adcd5641c0080d9a7c4a20035d1543766c00f2d37e3195cc83c",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 254,
-              "SHARED": 46248,
-              "STACK": 120
-            },
-            "resource_sha256": "60c5203f3f4c5e6bd97a680e33e32c71266abde6224d2aebe07a672b681dce69",
-            "source_sha256": "8ff943b062af043ddcc9eb191f17292624acabf4bf7df3ec5ea0387e59abc5c3",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6317,20 +5056,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 14,
-            "object_sha256": "9d1a6612ab7f21cd2293512e35d2ae28dab7669c45708c60a64224cae2d4018f",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 252,
-              "SHARED": 47272,
-              "STACK": 128
-            },
-            "resource_sha256": "20a91da17d6d4d9c836390d01d0a370a243836dfd6f52588a8482f9b6b766fd4",
-            "source_sha256": "f7c8933f56b7843794320a1c33da9506e8a8281ad8cd10f15b65ae61a626aa5c",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6373,20 +5099,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "cc80bf41d9d482af190bb06e444eb6f9460d940c51c1d176c8107cfb83b94a1d",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 26888,
-              "STACK": 792
-            },
-            "resource_sha256": "d40f64c1ac19dcb12ffd444316dd367780732fdfd4f192590bbf4681ddd5bcc0",
-            "source_sha256": "c227e94aa4e0d92da284f6002ed4c5282ff8be1768bc95bb0255684821de74ba",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6403,20 +5116,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 16,
-            "object_sha256": "61e9dba67f324d97912ecf2420766ffe78c63ebabda98e0c2683a203fe4585f4",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 27912,
-              "STACK": 824
-            },
-            "resource_sha256": "470666cb44ef76d1635b7f2366f81dfd21c4ab71704b3428f5ad310fc6ec40cb",
-            "source_sha256": "74466e57692d818b7bbd1de1826905e94c2b0ae92e5102c44d7246cf657bfc22",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6459,20 +5159,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 18,
-            "object_sha256": "39512ee4f1d315f43424bfd1be9605977ef1d209e893d97952d4d418afd777d8",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 48552,
-              "STACK": 184
-            },
-            "resource_sha256": "9c190ba89fc400e6e64048367647cb68911dd81494af3a9d124c6f6796ae95bd",
-            "source_sha256": "87e7585f73a1db1d6429f6033d19e7e5783f04fefe69f0a26d315e94311ac009",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "A100",
           "retained_stock_selection": false
         },
@@ -6489,20 +5176,7 @@
             "status": "target-plan-accepted",
             "threads": 128
           },
-          "nvcc_compile_and_resources": {
-            "bundle_sha256": "c92b57709685b7d2d0d7281152fcdcbc635b97f1552f5d6574e861925e01ace9",
-            "kernel_count": 18,
-            "object_sha256": "213bac88c72e9ceb503fb255f479814989b3a33bd5c448c16dc28d49dfca7a31",
-            "resource_maxima": {
-              "LOCAL": 0,
-              "REG": 255,
-              "SHARED": 49576,
-              "STACK": 320
-            },
-            "resource_sha256": "c5746ccc6a1aae854cab71e3ea223df02d661b21bc318576d3874c777662f4c8",
-            "source_sha256": "7ceccf4cbd3c72c6c503237f8686ad91fbdb7079a485dd619010a74c9282e9cb",
-            "status": "compiled-resources-recorded-not-admitted"
-          },
+          "nvcc_compile_and_resources": "not-run-for-this-audit",
           "representative_device": "H100",
           "retained_stock_selection": false
         }
@@ -6650,7 +5324,7 @@
       },
       "sha256": "8fc846f2622abb08785c0d945afc0d2fcb64805e2f46b9220bd1b6513cf1f0e6",
       "source_commit": "6c0e89cfff07881d76f10f27de79b7bc509dd0d1",
-      "source_status": "current-source"
+      "source_status": "historical-source-only"
     }
   },
   "schema": "generativeqc.cuda-aot-capability-audit",
