@@ -118,3 +118,8 @@ diagnostic contracts. Consider splitting the large CPU response header as a
 separate change: this patch does not remove its host compilation cost and does
 not establish why the historical runner disconnected. Retain whole-wheel cold
 and warm qualification before revisiting the conservative resource envelope.
+
+Follow-up: `2026-11-16-native-response-cuda-kernel-sharing.md` expands exact
+worker sharing to additional native response packages and requires explicit
+translation-unit owners. It preserves this note's measured UCCSD source and
+supersedes only its deliberately UCCSD-only application scope.

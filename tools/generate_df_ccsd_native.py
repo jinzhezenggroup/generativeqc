@@ -24,6 +24,7 @@ from generativeqc_compiler.tensor import Program, prepare_for_backend
 
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _packed_batched_matrix_gemm,
@@ -279,6 +280,7 @@ def cuda_source() -> str:
         '#include "tensor/cuda_runtime.cuh"',
         "namespace generativeqc::cc::generated::df {",
     ]
+    kernel_pool = CudaKernelPool("df_native")
     for name, program in programs("cuda").items():
         output_type, fields = OUTPUTS[name]
         lines.append(
@@ -289,6 +291,7 @@ def cuda_source() -> str:
                 input_overrides={key: f"s.{key}" for key in INPUTS},
                 output_fields=fields,
                 reset_error=False,
+                kernel_pool=kernel_pool,
             )
         )
         if name == "virtual":
@@ -315,6 +318,7 @@ def cuda_source() -> str:
             output_fields=OUTPUTS["virtual"][1],
             reset_error=False,
             prepared_contractions="s.contractions",
+            kernel_pool=kernel_pool,
         ),
         "void prepare_virtual_replay(ReplayCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){bind_df_virtual_replay(s,context,1,calls,summands);}",
         "VirtualOutputs run_virtual_replay_cuda(ReplayCudaState& s){return run_df_virtual_replay(s);}",
@@ -328,6 +332,7 @@ def cuda_source() -> str:
             output_fields=OUTPUTS["virtual"][1],
             reset_error=False,
             prepared_contractions="s.contractions",
+            kernel_pool=kernel_pool,
         ),
         "void prepare_virtual_batch(BatchedReplayCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){bind_df_virtual_batch(s,context,batch,calls,summands); if(tail>1&&tail!=batch) bind_df_virtual_batch(s,context,tail,calls,summands);}",
         "VirtualOutputs run_virtual_batch_cuda(BatchedReplayCudaState& s){return run_df_virtual_batch(s);}",

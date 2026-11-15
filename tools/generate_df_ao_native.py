@@ -17,6 +17,7 @@ from generativeqc_compiler.method.df_ao_source import (
 from generativeqc_compiler.tensor import prepare_for_backend
 
 from tools.generate_rccsd_native import (
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _required_function,
@@ -86,6 +87,7 @@ def cuda_source() -> str:
         "namespace generativeqc::posthf::df_ao_generated {",
         "struct State{std::size_t na{},nb{},q{};double *three_center{},*inverse_root{},*coefficients{},*bar_factors{},*left_factors{},*right_factors{},*arena{};int* error{};cudaStream_t stream{};};",
     ]
+    kernel_pool = CudaKernelPool("df_ao")
     for name, program in prepared().items():
         lines.append(
             _cuda_program(
@@ -103,6 +105,7 @@ def cuda_source() -> str:
                 if name == "factor_block"
                 else ("na", "q"),
                 output_fields=tuple(program.outputs),
+                kernel_pool=kernel_pool,
             )
         )
     lines += [

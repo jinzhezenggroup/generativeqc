@@ -23,6 +23,7 @@ from generativeqc_compiler.tensor import Program
 from tools.generate_df_ccsd_core import INPUTS as CORE_INPUTS
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _packed_batched_matrix_gemm,
@@ -290,6 +291,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_hoisted_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfhoist {",
     ]
+    kernel_pool = CudaKernelPool("df_hoist")
     for name, program in programs().items():
         kind, fields = OUTPUTS[name]
         if name == "iteration":
@@ -309,6 +311,7 @@ def cuda_source() -> str:
                     reset_error=False,
                     prepared_contractions=binding,
                     parallel_scalar_reductions=name == "iteration",
+                    kernel_pool=kernel_pool,
                 )
             )
         if name == "auxiliary":
@@ -323,6 +326,7 @@ def cuda_source() -> str:
                     reset_error=False,
                     prepared_contractions="s.auxiliary_batched_contractions",
                     batch_dim=True,
+                    kernel_pool=kernel_pool,
                 )
             )
             lines.append(
@@ -344,6 +348,7 @@ def cuda_source() -> str:
             reset_error=False,
             prepared_contractions="s.contractions",
             batch_dim=True,
+            kernel_pool=kernel_pool,
         ),
         "MixedAuxiliaryOutputs run_mixed_auxiliary_cuda(MixedAuxiliaryCudaState& s){ return run_mixed_auxiliary(s); }",
         "void prepare_mixed_contractions(MixedAuxiliaryCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",

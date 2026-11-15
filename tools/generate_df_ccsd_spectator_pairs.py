@@ -31,6 +31,7 @@ from generativeqc_compiler.tensor.native_arena import analyze_native_copy_roundt
 
 from tools import generate_df_ccsd_hoisted as hoisted
 from tools.generate_rccsd_native import (
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _dim,
@@ -375,6 +376,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_spectator_pairs_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfpairs {",
     ]
+    kernel_pool = CudaKernelPool("df_pairs")
     for name, program in programs().items():
         batched = name.endswith("batched")
         lines.append(
@@ -395,6 +397,7 @@ def cuda_source() -> str:
                 ),
                 batch_dim=batched,
                 elide_native_copy_roundtrips=name != "auxiliary",
+                kernel_pool=kernel_pool,
             )
         )
     lines += [

@@ -325,7 +325,7 @@ def cuda_source() -> str:
         "std::map<std::string,const double*> inputs;",
         "};",
     ]
-    kernel_pool = CudaKernelPool()
+    kernel_pool = CudaKernelPool("shared")
     for name, program in programs.items():
         names = {
             node.attrs["name"] for node in program.live_nodes if node.op == "input"

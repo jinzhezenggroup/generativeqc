@@ -21,6 +21,7 @@ from generativeqc_compiler.tensor import Program, optimize, reassociate_einsums
 from tools.generate_rccsd_native import (
     INPUT_NAMES,
     REPRESENTATIVE,
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _required_function,
@@ -134,6 +135,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_core_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfcore {",
     ]
+    kernel_pool = CudaKernelPool("df_core")
     for name, program in programs().items():
         output = (
             "DeviceIterationOutputs" if name == "iteration" else "DeviceReplayOutputs"
@@ -146,6 +148,7 @@ def cuda_source() -> str:
                 input_overrides={key: f"s.{key}" for key in INPUTS},
                 reset_error=False,
                 parallel_scalar_reductions=name == "iteration",
+                kernel_pool=kernel_pool,
             ),
             f"{output} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]

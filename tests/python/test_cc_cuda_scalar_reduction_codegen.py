@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 def test_kernel_pool_preserves_executable_contracts() -> None:
     """Names may share; arithmetic, layout, precision and reduction policy may not."""
-    pool = codegen.CudaKernelPool()
+    pool = codegen.CudaKernelPool("probe")
     occupied = IndexSpace("occupied", "occupied", 3)
     virtual = IndexSpace("virtual", "virtual", 3)
 
@@ -71,6 +71,62 @@ def test_kernel_pool_preserves_executable_contracts() -> None:
             )
 
 
+@pytest.mark.parametrize(
+    "owner", ("", "0owner", "unit-name", "unit::name", "unit name")
+)
+def test_kernel_pool_requires_a_valid_owner(owner: str) -> None:
+    with pytest.raises(ValueError, match="owner"):
+        codegen.CudaKernelPool(owner)
+
+
+def test_identical_workers_in_distinct_units_link_and_execute(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Same arithmetic in one namespace must not create duplicate global symbols."""
+    occupied = Index("occupied", IndexSpace("occupied", "occupied", 3))
+    source = input_tensor("source", TensorSpec((occupied,), role="input"))
+    node = add(source, source)
+    units = []
+    for owner in ("left_unit", "right_unit"):
+        symbol, kernel = codegen.CudaKernelPool(owner).emit(node)
+        unit = tmp_path / f"{owner}.cpp"
+        unit.write_text(
+            """
+#include <cassert>
+#include <cstddef>
+#define __global__
+struct Dim {unsigned x;};
+constexpr Dim threadIdx{0},blockIdx{0},blockDim{1},gridDim{1};
+namespace generativeqc_tensor {inline double finite(double value,int*,int){return value;}}
+namespace common_namespace {
+"""
+            + kernel
+            + f"""
+}}
+extern "C" int run_{owner}(){{
+  const double input[3]={{1.,-2.,.125}};
+  double output[5]={{54321.,-1.,-1.,-1.,54321.}};
+  int error=0;
+  common_namespace::{symbol}(input,input,output+1,3,1,&error,37);
+  assert(error==0 && output[0]==54321. && output[4]==54321.);
+  for(std::size_t index=0;index<3;++index)assert(output[index+1]==2.*input[index]);
+  return 1;
+}}
+"""
+        )
+        units.append(unit)
+    main = tmp_path / "main.cpp"
+    main.write_text(
+        '#include <cassert>\nextern "C" int run_left_unit();\n'
+        'extern "C" int run_right_unit();\n'
+        "int main(){assert(run_left_unit()==1 && run_right_unit()==1);}\n"
+    )
+    binary = required_native_cxx.build_executable(
+        [*units, main], tmp_path / "linked", compile_args=("-std=c++17", "-O2")
+    )
+    subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
+
+
 def test_shared_runners_preserve_values_arenas_and_node_errors(
     tmp_path: Path, required_native_cxx: NativeCxx
 ) -> None:
@@ -89,7 +145,7 @@ def test_shared_runners_preserve_values_arenas_and_node_errors(
         Program({"matrix": add(left, right), "energy": einsum("ij,ij->", left, right)}),
         Program({"matrix": add(squared, right), "energy": reduce_sum(squared, (0, 1))}),
     )
-    pool = codegen.CudaKernelPool()
+    pool = codegen.CudaKernelPool("probe")
     definitions = []
     cases = []
     for index, program in enumerate(programs):
@@ -196,7 +252,7 @@ def test_shared_kernels_keep_signed_singular_and_invalid_index_errors(
     values = input_tensor("values", TensorSpec((occupied,), role="input"))
     mapping = input_tensor("map", TensorSpec((batch,), dtype="int64", role="input"))
     selection = runtime_indexed_select(values, ((0, mapping),), batch)
-    pool = codegen.CudaKernelPool()
+    pool = codegen.CudaKernelPool("probe")
     quotient_symbol, quotient_kernel = pool.emit(quotient)
     selection_symbol, selection_kernel = pool.emit(selection, batch_dim=True)
     unit = tmp_path / "errors.cpp"
@@ -250,8 +306,34 @@ int main(){{
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
 
 
-def _kernels(source: str) -> tuple[str, ...]:
-    return tuple(source.split("__global__ void ")[1:])
+def _kernel_paths(source: str, entry: str) -> tuple[tuple[str, ...], ...]:
+    """Follow the actual native ABI to workers, independent of private names."""
+    functions = {}
+    for match in re.finditer(
+        r"(?m)^(?:static\s+)?(?:__global__\s+)?\w+\s+(\w+)\([^;{}]*\)\s*\{", source
+    ):
+        begin = match.end()
+        depth, end = 1, begin
+        while depth:
+            depth += (source[end] == "{") - (source[end] == "}")
+            end += 1
+        functions[match[1]] = source[begin : end - 1]
+
+    def paths(name: str) -> tuple[tuple[str, ...], ...]:
+        body = functions[name]
+        launches = tuple(functions[symbol] for symbol in re.findall(r"(\w+)<<<", body))
+        if launches:
+            return (launches,)
+        return tuple(
+            branch
+            for called in re.findall(r"\b(\w+)\s*\(", body)
+            if called in functions
+            for branch in paths(called)
+        )
+
+    result = paths(entry)
+    assert result
+    return result
 
 
 def _iteration_scalar_reductions() -> tuple[tuple[int, object], ...]:
@@ -296,37 +378,21 @@ def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback(
 def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_serial() -> (
     None
 ):
-    kernels = _kernels(codegen.cuda_source())
-    iteration = tuple(
-        kernel for kernel in kernels if kernel.startswith("iteration_node_")
-    )
-    replay = tuple(kernel for kernel in kernels if kernel.startswith("replay_"))
-
-    assert '#include "tensor/cuda_reduction.cuh"' in codegen.cuda_source()
-    assert iteration
-    assert any("StrictFp64BlockReduce<256>" in kernel for kernel in iteration)
-    assert replay
-    assert all("StrictFp64BlockReduce" not in kernel for kernel in replay)
+    source = codegen.cuda_source()
+    assert '#include "tensor/cuda_reduction.cuh"' in source
+    for branch in _kernel_paths(source, "run_iteration_cuda"):
+        assert any("StrictFp64BlockReduce<256>" in kernel for kernel in branch)
+    for branch in _kernel_paths(source, "run_replay_cuda"):
+        assert all("StrictFp64BlockReduce" not in kernel for kernel in branch)
 
 
 def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
-    core = _kernels(generate_df_ccsd_core.cuda_source())
-    hoisted = _kernels(generate_df_ccsd_hoisted.cuda_source())
-
-    assert any(
-        kernel.startswith("iteration_node_") and "StrictFp64BlockReduce<256>" in kernel
-        for kernel in core
-    )
-    assert any(
-        kernel.startswith("iteration_packed_node_")
-        and "StrictFp64BlockReduce<256>" in kernel
-        for kernel in hoisted
-    )
-    assert any(
-        kernel.startswith("iteration_scalar_node_")
-        and "StrictFp64BlockReduce<256>" in kernel
-        for kernel in hoisted
-    )
+    for source in (
+        generate_df_ccsd_core.cuda_source(),
+        generate_df_ccsd_hoisted.cuda_source(),
+    ):
+        for branch in _kernel_paths(source, "run_iteration_cuda"):
+            assert any("StrictFp64BlockReduce<256>" in kernel for kernel in branch)
 
 
 @pytest.mark.parametrize("operation", ("reduce", "einsum"))
@@ -343,7 +409,7 @@ def test_complete_orbital_scalar_kernel_declares_runtime_extent(
         else einsum("p,p->", source, source)
     )
     if shared:
-        symbol, kernel = codegen.CudaKernelPool().emit(
+        symbol, kernel = codegen.CudaKernelPool("complete").emit(
             node, parallel_scalar_reductions=True
         )
     else:
