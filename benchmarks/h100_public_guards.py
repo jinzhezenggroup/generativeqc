@@ -51,7 +51,11 @@ def artifact_bytes(name: str) -> bytes:
         "Unsafe public guard evidence path",
     )
     if path.is_file():
-        return path.read_bytes()
+        return (
+            support.read_stored_json_bytes(path)
+            if path.suffix == ".json"
+            else path.read_bytes()
+        )
     check(
         not path.exists()
         and name

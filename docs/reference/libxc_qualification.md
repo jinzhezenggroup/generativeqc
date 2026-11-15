@@ -22,22 +22,46 @@ Libxc capability summary (222 functionals)
 stage                qualified  ready  blocked
 graph-imported             222      0        0
 pointwise-validated        222      0        0
-compiled-cpu                 0    222       11
-compiled-cuda                0    222       11
+compiled-cpu                 4    218        7
+compiled-cuda                4    218        7
 production-domain           11    203        0
-gpu-runtime                  0      0       11
-molecular-scf                0      0       11
-forces                       0      0       11
-response                     0      0        0
-public-method                0      0        0
+gpu-runtime                  4      0        7
+molecular-scf                4      0        7
+forces                       4      0        7
+response                     0      4        0
+public-method                0      4        0
 public DFT: 0/222
-explicit blockers: 55 across 11 functionals
+explicit blockers: 35 across 7 functionals
 ```
 
 | Family | Backend | Spin | Product | Qualified registrations |
 | --- | --- | --- | --- | ---: |
+| gga | cpu | polarized | energy | 1 |
+| gga | cpu | polarized | forces | 1 |
+| gga | cpu | unpolarized | energy | 1 |
+| gga | cpu | unpolarized | forces | 1 |
+| gga | cuda | polarized | energy | 1 |
+| gga | cuda | polarized | forces | 1 |
+| gga | cuda | unpolarized | energy | 1 |
+| gga | cuda | unpolarized | forces | 1 |
+| lda | cpu | polarized | energy | 1 |
+| lda | cpu | polarized | forces | 1 |
+| lda | cpu | unpolarized | energy | 1 |
+| lda | cpu | unpolarized | forces | 1 |
+| lda | cuda | polarized | energy | 1 |
+| lda | cuda | polarized | forces | 1 |
+| lda | cuda | unpolarized | energy | 1 |
+| lda | cuda | unpolarized | forces | 1 |
+| mgga | cpu | polarized | energy | 2 |
+| mgga | cpu | polarized | forces | 2 |
+| mgga | cpu | unpolarized | energy | 2 |
+| mgga | cpu | unpolarized | forces | 2 |
+| mgga | cuda | polarized | energy | 2 |
+| mgga | cuda | polarized | forces | 2 |
+| mgga | cuda | unpolarized | energy | 2 |
+| mgga | cuda | unpolarized | forces | 2 |
 
-Dependency-current backend/spin lifecycle records: 0.
+Dependency-current backend/spin lifecycle records: 16.
 Historical measurements remain in the retained campaign; stale receipts are not
 counted as dependency-current admitted contexts. Unchanged dependencies can
 inherit evidence; this does not claim a new binary was measured. Records retain exact
@@ -55,6 +79,7 @@ Each context retains its own executed library identity in the snapshot.
 | `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95` | `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64` | `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c` |
 | `fb8cbabd90fe77c07609987bfeea06162177ed21` | `9c225b7f02856f3a472786fcbe4b135ada91ff634c3809e6669f02e2212002ff` | `de2c01a15769c7942338ec9158e0fc0a517f5f447ae23c84475b0a6f5289121e` |
 | `fb8cbabd90fe77c07609987bfeea06162177ed21` | `9c225b7f02856f3a472786fcbe4b135ada91ff634c3809e6669f02e2212002ff` | `de2c01a15769c7942338ec9158e0fc0a517f5f447ae23c84475b0a6f5289121e` |
+| `df42f93bbace0f16fb5b3dec77552384c9da9101` | `48a2277a0d48ca65f6fa6c6ff9453f4b6d399b635e4bca771f58e01d463acb13` | `93909e00bc0460033a6e1e8c21ef12efdcc9a054cb9a11eb150e454bd3ea1b69` |
 
 ## Targeted revalidation
 
@@ -67,8 +92,6 @@ ABI, build and unknown shared inputs require compatibility review and targeted r
 | --- | --- | --- | --- |
 | `GGA_C_APBE` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `GGA_C_APBE` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `GGA_X_APBE` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `GGA_X_APBE` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `GGA_X_B86` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `GGA_X_B86` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `GGA_X_PBE_SOL` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
@@ -79,25 +102,29 @@ ABI, build and unknown shared inputs require compatibility review and targeted r
 | `LDA_C_CHACHIYO` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `LDA_C_PZ_MOD` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `LDA_C_PZ_MOD` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `LDA_C_VWN_4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `LDA_C_VWN_4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `MGGA_C_TPSS` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `MGGA_C_TPSS` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_GVT4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_GVT4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_LTA` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_LTA` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `LDA_C_VWN_4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `LDA_C_VWN_4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `GGA_X_APBE` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `GGA_X_APBE` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_GVT4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
-| `MGGA_X_GVT4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 
 ## Qualified registrations
 
 | Registration | Backend | Product | Qualified spin layouts |
 | --- | --- | --- | --- |
+| `GGA_X_APBE` | cpu | energy | polarized, unpolarized |
+| `GGA_X_APBE` | cpu | forces | polarized, unpolarized |
+| `GGA_X_APBE` | cuda | energy | polarized, unpolarized |
+| `GGA_X_APBE` | cuda | forces | polarized, unpolarized |
+| `LDA_C_VWN_4` | cpu | energy | polarized, unpolarized |
+| `LDA_C_VWN_4` | cpu | forces | polarized, unpolarized |
+| `LDA_C_VWN_4` | cuda | energy | polarized, unpolarized |
+| `LDA_C_VWN_4` | cuda | forces | polarized, unpolarized |
+| `MGGA_X_GVT4` | cpu | energy | polarized, unpolarized |
+| `MGGA_X_GVT4` | cpu | forces | polarized, unpolarized |
+| `MGGA_X_GVT4` | cuda | energy | polarized, unpolarized |
+| `MGGA_X_GVT4` | cuda | forces | polarized, unpolarized |
+| `MGGA_X_LTA` | cpu | energy | polarized, unpolarized |
+| `MGGA_X_LTA` | cpu | forces | polarized, unpolarized |
+| `MGGA_X_LTA` | cuda | energy | polarized, unpolarized |
+| `MGGA_X_LTA` | cuda | forces | polarized, unpolarized |
 
 ## Explicit blockers
 
@@ -110,17 +137,12 @@ ABI, build and unknown shared inputs require compatibility review and targeted r
 - `MGGA_X_MK00`: unsupported-ingredients:laplacian
 - `MGGA_X_RLDA`: unsupported-ingredients:laplacian
 - `GGA_C_APBE`: changed endpoint dependencies; targeted numerical regression required
-- `GGA_X_APBE`: changed endpoint dependencies; targeted numerical regression required
 - `GGA_X_B86`: changed endpoint dependencies; targeted numerical regression required
 - `GGA_X_PBE_SOL`: changed endpoint dependencies; targeted numerical regression required
 - `GGA_X_RPBE`: changed endpoint dependencies; targeted numerical regression required
 - `LDA_C_CHACHIYO`: changed endpoint dependencies; targeted numerical regression required
 - `LDA_C_PZ_MOD`: changed endpoint dependencies; targeted numerical regression required
-- `LDA_C_VWN_4`: changed endpoint dependencies; targeted numerical regression required
 - `MGGA_C_TPSS`: changed endpoint dependencies; targeted numerical regression required
-- `MGGA_X_GVT4`: changed endpoint dependencies; targeted numerical regression required
-- `MGGA_X_LTA`: changed endpoint dependencies; targeted numerical regression required
-- `GGA_X_APBE`: missing native endpoint receipts
 
 Physical empty-spin particle-birth continuation remains excluded;
 a successful molecular force measurement does not qualify that domain.
@@ -132,11 +154,11 @@ Libxc capability changes
 added functionals: none
 removed functionals: none
 identity changes: none
-promotions: none
-demotions:
-  compiled-cpu: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  compiled-cuda: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  gpu-runtime: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  molecular-scf: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
-  forces: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4
+promotions:
+  compiled-cpu: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  compiled-cuda: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  gpu-runtime: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  molecular-scf: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  forces: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+demotions: none
 ```

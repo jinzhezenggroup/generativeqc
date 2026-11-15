@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from benchmarks import h100_production_cohort as support
+from tools.restore_retained_evidence import read_evidence_bytes
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -66,6 +67,35 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def artifact_bytes(name: str) -> bytes:
+    """Recover only archived build provenance; numerical packets stay local.
+
+    The frozen receiver still consumes and authenticates the exact original
+    archive. Missing science packets never fall back to Git or a network fetch.
+    """
+    relative = Path(name)
+    check(
+        not relative.is_absolute() and ".." not in relative.parts,
+        "Unsafe safety publication member",
+    )
+    path = DIRECTORY / relative
+    check(
+        not path.is_symlink() and (not path.exists() or path.is_file()),
+        "Linked or nonregular safety publication member",
+    )
+    if path.is_file():
+        return path.read_bytes()
+    check(
+        name == PACKETS["production-build-v1"],
+        "Missing original safety observations: " + name,
+    )
+    return read_evidence_bytes(
+        ROOT / "benchmarks/results/h100-sm90-db36-safety-20261103" / relative,
+        manifest=ROOT
+        / "benchmarks/results/evidence-storage-20261115/source-snapshot.json",
+    )
+
+
 def decoded_manifest(binding: dict) -> bytes:
     data = lzma.decompress((DIRECTORY / binding["path"]).read_bytes())
     check(
@@ -103,15 +133,15 @@ def checked_publication() -> dict:
     by_name = {b["path"]: b for b in entries}
     for binding in entries:
         relative = Path(binding["path"])
-        path = DIRECTORY / relative
         check(
             not relative.is_absolute()
             and ".." not in relative.parts
-            and relative.name != ".env"
-            and path.is_file()
-            and not path.is_symlink()
-            and path.stat().st_size == binding["bytes"]
-            and digest(path.read_bytes()) == binding["sha256"],
+            and relative.name != ".env",
+            "Unsafe safety publication member: " + str(relative),
+        )
+        data = artifact_bytes(binding["path"])
+        check(
+            len(data) == binding["bytes"] and digest(data) == binding["sha256"],
             "Original safety bytes differ: " + str(relative),
         )
     packets = publication["packets"]
@@ -241,7 +271,8 @@ def replay(*, extension: Callable[[Path, Path], dict] | None = None) -> dict:
             support.copy_exact(DIRECTORY / "readers" / name, task / name)
         for packet in publication["packets"]:
             name = packet["archive"]["path"]
-            support.copy_exact(DIRECTORY / name, task / name)
+            with (task / name).open("xb") as stream:
+                stream.write(artifact_bytes(name))
             manifest = packet["manifest"]
             with (task / manifest["decoded_name"]).open("xb") as stream:
                 stream.write(decoded_manifest(manifest))

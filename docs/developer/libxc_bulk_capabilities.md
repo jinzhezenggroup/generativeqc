@@ -535,11 +535,18 @@ checker preserves its archival validity even when endpoint dependencies change.
 The default archival check deliberately permits
 truthfully recorded stale campaigns without relabeling them as current evidence.
 
-The current retained campaigns do not authenticate every transitive native
-source-generator input now included in the build identity. Endpoint inheritance
-therefore remains pending: the normal archival check passes, while
-`--require-current` must fail until an authentic measured-source supplement or
-appropriate new qualification supplies that missing binding. Existing
-production-domain proofs and historical numerical observations remain retained;
-missing generator authentication is not a measured numerical failure. Consult
-the generated report for exact current counts and scoped requests.
+The native identity includes transitive source-generator inputs. A campaign
+without their measured hashes remains historical: current checkout bytes cannot
+fill missing historical proof. A fresh campaign must authenticate its complete
+inventory, executed ELF and exact endpoint contexts. Its scheduled safety receipt
+must use the same ELF and execution environment, and its nonconvergence selector
+must name a force context actually measured by that campaign.
+
+Before promoting new evidence with `--write`, retain the exact immediately
+preceding snapshot summary as `previous`, not an older baseline that hides
+intervening demotions. Preserve superseded stage-demotion acknowledgements in
+the transition evidence rather than erasing their history. Neither a hash match
+nor an acknowledgement substitutes for passed independent numerical and safety
+gates. Existing production-domain proofs and historical observations remain
+retained; missing generator authentication is not a measured numerical failure.
+Consult the generated report for exact current counts and scoped requests.

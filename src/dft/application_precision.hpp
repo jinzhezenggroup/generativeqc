@@ -87,34 +87,17 @@ inline double nonlocal_inner_tolerance(bool budget_stationarity, double maximum_
   return std::clamp(maximum_residual * 1e-2, std::min(1e-12, target_gate * 0.1), 1e-5);
 }
 
-/** Private size-tagged Python transport. The original public KS descriptor
- * remains the prefix and retains its ABI/version. Only callers that verified
- * application_precision_version_v1 may pass the extended size; every pointer
- * still outlives preparation and the native owner copies the three allowances. */
-struct ApplicationPrecisionKsOptions {
-  generativeqc_ks_options base;
-  double energy{}, maximum_force{}, rms_force{};
-};
-static_assert(offsetof(ApplicationPrecisionKsOptions, base) == 0);
+static_assert(offsetof(generativeqc_ks_precision_options, base) == 0);
+static_assert(offsetof(generativeqc_ks_nonlocal_grid_options, base) == 0);
 
-/** Private additive transport for an independently prescribed VV10 grid.
- * The borrowed descriptor contributes only its grid fields; preparation copies
- * them before returning. Keeping the precision prefix preserves both old ABIs. */
-struct NonlocalGridKsOptions {
-  ApplicationPrecisionKsOptions base;
-  std::uint32_t version{1}, reserved{};
-  const generativeqc_ks_options* grid{};
-};
-static_assert(offsetof(NonlocalGridKsOptions, base) == 0);
-
-/** Recognize the private request without reading past a legacy descriptor.
+/** Recognize the size-tagged request without reading past a base descriptor.
  * Full allowance validation remains with KS preparation. This early query
  * admits the unchanged strict seed provider, not any mixed target operator. */
 inline bool application_precision_requested(const generativeqc_ks_options* options) noexcept {
   if (!options || options->abi_version != GENERATIVEQC_ABI_VERSION ||
-      options->struct_size < sizeof(ApplicationPrecisionKsOptions))
+      options->struct_size < sizeof(generativeqc_ks_precision_options))
     return false;
-  const auto energy = reinterpret_cast<const ApplicationPrecisionKsOptions*>(options)->energy;
+  const auto energy = reinterpret_cast<const generativeqc_ks_precision_options*>(options)->energy;
   return std::isfinite(energy) && energy > 0.0;
 }
 

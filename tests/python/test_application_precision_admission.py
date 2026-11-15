@@ -228,7 +228,7 @@ int main() {
       assert(!admit_application_df_hf_gradient(invalid, 96, 464, 12, 2, 3, true, true));
     }
   }
-  assert(offsetof(generativeqc::dft::ApplicationPrecisionKsOptions, energy) ==
+  assert(offsetof(generativeqc_ks_precision_options, energy) ==
          sizeof(generativeqc_ks_options));
   using generativeqc::dft::application_precision_requested;
   generativeqc_ks_options legacy{};
@@ -236,7 +236,7 @@ int main() {
   legacy.abi_version = GENERATIVEQC_ABI_VERSION;
   assert(!application_precision_requested(nullptr));
   assert(!application_precision_requested(&legacy));
-  generativeqc::dft::ApplicationPrecisionKsOptions extended{};
+  generativeqc_ks_precision_options extended{};
   extended.base = legacy;
   extended.energy = 1e-5;
   for (unsigned size = sizeof(legacy); size < sizeof(extended); ++size) {

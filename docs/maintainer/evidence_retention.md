@@ -501,3 +501,10 @@ with an adjacent XZ payload. `tools/restore_retained_evidence.py` verifies both
 checksums and the bounded decoded size before validating the original manifest.
 This representation preserves the original manifest bytes and existing recovery
 paths; it does not change the retained Git objects or numerical evidence.
+
+The common record reader and native Libxc metadata reader accept this same
+authenticated local transport. Historical manifest pins still compare the
+original decoded JSON bytes; the adjacent payload has its own checked SHA-256.
+An unchanged receiver that requires raw original bytes must receive those bytes,
+not the storage descriptor. This does not authorize implicit Git or network
+recovery of missing scientific observations.

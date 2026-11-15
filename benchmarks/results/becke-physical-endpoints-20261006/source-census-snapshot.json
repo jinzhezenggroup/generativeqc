@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "17f9317a2495c142941d7390d465fcf79887d643",
+  "file_count": 1,
+  "total_bytes": 65843,
+  "purpose": "Only frozen build metadata and source-checksum streams. Independent scientific inputs, full observables, failed populations and numerical gates remain in the checkout. No Release or external backup. Exact original bytes are recovered from an already published ancestor without a network fetch.",
+  "files": [
+    {
+      "path": "benchmarks/results/becke-physical-endpoints-20261006/source-files.sha256.gz",
+      "bytes": 65843,
+      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7",
+      "git_blob_sha1": "f9dab9c85d62f60700c2840880a7b989ae558aa1",
+      "git_mode": "100644"
+    }
+  ]
+}

@@ -83,12 +83,12 @@ struct generativeqc_ks_options {
  unsigned grid_version=2,radial_points=7,angular_polar=5,angular_azimuth=9,partition_iterations=4;
  double coincident_tolerance=1e-10; const double* element_radii=nullptr; std::size_t element_radius_count=0;
 };
-namespace dft {struct NonlocalGridKsOptions {
+struct generativeqc_ks_nonlocal_grid_options {
  generativeqc_ks_options base;
  double energy{},maximum_force{},rms_force{};
  std::uint32_t version=1,reserved=0;
  const generativeqc_ks_options* grid=nullptr;
-};}
+};
 struct generativeqc_method_descriptor {
  std::size_t struct_size=sizeof(generativeqc_method_descriptor);
  const generativeqc_ks_options* ks_options=nullptr;

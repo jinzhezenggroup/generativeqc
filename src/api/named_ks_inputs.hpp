@@ -32,7 +32,7 @@ inline const methods::named_ks::Method& named_ks_program(
  * library storage; execution controls retain their existing size-tagged ABI.
  * No pointer in this temporary survives the native prepared owner's copy. */
 struct NamedKsInputs {
-  dft::NonlocalGridKsOptions storage{};
+  generativeqc_ks_nonlocal_grid_options storage{};
   generativeqc_ks_options nonlocal_grid{};
   methods::detail::ApplicationPrecisionMethodOptions method{};
   const methods::named_ks::Method* program{};
@@ -52,7 +52,7 @@ struct NamedKsInputs {
       const auto size = input.ks_options->struct_size;
       if (input.ks_options->abi_version != GENERATIVEQC_ABI_VERSION ||
           (size != sizeof(generativeqc_ks_options) &&
-           size != sizeof(dft::ApplicationPrecisionKsOptions) && size != sizeof(storage)))
+           size != sizeof(generativeqc_ks_precision_options) && size != sizeof(storage)))
         throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                                    "unknown named KS controls ABI");
       std::memcpy(&storage, input.ks_options, size);

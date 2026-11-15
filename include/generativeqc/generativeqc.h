@@ -712,6 +712,42 @@ typedef struct generativeqc_ks_options {
   uint64_t force_tile_points;
 } generativeqc_ks_options;
 
+/** Size-tagged execution allowances for KS preparation. base.struct_size is
+ * sizeof(generativeqc_ks_precision_options); base.abi_version is unchanged.
+ * Zero allowances retain strict FP64 execution. Nonzero finite, nonnegative
+ * allowances request the existing context-qualified application-precision
+ * policy, not a method/property capability or a force-error guarantee. */
+typedef struct generativeqc_ks_precision_options {
+  generativeqc_ks_options base;
+  double energy;
+  double maximum_force;
+  double rms_force;
+} generativeqc_ks_precision_options;
+
+/** Independently prescribed nonlocal-correlation quadrature. Set
+ * base.base.struct_size to sizeof(generativeqc_ks_nonlocal_grid_options),
+ * version to 1 and reserved to zero. grid must point to an ordinary
+ * generativeqc_ks_options with its own complete size/ABI tags. Preparation
+ * copies the grid and its radii before returning; callers retain ownership.
+ * Named preparation supplies the nested scientific domain and consumes only
+ * quadrature controls. Explicit compositions must supply the same scf_domain
+ * as the primary descriptor. The prepared model owns the scientific nonlocal
+ * term; a nonlocal grid on a model without that term is rejected.
+ * Zero precision allowances preserve the strict-FP64 policy. */
+typedef struct generativeqc_ks_nonlocal_grid_options {
+  generativeqc_ks_precision_options base;
+  uint32_t version;
+  uint32_t reserved;
+  const generativeqc_ks_options* grid;
+} generativeqc_ks_nonlocal_grid_options;
+
+/** @native-contract generativeqc_ks_nonlocal_grid_version_v1
+ * @behavior Query support for the size-tagged independent nonlocal grid descriptor.
+ * @outputs Returns 1; this is transport support, not scientific force admission.
+ * @execution Pure synchronous query; no allocation or device initialization.
+ */
+GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void);
+
 /** Select a complete build-time MethodIR program, including geometry-only
  * dispersion. Strings are NUL-terminated and borrowed through preparation.
  * identity may be NULL; otherwise it must match the exact 64-character MethodIR

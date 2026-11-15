@@ -19,12 +19,6 @@
       "sha256": "8a46e62bcb46d8a3efaff0e8e664edeb97f13666257d77621bde7a05fe602793"
     },
     {
-      "bytes": 65843,
-      "path": "source-files.sha256.gz",
-      "role": "input",
-      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7"
-    },
-    {
       "bytes": 9892,
       "path": "source.patch.xz",
       "role": "source-patch",
@@ -117,8 +111,14 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 396,
-      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
+      "bytes": 1232,
+      "sha256": "49b9790ca4c6d864af95d95a662077ef3ac1f1f6d6ea0330b90044b19db5d749"
+    },
+    {
+      "path": "source-census-snapshot.json",
+      "role": "input",
+      "bytes": 788,
+      "sha256": "ae344c19949dbdc96b7cab7e5c116c464d374df63e11c4e5340af18e801d5eb0"
     }
   ],
   "reproduction": {
@@ -127,7 +127,7 @@
       "benchmarks/results/becke-physical-endpoints-20261006/reproduce.sh"
     ],
     "prerequisites": "CUDA 12.9 sm120/RTX5090, ccache/CMake/Ninja, Python compiler/native dependencies, NumPy/pytest/CuPy/GPU4PySCF, PySCF2.14/Libxc7. Set CUDA_ROOT/PYTHON. All GPU commands require finite main/gpu:5090:1 Slurm and preserved device visibility. Full recipe not reexecuted as a separate campaign.",
-    "source_restore": "Keep bundle outside checkout. Restore source.revision and apply source.patch. Verify the decompressed scientific/build manifest before reproduction."
+    "source_restore": "Keep bundle outside checkout. Restore source.revision and apply source.patch. Verify the decompressed scientific/build manifest before reproduction. Restore the exact source census from source-census-snapshot.json into the external reproduction bundle first; independent observations remain offline."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

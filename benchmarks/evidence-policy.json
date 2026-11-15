@@ -413,11 +413,6 @@
       "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
       "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
     },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
-    },
     "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-download-manifest.json.xz": {
       "owner": "H100 frozen DB36 safety delivery",
       "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
@@ -727,6 +722,18 @@
       "owner": "gfn2-current-source-20261114",
       "reason": "Exact compact receipt of 11 rejected evidence mutations: source, model, geometry, numerics and solver controls fail closed.",
       "sha256": "bc2e2da902f12aee0673edb3620313885960e1e404485d65afde4f5847acab37"
+    },
+    "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-abba/fp64.xz": {
+      "owner": "R1 native DFT force endpoint qualification (#2227)",
+      "reason": "Complete original failed and incomplete ABBA populations, preserved as exact FP64 v3 words with every scientific observable and elapsed-time value. This exact rejected-only stream cannot be replaced by medians or selected passing attempts. Review-budget exception only under the existing policy; accepted streams remain charged, and hard per-file/aggregate limits and scientific/work/performance gates are unchanged.",
+      "sha256": "6d4565c414632c2c876db6a31f906f371e9ac47f0b11306fda0c003f4f9628ad",
+      "review_change": true
+    },
+    "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-baab/fp64.xz": {
+      "owner": "R1 native DFT force endpoint qualification (#2227)",
+      "reason": "Complete original failed and incomplete BAAB populations, preserved as exact FP64 v3 words with every scientific observable and elapsed-time value. Retaining both timing orders prevents a passing-order selection from erasing real rejected endpoints. Review-budget exception only under the existing policy; accepted streams remain charged, and hard per-file/aggregate limits and scientific/work/performance gates are unchanged.",
+      "sha256": "f817e032b4bfec68050f3a58ded875703030b7b3f2e6967a6029a60a94d61838",
+      "review_change": true
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

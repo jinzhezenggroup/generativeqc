@@ -223,13 +223,13 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
         ks_input->abi_version != GENERATIVEQC_ABI_VERSION)
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "KS execution-plan ABI mismatch");
     if (ks_input->struct_size != sizeof(generativeqc_ks_options) &&
-        ks_input->struct_size != sizeof(dft::ApplicationPrecisionKsOptions) &&
-        ks_input->struct_size != sizeof(dft::NonlocalGridKsOptions))
+        ks_input->struct_size != sizeof(generativeqc_ks_precision_options) &&
+        ks_input->struct_size != sizeof(generativeqc_ks_nonlocal_grid_options))
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                         "unknown or incomplete KS options extension");
-    if (ks_input->struct_size >= sizeof(dft::ApplicationPrecisionKsOptions)) {
+    if (ks_input->struct_size >= sizeof(generativeqc_ks_precision_options)) {
       const auto& application =
-          *reinterpret_cast<const dft::ApplicationPrecisionKsOptions*>(ks_input);
+          *reinterpret_cast<const generativeqc_ks_precision_options*>(ks_input);
       const std::array<double, 3> legacy_budget{application.energy, application.maximum_force,
                                                 application.rms_force};
       bool requested = false;
@@ -628,8 +628,8 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
     }
   }
   dft::validate_grid_spec(grid);
-  if (input.struct_size == sizeof(dft::NonlocalGridKsOptions)) {
-    const auto& extension = *reinterpret_cast<const dft::NonlocalGridKsOptions*>(&input);
+  if (input.struct_size == sizeof(generativeqc_ks_nonlocal_grid_options)) {
+    const auto& extension = *reinterpret_cast<const generativeqc_ks_nonlocal_grid_options*>(&input);
     if (extension.version != 1 || extension.reserved != 0 || !extension.grid ||
         extension.grid->struct_size != sizeof(generativeqc_ks_options))
       throw MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH, "invalid nonlocal grid extension");

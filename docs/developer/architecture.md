@@ -159,15 +159,44 @@ The separate
 accounts for every baseline row at its own explicit audit revision. It records
 scoped native delivery, retired Python work, remaining production controllers
 and unmet acceptance, including intentionally retained compiler/oracle work.
+Each row's `audit_axes` explicitly records its current method, backend,
+representation, property, spin and approximation review domains; later source
+delivery can broaden these independently of the unchanged historical matrix.
+Its v2 `call_paths` connect caller/callee source files with a contextual scope
+and a Python-role classification. A null role means a wholly native edge;
+an empty row-level `python_roles` list is reserved for native-only dispatch,
+such as the installed CLI. The checker requires those edge classifications to
+agree with the row's roles and disposition. A partial cutover cannot hide its
+remaining Python science, and compiler/oracle/compatibility work cannot be
+relabeled as native dispatch. These are reviewed navigation edges, not an
+exhaustive inferred call graph or rules that enable execution.
 Historical row names are identities, not claims about current dispatch:
 admitted native CPU/CUDA force items and the dedicated native WB97M-V CUDA
 second-order endpoint no longer use the historical Python controllers.
 Other stationary force and general molecular HVP consumers still do.
+In particular, admitted CPU full-range PBE0/B3LYP second derivatives retain
+Python response/source and Hessian-column orchestration. Their optional uncut
+two-body D3(BJ) curvature is generated through compiler AD and composed in
+Python; an artifact miss may compile code. Native kernels and independent
+scientific acceptance do not make these complete Python-free AOT endpoints.
 The checker validates both inventories without pinning production function
 bodies or requiring that the audit revision equal HEAD. Source/test pointers
 are not execution receipts, newer-head qualification, or a second capability
 registry; use the [capability authorities](../reference/capabilities.md) and
 source-matched independent endpoint evidence for admission.
+
+To refresh R0, review every baseline domain at an exact source revision, follow
+both admitted dispatch and retained/refused branches, and update the delivery
+snapshot's revision, date, scoped edges, retired/remaining work and behavioral
+test pointers together. Preserve the historical baseline revision and all six
+audit axes; they do not imply a Cartesian product of supported capabilities.
+Run `python tools/check_native_runtime_ownership.py` and
+`python -m pytest tests/python/test_native_runtime_ownership.py tests/python/test_runtime_retirement_inventory.py`.
+Run relevant dispatch/refusal/lifetime tests separately and report their actual
+results rather than treating the ledger's test paths as execution evidence.
+This source audit completes neither R1–R6 nor their numerical, resource and
+complete-endpoint performance gates.
+
 Automatic cold-start selection is queried from the native owner; its precise
 domain and older-library behavior are documented in
 [cold-start initial guesses](../user/initial_guesses.md).
