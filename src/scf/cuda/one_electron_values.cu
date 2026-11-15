@@ -1,6 +1,7 @@
 #include <limits>
 
 #include "generated_one_electron_policy.cuh"
+#include "generated_one_electron_value_family.cuh"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_ao_pairs.cuh"
 #include "scf/cuda/one_electron_values.cuh"
@@ -8,16 +9,14 @@
 namespace generativeqc::scf {
 namespace {
 
-using Policy = generated_one_electron::ValuePolicy;
 namespace pairs = runtime::cuda_ao_pairs;
 constexpr std::size_t kTerms = molecule::kMaximumAoExpansionTerms;
 
-}  // namespace
-
-cudaError_t launch_generated_one_electron_values(
-    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
-    const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
-    double* hcore, cudaStream_t stream, double* kinetic, double* attraction) {
+template <class Policy>
+cudaError_t launch_value_family(const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+                                const std::int32_t* pair_second, std::size_t pair_count,
+                                unsigned schedule, double* overlap, double* hcore,
+                                cudaStream_t stream, double* kinetic, double* attraction) {
   constexpr unsigned threads = 128;
   if (batch.batch_size <= 0 || batch.nbf <= 0 || !overlap || !hcore || schedule > 3)
     return cudaErrorInvalidValue;
@@ -46,6 +45,22 @@ cudaError_t launch_generated_one_electron_values(
         pairs::Outputs<Policy::channels>{{overlap, hcore, kinetic, attraction}});
   }
   return cudaPeekAtLastError();
+}
+
+}  // namespace
+
+cudaError_t launch_generated_one_electron_values(
+    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+    const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
+    double* hcore, cudaStream_t stream, double* kinetic, double* attraction) {
+  if (batch.maximum_angular_momentum <=
+      generated_one_electron_through_f::ValueFamily::maximum_angular_momentum)
+    return launch_value_family<generated_one_electron_through_f::ValueFamily>(
+        batch, pair_first, pair_second, pair_count, schedule, overlap, hcore, stream, kinetic,
+        attraction);
+  return launch_value_family<generated_one_electron::ValuePolicy>(
+      batch, pair_first, pair_second, pair_count, schedule, overlap, hcore, stream, kinetic,
+      attraction);
 }
 
 }  // namespace generativeqc::scf

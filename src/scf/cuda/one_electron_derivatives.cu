@@ -1,6 +1,7 @@
 #include <cmath>
 #include <limits>
 
+#include "generated_one_electron_derivative_family.cuh"
 #include "generated_one_electron_derivative_policy.cuh"
 #include "generated_one_electron_derivatives.cuh"
 #include "molecule/basis.hpp"
@@ -8,7 +9,8 @@
 
 namespace generativeqc::scf {
 namespace {
-namespace generated = generated_one_electron_derivatives;
+using ThroughF = generated_one_electron_through_f_derivatives::Program;
+using ThroughG = generated_one_electron_derivatives::Program;
 namespace derivative_policy = generated_one_electron_derivative_policy;
 using NucleusCooperativeSchedule = derivative_policy::NucleusCooperativeSchedule;
 constexpr unsigned kWarpThreads = 32U;
@@ -32,6 +34,7 @@ __device__ double pair_weight(const double* matrix, double scale, std::size_t of
  * pair-center accumulators live in registers; each external nuclear response
  * goes directly to the bounded global gradient buffer.
  */
+template <class Program>
 __device__ void contract_pair(const OneElectronDeviceView& batch, std::int64_t i, std::int64_t j,
                               const OneElectronWeightView& weights, double sign, double* gradient) {
   const std::size_t n = batch.nbf, system = i / n, offset = system * n * n;
@@ -49,21 +52,21 @@ __device__ void contract_pair(const OneElectronDeviceView& batch, std::int64_t i
     for (auto b = batch.shell_primitive_offsets[sj]; b < batch.shell_primitive_offsets[sj + 1];
          ++b) {
       const auto pair =
-          generated::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b], A[0],
-                               A[1], A[2], B[0], B[1], B[2]);
+          Program::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b], A[0], A[1],
+                             A[2], B[0], B[1], B[2]);
       const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
       for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
         const auto term_i = i * batch.ao_expansion_terms + ti;
         const auto* ai = batch.ao_term_angular + 3 * term_i;
-        const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
+        const auto ca = Program::component_index(ai[0], ai[1], ai[2]);
         for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
           const auto term_j = j * batch.ao_expansion_terms + tj;
           const auto* aj = batch.ao_term_angular + 3 * term_j;
-          const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
+          const auto cb = Program::component_index(aj[0], aj[1], aj[2]);
           const double norm = sign * radial * batch.ao_term_coefficients[term_i] *
                               batch.ao_term_coefficients[term_j];
           if (ws != 0.0 || wt != 0.0) {
-            const auto st = generated::overlap_kinetic_gradient(pair, ca, cb);
+            const auto st = Program::overlap_kinetic_gradient(pair, ca, cb);
             for (unsigned axis = 0; axis < 3; ++axis) {
               const double value = norm * (ws * st.first[axis] + wt * st.second[axis]);
               first[axis] += value;
@@ -74,7 +77,7 @@ __device__ void contract_pair(const OneElectronDeviceView& batch, std::int64_t i
             for (auto atom = batch.atom_offsets[system]; atom < batch.atom_offsets[system + 1];
                  ++atom) {
               const double* C = batch.positions + 3 * atom;
-              const auto v = generated::attraction_gradient(pair, ca, cb, C[0], C[1], C[2]);
+              const auto v = Program::attraction_gradient(pair, ca, cb, C[0], C[1], C[2]);
               const double factor = norm * wv * batch.atomic_numbers[atom];
               for (unsigned axis = 0; axis < 3; ++axis) {
                 const double da = factor * v.first[axis], db = factor * v.second[axis];
@@ -103,11 +106,12 @@ __device__ void contract_pair(const OneElectronDeviceView& batch, std::int64_t i
  * warp; each lane accumulates its owned nuclear response before one global
  * update per coordinate.
  */
+template <class Program>
 __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& batch,
                                                   std::int64_t i, std::int64_t j,
                                                   const OneElectronWeightView& weights, double sign,
                                                   double* gradient,
-                                                  generated::PairGeometry* shared_pair) {
+                                                  typename Program::Geometry* shared_pair) {
   constexpr unsigned kWarpMask = 0xffffffffU;
   const unsigned lane = threadIdx.x % kCooperativeLanes;
   const std::size_t n = batch.nbf, system = i / n, offset = system * n * n;
@@ -135,20 +139,20 @@ __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& b
       for (auto b = batch.shell_primitive_offsets[sj]; b < batch.shell_primitive_offsets[sj + 1];
            ++b) {
         const auto pair =
-            generated::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b], A[0],
-                                 A[1], A[2], B[0], B[1], B[2]);
+            Program::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b], A[0],
+                               A[1], A[2], B[0], B[1], B[2]);
         const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
         for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
           const auto term_i = i * batch.ao_expansion_terms + ti;
           const auto* ai = batch.ao_term_angular + 3 * term_i;
-          const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
+          const auto ca = Program::component_index(ai[0], ai[1], ai[2]);
           for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
             const auto term_j = j * batch.ao_expansion_terms + tj;
             const auto* aj = batch.ao_term_angular + 3 * term_j;
-            const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
+            const auto cb = Program::component_index(aj[0], aj[1], aj[2]);
             const double norm = sign * radial * batch.ao_term_coefficients[term_i] *
                                 batch.ao_term_coefficients[term_j];
-            const auto st = generated::overlap_kinetic_gradient(pair, ca, cb);
+            const auto st = Program::overlap_kinetic_gradient(pair, ca, cb);
             for (unsigned axis = 0; axis < 3; ++axis) {
               const double value = norm * (ws * st.first[axis] + wt * st.second[axis]);
               first[axis] += value;
@@ -180,23 +184,22 @@ __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& b
           // exp/pow-heavy setup in every active lane.
           if (lane == 0U)
             *shared_pair =
-                generated::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b],
-                                     A[0], A[1], A[2], B[0], B[1], B[2]);
+                Program::make_pair(batch.primitive_exponents[a], batch.primitive_exponents[b], A[0],
+                                   A[1], A[2], B[0], B[1], B[2]);
           __syncwarp(kWarpMask);
           const double radial = batch.primitive_coefficients[a] * batch.primitive_coefficients[b];
           for (unsigned ti = 0; ti < batch.ao_term_counts[i]; ++ti) {
             const auto term_i = i * batch.ao_expansion_terms + ti;
             const auto* ai = batch.ao_term_angular + 3 * term_i;
-            const auto ca = generated::component_index(ai[0], ai[1], ai[2]);
+            const auto ca = Program::component_index(ai[0], ai[1], ai[2]);
             for (unsigned tj = 0; tj < batch.ao_term_counts[j]; ++tj) {
               const auto term_j = j * batch.ao_expansion_terms + tj;
               const auto* aj = batch.ao_term_angular + 3 * term_j;
-              const auto cb = generated::component_index(aj[0], aj[1], aj[2]);
+              const auto cb = Program::component_index(aj[0], aj[1], aj[2]);
               const double norm = sign * radial * batch.ao_term_coefficients[term_i] *
                                   batch.ao_term_coefficients[term_j];
               if (valid_atom) {
-                const auto v =
-                    generated::attraction_gradient(*shared_pair, ca, cb, C[0], C[1], C[2]);
+                const auto v = Program::attraction_gradient(*shared_pair, ca, cb, C[0], C[1], C[2]);
                 const double factor = norm * wv * batch.atomic_numbers[atom];
                 for (unsigned axis = 0; axis < 3; ++axis) {
                   const double da = factor * v.first[axis], db = factor * v.second[axis];
@@ -230,22 +233,25 @@ __device__ void contract_pair_nucleus_cooperative(const OneElectronDeviceView& b
     }
 }
 
+template <class Program>
 __global__ void nucleus_cooperative_gradient(OneElectronDeviceView batch, const std::int32_t* first,
                                              const std::int32_t* second, std::size_t count,
                                              OneElectronWeightView weights,
                                              const std::uint8_t* active, double sign,
                                              double* gradient) {
-  __shared__ generated::PairGeometry shared_pairs[kCooperativeGroups];
+  __shared__ typename Program::Geometry shared_pairs[kCooperativeGroups];
   const std::size_t warp = (std::size_t{blockIdx.x} * blockDim.x + threadIdx.x) / kCooperativeLanes;
   const std::size_t tasks = static_cast<std::size_t>(batch.batch_size) * count;
   if (warp >= tasks) return;
   const auto system = warp / count;
   if (active && !active[system]) return;
   const auto base = system * batch.nbf, pair = warp % count;
-  contract_pair_nucleus_cooperative(batch, base + first[pair], base + second[pair], weights, sign,
-                                    gradient, shared_pairs + threadIdx.x / kCooperativeLanes);
+  contract_pair_nucleus_cooperative<Program>(batch, base + first[pair], base + second[pair],
+                                             weights, sign, gradient,
+                                             shared_pairs + threadIdx.x / kCooperativeLanes);
 }
 
+template <class Program>
 __global__ void thread_gradient(OneElectronDeviceView batch, const std::int32_t* first,
                                 const std::int32_t* second, std::size_t count,
                                 OneElectronWeightView weights, const std::uint8_t* active,
@@ -255,9 +261,10 @@ __global__ void thread_gradient(OneElectronDeviceView batch, const std::int32_t*
   const auto system = task / count;
   if (active && !active[system]) return;
   const auto base = system * batch.nbf, pair = task % count;
-  contract_pair(batch, base + first[pair], base + second[pair], weights, sign, gradient);
+  contract_pair<Program>(batch, base + first[pair], base + second[pair], weights, sign, gradient);
 }
 
+template <class Program>
 __global__ void shell_warp_gradient(OneElectronDeviceView batch, OneElectronWeightView weights,
                                     const std::uint8_t* active, double sign, double* gradient) {
   const std::size_t task = (std::size_t{blockIdx.x} * blockDim.x + threadIdx.x) / 32;
@@ -270,7 +277,7 @@ __global__ void shell_warp_gradient(OneElectronDeviceView batch, OneElectronWeig
   for (std::int64_t c = threadIdx.x % 32; c < ni * nj; c += 32) {
     const auto i = begin_i + c / nj, j = begin_j + c % nj;
     if (si == sj && i < j) continue;
-    contract_pair(batch, i, j, weights, sign, gradient);
+    contract_pair<Program>(batch, i, j, weights, sign, gradient);
   }
 }
 
@@ -286,12 +293,13 @@ __device__ std::size_t implicit_pair_first(std::size_t ordinal, std::size_t nbf)
   return first;
 }
 
+template <class Program>
 __global__ void implicit_nucleus_cooperative_gradient(OneElectronDeviceView batch,
                                                       std::size_t count,
                                                       OneElectronWeightView weights,
                                                       const std::uint8_t* active, double sign,
                                                       double* gradient) {
-  __shared__ generated::PairGeometry shared_pairs[kCooperativeGroups];
+  __shared__ typename Program::Geometry shared_pairs[kCooperativeGroups];
   const std::size_t warp = (std::size_t{blockIdx.x} * blockDim.x + threadIdx.x) / kCooperativeLanes;
   if (warp >= static_cast<std::size_t>(batch.batch_size) * count) return;
   const auto system = warp / count;
@@ -300,10 +308,12 @@ __global__ void implicit_nucleus_cooperative_gradient(OneElectronDeviceView batc
   const auto first = implicit_pair_first(ordinal, batch.nbf);
   const auto second = ordinal - first * (first + 1) / 2;
   const auto base = system * batch.nbf;
-  contract_pair_nucleus_cooperative(batch, base + first, base + second, weights, sign, gradient,
-                                    shared_pairs + threadIdx.x / kCooperativeLanes);
+  contract_pair_nucleus_cooperative<Program>(batch, base + first, base + second, weights, sign,
+                                             gradient,
+                                             shared_pairs + threadIdx.x / kCooperativeLanes);
 }
 
+template <class Program>
 __global__ void serial_gradient(OneElectronDeviceView batch, OneElectronWeightView weights,
                                 const std::uint8_t* active, double sign, double* gradient) {
   const std::size_t system = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
@@ -311,15 +321,15 @@ __global__ void serial_gradient(OneElectronDeviceView batch, OneElectronWeightVi
   const auto base = system * batch.nbf;
   for (std::int32_t i = 0; i < batch.nbf; ++i)
     for (std::int32_t j = 0; j <= i; ++j)
-      contract_pair(batch, base + i, base + j, weights, sign, gradient);
+      contract_pair<Program>(batch, base + i, base + j, weights, sign, gradient);
 }
-}  // namespace
 
-cudaError_t launch_generated_one_electron_gradient(
-    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
-    const std::int32_t* pair_second, std::size_t pair_count, const OneElectronWeightView& weights,
-    const std::uint8_t* active, unsigned schedule, double output_sign, double* gradient,
-    cudaStream_t stream) {
+template <class Program>
+cudaError_t launch_gradient_family(const OneElectronDeviceView& batch,
+                                   const std::int32_t* pair_first, const std::int32_t* pair_second,
+                                   std::size_t pair_count, const OneElectronWeightView& weights,
+                                   const std::uint8_t* active, unsigned schedule,
+                                   double output_sign, double* gradient, cudaStream_t stream) {
   if (batch.batch_size <= 0 || batch.nbf <= 0 || !gradient ||
       schedule > NucleusCooperativeSchedule::schedule_code || !std::isfinite(output_sign) ||
       !std::isfinite(weights.overlap_scale) || !std::isfinite(weights.kinetic_scale) ||
@@ -360,20 +370,35 @@ cudaError_t launch_generated_one_electron_gradient(
     return cudaErrorInvalidValue;
   const unsigned blocks = static_cast<unsigned>((tasks - 1) / per_block + 1);
   if (schedule == 2)
-    serial_gradient<<<blocks, threads, 0, stream>>>(batch, weights, active, output_sign, gradient);
+    serial_gradient<Program>
+        <<<blocks, threads, 0, stream>>>(batch, weights, active, output_sign, gradient);
   else if (schedule == 1)
-    shell_warp_gradient<<<blocks, threads, 0, stream>>>(batch, weights, active, output_sign,
-                                                        gradient);
+    shell_warp_gradient<Program>
+        <<<blocks, threads, 0, stream>>>(batch, weights, active, output_sign, gradient);
   else if (implicit_cooperative)
-    implicit_nucleus_cooperative_gradient<<<blocks, threads, 0, stream>>>(
+    implicit_nucleus_cooperative_gradient<Program><<<blocks, threads, 0, stream>>>(
         batch, implicit_pairs, weights, active, output_sign, gradient);
   else if (schedule == NucleusCooperativeSchedule::schedule_code)
-    nucleus_cooperative_gradient<<<blocks, threads, 0, stream>>>(
+    nucleus_cooperative_gradient<Program><<<blocks, threads, 0, stream>>>(
         batch, pair_first, pair_second, pair_count, weights, active, output_sign, gradient);
   else
-    thread_gradient<<<blocks, threads, 0, stream>>>(batch, pair_first, pair_second, pair_count,
-                                                    weights, active, output_sign, gradient);
+    thread_gradient<Program><<<blocks, threads, 0, stream>>>(
+        batch, pair_first, pair_second, pair_count, weights, active, output_sign, gradient);
   return cudaPeekAtLastError();
+}
+
+}  // namespace
+
+cudaError_t launch_generated_one_electron_gradient(
+    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+    const std::int32_t* pair_second, std::size_t pair_count, const OneElectronWeightView& weights,
+    const std::uint8_t* active, unsigned schedule, double output_sign, double* gradient,
+    cudaStream_t stream) {
+  if (batch.maximum_angular_momentum <= ThroughF::maximum_angular_momentum)
+    return launch_gradient_family<ThroughF>(batch, pair_first, pair_second, pair_count, weights,
+                                            active, schedule, output_sign, gradient, stream);
+  return launch_gradient_family<ThroughG>(batch, pair_first, pair_second, pair_count, weights,
+                                          active, schedule, output_sign, gradient, stream);
 }
 
 }  // namespace generativeqc::scf

@@ -6,6 +6,7 @@
 namespace generativeqc::scf::cuda_execution {
 
 /** Borrow normalized one-electron metadata; the caller retains all storage. */
-OneElectronDeviceView one_electron_view(const DeviceBatch& batch);
+OneElectronDeviceView one_electron_view(const DeviceBatch& batch,
+                                        unsigned maximum_angular_momentum = 4);
 
 }  // namespace generativeqc::scf::cuda_execution

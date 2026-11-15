@@ -33,6 +33,9 @@ struct OneElectronDeviceView {
   const double* primitive_coefficients;
   /** Compact response owners use six terms for spherical g; Direct-HF stays at three. */
   std::size_t ao_expansion_terms = 3;
+  /** Validated physical shell bound. Unknown callers retain the complete family;
+   * Cartesian g has one expansion term, so stride cannot establish this bound. */
+  unsigned maximum_angular_momentum = 4;
 };
 
 /** Launch normalized S/Hcore, optionally retaining separate T/V diagnostics.
