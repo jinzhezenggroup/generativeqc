@@ -1339,14 +1339,12 @@ jobs:
     # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
-    # Keep the full test-step ceilings and leave setup/cache-save headroom.
-    # Run 43052160517/attempt 2 spent 16m09s in ECP setup and 19m03s in
-    # core-b setup, truncating their existing 30/35-minute test allowances.
-    # Run 43138869481 then spent 18m43s preparing core-a, leaving only 21m29s
-    # of its 30-minute test deadline before the whole-job cap stopped it at 99%.
-    # Reserve twenty core-a/ECP and twenty-five core-b setup/cleanup minutes
-    # without extending test deadlines. Other shards retain ten minutes.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || matrix.shard == 'core-b' && 60 || (matrix.shard == 'core-a' || matrix.shard == 'ecp-forces') && 50 || ((matrix.shard == 'posthf' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 45 || 40) }}
+    # Every shard may need the same cold native build when optional caches miss.
+    # Run 43757181745 spent 22m04s building core-c's library, leaving only
+    # 16m58s of its existing 30-minute test allowance before the 40-minute cap.
+    # Reuse core-b's finite 60-minute routine ceiling for every shard, leaving
+    # at least 25 minutes for setup/cleanup without extending any test deadline.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 100 || 60 }}
     env:
       CCACHE_MAXSIZE: 2G
       # PySCF and NumPy can each fan out through BLAS/OpenMP. Keep those
