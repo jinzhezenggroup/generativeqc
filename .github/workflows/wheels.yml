@@ -118,6 +118,15 @@ jobs:
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
           CIBW_CACHE_PATH: ${{ runner.temp }}/cibw-cache
+          # Leave 4 GiB of the standard runner's 16 GiB outside the build cgroup.
+          # An oversized compiler must fail the build, not take the runner and
+          # its always()-guarded partial-cache save offline. Equal memory/swap
+          # limits prohibit container swapping rather than prolonging thrashing.
+          CIBW_CONTAINER_ENGINE: >-
+            docker; create_args: --memory=12g --memory-swap=12g
+            --label=gqc-wheel-run=${{ github.run_id }}-${{ github.run_attempt }}
+          # Retain only until the bounded diagnostic/cleanup step below.
+          CIBW_DEBUG_KEEP_CONTAINER: "1"
           # cibuildwheel mounts the host root at /host inside the manylinux
           # container, so the compiler cache survives the container lifetime.
           # scikit-build-core creates a fresh /tmp/tmp*/build directory on every
@@ -125,7 +134,9 @@ jobs:
           # hashes the CMake/NVCC command line; otherwise generated-source and
           # generated-include paths make identical compilations miss across runs.
           # Package all structural Libxc providers independently of CUDA SM.
+          # Bound the whole Ninja graph, including large host C++ units.
           CIBW_ENVIRONMENT: >-
+            CMAKE_BUILD_PARALLEL_LEVEL=2
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
             SKBUILD_CMAKE_DEFINE="GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
@@ -141,6 +152,26 @@ jobs:
           package-dir: .
           output-dir: wheelhouse
           extras: "uv"
+
+      - name: Report wheel container resources and clean up
+        if: ${{ always() }}
+        timeout-minutes: 2
+        continue-on-error: true
+        shell: bash
+        env:
+          GQC_WHEEL_RUN: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          free -h || true
+          df -h "$RUNNER_TEMP" || true
+          # Never inspect or remove containers belonging to other job work.
+          mapfile -t containers < <(docker ps --all --quiet \
+            --filter "label=gqc-wheel-run=$GQC_WHEEL_RUN")
+          for container in "${containers[@]}"; do
+            docker inspect --format \
+              'state={{json .State}} memory={{.HostConfig.Memory}} memory_swap={{.HostConfig.MemorySwap}}' \
+              "$container" || true
+            docker rm --force --volumes "$container" || true
+          done
 
       - name: Prepare stationary source cache for host archive
         if: ${{ always() }}

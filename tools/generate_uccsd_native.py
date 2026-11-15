@@ -36,6 +36,7 @@ from generativeqc_compiler.tensor import Program, prepare_for_backend, transpose
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 from tools.generate_rccsd_native import (
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _dim,
@@ -70,6 +71,15 @@ def _work(
             extents = ",".join(_label_dims(node).values()) or "1"
             lines.append(f"work=checked_add(work,checked_product({{{extents}}}));")
     return "\n".join([*lines, "return work;}"])
+
+
+def _cpu_only(source: str) -> str:
+    """CUDA borrows shape/work contracts, never the host tensor evaluator.
+
+    Keep the ordinary C++ implementation unchanged while avoiding repeated
+    parsing of its large arithmetic bodies in each CUDA architecture pass.
+    """
+    return "#ifndef __CUDACC__\n" + source + "\n#endif"
 
 
 def cpu_header() -> str:
@@ -116,13 +126,15 @@ def cpu_header() -> str:
         "}};",
         _required_function(program, "required", dimension_names=DIMENSIONS),
         _work(program, "work"),
-        _cpu_function(
-            program,
-            "evaluate",
-            "Outputs",
-            output_fields=outputs,
-            dimension_names=DIMENSIONS,
-            input_overrides={name: f"inputs.{name}" for name in names},
+        _cpu_only(
+            _cpu_function(
+                program,
+                "evaluate",
+                "Outputs",
+                output_fields=outputs,
+                dimension_names=DIMENSIONS,
+                input_overrides={name: f"inputs.{name}" for name in names},
+            )
         ),
     ]
     tile_hashes = []
@@ -155,14 +167,16 @@ def cpu_header() -> str:
                 program, f"required_{channel}", dimension_names=tile_dimensions
             ),
             _work(program, f"work_{channel}", dimensions=tile_dimensions),
-            _cpu_function(
-                program,
-                f"evaluate_{channel}",
-                "TriplesOutput",
-                signature=f"const Inputs_{channel}& inputs",
-                output_fields=("triples_energy",),
-                dimension_names=tile_dimensions,
-                input_overrides={name: f"inputs.{name}" for name in names},
+            _cpu_only(
+                _cpu_function(
+                    program,
+                    f"evaluate_{channel}",
+                    "TriplesOutput",
+                    signature=f"const Inputs_{channel}& inputs",
+                    output_fields=("triples_energy",),
+                    dimension_names=tile_dimensions,
+                    input_overrides={name: f"inputs.{name}" for name in names},
+                )
             ),
         ]
     lines += [
@@ -259,14 +273,18 @@ def response_header() -> str:
                 program, f"response_required_{name}", dimension_names=dimensions
             ),
             _work(program, f"response_work_{name}", dimensions=dimensions),
-            _cpu_function(
-                program,
-                f"response_evaluate_{name}",
-                f"ResponseOutputs_{name}",
-                signature="const ResponseFeeds& inputs",
-                output_fields=outputs,
-                dimension_names=dimensions,
-                input_overrides={key: f'inputs.at("{key}").data()' for key in inputs},
+            _cpu_only(
+                _cpu_function(
+                    program,
+                    f"response_evaluate_{name}",
+                    f"ResponseOutputs_{name}",
+                    signature="const ResponseFeeds& inputs",
+                    output_fields=outputs,
+                    dimension_names=dimensions,
+                    input_overrides={
+                        key: f'inputs.at("{key}").data()' for key in inputs
+                    },
+                )
             ),
         ]
         for kind, specs in (
@@ -289,6 +307,7 @@ def response_header() -> str:
             ),
             'throw std::invalid_argument("unknown unrestricted response program");}',
         ]
+    lines.append("#ifndef __CUDACC__")
     lines.append(
         f"inline ResponseViews response_evaluate(const std::string& program,{parameters},"
         "const ResponseFeeds& inputs,double* arena,std::size_t capacity){"
@@ -300,6 +319,7 @@ def response_header() -> str:
         )
     lines += [
         'throw std::invalid_argument("unknown unrestricted response program");}',
+        "#endif",
         "}  // namespace generativeqc::cc::ucc_generated",
         "",
     ]
@@ -307,7 +327,7 @@ def response_header() -> str:
 
 
 def cuda_source() -> str:
-    """Emit independent-spin CUDA graphs and their bounded synchronous owner."""
+    """Emit independent-spin graphs with exact workers shared across responses."""
     dimensions = (*DIMENSIONS, "na", "nb", "tile_extent")
     programs = {name: _prepared(value) for name, value in response_programs().items()}
     lines = [
@@ -324,6 +344,7 @@ def cuda_source() -> str:
         "std::map<std::string,const double*> inputs;",
         "};",
     ]
+    kernel_pool = CudaKernelPool("shared")
     for name, program in programs.items():
         names = {
             node.attrs["name"] for node in program.live_nodes if node.op == "input"
@@ -338,6 +359,7 @@ def cuda_source() -> str:
                 state_type="UccCudaState",
                 output_fields=tuple(program.outputs),
                 dimension_names=dimensions,
+                kernel_pool=kernel_pool,
             )
         )
     lines += [
