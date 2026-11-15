@@ -45,6 +45,15 @@ new complete-export/unprefixed-header case reproduces the false negative.
 Compilation reuses the existing ccache store; commands and before/after cache
 statistics are retained with the local validation logs outside Git.
 
+The native Libxc archival checker also tracks live source-input identities.
+Regenerate its derived snapshot and reference page with the owning checker
+after this source change. Only the two checked input identities change: the
+retained campaign, measured identity, binary identity, stale status, qualification
+summary and all negative evidence remain unchanged. This is archival consistency,
+not new Libxc qualification, and no acknowledgement or scientific gate is relaxed.
+The live checker and all 75 native-catalog receipt/context/regression tests pass
+after this derived refresh.
+
 This independent fix does not change AOT profile selection, PR 3084 data or
 figures, CUDA code, numerical acceptance gates, or provider ownership policy.
 The earlier single-translation-unit endpoint experiment is diagnostic evidence,
