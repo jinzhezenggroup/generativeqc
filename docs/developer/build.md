@@ -188,6 +188,28 @@ Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
 entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
 generic CUDA path for every target, including measured architectures.
 
+Profile identity is not generated-shell coverage. The existing
+`generativeqc_cuda_tuning_device` probe (Python: `profiles.probe_device`)
+reports the actual device SM, `official_profile`, `tuned`, `portable`,
+`compatible`, and `registry_status` separately:
+
+- `matched`: an exact device-SM kernel set exists, including a forced-portable
+  set on SM120. Its generated inventory may still be empty or restricted.
+- `no_matching_kernel_set`: shell AOT is present but no compiled set matches
+  the visible device SM. `generic_cuda` selects the bounded native fallback;
+  executable PTX or SASS alone does not supply an application registry match.
+- `aot_disabled`: shell bundles were omitted at build time; generated masks
+  are zero and the bounded native fallback remains available.
+
+The probe's `enabled_force_shell_class_mask`, `enabled_fock_shell_class_mask`,
+and `enabled_mixed_fock_shell_class_mask` are the selected registry's exact
+class masks after the corresponding `GENERATIVEQC_AOT_*_SHELL_CLASSES`
+environment filters. A matched registry with zero enabled coverage is distinct
+from an unmatched or disabled registry. These masks do not replace additional
+consumer-specific resource, precision or workload admission checks, nor do
+they establish numerical or performance qualification. Rebuild native clients
+against the current full tuning descriptor when updating this pre-release API.
+
 Derivative shell registries follow the same target/profile mapping, including
 custom manifests. Portable targets and builds with shell AOT disabled retain
 the bounded native derivative route. They do not inherit `sm_120` package

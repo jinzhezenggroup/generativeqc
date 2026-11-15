@@ -12,6 +12,8 @@ void select_profile_for_device(int, int, int) noexcept {}
 
 const ProfileInfo& selected_profile() noexcept { return kGenericProfile; }
 
+const char* selected_registry_status() noexcept { return "aot_disabled"; }
+
 const ShellKernelMetadata* selected_shell_kernels(std::size_t& count) noexcept {
   count = 0;
   return nullptr;
