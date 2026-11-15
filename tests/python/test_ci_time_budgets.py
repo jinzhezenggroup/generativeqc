@@ -271,14 +271,14 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
 @pytest.mark.parametrize(
     "filename, job, shard, routine_minutes",
     [
-        ("ci.yml", "python", "core-a", 50),
+        ("ci.yml", "python", "core-a", 60),
         ("ci.yml", "python", "core-b", 60),
-        ("ci.yml", "python", "core-c", 40),
-        ("ci.yml", "python", "uccsd-forces", 40),
-        ("ci.yml", "python", "runtime-heavy", 45),
-        ("ci.yml", "python", "posthf", 45),
-        ("ci.yml", "python", "compiler-heavy", 45),
-        ("ci.yml", "python", "ecp-forces", 50),
+        ("ci.yml", "python", "core-c", 60),
+        ("ci.yml", "python", "uccsd-forces", 60),
+        ("ci.yml", "python", "runtime-heavy", 60),
+        ("ci.yml", "python", "posthf", 60),
+        ("ci.yml", "python", "compiler-heavy", 60),
+        ("ci.yml", "python", "ecp-forces", 60),
         ("cumetal-cuda.yml", "cuda-tests", "", 75),
     ],
 )
@@ -291,8 +291,7 @@ def test_full_qualification_has_a_separate_finite_budget(
     match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
     assert match, "full qualification must have a finite timeout"
     budget = match[1]
-    # Evaluate the actual matrix context: extended shards have bounded routine exceptions,
-    # while every shard still receives the independent full-qualification budget.
+    # Evaluate each matrix context without pinning equivalent expression spellings.
     context = {"matrix.shard": shard}
     for event in ("schedule", "workflow_dispatch"):
         full = expression(budget, {**context, "github.event_name": event})
@@ -322,14 +321,14 @@ def test_full_qualification_has_a_separate_finite_budget(
 @pytest.mark.parametrize(
     ("shard", "job_minutes", "test_minutes"),
     (
-        ("core-a", 50, 30),
+        ("core-a", 60, 30),
         ("core-b", 60, 35),
-        ("core-c", 40, 30),
-        ("uccsd-forces", 40, 30),
-        ("runtime-heavy", 45, 35),
-        ("posthf", 45, 35),
-        ("compiler-heavy", 45, 35),
-        ("ecp-forces", 50, 30),
+        ("core-c", 60, 30),
+        ("uccsd-forces", 60, 30),
+        ("runtime-heavy", 60, 35),
+        ("posthf", 60, 35),
+        ("compiler-heavy", 60, 35),
+        ("ecp-forces", 60, 30),
     ),
 )
 def test_cold_python_setup_preserves_the_existing_test_deadline(

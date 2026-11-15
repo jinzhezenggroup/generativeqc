@@ -165,7 +165,7 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     job = _job("python")
     tests = _step("python", "Run Python tests with coverage")
     # Evaluate the matrix rather than requiring identical expression shapes:
-    # Cold core-a/core-b/ECP need setup headroom, not longer test allowances.
+    # Every shard can miss optional native caches; preserve its test allowance.
     pattern = r"^\s*timeout-minutes: (.+)$"
     job_limits = re.search(pattern, job.split("\n    steps:\n", 1)[0], re.MULTILINE)
     test_limits = re.search(pattern, tests, re.MULTILINE)
@@ -184,13 +184,10 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
             context = {"matrix.shard": shard, "github.event_name": event}
             full = event in {"schedule", "workflow_dispatch"}
             test_minutes = 90 if full else 35 if shard in extended else 30
-            setup_minutes = (
-                10
-                if full
-                else {"core-a": 20, "core-b": 25, "ecp-forces": 20}.get(shard, 10)
-            )
             assert expression(test_limits[1], context) == test_minutes
-            assert expression(job_limits[1], context) == test_minutes + setup_minutes
+            job_minutes = expression(job_limits[1], context)
+            assert job_minutes == (100 if full else 60)
+            assert job_minutes - test_minutes >= (10 if full else 25)
     assert "id: python_tests" in tests
     assert "continue-on-error:" not in tests
     assert "-m pytest" in tests and '"${collection_targets[@]}"' in tests
