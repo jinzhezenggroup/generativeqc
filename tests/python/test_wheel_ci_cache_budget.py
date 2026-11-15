@@ -87,7 +87,7 @@ def test_compiler_cache_saves_partial_progress_without_masking_failure() -> None
     snapshot = _step("Publish bounded wheel compiler snapshot")
     assert "if: steps.wheel_snapshot.outcome == 'success'" in snapshot
     assert "continue-on-error: true" in snapshot
-    assert "retention-days: 1" in snapshot
+    assert "retention-days: 7" in snapshot
     assert _timeout(snapshot) == 2
     package = _step("Package bounded wheel compiler snapshot")
     assert "github.repository == 'jinzhezenggroup/generativeqc'" in package
