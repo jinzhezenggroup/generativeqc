@@ -141,9 +141,11 @@ a custom portable manifest explicitly enabling derivative-shell packaging.
 With global AOT enabled, generated packages match that opt-in. With
 `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF`, the actual generated derivative registry
 is empty for all three targets, overriding the custom policy. The stock
-configuration is restored before endpoint acquisition. Commands, custom input,
-source revision, outputs and independently checked emitter results are retained
-inside the primary endpoint bundle. This tests CMake/codegen routing, not
+configuration is restored before endpoint acquisition. Commands, source revision,
+outputs and independently checked emitter results remain in the primary capsule.
+Its archive descriptor recovers the exact custom input from the original capsule
+at `ec205be986fe83824730fa6aa9fcd249b1fc304d`, checking both capsule/member hashes;
+no input bytes are discarded. This tests CMake/codegen routing, not
 the mathematical or device qualification of optional derivative packages.
 
 ## Bounded retention
