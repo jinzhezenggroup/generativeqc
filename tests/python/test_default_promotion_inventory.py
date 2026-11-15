@@ -19,6 +19,7 @@ from tools.check_default_promotion_inventory import (
     load_and_validate,
     validate_inventory,
 )
+from tools.generativeqc_validation.cuda_aot_policy import check_defaults
 
 
 def _payload() -> dict:
@@ -36,6 +37,18 @@ def _copy_audited_sources(payload: dict, destination_root: Path) -> None:
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+
+
+def _check_aot_decisions(root: Path) -> None:
+    """Use the semantic AOT gate rather than duplicate its retained defaults."""
+    inventory = json.loads(
+        (ROOT / "manifests/maintenance/cuda_aot_default_decisions.json").read_text()
+    )
+    relative = inventory["retained_baseline"]["manifest"]
+    destination = root / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / relative, destination)
+    check_defaults(root, inventory, source_identity="0" * 64)
 
 
 def test_current_default_promotion_inventory_is_complete() -> None:
@@ -478,10 +491,13 @@ def test_rys_task_default_preference_requires_an_audited_decision(
     manifest = json.loads(source.read_text())
     manifest["architectures"][profile]["prefer_rys_task_fock"] = value
     source.write_text(json.dumps(manifest))
-    assert any(
-        "Rys-task default target/class admission drifted" in error
-        for error in validate_inventory(payload, root=tmp_path)
-    )
+    if profile == "portable_cuda" and value is True:
+        # No optional modules means no effective preferred route. An inert
+        # flag is not a global default change or scientific qualification.
+        _check_aot_decisions(tmp_path)
+        return
+    with pytest.raises((ValueError, TypeError)):
+        _check_aot_decisions(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -516,10 +532,12 @@ def test_rys_task_manifest_preferences_require_renewed_qualification(
     else:
         classes.append(None)
     source.write_text(json.dumps(manifest))
-    assert any(
-        "Rys-task default target/class admission drifted" in error
-        for error in validate_inventory(payload, root=tmp_path)
-    )
+    if mutation == "absent":
+        # The shared preference set equals the former explicit override.
+        _check_aot_decisions(tmp_path)
+        return
+    with pytest.raises((ValueError, TypeError)):
+        _check_aot_decisions(tmp_path)
 
 
 @pytest.mark.parametrize(

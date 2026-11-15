@@ -6,6 +6,70 @@ rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
 ## Direct J/K policy ownership
 
+### CUDA AOT capability and global-default decisions
+
+`AOT_PROFILE=auto` resolves already declared production choices; it does not
+run an autotuner. The generated
+[capability audit](../../manifests/maintenance/cuda_aot_capability_audit.json)
+separates shared force mathematics, changed Fock mappings, extra consumers,
+precision contracts and optional route packaging for SM80/A100, SM90/H100 and
+SM120/RTX5090. A static target-plan acceptance is not an NVCC resource result,
+independent GPU numerical acceptance, or cold/warm/moved endpoint measurement.
+An unmeasured target remains explicit experimental or fallback-only; the audit
+does not change dispatch. Historical references retain their original source
+and device identities. Existing provisional selections are retained, not
+retroactively certified.
+
+Run `PYTHONPATH=python:. python tools/check_cuda_aot_policy.py` in the source
+checkout. `--write-audit` refreshes only the current unmeasured static inventory;
+it cannot qualify a default. The
+[default decisions](../../manifests/maintenance/cuda_aot_default_decisions.json)
+retain an integrity-checked historical manifest. The checker compares effective
+per-target schedules, recurrences, capabilities, preferences, target resources
+and packaging, not production function bodies or generated-source fingerprints.
+Formatting or an inert preference flag is not a default promotion.
+
+A semantic stock-policy change needs one source-matched campaign for every
+affected target, including newly auto-admitted targets. Record raw acquisition,
+independent reference inputs/results, build commands, cubin resources, loaded
+library identity, actual CUDA images, device UUID/model/driver, scheduler
+visibility and scientific settings. The global-promotion schema is
+`generativeqc.cuda-aot-global-promotion` version 1. Its executable contract and
+receipt validation are owned by
+`tools/generativeqc_validation/cuda_aot_policy.py::promotion_gate` and
+`check_defaults`:
+
+- At least four distinct paired fresh processes on the same device/driver and
+  source, using identified Release binaries without fast compilation.
+- Complete energy plus analytic forces for cold, warm, moved and moved-warm
+  phases; moved geometry differs from the initial geometry. Kernel-only timing,
+  missing phases and nonconvergence cannot enter a passing population.
+- Independent converged reference energies and every Cartesian force component,
+  with the existing `1e-9` energy, `1e-7` force and translation limits. Scientific
+  settings cannot change between arms or references; oracle calls and nondefault
+  runtime controls cannot enter timed production work.
+- Explicit SCF branches and actual semantic work counts: iterations, Fock builds,
+  force evaluations and quartet tasks, plus any additional measured axes. Work
+  amplification, missing counters and changed iteration branches reject a pair.
+- No package-size, peak-device-memory, compiled register/stack/shared/local or
+  module-first-use regression. Resource aggregates are recomputed from retained
+  CUOBJDump output, not accepted from a `passed` flag.
+- Mean/median and paired-bootstrap nonregression for every endpoint and first
+  use, with at least one complete endpoint improving by `1.02x` and a positive
+  bootstrap lower bound. All raw processes enter the gate.
+
+The checker verifies integrity and consistency, not the honesty of acquisition:
+receipts are not authentication signatures. Review source-bound raw records and
+representative workload/device coverage before accepting a campaign. One card's
+result is not a claim that all cards with the same compute capability perform
+equally. A generic mathematical capability is not automatically a global schedule
+preference. Runtime resource/precision refusal and bounded native fallback remain
+mandatory independently of these offline decisions.
+
+The [local tuning workflow](../user/local_autotuning.md) retains its existing
+workload-local **warm** acceptance gate. Its results are not valid global-promotion
+campaigns and are not automatically imported into the stock manifest.
+
 The [tuning inventory](../../manifests/maintenance/direct_jk_tuning_inventory.json)
 distinguishes retained bounds, migrated policy owners and pending qualification.
 Persistent-ERI admission belongs to `SmallHfProfitabilityProfile`: the no-calibration
