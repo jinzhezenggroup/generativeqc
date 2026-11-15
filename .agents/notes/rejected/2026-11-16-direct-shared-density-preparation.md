@@ -110,3 +110,12 @@ Reconsider density preparation only if a materially different interface avoids
 the extra escaped metadata/call cost and complete production endpoint evidence
 demonstrates nonregression with a substantial compiler-work/resource reduction.
 Do not repeat this same extraction merely because its standalone code is cleaner.
+
+## Follow-up evidence
+
+The first isolated per-angular range-sharing experiment described above is also
+rejected after complete-object compilation: PTX grows 0.27%, object size falls
+0.83%, and the single worker-memory observation falls only 0.74%. See
+`2026-11-16-direct-range-order-sharing.md` for its preserved admission contract,
+resource evidence and qualification limits. No range-dispatch prototype is
+adopted into production.
