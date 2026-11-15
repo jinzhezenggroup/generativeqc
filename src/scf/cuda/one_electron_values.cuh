@@ -53,6 +53,12 @@ cudaError_t launch_generated_one_electron_values(
     const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
     double* hcore, cudaStream_t stream, double* kinetic = nullptr, double* attraction = nullptr);
 
+/** Private host bridge to a distinct low-angular CUDA module. */
+cudaError_t launch_through_f_one_electron_values(
+    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+    const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
+    double* hcore, cudaStream_t stream, double* kinetic, double* attraction);
+
 }  // namespace generativeqc::scf
 
 #endif

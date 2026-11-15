@@ -48,6 +48,7 @@ def main() -> None:
     parser.add_argument("--derivative-policy-output", type=Path)
     parser.add_argument("--cpu-st-output", type=Path)
     parser.add_argument("--family-output", type=Path)
+    parser.add_argument("--family-metadata-output", type=Path)
     parser.add_argument(
         "--max-angular-momentum",
         type=int,
@@ -70,6 +71,8 @@ def main() -> None:
         parser.error("--inventory requires --output")
     if args.family_output and (not args.output or args.max_angular_momentum != 4):
         parser.error("--family-output requires a complete through-g --output")
+    if args.family_metadata_output and not args.family_output:
+        parser.error("--family-metadata-output requires --family-output")
     maximum = args.max_angular_momentum
     policy_source = emit_one_electron_policy_cuda() if args.policy_output else None
     if policy_source is not None:
@@ -92,6 +95,7 @@ def main() -> None:
         )
         write_if_changed(args.output, source)
     family_source = None
+    family_metadata = None
     if args.family_output:
         from generativeqc_compiler.integral.one_electron_families_cuda import (
             emit_one_electron_derivative_family_cuda,
@@ -104,6 +108,13 @@ def main() -> None:
             else emit_one_electron_value_family_cuda()
         )
         write_if_changed(args.family_output, family_source)
+    if args.family_metadata_output:
+        from generativeqc_compiler.integral.one_electron_families_cuda import (
+            emit_one_electron_family_metadata_cpp,
+        )
+
+        family_metadata = emit_one_electron_family_metadata_cpp()
+        write_if_changed(args.family_metadata_output, family_metadata)
     if args.inventory:
         assert source is not None
         payload = {
@@ -123,6 +134,10 @@ def main() -> None:
                 **one_electron_family_inventory(),
                 "source_sha256": hashlib.sha256(family_source.encode()).hexdigest(),
             }
+        if family_metadata is not None:
+            payload["angular_family_metadata_sha256"] = hashlib.sha256(
+                family_metadata.encode()
+            ).hexdigest()
         if policy_source is not None:
             payload["execution_policy"] = {
                 **one_electron_policy_inventory(),

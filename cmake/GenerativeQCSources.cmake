@@ -171,7 +171,9 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/df_gradient_bridge.cu
       src/scf/cuda/df_response_weights.cu
       src/scf/cuda/one_electron_values.cu
+      src/scf/cuda/one_electron_values_f.cu
       src/scf/cuda/one_electron_derivatives.cu
+      src/scf/cuda/one_electron_derivatives_f.cu
       src/scf/cuda/one_electron_gradient_bridge.cu
       src/scf/cuda/df_coulomb.cpp
       src/scf/cuda/df_exchange.cpp

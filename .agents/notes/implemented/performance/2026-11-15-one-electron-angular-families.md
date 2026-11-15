@@ -3,6 +3,10 @@
 Status: implemented; native/device endpoint qualification pending
 Date: 2026-11-15
 
+Follow-up: [lazy module boundaries](2026-11-15-one-electron-lazy-module-boundaries.md)
+records the separate AOT acquisition correction and why the initial combined-CUDA-
+module specialization did not recover the remaining first-launch cost.
+
 ## Problem
 
 Expanding the generic one-electron value and gradient programs from f to g also

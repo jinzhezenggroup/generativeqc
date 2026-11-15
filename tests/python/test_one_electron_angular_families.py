@@ -11,6 +11,7 @@ from generativeqc_compiler.integral.one_electron_cuda import (
 )
 from generativeqc_compiler.integral.one_electron_families_cuda import (
     emit_one_electron_derivative_family_cuda,
+    emit_one_electron_family_metadata_cpp,
     emit_one_electron_value_family_cuda,
 )
 from test_one_electron_g_shared_values import (
@@ -32,11 +33,15 @@ def angular_families(
         ("generated_one_electron_values.cuh", emit_one_electron_values_cuda(4)),
         ("value_family.cuh", emit_one_electron_value_family_cuda()),
         ("derivative_family.cuh", emit_one_electron_derivative_family_cuda()),
+        ("family_metadata.cuh", emit_one_electron_family_metadata_cpp()),
     ):
         (directory / name).write_text(source)
     source = r"""
 #include "generated_one_electron_values.cuh"
 #include "value_family.cuh"
+#include "family_metadata.cuh"
+static_assert(generativeqc::scf::generated_one_electron_families::through_f_maximum_angular_momentum
+    == generativeqc::scf::generated_one_electron_through_f::ValueFamily::maximum_angular_momentum);
 struct NuclearView {
   const long long* atom_offsets;
   const double* atomic_numbers;
@@ -75,7 +80,9 @@ extern "C" void evaluate_g(const double* inputs, double* outputs, unsigned count
     )
 
     derivative_source = (
-        '#include "derivative_family.cuh"\n'
+        '#include "derivative_family.cuh"\n#include "family_metadata.cuh"\n'
+        "static_assert(generativeqc::scf::generated_one_electron_families::through_f_maximum_angular_momentum\n"
+        " == generativeqc::scf::generated_one_electron_through_f_derivatives::Program::maximum_angular_momentum);\n"
         'extern "C" void derivative_f(const double* inputs, double* outputs, unsigned count) {\n'
         "using one = generativeqc::scf::generated_one_electron_through_f_derivatives::Program;\n"
         "for (unsigned i=0;i<count;++i) { const double* p=inputs+14*i; double* out=outputs+27*i;\n"

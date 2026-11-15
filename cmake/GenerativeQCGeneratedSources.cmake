@@ -1107,6 +1107,8 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_one_electron_policy.cuh")
   set(GENERATIVEQC_ONE_ELECTRON_VALUE_FAMILY_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_one_electron_value_family.cuh")
+  set(GENERATIVEQC_ONE_ELECTRON_FAMILY_METADATA_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_one_electron_family_metadata.cuh")
   generativeqc_register_generated_sources(
     TARGET ${target}
     ADD_TO_TARGET
@@ -1115,6 +1117,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_ONE_ELECTRON_HEADER}"
       "${GENERATIVEQC_ONE_ELECTRON_POLICY_HEADER}"
       "${GENERATIVEQC_ONE_ELECTRON_VALUE_FAMILY_HEADER}"
+      "${GENERATIVEQC_ONE_ELECTRON_FAMILY_METADATA_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_families_cuda.py"
@@ -1122,6 +1125,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       --output "${GENERATIVEQC_ONE_ELECTRON_HEADER}"
       --max-angular-momentum 4
       --family-output "${GENERATIVEQC_ONE_ELECTRON_VALUE_FAMILY_HEADER}"
+      --family-metadata-output "${GENERATIVEQC_ONE_ELECTRON_FAMILY_METADATA_HEADER}"
       --policy-output "${GENERATIVEQC_ONE_ELECTRON_POLICY_HEADER}")
 
   set(GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER

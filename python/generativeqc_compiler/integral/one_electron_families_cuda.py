@@ -22,6 +22,17 @@ def one_electron_family_inventory() -> dict:
     }
 
 
+def emit_one_electron_family_metadata_cpp() -> str:
+    """Publish admission bounds without pulling scalar CUDA code into dispatch."""
+    bounds = one_electron_family_inventory()["families"]
+    return f"""#pragma once
+namespace generativeqc::scf::generated_one_electron_families {{
+inline constexpr unsigned through_f_maximum_angular_momentum = {bounds["through_f"]};
+inline constexpr unsigned through_g_maximum_angular_momentum = {bounds["through_g"]};
+}}
+"""
+
+
 def _through_f(source: str) -> str:
     """Give canonical emitted declarations independent namespace/header guards."""
     return source.replace(
