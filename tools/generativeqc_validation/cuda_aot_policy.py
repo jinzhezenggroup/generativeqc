@@ -344,6 +344,7 @@ def capability_audit(manifest: Path) -> dict:
 
 
 def _observables(sample: dict, oracle: dict, name: str) -> None:
+    """Keep independent limits and compensated force totals interpreter-stable."""
     _require(
         oracle["converged"] is True, f"{name}: independent reference is unconverged"
     )
@@ -395,7 +396,7 @@ def _observables(sample: dict, oracle: dict, name: str) -> None:
             )
     _require(
         all(
-            abs(sum(force[axis] for force in forces)) <= FORCE_LIMIT
+            abs(math.fsum(force[axis] for force in forces)) <= FORCE_LIMIT
             for axis in range(3)
         ),
         f"{name}: force translation gate",

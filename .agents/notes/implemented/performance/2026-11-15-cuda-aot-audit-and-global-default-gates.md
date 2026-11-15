@@ -167,6 +167,18 @@ published commit `3958635e7687537d50ae3f61689ba257416b872c`, not a new external
 archive. Preserve all positive and negative outcomes without raising budgets,
 dropping reference tests or manufacturing default qualification.
 
+## Python-version-independent replay reductions
+
+CI run 43702787870 rejects the fresh audit under Python 3.11 although Python
+3.13 reproduces its bytes. Replaying the exact same retained arrays identifies
+one translation residual: `1.4221263056057865e-14` versus
+`1.422169673692686e-14`. Python 3.12 changed builtin floating-point `sum` to a
+compensated algorithm. Do not round evidence, relax the stale-audit check or
+relabel outcomes to conceal that interpreter dependency. Use explicit
+`math.fsum` for both endpoint replay and the global translation gate, with
+synthetic exact-cancellation regressions and both interpreters. No raw forces,
+independent references, production kernels or scientific limits change.
+
 ## Revisit when
 
 Fresh source/device-matched raw evidence qualifies an explicitly proposed

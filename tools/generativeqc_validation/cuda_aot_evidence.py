@@ -200,6 +200,7 @@ def apply_endpoint_evidence(
     A route-level water smoke does not establish per-shell coverage. Missing
     quartet counters and resource admission also prohibit global promotion.
     Diagnostic convergence overrides must never replace stock acquisitions.
+    Explicit compensated totals avoid version-specific builtin sum semantics.
     """
     bundle = _retained_bundle(root, declaration)
     _require(
@@ -336,7 +337,7 @@ def apply_endpoint_evidence(
                     for value, want in zip(force, target, strict=True)
                 )
                 translation = max(
-                    abs(sum(force[axis] for force in forces)) for axis in range(3)
+                    abs(math.fsum(force[axis] for force in forces)) for axis in range(3)
                 )
                 _require(
                     all(

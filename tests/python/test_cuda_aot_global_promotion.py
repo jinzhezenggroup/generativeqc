@@ -142,6 +142,20 @@ def test_complete_fresh_global_campaign_passes_without_a_local_profile() -> None
     assert set(result["phases"]) == {*PHASES, "module_first_use"}
 
 
+def test_translation_gate_does_not_erase_a_residual_between_large_forces() -> None:
+    """An exact synthetic residual exceeds the unchanged translation gate."""
+    payload = campaign()
+    forces = [[1e16, 0.0, 0.0], [1e-6, 0.0, 0.0], [-1e16, 0.0, 0.0]]
+    for geometry in payload["oracle"]["geometries"].values():
+        geometry["forces"] = forces
+    for pair in payload["pairs"]:
+        for arm in pair.values():
+            for phase in arm["phases"].values():
+                phase["forces"] = forces
+    with pytest.raises(ValueError, match="force translation gate"):
+        gate(payload)
+
+
 @pytest.mark.parametrize("phase", PHASES)
 def test_fast_warm_does_not_hide_any_endpoint_regression(phase: str) -> None:
     payload = campaign()

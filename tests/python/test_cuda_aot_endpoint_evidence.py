@@ -78,6 +78,40 @@ def test_endpoint_source_changes_leave_only_historical_observations(
     )
 
 
+def test_translation_replay_preserves_small_residuals_across_python_versions(
+    endpoint_bundle: dict, tmp_path: Path
+) -> None:
+    """Synthetic exact cancellation exposes Python 3.11's naive sum loss."""
+    bundle = copy.deepcopy(endpoint_bundle)
+    forces = [[1.0, 0.0, 0.0], [1e-16, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+    for files in bundle["campaigns"].values():
+        index = json.loads(files["index.json"])
+        reference = json.loads(files["reference.json"])
+        for record in reference["records"].values():
+            record["forces"] = forces
+        files["reference.json"] = json.dumps(reference)
+        index["reference_sha256"] = hashlib.sha256(
+            files["reference.json"].encode()
+        ).hexdigest()
+        for row in index["rows"]:
+            sample = json.loads(files[row["file"]])
+            for phase, values in sample["phases"].items():
+                values["forces"] = forces
+                row["validation"][phase]["passed"] = True
+            files[row["file"]] = json.dumps(sample)
+            row["artifact_sha256"] = hashlib.sha256(
+                files[row["file"]].encode()
+            ).hexdigest()
+        files["index.json"] = json.dumps(index)
+    evidence = replay(bundle, tmp_path)["endpoint_smoke_evidence"]
+    assert all(
+        phase["maximum_translation_error"] == 1e-16
+        for arms in evidence["results"].values()
+        for arm in arms.values()
+        for phase in arm["phases"].values()
+    )
+
+
 @pytest.mark.parametrize(
     "mutation",
     (
