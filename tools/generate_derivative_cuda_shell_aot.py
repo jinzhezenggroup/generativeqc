@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +44,11 @@ def main() -> None:
     parser.add_argument("--profile", default="auto")
     parser.add_argument("--profile-map", action="append", default=[])
     parser.add_argument("--cuda-image", action="append", default=[])
+    parser.add_argument(
+        "--disable-shell-packages",
+        action="store_true",
+        help="Emit empty derivative registries regardless of manifest packaging policy",
+    )
     args = parser.parse_args()
 
     radial_payload = json.loads(args.radial_manifest.read_text(encoding="utf-8"))
@@ -65,6 +71,12 @@ def main() -> None:
         )
         for architecture in architectures
     )
+    if args.disable_shell_packages:
+        # The global build switch is authoritative even for a custom portable
+        # profile that explicitly opts into derivative compilation.
+        profiles = tuple(
+            replace(profile, compile_derivative_shells=False) for profile in profiles
+        )
     source = emit_cuda_derivative_shell_aot_bundle(profiles, radials)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.output.exists() or args.output.read_text(encoding="utf-8") != source:
