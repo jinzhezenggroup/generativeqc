@@ -64,6 +64,20 @@ fields. Original measured identities, receipts, stale flags and qualification
 outcomes are preserved byte-for-byte at the decoded-field level; this refresh
 does not establish new scientific acceptance.
 
+## Master metadata transition
+
+Master `c99e6543e1fe0f4ea6832d58381d30e002e04c67` adds scoped Libxc
+dependency inventories and strict predecessor/acknowledgement handling. Merge
+it without rewriting the published P1a history. Preserve its exact current
+summary in `native-qualification-previous-c99e6543e1.json.xz` before regenerating
+the live snapshot with the upstream owner. Its zero dependency-current products
+and 55 blockers remain unchanged. The preceding 15 explicit demotions and the
+older 7d7dc89b5c predecessor remain in their original published Git history and
+retained file; stale acknowledgements are not reused for a new transition.
+This is not new Libxc science or permission to relabel earlier AOT/GPU evidence.
+The original two-field refresh described above belongs to the earlier 8d2ad48
+P1a revision, not a bypass of the new scoped provenance contract.
+
 ## Revisit when
 
 Revisit the diagnostic inventory when additional independently admitted runtime
