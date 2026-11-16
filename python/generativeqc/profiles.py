@@ -31,6 +31,19 @@ from generativeqc_compiler.common.provenance import (
 PROFILE_SCHEMA = 1
 POLICY = {"precision": "fp64", "spin": ["rhf", "uhf"], "consumers": ["fock", "force"]}
 BUNDLE_FILES = ("profile.json", "libgenerativeqc.so", "manifest.json", "evidence.json")
+_AOT_MASK_FIELDS = (
+    "enabled_force_shell_class_mask",
+    "enabled_fock_shell_class_mask",
+    "enabled_mixed_fock_shell_class_mask",
+    "enabled_rys_value_fock_shell_class_mask",
+    "enabled_k_block_fock_shell_class_mask",
+    "enabled_rys_task_fock_shell_class_mask",
+    "enabled_shared_rys_xy_fock_shell_class_mask",
+    "enabled_shared_rys_weighted_z_fock_shell_class_mask",
+    "preferred_streaming_fock_shell_class_mask",
+    "preferred_rys_task_fock_shell_class_mask",
+    "available_shared_rys_xy_streaming_fock_shell_class_mask",
+)
 
 
 class DeviceDescriptor(ctypes.Structure):
@@ -77,9 +90,7 @@ class DeviceDescriptor(ctypes.Structure):
         ("registry_status", ctypes.c_char * 32),
         ("tuned", ctypes.c_int32),
         ("compatible", ctypes.c_int32),
-        ("enabled_force_shell_class_mask", ctypes.c_uint64),
-        ("enabled_fock_shell_class_mask", ctypes.c_uint64),
-        ("enabled_mixed_fock_shell_class_mask", ctypes.c_uint64),
+        *[(name, ctypes.c_uint64) for name in _AOT_MASK_FIELDS],
     ]
 
 
@@ -141,9 +152,7 @@ def compatibility_identity(probe: dict) -> dict:
                 "registry_status",
                 "tuned",
                 "compatible",
-                "enabled_force_shell_class_mask",
-                "enabled_fock_shell_class_mask",
-                "enabled_mixed_fock_shell_class_mask",
+                *_AOT_MASK_FIELDS,
             )
         },
     }

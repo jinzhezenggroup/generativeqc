@@ -1594,6 +1594,18 @@ typedef struct generativeqc_cuda_tuning_device_descriptor {
   uint64_t enabled_force_shell_class_mask;
   uint64_t enabled_fock_shell_class_mask;
   uint64_t enabled_mixed_fock_shell_class_mask;
+  /** Route inventories and preferences remain separate. Only the final field
+   * additionally applies the streaming companion's device-resource check.
+   * No field bypasses consumer-specific precision or workload admission.
+   */
+  uint64_t enabled_rys_value_fock_shell_class_mask;
+  uint64_t enabled_k_block_fock_shell_class_mask;
+  uint64_t enabled_rys_task_fock_shell_class_mask;
+  uint64_t enabled_shared_rys_xy_fock_shell_class_mask;
+  uint64_t enabled_shared_rys_weighted_z_fock_shell_class_mask;
+  uint64_t preferred_streaming_fock_shell_class_mask;
+  uint64_t preferred_rys_task_fock_shell_class_mask;
+  uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask;
 } generativeqc_cuda_tuning_device_descriptor;
 
 /** Probe an allocated GPU; CPU builds return NOT_IMPLEMENTED without probing. */

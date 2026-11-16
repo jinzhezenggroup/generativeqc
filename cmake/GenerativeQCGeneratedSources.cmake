@@ -1328,7 +1328,8 @@ macro(generativeqc_register_cuda_generated_sources target)
     foreach(architecture IN LISTS _generativeqc_cuda_compile_architectures)
       list(APPEND _generativeqc_derivative_profile_args --target-architecture "${architecture}")
     endforeach()
-    list(APPEND _generativeqc_derivative_profile_args --profile portable)
+    # Portable is selection metadata, not a guarantee of empty custom policy.
+    list(APPEND _generativeqc_derivative_profile_args --profile portable --disable-shell-packages)
   endif()
   generativeqc_register_generated_sources(
     NAME generativeqc_derivative_shell_aot_codegen

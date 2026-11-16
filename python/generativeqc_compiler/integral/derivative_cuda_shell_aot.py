@@ -56,9 +56,14 @@ def cuda_derivative_shell_packages(
     profile: ResolvedProductionProfile,
     radials: tuple[CoulombKernel, ...],
 ) -> tuple[CudaDerivativeShellPackage, ...]:
-    """Bind one accepted Direct force profile to full/SR/LR derivative identities."""
+    """Bind explicitly compiled Direct force packages to derivative identities.
 
-    if profile.portable:
+    Compilation is a packaging choice, not scientific acceptance. A portable
+    label neither makes the mathematical operator illegal nor qualifies a new
+    target. Absent explicit compilation policy, retain the native fallback.
+    """
+
+    if not profile.compile_derivative_shells:
         return ()
     if any(
         radial.family

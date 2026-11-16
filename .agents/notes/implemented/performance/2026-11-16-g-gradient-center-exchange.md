@@ -99,11 +99,29 @@ or infer that arbitrary concurrent large owners now fit the container.
 
 The final focused one-electron/catalog/CI-budget suites pass 776 tests with 63
 host-run skips. The pinned `ty==0.0.82` check, all 604 compiler modules and the
-complete applicable pre-commit hooks pass. Official catalog regeneration changes
-only its two current source identities; historical measurements, receipts and
+complete applicable pre-commit hooks pass. Before the master refresh, official
+catalog regeneration changes only its two current source identities;
+historical measurements, receipts and
 qualification claims remain unchanged. Normal catalog integrity passes; the
 separate `--require-current` Libxc acceptance gate still lacks a matching
 resource/lifetime receipt and is not claimed by this optimization.
+
+A subsequent clean complete sm120 Release library/CLI build at code commit
+`6bd41de6fbf5da371dfb7d6769e738c4c0379dc4` also succeeds. Slurm job 17511
+repeats all 16 independent Direct-HF endpoints with identical baseline work
+counts; maximum energy/force errors are 6.31e-14 Hartree / 8.04e-11
+Hartree/Bohr. The source is clean before and after the build. Its library SHA-256
+is `8949a3e65d24d76032c5c4703614c3c5d0d85ed11efe2c95d1c1046e3ffc9283`;
+the artifact, reports and cache statistics are frozen in `clean-code-native/`
+under the investigation directory. Retain its 16 CUBIN hits and 66 stage misses;
+the 350-second incremental rebuild is not a cold compile or whole-wheel timing.
+
+The follow-up refresh merges master `01068725898ec46bc2b0ddfd35772e4cf44874cb`
+with its independently landed AOT-policy separation and cold-Python CI budget
+changes. Resolve the catalog's binary merge from the upstream snapshot, retaining
+its resource-manifest receipt, then regenerate current metadata. Relative to that
+upstream snapshot only two current source identities and 28 changed-input lists
+change; no historical measurements, summaries or qualification receipts change.
 
 ## Rejected alternatives and boundaries
 
