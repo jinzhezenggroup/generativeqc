@@ -5,18 +5,39 @@ import glob
 import json
 import math
 import statistics
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
+# This retained campaign declares two fresh processes and three owners per
+# process (provenance.json). A file is one process, named <variant>-<index>.jsonl.
+EXPECTED_SAMPLES = {
+    (process, repetition) for process in range(2) for repetition in range(3)
+}
 
-def population(pattern: str) -> dict[tuple, list[dict[str, Any]]]:
+
+def population(pattern: str, errors: list[str]) -> dict[tuple, list[dict[str, Any]]]:
     """Retain every observed sample, including process/owner cold calls."""
     result = {}
+    process_ids = []
     for filename in sorted(glob.glob(pattern)):
+        try:
+            process = int(Path(filename).stem.rsplit("-", 1)[1])
+        except (IndexError, ValueError):
+            errors.append(f"invalid process filename: {filename}")
+            continue
+        process_ids.append(process)
         for line in Path(filename).read_text().splitlines():
             row = json.loads(line)
+            row["process"] = process
             key = (row["spin"], row["nbf"], row["forces"], row["batch"], row["phase"])
             result.setdefault(key, []).append(row)
+    if Counter(process_ids) != Counter({0: 1, 1: 1}):
+        errors.append(f"incomplete or duplicate process population: {pattern}")
+    for key, rows in result.items():
+        identities = Counter((row["process"], row["repetition"]) for row in rows)
+        if identities != Counter(dict.fromkeys(EXPECTED_SAMPLES, 1)):
+            errors.append(f"incomplete or duplicate owner population: {pattern}: {key}")
     return result
 
 
@@ -27,8 +48,9 @@ def main() -> int:
     parser.add_argument("--reference", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    baseline = population(args.baseline)
-    candidate = population(args.candidate)
+    errors = []
+    baseline = population(args.baseline, errors)
+    candidate = population(args.candidate, errors)
     references = json.loads(Path(args.reference).read_text())["fixtures"]
     lookup = {
         (row["unrestricted"], row["nbf"], row["moved"]): row for row in references
@@ -41,7 +63,6 @@ def main() -> int:
         for batch in (1, 2)
         for phase in ("cold", "warm", "moved-warm")
     }
-    errors = []
     groups = []
     if set(baseline) != expected or set(candidate) != expected:
         errors.append("incomplete or unexpected endpoint populations")
@@ -72,6 +93,12 @@ def main() -> int:
         before_ms = statistics.median(row["endpoint_ms"] for row in before)
         after_ms = statistics.median(row["endpoint_ms"] for row in after)
         regression = 100 * (after_ms / before_ms - 1)
+        work = lambda rows: Counter(
+            (row["process"], row["repetition"], row["iterations"], row["fock_builds"])
+            for row in rows
+        )
+        if work(before) != work(after):
+            errors.append(f"semantic work changed: {key}")
         if len(before) != len(after):
             errors.append(f"unmatched sample counts: {key}")
         if regression > 5:

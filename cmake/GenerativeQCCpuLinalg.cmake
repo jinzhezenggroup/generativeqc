@@ -151,20 +151,24 @@ function(generativeqc_configure_cpu_linalg target)
     include(CheckCXXSourceCompiles)
     set(CMAKE_REQUIRED_INCLUDES ${_include_dirs})
     set(CMAKE_REQUIRED_LIBRARIES ${_provider_libraries})
+    # Probe the same declaration adapter used by the production owner. SciPy's
+    # exported LAPACKE prefix is not consistently reflected in wheel headers.
+    set(_lapack_header
+        "#define GENERATIVEQC_OPENBLAS_SCIPY_PREFIX ${_scipy_prefix}\n#include \"${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/tensor/openblas_lapacke.hpp\"\n")
     if(_scipy_prefix)
       set(_thread_probe
           "#include <cblas.h>\nint main(){return scipy_openblas_set_num_threads_local(1);}")
       set(_global_thread_probe
           "#include <cblas.h>\nint main(){int n=scipy_openblas_get_num_threads();scipy_openblas_set_num_threads(n);return 0;}")
       set(_lapack_probe
-          "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
+          "${_lapack_header}int main(){double matrix[1]={1},eigenvalues[1];int status=scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,matrix,1);return status+scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,matrix,1,eigenvalues);}")
     else()
       set(_thread_probe
           "#include <cblas.h>\nint main(){return openblas_set_num_threads_local(1);}")
       set(_global_thread_probe
           "#include <cblas.h>\nint main(){int n=openblas_get_num_threads();openblas_set_num_threads(n);return 0;}")
       set(_lapack_probe
-          "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
+          "${_lapack_header}int main(){double matrix[1]={1},eigenvalues[1];int status=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,matrix,1);return status+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,matrix,1,eigenvalues);}")
     endif()
     # Cached successes are hints only: validate their actual compile/link inputs
     # together before reusing them. A dependency fingerprint cannot in general

@@ -1360,6 +1360,10 @@ const ProfileInfo& selected_profile() noexcept {{
   return kernels == nullptr ? kGenericProfile : kernels->info;
 }}
 
+const char* selected_registry_status() noexcept {{
+  return current_kernel_set() == nullptr ? "no_matching_kernel_set" : "matched";
+}}
+
 const ShellKernelMetadata* selected_shell_kernels(
     std::size_t& count) noexcept {{
   const KernelSet* kernels = current_kernel_set();

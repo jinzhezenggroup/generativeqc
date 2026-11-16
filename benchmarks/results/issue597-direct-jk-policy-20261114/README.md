@@ -10,6 +10,11 @@ shipped or promoted by this qualification.
 All 48 endpoint groups pass. Each binary contributes six complete observations
 per group: two fresh-process populations, three fresh prepared-owner repetitions
 each, alternating baseline/candidate then candidate/baseline. No sample is dropped.
+The replay checks each declared process index (0/1) and owner repetition (0/1/2)
+exactly once per group, and matches iteration/Fock work for each process/owner
+pair. Process indices come from the `<variant>-<index>.jsonl` filenames. Equal
+aggregate counts alone do not qualify a population.
+
 Groups cover 2/18 spherical AOs, RHF/UHF, energy/energy-and-force, batches 1/2 and
 cold/warm/+0.03-Bohr moved-warm calls.
 

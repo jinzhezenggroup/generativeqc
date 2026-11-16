@@ -172,6 +172,7 @@ def emit_weighted_eri_function(
     ordering: AlgebraOrdering = AlgebraOrdering.TOPOLOGICAL,
     fusion: AlgebraFusion = AlgebraFusion.SEPARATE,
     scalar_type: str = "double",
+    cuda_noinline: bool = False,
 ) -> str:
     """Emit one selected weighted result with shared scalar CSE.
 
@@ -186,6 +187,10 @@ def emit_weighted_eri_function(
     Exact pair-separable kernels consume ``bra_weights`` and ``ket_weights``
     instead of one component array. This separate FP64 ABI cannot represent a
     partial four-index mask or packed arbitrary component weights.
+    ``cuda_noinline`` retains one header-safe CUDA callable for large arithmetic
+    bodies shared by spin, radial and output-layout consumers. It changes no
+    roots, scalar ordering or component-partition boundaries; CPU emission is
+    unaffected.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("weighted scalar emission supports cpu or cuda")
@@ -258,9 +263,16 @@ def emit_weighted_eri_function(
     emitter = CudaEmitter(graph, variables, plan, scalar_type=scalar_type)
     emitter.emit(roots)
     output_kind = "derivatives" if include_value else "gradient-only"
+    qualifiers = "inline"
+    if backend == "cuda":
+        qualifiers = (
+            "__device__ inline __noinline__"
+            if cuda_noinline
+            else "__device__ __forceinline__"
+        )
     lines = [
         f"/** Unscreened {kernel.spec.name} {weight_kind} {output_kind}; {len(kernel.component_indices)} components. */",
-        f"{'__device__ __forceinline__' if backend == 'cuda' else 'inline'} {result_type} {name}(const Geometry& geometry, {weight_arguments}) {{",
+        f"{qualifiers} {result_type} {name}(const Geometry& geometry, {weight_arguments}) {{",
         *emitter.lines,
         f"  {result_type} result{{}};",
     ]
@@ -532,6 +544,7 @@ def _emit_pair_separable_force_classes(
                 gradient_centers=(0, 1, 2),
                 result_type="IndependentGradient",
                 ordering=AlgebraOrdering.PRESSURE_AWARE,
+                cuda_noinline=True,
             )
         )
     return (
@@ -542,13 +555,22 @@ def _emit_pair_separable_force_classes(
 
 
 def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...]) -> str:
-    """Emit strict/mixed contractions from the same bounded AD partitions."""
+    """Share the large order-four/five scalar bodies across native consumers.
+
+    Spin, radial and output-layout adapters borrow identical weighted roots;
+    force-inlining those roots duplicates their optimization and register
+    allocation. Retain one callable per strict/mixed/relative partition while
+    keeping the complete-class additions in their original order. Small
+    low-order responses use the default inlined path instead.
+    """
     return (
         '#pragma once\n#include "weighted_eri.cuh"\n'
         "namespace generativeqc::scf::generated_weighted_eri {\n"
-        + _emit_weighted_force_class_bodies(classes, "double")
-        + _emit_weighted_force_class_bodies(classes, "float")
-        + _emit_weighted_force_class_bodies(classes, "double", relative_responses=True)
+        + _emit_weighted_force_class_bodies(classes, "double", cuda_noinline=True)
+        + _emit_weighted_force_class_bodies(classes, "float", cuda_noinline=True)
+        + _emit_weighted_force_class_bodies(
+            classes, "double", relative_responses=True, cuda_noinline=True
+        )
         + "}  // namespace generativeqc::scf::generated_weighted_eri\n"
     )
 
@@ -559,6 +581,7 @@ def _emit_weighted_force_class_bodies(
     *,
     relative_responses: bool = False,
     inline_single_use: typing.Any = False,
+    cuda_noinline: bool = False,
 ) -> str:
     """Keep bounded partitions and retain nuclear roots beside relative FP64 AD."""
     if relative_responses and scalar_type != "double":
@@ -596,6 +619,7 @@ def _emit_weighted_force_class_bodies(
                     ordering=AlgebraOrdering.PRESSURE_AWARE,
                     scalar_type=scalar_type,
                     inline_single_use=inline_single_use,
+                    cuda_noinline=cuda_noinline,
                 )
             )
         if len(parts) > 1:

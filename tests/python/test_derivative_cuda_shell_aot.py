@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -111,7 +112,11 @@ def test_compiled_fatbinary_selector_keeps_portable_targets_bounded(
                     "schema_version": 2,
                     "default_architecture": accepted_target,
                     "architectures": {
-                        accepted_target: {"kind": "tuned", "kernels": [kernel]}
+                        accepted_target: {
+                            "kind": "tuned",
+                            "compile_derivative_shells": True,
+                            "kernels": [kernel],
+                        }
                     },
                 }
             )
@@ -201,3 +206,49 @@ def test_generator_requires_target_and_honors_portable_profile(tmp_path: Path) -
         (resolve_production_profile(PRODUCTION, "sm_86", "portable"),), _inputs()[1]
     )
     assert (tmp_path / "registry.cuh").read_text() == expected
+
+
+@pytest.mark.parametrize("targets", [("120-real",), ("80-real", "90-real", "120-real")])
+@pytest.mark.parametrize("profile_name", ["portable", "auto"])
+@pytest.mark.parametrize("disabled", [False, True])
+def test_generator_global_disable_overrides_custom_packaging_policy(
+    tmp_path: Path, targets: tuple[str, ...], profile_name: str, disabled: bool
+) -> None:
+    """An explicit global OFF must win over a valid portable packaging opt-in."""
+    payload = json.loads(PRODUCTION.read_text())
+    payload["architectures"]["portable_cuda"]["compile_derivative_shells"] = True
+    manifest = tmp_path / "custom.json"
+    manifest.write_text(json.dumps(payload))
+    output = tmp_path / "registry.cuh"
+    command = [
+        sys.executable,
+        str(ROOT / "tools/generate_derivative_cuda_shell_aot.py"),
+        "--output",
+        str(output),
+        "--production-manifest",
+        str(manifest),
+        "--profile",
+        profile_name,
+    ]
+    for target in targets:
+        command.extend(("--target-architecture", target))
+    if disabled:
+        command.append("--disable-shell-packages")
+    subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
+    profiles = tuple(
+        resolve_production_profile(manifest, target, profile_name) for target in targets
+    )
+    radials = _inputs()[1]
+    assert all(cuda_derivative_shell_packages(profile, radials) for profile in profiles)
+    if disabled:
+        profiles = tuple(
+            replace(profile, compile_derivative_shells=False) for profile in profiles
+        )
+        assert all(
+            not cuda_derivative_shell_packages(profile, radials) for profile in profiles
+        )
+    # Compare against the same emitter fed the explicit policy, not a pinned
+    # historical source body: disabled selectors retain the bounded route.
+    assert output.read_text() == emit_cuda_derivative_shell_aot_bundle(
+        profiles, radials
+    )
