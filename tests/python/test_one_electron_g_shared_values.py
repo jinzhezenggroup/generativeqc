@@ -23,18 +23,19 @@ from generativeqc_compiler.integral.one_electron_derivatives_cuda import (
 )
 from generativeqc_compiler.integral.shell_spec import cartesian_components
 
-_GRADIENT_PAIRS = ((0, 4), (4, 1), (4, 4))
+_GRADIENT_PAIRS = ((0, 4), (1, 4), (4, 0), (4, 1), (4, 4))
 
 
 @pytest.fixture(scope="module")
 def emitted_g_gradient_x(
     tmp_path_factory: pytest.TempPathFactory, required_native_cxx: typing.Any
 ) -> typing.Any:
-    """Exercise real g-shell helpers without compiling all 25 shell pairs.
+    """Exercise real g-bearing helpers, including both Gaussian-center orders.
 
-    The additional covariance fixes x, so x derivatives cover the changed
-    dispatch. Independent Boys inputs isolate it from the existing radial
-    evaluator; full axis composition and device qualification have separate gates.
+    Canonical lower/g helpers precede their reversed g/lower callers. The shared
+    covariance fixes x, so x derivatives cover the changed dispatch. Independent
+    Boys inputs isolate it from the existing radial evaluator; full axis
+    composition and device qualification have separate gates.
     """
     directory = tmp_path_factory.mktemp("one-electron-g-gradient")
     source = "\n".join(
@@ -251,6 +252,9 @@ def test_emitted_g_invalid_component_refuses(
 
 @pytest.mark.parametrize("angular", _GRADIENT_PAIRS)
 @pytest.mark.parametrize(
+    "primitive_exponents", [(0.8, 0.35), (0.03, 14.0), (18.0, 0.05)]
+)
+@pytest.mark.parametrize(
     "variant",
     [
         "asymmetric",
@@ -263,12 +267,15 @@ def test_emitted_g_invalid_component_refuses(
     ],
 )
 def test_emitted_g_gradient_covariance_against_libcint(
-    emitted_g_gradient_x: typing.Any, angular: tuple[int, int], variant: str
+    emitted_g_gradient_x: typing.Any,
+    angular: tuple[int, int],
+    variant: str,
+    primitive_exponents: tuple[float, float],
 ) -> None:
     """All component orbits retain independently checked A/B S/T/V derivatives."""
     gto = pytest.importorskip("pyscf.gto")
     special = pytest.importorskip("scipy.special")
-    alpha, beta, charge = 0.8, 0.35, 2.3
+    (alpha, beta), charge = primitive_exponents, 2.3
     center_a, center_b, center_c = _geometry(variant)
     components = tuple(cartesian_components(value) for value in angular)
     molecule = gto.M(
