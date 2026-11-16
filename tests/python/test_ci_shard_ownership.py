@@ -2003,7 +2003,7 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values"))
+@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values", "cuda-aot"))
 def test_qualification_insertion_preserves_existing_core_owners(
     event: str, presence: str, family: str, tmp_path: Path
 ) -> None:
@@ -2035,6 +2035,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
         }
     elif family == "g-values":
         owners = {"test_one_electron_g_shared_values.py": "compiler-heavy"}
+    elif family == "cuda-aot":
+        owners = {
+            "test_aot_policy_dimensions.py": "core-a",
+            "test_cuda_aot_compile_evidence.py": "core-b",
+            "test_cuda_aot_endpoint_evidence.py": "core-c",
+            "test_cuda_aot_global_promotion.py": "core-a",
+        }
     owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
     # Interleave ordinary files with the inserted qualification filenames.
     suffixes = ("aaa", "mmm", "zzz") if family == "g-values" else ("aaa", "zzz")

@@ -184,7 +184,7 @@ Ignored evidence is in `/tmp/gqc-wheel-direct-source-only/`:
 
 The PR REST payload still names base `010687258`, but a fresh SSH fetch of
 `refs/heads/master` resolves to `718d5b32a` (November 16, 2026, 02:45:34 UTC).
-The actual committed branch is two commits behind/twenty ahead. A read-only
+At `d31343b55` the branch is two commits behind/twenty ahead. A read-only
 merge against this real tip finds a genuine binary conflict in
 `manifests/libxc/native-qualification-snapshot.json.xz`, not a CUDA source
 conflict. Do not infer zero-behind or only an external metadata problem from
@@ -192,3 +192,11 @@ the cached PR base. Retain incoming #3101 CI ownership and #3102 scoped Libxc
 dependency fixes; regenerate the snapshot with the merged offline validator
 rather than choosing one binary side. Preserve historical receipts, stale
 contexts and current resource/lifetime acceptance requirements.
+
+The actual merge regenerates that snapshot with the incoming validator and
+passes all 1,093 shard-ownership/dependency-qualification tests. All 28
+revalidation contexts retain their products and non-input fields; only the
+seven upstream-authorized post-HF-only generator inputs disappear. Historical
+campaigns, measured identities, executions, resource acceptance and blockers
+are unchanged. The snapshot remains stale with zero currently qualified
+products; passing catalog integrity is not a new Libxc lifecycle receipt.
