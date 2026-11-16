@@ -254,6 +254,8 @@ resource records exactly match the measured prototype.
   executing the independent Full/LR small, batch, displaced and through-f
   construction/replay/refusal oracles. It repeats all **21,840** source-window
   cases and **26** null-source Fock comparisons, maximum error **1.78e-15**.
+  Matching 11,808,000-byte expanded baseline/final traces differ by at most
+  **1.07e-19**; the older initial, narrower baseline trace is not substituted.
   The maintained through-f window pytest also passes (one pass, 39 deselected).
 - The same scheduled job repeats complete source/replay and public default
   Direct WB97M-V 12-atom cold E+F / first-own-density warm ABBA gates. Source
@@ -276,3 +278,21 @@ binding receipts are in `clean-final-native/`,
 documented in `2026-11-15-wheel-cold-build-resource-envelope.md`; none of these
 local native gates substitutes for manylinux link/repair/installed acceptance,
 the separately stale Libxc lifetime/resource receipt, or current-head CI.
+
+### Later actual-master refresh
+
+A further SSH fetch resolves master to `c35e15199`, adding #3089's CUDA AOT
+portability/default-promotion audit and #3097's retained paper data. The merge
+is clean and changes none of the qualified native/runtime/compiler inputs from
+`d4953238d`; its native source identity remains exactly the value above. Refresh
+only the new, explicitly unmeasured capability audit's `native_source_identity`
+with `tools/check_cuda_aot_policy.py --write-audit`. Every other audit field is
+identical to incoming master; the default decisions, frozen baseline and
+measured qualification receipts are untouched. Ordinary Libxc catalog integrity
+still passes without manufacturing a new lifecycle receipt.
+
+All **1,336** merged CUDA-policy, promotion-inventory, retained-paper-data,
+shard-ownership, time-budget and wheel-resource tests pass, as do the applicable
+merged pre-commit hooks. The unmeasured audit reports no changed default targets
+or promotions. These host/integrity checks do not upgrade the pending full
+manylinux wheel or Libxc lifecycle gates.
