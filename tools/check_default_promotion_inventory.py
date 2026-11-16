@@ -403,11 +403,9 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
     )
     manifest = json.loads(_read(root / manifest_relative))
     profiles = manifest.get("architectures")
-    qualified: dict[str, set[str]] = {}
-    preference_enabled: set[str] = set()
     if not isinstance(profiles, dict):
         raise TypeError("Rys-task default target/class admission drifted")
-    for name, profile in profiles.items():
+    for profile in profiles.values():
         if not isinstance(profile, dict):
             raise TypeError("Rys-task default target/class admission drifted")
         classes = profile.get("preferred_rys_task_fock_shell_classes", [])
@@ -417,29 +415,12 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
             or len(classes) != len(set(classes))
         ):
             raise ValueError("Rys-task default target/class admission drifted")
-        if "preferred_rys_task_fock_shell_classes" in profile:
-            qualified[name] = set(classes)
         enabled = profile.get("prefer_rys_task_fock", False)
         if not isinstance(enabled, bool):
             raise TypeError("Rys-task default target/class admission drifted")
-        if enabled:
-            preference_enabled.add(name)
-    # Audit the stock policy data, not Python spelling. Executable compiler and
-    # host-registry tests own resource refusal, replacement and filter semantics.
-    if preference_enabled != {"sm_120"} or qualified != {
-        "sm_120": {
-            "psps",
-            "ppps",
-            "dsss",
-            "dpss",
-            "dsps",
-            "ddss",
-            "dsds",
-            "dpps",
-            "dspp",
-        }
-    }:
-        raise ValueError("Rys-task default target/class admission drifted")
+    # Semantic stock-policy changes are gated by check_cuda_aot_policy.py.
+    # This inventory owns control registration and schema, not a second,
+    # hardcoded set that could veto an independently qualified promotion.
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
     lowering = _read(root / lowering_relative)
     registry_relative = Path(

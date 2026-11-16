@@ -95,6 +95,11 @@ alongside energy, force, and translation parity. A faster isolated kernel alone
 cannot enable a local profile. When a compatible local profile is already active,
 the final proposal must also beat that incumbent before replacing it.
 
+This acceptance is workload-local and warm-only, not permission to change a
+global production default. Global CUDA AOT changes additionally require the
+[cold/warm/moved, resource and package qualification gate](../maintainer/performance_engineering.md#cuda-aot-capability-and-global-default-decisions).
+The ordinary `AOT_PROFILE=auto` build does not run this local search.
+
 Fock and force proposals are gated independently. An older official row with an
 implicit Fock mapping cannot accept a force-only replacement until an explicit
 Fock schedule has been accepted, because its value mapping otherwise changes

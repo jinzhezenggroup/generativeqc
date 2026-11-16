@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "paper-hfdft-cold3-20261115",
+  "owner": "Approved H100 and RTX5090 paper figure source data",
+  "reason": "Both live SVG figures require all384 formal process records per GPU, all1536 E+F calls per GPU, complete force vectors/work/settings, exact original raw SHA256s and command ownership. The data retain all slower and numerical-failing points, use bounded XZ under the1MiB cap and support independent offline tables/qualification/SVG replay. This is a storage review, not global performance or numerical promotion.",
+  "review_document": "benchmarks/results/paper-hfdft-cold3-20261115/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/paper-hfdft-cold3-20261115/h100/samples.json.xz",
+      "family": "paper-hfdft-cold3-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original formal scientific/process receipts and successful-command census for the approved figure; exact raw-byte restoration and offline full-vector/plot replay",
+      "bytes": 995712,
+      "sha256": "721c2142daded39eafc5201ce3b4186925209b3dc6d2a0591e427d35195d8d05"
+    },
+    {
+      "path": "benchmarks/results/paper-hfdft-cold3-20261115/rtx5090/samples.json.xz",
+      "family": "paper-hfdft-cold3-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original formal scientific/process receipts and successful-command census for the approved figure; exact raw-byte restoration and offline full-vector/plot replay",
+      "bytes": 989968,
+      "sha256": "081ed34128c6822768e59cef278cc84736dd59507dba89983717608dab99e9f5"
+    }
+  ]
+}
