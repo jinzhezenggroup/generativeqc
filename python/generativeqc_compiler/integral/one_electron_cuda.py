@@ -181,7 +181,7 @@ def _canonical_value_component_map(
 
 
 def _emit_value_symmetries() -> str:
-    """Emit g-only scalar orbit maps and rounded Cartesian field transforms.
+    """Emit shared g maps and sm120-only f maps, preserving rounded geometry.
 
     Radial quantities are already rounded by ``make_pair``. Copy them unchanged
     and permute or exchange only the coordinate/exponent ownership, just as the
@@ -232,7 +232,12 @@ def _emit_value_symmetries() -> str:
             values = ", ".join("c_" + axis for axis in axes)
             lines.append(f"    case {permutation}U: return {{{values}}};")
     lines += ["  }", "  return {c_x, c_y, c_z};", "}"]
-    for angular in ((0, 4), (1, 4), (2, 4), (3, 4), (4, 4)):
+    for angular in product(range(5), repeat=2):
+        if max(angular) < 3 or angular[0] > angular[1]:
+            continue
+        sm120_only = max(angular) == 3
+        if sm120_only:
+            lines.append("#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1200")
         lines += [
             f"__device__ __forceinline__ CanonicalValueComponent canonical_value_{angular[0]}{angular[1]}(unsigned component) {{",
             "  switch (component) {",
@@ -245,18 +250,20 @@ def _emit_value_symmetries() -> str:
                     f"    case {index}U: return {{{canonical}U, {permutation}U, {str(exchanged).lower()}}};"
                 )
         lines += ["  }", "  return {component, 0U, false};", "}"]
+        if sm120_only:
+            lines.append("#endif")
     return "\n".join(lines)
 
 
 def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str:
-    """Lower scalar g orbits with non-speculative sharing between representatives.
+    """Lower scalar f/g orbits without speculative work between representatives.
 
     Joint coordinate/power permutations select one canonical representative;
     reversing unequal shells additionally transposes the component pair. Keep
     representatives in a separate noinline body rather than recursive dispatch.
     Existing Graph value numbering hoists only ancestors needed by every
     representative. Invalid indices refuse before any transform or arithmetic,
-    and the complete <=f artifact stays on its established scalar lowering.
+    and standalone <=f artifacts keep their established scalar lowering.
     """
     name = "attraction" if attraction else "overlap_kinetic"
     result_type, invalid = ("double", "NAN") if attraction else ("ST", "ST{NAN, NAN}")
@@ -381,6 +388,16 @@ def _emit_operator_helpers(
                 _emit_shared_shell_helper(bool(attraction), (angular[0], angular[1]))
             )
             continue
+        # Sharing f representatives reduces sm120 code, but increases sm80/90
+        # stack and object size. Unknown targets and standalone <=f owners keep
+        # the original lowering rather than inheriting an unqualified schedule.
+        share_f = maximum == 4 and max(angular) == 3
+        if share_f:
+            lines += [
+                "#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1200",
+                _emit_shared_shell_helper(bool(attraction), (angular[0], angular[1])),
+                "#else",
+            ]
         suffix = f"{angular[0]}{angular[1]}"
         lines += [
             f"static __device__ __noinline__ {return_type} {name}_{suffix}({arguments}) {{",
@@ -431,6 +448,8 @@ def _emit_operator_helpers(
             lines += emitter.lines + [f"      return {result};", "    }"]
         invalid = "NAN" if attraction else "ST{NAN, NAN}"
         lines += ["  }", f"  return {invalid};", "}"]
+        if share_f:
+            lines.append("#endif")
     lines += [
         f"__device__ __forceinline__ {return_type} {name}(",
         "    const PairGeometry& pair, unsigned first, unsigned second"

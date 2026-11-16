@@ -108,11 +108,15 @@ extern "C" void evaluate_gradient_x(const double* inputs, double* outputs,
     return library.evaluate_gradient_x
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(
+    scope="module", params=[None, 1200], ids=["baseline-f", "sm120-shared-f"]
+)
 def emitted_g_values(
-    tmp_path_factory: pytest.TempPathFactory, required_native_cxx: typing.Any
+    request: pytest.FixtureRequest,
+    tmp_path_factory: pytest.TempPathFactory,
+    required_native_cxx: typing.Any,
 ) -> typing.Any:
-    """Compile the actual g-capable emitter with the mandatory host cache."""
+    """Execute both target lowerings; this is not CUDA hardware qualification."""
     directory = tmp_path_factory.mktemp("one-electron-g-shared")
     source = emit_one_electron_values_cuda(4).replace("#include <cuda_runtime.h>", "")
     source = (
@@ -136,8 +140,11 @@ extern "C" void evaluate_g(const double* inputs, double* outputs, unsigned count
     path = directory / "probe.cpp"
     path.write_text(source)
     library_path = directory / "probe.so"
+    arguments = ["-std=c++17", "-O0"]
+    if request.param is not None:
+        arguments.append(f"-D__CUDA_ARCH__={request.param}")
     required_native_cxx.build_shared(
-        [path], library_path, compile_args=["-std=c++17", "-O0"], compile_timeout=180
+        [path], library_path, compile_args=arguments, compile_timeout=180
     )
     library = ctypes.CDLL(str(library_path))
     pointer = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
@@ -179,7 +186,7 @@ def _raw_norm(exponent: float, component: str) -> float:
         (angular, exponents)
         for angular in product(range(5), repeat=2)
         for exponents in ((0.8, 0.35), (0.03, 14.0), (18.0, 0.05))
-        if 4 in angular or exponents == (0.8, 0.35)
+        if max(angular) >= 3 or exponents == (0.8, 0.35)
     ],
 )
 @pytest.mark.parametrize(
@@ -200,11 +207,12 @@ def test_emitted_g_components_against_libcint(
     primitive_exponents: tuple[float, float],
     variant: str,
 ) -> None:
-    """Check every pair and both diffuse/tight g orders against Libcint.
+    """Check every pair and diffuse/tight f/g orders against Libcint.
 
     Scalar covariance permutes all axes and may exchange Gaussian centers, so
     unequal exponents and non-symmetric external positions must remain covered.
-    The unchanged through-f family retains its ordinary-exponent control cases.
+    The g-capable header may share f-bearing representatives too; s/p/d pairs
+    retain their ordinary-exponent control cases and the same numerical gates.
     """
     gto = pytest.importorskip("pyscf.gto")
     alpha, beta = primitive_exponents

@@ -91,3 +91,15 @@ per-kernel/callee resource review and independent complete public GPU endpoints
 with semantic work counts, including COSX values/forces and moved geometries.
 Replace historical helper-count spelling tests with executable linkage behavior
 if ownership changes; do not remove real integrity checks to make it pass.
+
+## Narrow follow-up
+
+The [sm120-only full-g value decision](../implemented/performance/2026-11-16-sm120-f-value-orbit-sharing.md)
+qualifies a narrower extension without changing COSX or any gradient generator.
+Unconditional native f-value sharing grows the full supported-matrix object and
+sm80/sm90 stack despite reducing physical source. The selected target guard
+retains those original images and compute80 PTX exactly, while reducing the
+affected full-matrix object about 21%. The physical guarded header grows about
+6.24%; do not substitute the broad experiment's source reduction for that result.
+The linked note preserves independent public HF and weighted-owner acceptance
+separately from image-level comparisons and cached compilation observations.
