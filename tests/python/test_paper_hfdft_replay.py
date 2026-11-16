@@ -2,6 +2,8 @@
 
 import json
 import lzma
+import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from pathlib import Path
@@ -253,3 +255,43 @@ def test_actual_cohorts_replay_with_published_svg_serialization(
         assert len(cohort["records"]) == 384
         assert cohort["numeric_counts"] == {"qualified": 348, "failed": 36}
         assert cohort["plot_replay"]["range_endpoints_checked"] == 512
+
+
+def test_fresh_autocrlf_checkout_preserves_real_publications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise Git's actual checkout filters for the complete authenticated data."""
+    root = replay.ROOT
+    source, checked = tmp_path / "repository", tmp_path / "checkout"
+    source.mkdir()
+    checked.mkdir()
+    dataset = Path("benchmarks/results/paper-hfdft-cold3-20261115")
+    shutil.copytree(root / dataset, source / dataset)
+    paths = [
+        Path(".gitattributes"),
+        Path("benchmarks/results/readme-refresh-20261026/oracles.json.xz"),
+    ]
+    paths.extend(
+        Path(f"assets/paper-hfdft-cold3-{device}.svg") for device in ("h100", "rtx5090")
+    )
+    for path in paths:
+        target = source / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((root / path).read_bytes())
+    for argv in (
+        ["git", "init", "--quiet"],
+        ["git", "config", "core.autocrlf", "true"],
+        ["git", "add", "--all"],
+        [
+            "git",
+            "checkout-index",
+            "--all",
+            "--prefix=" + checked.resolve().as_posix() + "/",
+        ],
+    ):
+        subprocess.run(argv, cwd=source, check=True, capture_output=True)
+    monkeypatch.syspath_prepend(str(root / "python"))
+    monkeypatch.setattr(replay, "ROOT", checked)
+    result = replay.verify(checked / dataset)
+    assert result["rtx5090"]["wins"] == {"cold": 64, "warm": 64}
+    assert len(result["h100"]["records"]) == 384
