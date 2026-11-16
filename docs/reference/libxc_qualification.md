@@ -154,11 +154,6 @@ Libxc capability changes
 added functionals: none
 removed functionals: none
 identity changes: none
-promotions:
-  compiled-cpu: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
-  compiled-cuda: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
-  gpu-runtime: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
-  molecular-scf: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
-  forces: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+promotions: none
 demotions: none
 ```

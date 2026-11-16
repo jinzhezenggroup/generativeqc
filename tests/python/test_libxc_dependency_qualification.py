@@ -48,6 +48,7 @@ def replay(inputs: dict, monkeypatch: pytest.MonkeyPatch, changes: dict) -> dict
         "src/cc/new_solver.cpp",
         "src/posthf/mp2_energy.cpp",
         "src/integrals/AGENTS.md",
+        "cmake/GenerativeQCTests.cmake",
     ],
 )
 def test_unrelated_changes_retain_all_measured_contexts(
@@ -474,3 +475,23 @@ def test_unmeasured_shared_build_generators_require_scoped_revalidation(
     # Once actually measured, subsequent scientific edits also expire reuse.
     changed = {**live, path: "0" * 64}
     assert changed_inputs(live, changed, backend=backend, product=product) == [path]
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("product", ["compiled", "energy", "forces"])
+@pytest.mark.parametrize("operation", ["added", "removed", "modified"])
+def test_test_registration_is_disjoint_but_build_inputs_are_not(
+    backend: str, product: str, operation: str
+) -> None:
+    paths = [
+        "cmake/GenerativeQCTests.cmake",
+        "CMakeLists.txt",
+        "cmake/GenerativeQCCuda.cmake",
+        "cmake/new_flags.cmake",
+        "include/generativeqc/generativeqc.h",
+    ]
+    before = {} if operation == "added" else dict.fromkeys(paths, "0" * 64)
+    after = {} if operation == "removed" else dict.fromkeys(paths, "1" * 64)
+    assert changed_inputs(before, after, backend=backend, product=product) == sorted(
+        paths[1:]
+    )

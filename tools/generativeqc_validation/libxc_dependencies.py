@@ -136,7 +136,14 @@ def affects(path: str, *, backend: str, product: str) -> bool:
         return False
     if path in POINT_CONTRACT_INPUTS:
         return False
-    if path == "cmake/GenerativeQCSourceIdentity.json":
+    # This module owns only test/probe targets and CTest registration. Its
+    # consumers link the production library, never configure its implementation.
+    # Keep it in the authenticated whole-build census, but not in E/F dependency
+    # invalidation. Production/unknown CMake modules remain fail-closed below.
+    if path in (
+        "cmake/GenerativeQCSourceIdentity.json",
+        "cmake/GenerativeQCTests.cmake",
+    ):
         return False
     if path == "CMakeLists.txt" or path.startswith(
         ("include/", "cmake/", "python/generativeqc_compiler/common/")
