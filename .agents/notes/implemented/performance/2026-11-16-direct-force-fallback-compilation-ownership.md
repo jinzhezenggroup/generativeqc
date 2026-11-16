@@ -71,7 +71,7 @@ Slurm job **17547** passes **64** ABBA complete independent PySCF endpoints:
 RHF/UHF, Cartesian/spherical, cold/warm/moved/restored. Every iteration,
 Fock-build and precision-work count agrees. Maximum independent energy/force
 errors are about **6.31e-14 / 8.04e-11**; maximum baseline/candidate differences
-are **4.44e-15 / 2.45e-15**. Diagnostic execute-time median/maximum ratios are
+are **4.44e-15 / 2.44e-15**. Diagnostic execute-time median/maximum ratios are
 **0.9998 / 1.0543**; no runtime speedup is claimed.
 
 The same allocated job passes **53** native profile/safety and bounded high-l
@@ -82,6 +82,27 @@ Current audit writers change only current source identities; all scientific,
 historical and acceptance fields remain unchanged. The full changed-file
 pre-commit run passes. Clean committed-source replay is a separate pre-publication
 gate; this paragraph records the patch-stage artifact, not that later replay.
+
+## Clean committed-source replay
+
+Code commit **feaddd7aa46297d057130b98f2c11e0fdefd9db5** is checked out in the
+independent native snapshot, clean before and after. The 65-second configure/
+incremental replay makes **zero compiler requests**, retaining the exact library
+SHA256 and native source identity above. This authenticates the committed
+inputs/artifact and native dependency graph; it is not a fresh cold compile.
+The actual owner still has identical function/resource/SASS records to the
+full-matrix prototype.
+
+Slurm job **17548** repeats all **64** complete independent ABBA endpoints and
+all **53** native profile/safety/forced-bounded tests, with no skips or failures.
+Maximum oracle energy/force errors are about **6.40e-14 / 8.04e-11**, and maximum
+baseline/candidate differences **5.33e-15 / 1.89e-15**. All iteration, Fock and
+precision-work counts agree. Diagnostic median ratio is **0.9996**; retain the
+worst **1.2262** ratio (RHF spherical moved endpoint, **94.088 -> 115.372 ms**)
+rather than claiming uniform timing parity. No runtime or cold-wheel speedup
+is established. The follow-up evidence commit changes only this note, not the
+qualified compiler/native inputs. Clean receipts are `force-clean-native/` and
+`force-clean-qualification/` under the evidence directory.
 
 ## Evidence and remaining gates
 
