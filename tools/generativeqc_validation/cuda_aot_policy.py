@@ -6,6 +6,7 @@ autotuning has a deliberately narrower contract and does not call this gate.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import lzma
 import math
@@ -343,6 +344,7 @@ def capability_audit(manifest: Path) -> dict:
 
 
 def _observables(sample: dict, oracle: dict, name: str) -> None:
+    """Keep independent limits and compensated force totals interpreter-stable."""
     _require(
         oracle["converged"] is True, f"{name}: independent reference is unconverged"
     )
@@ -394,7 +396,7 @@ def _observables(sample: dict, oracle: dict, name: str) -> None:
             )
     _require(
         all(
-            abs(sum(force[axis] for force in forces)) <= FORCE_LIMIT
+            abs(math.fsum(force[axis] for force in forces)) <= FORCE_LIMIT
             for axis in range(3)
         ),
         f"{name}: force translation gate",
@@ -703,6 +705,11 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
     _require(
         file_hash(reference) == retained["sha256"],
         "retained baseline integrity mismatch",
+    )
+    _require(
+        hashlib.sha256(lzma.decompress(reference.read_bytes())).hexdigest()
+        == retained["uncompressed_sha256"],
+        "retained baseline uncompressed integrity mismatch",
     )
     _require(len(retained["source_commit"]) == 40, "baseline source commit required")
     snapshot = _path(root, retained["effective_policies"])

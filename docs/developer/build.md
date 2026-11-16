@@ -214,7 +214,10 @@ cmake -S . -B build -G Ninja \
 ```
 
 Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
-entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
+entirely, including derivative-shell packages explicitly enabled by a custom
+manifest. This global disable overrides per-profile packaging policy;
+portable profile metadata alone does not mean that its registry is empty.
+Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
 generic CUDA path for every target, including measured architectures.
 
 Profile identity is not generated-shell coverage. The existing

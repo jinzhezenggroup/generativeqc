@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import lzma
 import shutil
 from pathlib import Path
 
@@ -139,6 +140,20 @@ def test_complete_fresh_global_campaign_passes_without_a_local_profile() -> None
     result = gate(campaign())
     assert result["passed"] and result["scope"] == "global-default"
     assert set(result["phases"]) == {*PHASES, "module_first_use"}
+
+
+def test_translation_gate_does_not_erase_a_residual_between_large_forces() -> None:
+    """An exact synthetic residual exceeds the unchanged translation gate."""
+    payload = campaign()
+    forces = [[1e16, 0.0, 0.0], [1e-6, 0.0, 0.0], [-1e16, 0.0, 0.0]]
+    for geometry in payload["oracle"]["geometries"].values():
+        geometry["forces"] = forces
+    for pair in payload["pairs"]:
+        for arm in pair.values():
+            for phase in arm["phases"].values():
+                phase["forces"] = forces
+    with pytest.raises(ValueError, match="force translation gate"):
+        gate(payload)
 
 
 @pytest.mark.parametrize("phase", PHASES)
@@ -346,6 +361,17 @@ def test_retained_baseline_identity_is_a_real_integrity_check(tmp_path: Path) ->
         check_defaults(tmp_path, inventory, source_identity=SOURCE)
 
 
+def test_repacking_a_different_baseline_cannot_change_retained_identity(
+    tmp_path: Path,
+) -> None:
+    inventory = fixture_root(tmp_path)
+    baseline = tmp_path / inventory["retained_baseline"]["manifest"]
+    baseline.write_bytes(lzma.compress(b"{}"))
+    inventory["retained_baseline"]["sha256"] = file_hash(baseline)
+    with pytest.raises(ValueError, match="baseline uncompressed integrity"):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
 def test_audit_covers_all_extra_and_precision_consumers_without_promoting() -> None:
     report = capability_audit(ROOT / MANIFEST)
     tuned = resolve_production_profile(ROOT / MANIFEST, "sm_120")
@@ -398,9 +424,13 @@ def retained_campaign(
     manifest = json.loads(path.read_text())
     manifest["architectures"]["sm_120"]["prefer_rys_task_fock"] = False
     path.write_text(json.dumps(manifest))
-    baseline = default_policies(tmp_path / inventory["retained_baseline"]["manifest"])[
-        "sm_120"
-    ]
+    baseline = json.loads(
+        lzma.decompress(
+            (
+                tmp_path / inventory["retained_baseline"]["effective_policies"]
+            ).read_bytes()
+        )
+    )["sm_120"]
     candidate = default_policies(path)["sm_120"]
     policies = {"baseline": baseline, "candidate": candidate}
     payload = campaign()

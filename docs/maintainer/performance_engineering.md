@@ -21,8 +21,22 @@ and device identities. Existing provisional selections are retained, not
 retroactively certified.
 
 Run `PYTHONPATH=python:. python tools/check_cuda_aot_policy.py` in the source
-checkout. `--write-audit` refreshes only the current unmeasured static inventory;
-it cannot qualify a default. The
+checkout. `--write-audit` refreshes the current static inventory and replays
+integrity-checked retained observations; it neither acquires new measurements
+nor qualifies a default. The optional
+[compile evidence](../../manifests/maintenance/cuda_aot_capability_evidence.json)
+binds source, target and per-kernel resource logs. Observed resources are not
+resource admission or device numerical qualification. After native source
+changes, those measurements become explicitly historical and no longer annotate
+current feature cells. `--verify-compile-inputs` is an opt-in reproduction of
+source-matched acquisition inputs, never a required generated-source fingerprint.
+An optional same-binary card diagnostic replays two complete oracle campaigns
+and requires identical source/ELF identities, distinct physical devices and the
+same compute capability. Shared build receipts remain hash-bound to their one
+origin. This comparison cannot establish cross-SM science or isolate GPU-only
+performance when host/runtime environments differ; failed stock force gates
+remain failed on each card.
+The
 [default decisions](../../manifests/maintenance/cuda_aot_default_decisions.json)
 retain an integrity-checked historical manifest. The checker compares effective
 per-target schedules, recurrences, capabilities, preferences, target resources
