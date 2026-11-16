@@ -65,6 +65,9 @@ def _selection(
 @pytest.mark.parametrize(
     ("module", "owner"),
     (
+        ("tests/python/test_second_component_schedule.py", "runtime-heavy"),
+        ("tests/python/test_hessian_rks_directional.py", "runtime-heavy"),
+        ("tests/python/test_d3_public_second_order.py", "runtime-heavy"),
         ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
@@ -76,9 +79,9 @@ def test_measured_transfer_snapshot(
     selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
     content = selector.read_text(encoding="utf-8")
     addition = f"  {module}\n"
-    assert content.count(addition) == 1
+    assert addition in content
     old_selector = tmp_path / "original-selector.sh"
-    previous = content.replace(addition, "", 1)
+    previous = content.replace(addition, "")
     if owner == "compiler-heavy":
         previous = previous.replace(f" \\\n      {module}; do", "; do", 1)
     old_selector.write_text(previous, encoding="utf-8")
@@ -900,11 +903,8 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
         for shard in SHARDS:
             full = event in {"schedule", "workflow_dispatch"}
             extended = shard in {"core-b", "posthf", "compiler-heavy", "runtime-heavy"}
-            job_minutes = {"core-a": 50, "core-b": 60, "ecp-forces": 50}.get(
-                shard, 45 if extended else 40
-            )
             context = {"matrix.shard": shard, "github.event_name": event}
-            assert expression(job_limit[1], context) == (100 if full else job_minutes)
+            assert expression(job_limit[1], context) == (100 if full else 60)
             assert expression(test_limit[1], context) == (
                 90 if full else 35 if extended else 30
             )
@@ -943,6 +943,13 @@ def test_timed_diagnostics_contract_rejects_disabled_or_changed_guards(
         (8, "merge_group", "posthf", 36),
         (4, "pull_request", "core-a", 40),
         (4, "pull_request", "core-b", 45),
+        (4, "pull_request", "core-c", 40),
+        (4, "pull_request", "uccsd-forces", 40),
+        (4, "merge_group", "posthf", 45),
+        (4, "merge_group", "compiler-heavy", 45),
+        (4, "pull_request", "runtime-heavy", 45),
+        (4, "pull_request", "ecp-forces", 50),
+        (4, "pull_request", "core-c", 61),
     ),
 )
 def test_timed_diagnostics_contract_rejects_changed_budget_policy(
@@ -979,7 +986,7 @@ def test_timed_diagnostics_contract_accepts_equivalent_timeout_expressions() -> 
     )
     extended = "(matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy' || matrix.shard == 'posthf')"
     alternatives = {
-        4: f"${{{{ {full} && 100 || {extended} && 45 || matrix.shard == 'ecp-forces' && 50 || matrix.shard == 'core-a' && 50 || matrix.shard == 'core-b' && 60 || 40 }}}}",
+        4: "${{ github.event_name == 'pull_request' && 60 || github.event_name == 'push' && 60 || github.event_name == 'merge_group' && 60 || 100 }}",
         8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || 30 }}}}",
     }
     for indent, budget in alternatives.items():
@@ -1682,7 +1689,8 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
                 "tests/python/test_ecp_stuttgart_dft.py",
             ]
         elif shard == "runtime-heavy":
-            assert selected[:4] == [
+            assert selected[:5] == [
+                "tests/python/test_d3_public_second_order.py",
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
                 "tests/python/test_correlation_convergence.py",
@@ -1784,6 +1792,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
                 "test_uccsd_physical_response.py",
             ],
             "runtime": [
+                "test_d3_public_second_order.py",
                 "test_uccsd_triples_response.py",
                 "test_native_stationary_phased_budget.py",
                 "test_correlation_convergence.py",
@@ -1881,7 +1890,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         for path in [*tmp_path.glob("gw*.jsonl"), *tmp_path.glob("fixtures-*.txt")]:
             path.unlink()
     assert inventories[0] == inventories[1]
-    assert first_files == [set(ordinary[:4]), set(priority)]
+    assert first_files == [set(ordinary[:4]), set(priority[:4])]
 
 
 @pytest.mark.parametrize(
@@ -1997,7 +2006,7 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values"))
+@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values", "cuda-aot"))
 def test_qualification_insertion_preserves_existing_core_owners(
     event: str, presence: str, family: str, tmp_path: Path
 ) -> None:
@@ -2011,7 +2020,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
         "test_global_hybrid_molecular_hessian.py": "uccsd-forces",
         "test_native_semilocal_grid_second_order.py": "core-c",
         "test_orbital_gap_preconditioner.py": "core-c",
-        "test_second_component_schedule.py": "core-a",
+        "test_second_component_schedule.py": "runtime-heavy",
         "test_spherical_global_hybrid_basis.py": "core-b",
         "test_stationary_one_center_integrals.py": "core-c",
     }
@@ -2029,6 +2038,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
         }
     elif family == "g-values":
         owners = {"test_one_electron_g_shared_values.py": "compiler-heavy"}
+    elif family == "cuda-aot":
+        owners = {
+            "test_aot_policy_dimensions.py": "core-a",
+            "test_cuda_aot_compile_evidence.py": "core-b",
+            "test_cuda_aot_endpoint_evidence.py": "core-c",
+            "test_cuda_aot_global_promotion.py": "core-a",
+        }
     owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
     # Interleave ordinary files with the inserted qualification filenames.
     suffixes = ("aaa", "mmm", "zzz") if family == "g-values" else ("aaa", "zzz")

@@ -1,0 +1,29 @@
+{
+  "sample_interval_ms": 50,
+  "processes": {
+    "3088323": {
+      "variant": "baseline",
+      "run": 0,
+      "samples": 2655,
+      "maximum_mib": 8026
+    },
+    "3088420": {
+      "variant": "candidate",
+      "run": 0,
+      "samples": 2624,
+      "maximum_mib": 8038
+    },
+    "3088470": {
+      "variant": "candidate",
+      "run": 1,
+      "samples": 2625,
+      "maximum_mib": 8038
+    },
+    "3088567": {
+      "variant": "baseline",
+      "run": 1,
+      "samples": 2625,
+      "maximum_mib": 8026
+    }
+  }
+}

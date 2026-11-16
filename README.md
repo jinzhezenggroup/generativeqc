@@ -175,6 +175,13 @@ with the same call-by-call bounds of 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
 
 See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261112/README.md).
 
+The later three-process paper figures for
+[H100](assets/paper-hfdft-cold3-h100.svg) and
+[RTX 5090](assets/paper-hfdft-cold3-rtx5090.svg) have
+[original timing tables, complete E+F records and offline reproduction](benchmarks/results/paper-hfdft-cold3-20261115/README.md).
+Each figure is bound to its own recorded source; the RTX experiment is not a
+qualification of the current master implementation.
+
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
 ![GPU full-DF CCSD(T)/CBS complete endpoint timings](assets/readme-cbs-performance.svg)

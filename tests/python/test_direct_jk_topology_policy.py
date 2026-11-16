@@ -57,10 +57,12 @@ int main() {
   constrained.total_global_memory = eri_bytes * 32U - 1U;
   for (bool unrestricted : {false, true}) {
     const auto pack = [&](const runtime::CudaTargetInfo& target,
-                          SmallHfProfitabilityProfile profile, bool force_transform = false) {
+                          SmallHfProfitabilityProfile profile, bool force_transform = false,
+                          bool allow_resident = true) {
       HostBatch host;
       assert(pack_host_batch({system}, {nullptr}, host, unrestricted, false, force_transform,
-                             ResidentPsssPolicy::Skip, HostBasisPacking::Scf, target, profile));
+                             ResidentPsssPolicy::Skip, HostBasisPacking::Scf, target, profile,
+                             {}, allow_resident));
       assert(host.nbf == 7 && host.direct_nbf == 8);
       return host;
     };
@@ -73,6 +75,12 @@ int main() {
     const auto direct = pack(ample, profile);
     assert(!direct.persistent_eri && direct.ao_to_direct_transform.size() == 7 * 8);
     assert(!same_topology(baseline, direct));
+    const auto capacity_fallback = pack(ample, {}, false, false);
+    assert(!capacity_fallback.persistent_eri);
+    assert(same_topology(direct, capacity_fallback));
+    auto other_queue_domain = direct;
+    other_queue_domain.persistent_fock_angular_order_count = 3;
+    assert(!same_topology(direct, other_queue_domain));
     const auto layout_for = [&](const HostBatch& host) {
       ArenaLayout layout{};
       assert(make_layout(1, 7, 8, 1, 3, 6, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,

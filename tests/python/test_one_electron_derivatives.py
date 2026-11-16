@@ -2,8 +2,6 @@
 
 import ctypes
 import math
-import shutil
-import subprocess
 import typing
 from functools import cache
 from itertools import product
@@ -231,6 +229,7 @@ def test_derivative_contract_keeps_external_center_and_rejects_unsupported_shell
 
 def test_emitted_derivatives_normalized_raw_and_spherical_blocks(
     tmp_path: typing.Any,
+    required_native_cxx: typing.Any,
 ) -> None:
     """Exercise emitted CSE/geometry/Boys boundaries against independent blocks."""
     pytest.importorskip("pyscf")
@@ -245,10 +244,7 @@ def test_emitted_derivatives_normalized_raw_and_spherical_blocks(
         derivative_evaluation_body,
     )
 
-    compiler = shutil.which("clang++") or shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-    header = emit_one_electron_derivatives_cuda().replace(
+    header = emit_one_electron_derivatives_cuda(owner="cosx").replace(
         "#include <cuda_runtime.h>", ""
     )
     assert (
@@ -262,26 +258,13 @@ def test_emitted_derivatives_normalized_raw_and_spherical_blocks(
         "#define __device__\n#define __forceinline__ inline\n#define __noinline__\n"
         + header
     )
-    source += '\nnamespace one = generativeqc::scf::generated_one_electron_derivatives;\nextern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {\nfor (unsigned i=0;i<count;++i) { const double* p=inputs+14*i; double* out=outputs+27*i;\n'
+    source += '\nnamespace one = generativeqc::scf::generated_cosx_one_electron_derivatives;\nextern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {\nfor (unsigned i=0;i<count;++i) { const double* p=inputs+14*i; double* out=outputs+27*i;\n'
     source += derivative_evaluation_body() + "\n}}\n"
     path = tmp_path / "fixture.cpp"
     path.write_text(source)
     libpath = tmp_path / "fixture.so"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O0",
-            "-shared",
-            "-fPIC",
-            str(path),
-            "-o",
-            str(libpath),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=180,
+    required_native_cxx.build_shared(
+        [path], libpath, compile_args=["-std=c++17", "-O0"], compile_timeout=180
     )
     library = ctypes.CDLL(str(libpath))
     pointer = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")

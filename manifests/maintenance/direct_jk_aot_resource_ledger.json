@@ -640,7 +640,7 @@
       "STACK": 24
     }
   },
-  "manifest_sha256": "b979bf3080904560c2e7a0f75f42bb9ecd44c0ad4d58ce1573fb167d817b1d52",
+  "manifest_sha256": "a5df01c89d396a8b9411654cd47d464cc8a4fee3fd04fc655a76bce86de9638b",
   "preprocessed_sha256": "f4d6c6f026d60a795b7dec4ddca14cf4c4cc83967bea71d893ae80498d38f417",
   "schema": "generativeqc.direct-jk-aot-resource-ledger",
   "schema_version": 1,

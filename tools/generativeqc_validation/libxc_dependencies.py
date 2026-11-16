@@ -39,6 +39,20 @@ DISJOINT_ROOTS = (
     "tools/generativeqc_cc/",
     "tools/generativeqc_mp2/",
 )
+# These generators produce only post-HF owners, not the measured direct
+# semilocal E/F path. Keep an exact inventory: shared/unknown generators must
+# remain conservative dependencies (in particular nuclear and solver lowering).
+DISJOINT_GENERATORS = frozenset(
+    {
+        "tools/generate_df_ao_native.py",
+        "tools/generate_df_ccsd_core.py",
+        "tools/generate_df_ccsd_hoisted.py",
+        "tools/generate_df_ccsd_native.py",
+        "tools/generate_df_ccsd_spectator_pairs.py",
+        "tools/generate_rccsd_native.py",
+        "tools/generate_uccsd_native.py",
+    }
+)
 POINT_CONTRACT_INPUTS = frozenset(
     "python/generativeqc_compiler/xc/" + name
     for name in (
@@ -132,18 +146,15 @@ def affects(path: str, *, backend: str, product: str) -> bool:
     configuration and ABI inputs remain conservative shared dependencies.
     Spatial XC E/V contractions are energy dependencies, not force-only owners.
     """
-    if path.startswith(DISJOINT_ROOTS) or PurePosixPath(path).suffix in (".md", ".rst"):
+    if (
+        path.startswith(DISJOINT_ROOTS)
+        or path in DISJOINT_GENERATORS
+        or PurePosixPath(path).suffix in (".md", ".rst")
+    ):
         return False
     if path in POINT_CONTRACT_INPUTS:
         return False
-    # This module owns only test/probe targets and CTest registration. Its
-    # consumers link the production library, never configure its implementation.
-    # Keep it in the authenticated whole-build census, but not in E/F dependency
-    # invalidation. Production/unknown CMake modules remain fail-closed below.
-    if path in (
-        "cmake/GenerativeQCSourceIdentity.json",
-        "cmake/GenerativeQCTests.cmake",
-    ):
+    if path == "cmake/GenerativeQCSourceIdentity.json":
         return False
     if path == "CMakeLists.txt" or path.startswith(
         ("include/", "cmake/", "python/generativeqc_compiler/common/")

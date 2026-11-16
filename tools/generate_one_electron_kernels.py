@@ -48,6 +48,10 @@ def main() -> None:
     parser.add_argument("--derivative-policy-output", type=Path)
     parser.add_argument("--cpu-st-output", type=Path)
     parser.add_argument(
+        "--owner",
+        help="isolate primitive CUDA symbols for a consumer-specific shell bound",
+    )
+    parser.add_argument(
         "--max-angular-momentum",
         type=int,
         choices=range(5),
@@ -67,6 +71,13 @@ def main() -> None:
         parser.error("at least one generated output is required")
     if args.inventory and not args.output:
         parser.error("--inventory requires --output")
+    if args.owner is not None and (
+        not args.output
+        or args.policy_output
+        or args.derivative_policy_output
+        or args.cpu_st_output
+    ):
+        parser.error("--owner applies only to primitive CUDA output and its inventory")
     maximum = args.max_angular_momentum
     policy_source = emit_one_electron_policy_cuda() if args.policy_output else None
     if policy_source is not None:
@@ -83,9 +94,9 @@ def main() -> None:
     source = None
     if args.output:
         source = (
-            emit_one_electron_derivatives_cuda(maximum)
+            emit_one_electron_derivatives_cuda(maximum, owner=args.owner)
             if args.derivatives
-            else emit_one_electron_values_cuda(maximum)
+            else emit_one_electron_values_cuda(maximum, owner=args.owner)
         )
         write_if_changed(args.output, source)
     if args.inventory:

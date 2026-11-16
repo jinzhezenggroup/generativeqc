@@ -123,7 +123,9 @@ def test_resident_range_sources_match_independent_matrices(
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        "full host oracle checks passed"
+        "composite source windows passed"
+        if mode == "composite-source-windows"
+        else "full host oracle checks passed"
         if mode.startswith("full-")
         else "combined build oracle checks 4"
         if mode == "combined-build-oracle"
@@ -142,7 +144,13 @@ def test_resident_range_sources_match_independent_matrices(
 
 
 @pytest.mark.parametrize(
-    "mode", ["range-oracle", "combined-range-oracle", "combined-build-oracle"]
+    "mode",
+    [
+        "range-oracle",
+        "combined-range-oracle",
+        "combined-build-oracle",
+        "composite-source-windows",
+    ],
 )
 def test_resident_range_sources_cover_f_shells(
     tmp_path: Path, native_cxx: NativeCxx, mode: str

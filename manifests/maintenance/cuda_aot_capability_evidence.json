@@ -1,0 +1,13 @@
+{
+  "endpoint_smoke": {
+    "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-endpoint-smoke.json.xz",
+    "sha256": "cd92c7543819ca7c4bf0336fe52ad702ccc6c9c86e15a9b2ff977f5a10dd714a"
+  },
+  "path": "benchmarks/results/cuda-aot-policy-20261115/sm80-sm90-compile.json.xz",
+  "same_binary_card_comparison": {
+    "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-pro6000-endpoint-smoke.json.xz",
+    "sha256": "b2209aea061bf8a321dc8df6beb7703adb7807c0ed151efdd76991d98197a721"
+  },
+  "schema_version": 1,
+  "sha256": "3010edde02e9408def5fdd91099b9f4483332560fa7f7032099a81bf80754b73"
+}

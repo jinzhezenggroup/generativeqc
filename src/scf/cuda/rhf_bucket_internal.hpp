@@ -128,6 +128,12 @@ struct CudaRhfBucketPlan {
   bool warm_start_updates_enabled{true};
   bool matrix_context_enabled{true};
   bool retry_without_matrix_context{};
+  /** A refused optional tensor retries the bounded direct owner once. The
+   * resolved fallback remains frozen for compatible replays, not retried on
+   * every SCF call. A changed admitted profile can request a fresh selection.
+   */
+  bool persistent_eri_enabled{true};
+  bool retry_without_persistent_eri{};
   bool initialized{};
 };
 

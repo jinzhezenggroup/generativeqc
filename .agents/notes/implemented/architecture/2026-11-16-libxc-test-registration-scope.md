@@ -1,5 +1,7 @@
 # Test registration is not a Libxc scientific dependency
 
+Superseded by [the master reconciliation](../compatibility/2026-11-16-r1-master-reconciliation.md). The whole-file exemption below is no longer active.
+
 The retained direct/all-electron FP64 E/F evidence authenticates the full source
 census. Qualification invalidation is narrower than that provenance census.
 

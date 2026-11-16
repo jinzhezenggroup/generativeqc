@@ -40,6 +40,12 @@ void select_profile_for_device(int device_id, int compute_capability_major,
 /** Return the profile selected for the current CUDA device. */
 const ProfileInfo& selected_profile() noexcept;
 
+/** Registry match, independent of profile tuning and environment-enabled masks.
+ * Returns "matched", "no_matching_kernel_set", or "aot_disabled". A portable
+ * profile alone does not imply any generated force or Fock coverage.
+ */
+const char* selected_registry_status() noexcept;
+
 /** Return force-kernel metadata for the selected profile. */
 const ShellKernelMetadata* selected_shell_kernels(std::size_t& count) noexcept;
 

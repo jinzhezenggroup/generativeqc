@@ -21,6 +21,8 @@ struct HostBatch {
   std::size_t spin_count{1};
   /** Resolved resident-ERI admission; participates in immutable topology identity. */
   bool persistent_eri{};
+  /** Resolved runtime domains; compiled queue storage is their bounded superset. */
+  unsigned persistent_force_angular_order_count{}, persistent_fock_angular_order_count{};
   /** One prepared product decision feeds arena, optional context and binding. */
   tensor::CudaMatrixProductAdmission matrix_admission;
   std::optional<cuda_policy::HfMatrixProfile> matrix_profile;
@@ -88,7 +90,9 @@ enum class HostBasisPacking { Scf, DfValues, OneElectronValues };
  * default preserves Direct-HF's resident scheduling metadata. Target/profile
  * admission selects persistent ERIs before transform construction. Unknown
  * targets use the conservative no-device resource fallback. Changing the
- * resolved route invalidates same_topology, even if AO dimensions agree. */
+ * resolved route invalidates same_topology, even if AO dimensions agree.
+ * allow_persistent_eri=false is the allocator-refusal fallback: retain profile
+ * provenance while preparing the complete bounded direct transform/storage. */
 bool pack_host_batch(const std::vector<core::System>& systems,
                      const std::vector<const std::vector<double>*>& initial_densities,
                      HostBatch& host, bool unrestricted = false, bool matrix_direct = false,
@@ -97,7 +101,8 @@ bool pack_host_batch(const std::vector<core::System>& systems,
                      HostBasisPacking packing = HostBasisPacking::Scf,
                      const runtime::CudaTargetInfo& target = {},
                      cuda_policy::SmallHfProfitabilityProfile profile = {},
-                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile = {});
+                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile = {},
+                     bool allow_persistent_eri = true);
 
 /** Compare immutable topology; coordinates and warm state are checked separately by replay. */
 bool same_topology(const HostBatch& first, const HostBatch& second);

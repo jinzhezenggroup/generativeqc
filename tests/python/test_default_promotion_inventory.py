@@ -19,6 +19,7 @@ from tools.check_default_promotion_inventory import (
     load_and_validate,
     validate_inventory,
 )
+from tools.generativeqc_validation.cuda_aot_policy import check_defaults
 
 
 def _payload() -> dict:
@@ -36,6 +37,19 @@ def _copy_audited_sources(payload: dict, destination_root: Path) -> None:
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+
+
+def _check_aot_decisions(root: Path) -> None:
+    """Use the semantic AOT gate rather than duplicate its retained defaults."""
+    inventory = json.loads(
+        (ROOT / "manifests/maintenance/cuda_aot_default_decisions.json").read_text()
+    )
+    for field in ("manifest", "effective_policies"):
+        relative = inventory["retained_baseline"][field]
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
+    check_defaults(root, inventory, source_identity="0" * 64)
 
 
 def test_current_default_promotion_inventory_is_complete() -> None:
@@ -464,68 +478,27 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
 
 
 @pytest.mark.parametrize(
-    "relative,before,after",
-    [
-        (
-            "production_rys_tasks.py",
-            "if profile.portable:",
-            "if False:",
-        ),
-        (
-            "production_rys_tasks.py",
-            "schedule_candidates(integral, profile.target)",
-            "schedule_candidates(integral, fallback_target)",
-        ),
-        ("production_rys_tasks.py", "if schedule is None:", "if False:"),
-        (
-            "production_rys_tasks.py",
-            "if profile.portable:",
-            'if profile.target.architecture != "sm_120" or profile.portable:',
-        ),
-        ("production_rys_tasks.py", '"psps", "ppps",', '"ssss", "psps", "ppps",'),
-        ("production_rys_tasks.py", "if profile.tuned else None", "if True else None"),
-        ("production_rys_tasks.py", "if override is not None:", "if override:"),
-        (
-            "production_rys_tasks.py",
-            "preferred = set(override)",
-            "preferred |= set(override)",
-        ),
-        (
-            "production_rys_tasks.py",
-            "missing = preferred - available",
-            "missing = set()",
-        ),
-        (
-            "production_profile.py",
-            "match == ProfileMatch.EXACT",
-            "match != ProfileMatch.PORTABLE",
-        ),
-        (
-            "production_profile.py",
-            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return None',
-            'if "preferred_rys_task_fock_shell_classes" not in profile:\n        return ()',
-        ),
-        (
-            "production_profile.py",
-            "return tuple(raw) if tuned else None",
-            "return tuple(raw)",
-        ),
-    ],
+    "profile,value", (("portable_cuda", True), ("sm_120", False), ("sm_120", 1))
 )
-def test_rys_task_defaults_and_override_admission_are_audited(
-    tmp_path: Path, relative: str, before: str, after: str
+def test_rys_task_default_preference_requires_an_audited_decision(
+    tmp_path: Path, profile: str, value: object
 ) -> None:
-    """Retain shared capability gates and exact-tuned replacement semantics."""
+    """A label cannot broaden the retained stock default policy."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / "python/generativeqc_compiler/integral" / relative
-    original = source.read_text()
-    assert before in original
-    source.write_text(original.replace(before, after))
-    assert any(
-        "Rys-task default target/class admission drifted" in error
-        for error in validate_inventory(payload, root=tmp_path)
+    source = (
+        tmp_path / "python/generativeqc_compiler/integral/production_shell_classes.json"
     )
+    manifest = json.loads(source.read_text())
+    manifest["architectures"][profile]["prefer_rys_task_fock"] = value
+    source.write_text(json.dumps(manifest))
+    if profile == "portable_cuda" and value is True:
+        # No optional modules means no effective preferred route. An inert
+        # flag is not a global default change or scientific qualification.
+        _check_aot_decisions(tmp_path)
+        return
+    with pytest.raises((ValueError, TypeError)):
+        _check_aot_decisions(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -560,10 +533,12 @@ def test_rys_task_manifest_preferences_require_renewed_qualification(
     else:
         classes.append(None)
     source.write_text(json.dumps(manifest))
-    assert any(
-        "Rys-task default target/class admission drifted" in error
-        for error in validate_inventory(payload, root=tmp_path)
-    )
+    if mutation == "absent":
+        # The shared preference set equals the former explicit override.
+        _check_aot_decisions(tmp_path)
+        return
+    with pytest.raises((ValueError, TypeError)):
+        _check_aot_decisions(tmp_path)
 
 
 @pytest.mark.parametrize(

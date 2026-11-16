@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,10 @@ from generativeqc_compiler.integral.derivative_aot_registry import (
 )
 from generativeqc_compiler.integral.derivative_cuda_shell_aot import (
     emit_cuda_derivative_shell_aot_bundle,
+)
+from generativeqc_compiler.integral.production_policy import (
+    cuda_image_inventory,
+    profile_overrides,
 )
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
@@ -38,6 +43,12 @@ def main() -> None:
     parser.add_argument("--target-architecture", action="append", required=True)
     parser.add_argument("--profile", default="auto")
     parser.add_argument("--profile-map", action="append", default=[])
+    parser.add_argument("--cuda-image", action="append", default=[])
+    parser.add_argument(
+        "--disable-shell-packages",
+        action="store_true",
+        help="Emit empty derivative registries regardless of manifest packaging policy",
+    )
     args = parser.parse_args()
 
     radial_payload = json.loads(args.radial_manifest.read_text(encoding="utf-8"))
@@ -47,15 +58,11 @@ def main() -> None:
     architectures = sorted(
         {normalize_cuda_architecture(value) for value in args.target_architecture}
     )
-    overrides = {}
-    for entry in args.profile_map:
-        architecture, separator, profile = entry.partition("=")
-        if not separator or not profile:
-            parser.error("--profile-map requires sm_XX=profile")
-        architecture = normalize_cuda_architecture(architecture)
-        if architecture not in architectures or architecture in overrides:
-            parser.error("--profile-map requires a unique configured target")
-        overrides[architecture] = profile
+    try:
+        overrides = profile_overrides(architectures, args.profile_map)
+        cuda_image_inventory(architectures, args.cuda_image)
+    except ValueError as error:
+        parser.error(str(error))
     profiles = tuple(
         resolve_production_profile(
             args.production_manifest,
@@ -64,6 +71,12 @@ def main() -> None:
         )
         for architecture in architectures
     )
+    if args.disable_shell_packages:
+        # The global build switch is authoritative even for a custom portable
+        # profile that explicitly opts into derivative compilation.
+        profiles = tuple(
+            replace(profile, compile_derivative_shells=False) for profile in profiles
+        )
     source = emit_cuda_derivative_shell_aot_bundle(profiles, radials)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.output.exists() or args.output.read_text(encoding="utf-8") != source:

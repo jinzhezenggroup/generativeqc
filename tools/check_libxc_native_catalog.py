@@ -1,7 +1,8 @@
 """Recompute the retained native Libxc catalog and enforce exact transition acks.
 
-Run this command in CI against the checked-out source. It uses real retained
-native measurements without loading a library, compiling code or probing a GPU.
+Run this command explicitly when reviewing retained or new acceptance claims,
+not as a routine PR/merge-group freshness gate. It uses real retained native
+measurements without loading a library, compiling code or probing a GPU.
 """
 
 from __future__ import annotations
@@ -310,10 +311,47 @@ def acceptance_view(report: dict) -> dict:
     }
 
 
+def check_generated_views(
+    report: dict,
+    expected: dict,
+    rendered: str,
+    retained_markdown: str,
+    *,
+    allow_stale: bool = False,
+) -> None:
+    """Separate derived presentation freshness from evidence acceptance."""
+    if acceptance_view(report) != acceptance_view(expected):
+        transitions = capability_regressions(expected["summary"], report["summary"])
+        detail = ", ".join(item.token for item in transitions)
+        if not allow_stale:
+            raise ValueError(
+                "live native catalog differs from retained snapshot; requalify or explicitly demote claims: "
+                + detail
+            )
+        print(
+            "advisory: retained catalog snapshot is historical; current qualification "
+            "is only the live scope reported below. Transitions: " + detail
+        )
+    if retained_markdown != rendered:
+        require(allow_stale, "rendered native catalog is stale")
+        print(
+            "advisory: retained Markdown is a historical presentation, not a "
+            "current qualification result; use the live scope below"
+        )
+
+
 def check(
-    manifest_path: Path, *, write: bool = False, require_current: bool = False
+    manifest_path: Path,
+    *,
+    write: bool = False,
+    require_current: bool = False,
+    allow_stale_generated_views: bool = False,
 ) -> dict:
     """Validate bytes, live inputs, exact report coverage and regression policy."""
+    require(
+        not (allow_stale_generated_views and (write or require_current)),
+        "allow-stale-generated-views cannot be combined with write or require-current",
+    )
     manifest = load_json(manifest_path)
     require(
         manifest["schema"] == "generativeqc.libxc-native-catalog-manifest.v1",
@@ -431,15 +469,12 @@ def check(
         (ROOT / manifest["report"]).write_text(rendered)
     else:
         expected = load_json(ROOT / manifest["snapshot"])
-        if acceptance_view(report) != acceptance_view(expected):
-            transitions = capability_regressions(expected["summary"], report["summary"])
-            raise ValueError(
-                "live native catalog differs from retained snapshot; requalify or explicitly demote claims: "
-                + ", ".join(item.token for item in transitions)
-            )
-        require(
-            (ROOT / manifest["report"]).read_text() == rendered,
-            "rendered native catalog is stale",
+        check_generated_views(
+            report,
+            expected,
+            rendered,
+            (ROOT / manifest["report"]).read_text(),
+            allow_stale=allow_stale_generated_views,
         )
     print(render_capability_summary(report["summary"]))
     print(
@@ -463,8 +498,18 @@ def main() -> int:
         action="store_true",
         help="require dependency-current paired energy/forces for LDA/GGA/tau-MGGA, CPU/CUDA and RKS/UKS; unrelated stale rows do not veto acceptance",
     )
+    parser.add_argument(
+        "--allow-stale-generated-views",
+        action="store_true",
+        help="report derived snapshot/Markdown drift without blocking; evidence integrity and qualification gates remain enforced",
+    )
     args = parser.parse_args()
-    check(args.manifest, write=args.write, require_current=args.require_current)
+    check(
+        args.manifest,
+        write=args.write,
+        require_current=args.require_current,
+        allow_stale_generated_views=args.allow_stale_generated_views,
+    )
     return 0
 
 

@@ -79,13 +79,14 @@ def direct_rys_task_candidates(
 def preferred_rys_task_candidates(
     profile: ResolvedProductionProfile,
 ) -> tuple[KernelSelection, ...]:
-    """Use shared capability defaults unless an exact tuned profile overrides them.
+    """Apply an explicit default preference independently of compiled capability.
 
-    Overrides replace the shared classes, including an empty explicit opt-out.
+    An admitted preference uses shared classes unless an exact tuned profile
+    replaces them, including an empty explicit opt-out.
     They never transfer through compatibility. Missing override capability is a
     manifest error; unsupported shared defaults retain the incumbent instead.
     """
-    if profile.portable:
+    if not profile.prefer_rys_task_fock:
         return ()
     preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
     override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None

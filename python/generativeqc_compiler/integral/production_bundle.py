@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
@@ -14,6 +15,7 @@ from .production_emission import (
     emit_shared_rys_xy_streaming_fock_shard,
 )
 from .production_k_block import direct_k_block_candidates
+from .production_policy import production_policy_inventory, profile_overrides
 from .production_profile import (
     _profile_identifier,
     load_production_kernel_selections,
@@ -45,6 +47,8 @@ def write_production_bundles(
     profile_by_architecture: Mapping[str, str] | None = None,
     unit_mode: str = "stable-shards",
     all_class_units: bool = False,
+    default_profile: str = "auto",
+    cuda_images: Sequence[str] = (),
 ) -> tuple[Path, ...]:
     """Write independent, namespaced AOT bundles and one runtime registry.
 
@@ -52,6 +56,9 @@ def write_production_bundles(
     development layout that emits one translation unit per shell class, which
     is useful when iterating on a heavy generated class without compiling its
     neighbors.  Both layouts use the same symbols and registry ABI.
+    A deterministic ``generativeqc_aot_build_policy.json`` sidecar records
+    per-target intent and independent policy dimensions; returned paths remain
+    compiler inputs rather than including this diagnostic record.
     """
 
     if isinstance(shard_count, bool) or not isinstance(shard_count, int):
@@ -68,19 +75,31 @@ def write_production_bundles(
     )
     if not normalized:
         raise ValueError("at least one CUDA architecture is required")
-    requested = {
-        normalize_cuda_architecture(key): value
-        for key, value in (profile_by_architecture or {}).items()
-    }
+    requested = profile_overrides(
+        normalized,
+        (f"{key}={value}" for key, value in (profile_by_architecture or {}).items()),
+    )
     profiles = tuple(
         resolve_production_profile(
             manifest,
             architecture,
-            requested.get(architecture, "auto"),
+            requested.get(architecture, default_profile),
         )
         for architecture in normalized
     )
     output_directory.mkdir(parents=True, exist_ok=True)
+    inventory = output_directory / "generativeqc_aot_build_policy.json"
+    _write_if_changed(
+        inventory,
+        json.dumps(
+            production_policy_inventory(
+                profiles, images=cuda_images, overrides=requested
+            ),
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+    )
     outputs = []
     for profile in profiles:
         rys_by_name = {

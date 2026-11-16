@@ -29,6 +29,23 @@ function(generativeqc_register_named_ks_catalog target)
 endfunction()
 
 macro(generativeqc_register_host_generated_sources target)
+  # Host profile admission consumes these compiler-owned domain bounds even
+  # when no CUDA backend is built. The emitted header is device-independent.
+  set(GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_resident_psss_schedule.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_direct_resident_psss_schedule_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_resident_schedule.py"
+    OUTPUTS "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_resident_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cuda_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
+    ARGS --output "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
+    COMMENT "Generating compiler-owned Direct-HF resident-PSSS schedule")
+
   generativeqc_register_named_ks_catalog(${target})
   generativeqc_register_generated_sources(
     NAME generativeqc_gcp_scalar_codegen
@@ -1133,6 +1150,29 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --derivatives --max-angular-momentum 4
       --output "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}")
 
+  # AoBasis rejects shells above f at every COSX entry point. Keep full-DF's g
+  # primitives out of these translation units, with distinct symbols for ODR safety.
+  set(GENERATIVEQC_COSX_ONE_ELECTRON_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_one_electron_values.cuh")
+  set(GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_one_electron_derivatives.cuh")
+  generativeqc_register_generated_sources(
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_one_electron_kernels.py"
+    OUTPUTS "${GENERATIVEQC_COSX_ONE_ELECTRON_HEADER}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
+    ARGS --owner cosx --max-angular-momentum 3
+      --output "${GENERATIVEQC_COSX_ONE_ELECTRON_HEADER}")
+  generativeqc_register_generated_sources(
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_one_electron_kernels.py"
+    OUTPUTS "${GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
+    ARGS --owner cosx --derivatives --max-angular-momentum 3
+      --output "${GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER}")
+
   set(GENERATIVEQC_COSX_CONTRACTION_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_contractions.cuh")
   generativeqc_register_generated_sources(
@@ -1207,21 +1247,6 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
          --order4-output "${GENERATIVEQC_ORDER4_WEIGHTED_ERI_HEADER}"
          --order5-output "${GENERATIVEQC_ORDER5_WEIGHTED_ERI_HEADER}")
-
-  set(GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_resident_psss_schedule.cuh")
-  generativeqc_register_generated_sources(
-    NAME generativeqc_direct_resident_psss_schedule_codegen
-    TARGET ${target}
-    ADD_TO_TARGET
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_resident_schedule.py"
-    OUTPUTS "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
-    DEPENDS
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_resident_schedule.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cuda_schedule.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
-    ARGS --output "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
-    COMMENT "Generating compiler-owned Direct-HF resident-PSSS schedule")
 
   set(GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_high_order_pair_gradient.cuh")
@@ -1305,7 +1330,8 @@ macro(generativeqc_register_cuda_generated_sources target)
     foreach(architecture IN LISTS _generativeqc_cuda_compile_architectures)
       list(APPEND _generativeqc_derivative_profile_args --target-architecture "${architecture}")
     endforeach()
-    list(APPEND _generativeqc_derivative_profile_args --profile portable)
+    # Portable is selection metadata, not a guarantee of empty custom policy.
+    list(APPEND _generativeqc_derivative_profile_args --profile portable --disable-shell-packages)
   endif()
   generativeqc_register_generated_sources(
     NAME generativeqc_derivative_shell_aot_codegen
