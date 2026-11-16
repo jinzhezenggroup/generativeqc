@@ -1,6 +1,6 @@
 # Decision: share cached-tensor and packed-Fock compilation ownership
 
-Status: implemented; native/scientific gates pass, clean replay and full wheel pending
+Status: implemented; clean native/scientific gates pass, full wheel pending
 Date: 2026-11-16
 
 ## Problem and decision
@@ -85,5 +85,32 @@ applicable pre-commit hooks pass. Refreshing the unmeasured AOT audit and Libxc
 snapshot changes only their current source identities: no promotion, scientific
 receipt, qualified endpoint, stale-context or acceptance field changes.
 
-Clean committed native replay and full manylinux build, repair, installed-wheel
-and matching-head CI acceptance remain separate gates.
+## Clean committed replay
+
+The actual code commit **7b727b9f968dad5e4d9b08e71463c38f78e2fefb** builds from a
+clean source checkout, verified before and after the request. The native library
+has exactly the same ELF SHA and native source identity as the patch-stage
+artifact above. The 66-second incremental request is not a cold-build result.
+All **64** matching native profile/lifecycle/source-admission/retry tests pass
+against this clean artifact as well.
+
+The actual clean production wrapper also compiles for every retained wheel
+image, not just sm120. Its complete object and PTX byte counts equal the
+prototype above, and all **34/34/38** per-architecture function identities,
+resources and SASS section bytes match the original independent owners. Its
+owned compiler server records five hits and three misses, with a 419,712-KiB
+reaped-worker maximum RSS. The 19.906-second observation has more cache hits
+than the original requests and is not used as a cold-build speedup comparison.
+
+Slurm **17543** independently replays all **64** paired complete endpoints with
+this clean artifact. All numerical and semantic-work gates pass; maximum
+before/after energy/force differences, including the baseline control, are
+**3.56e-15 / 2.73e-15**. The diagnostic median execute ratio is **0.9995**, but
+one spherical-RHF warm observation is **53.160 ms versus 35.926 ms** (ratio
+**1.480**). All other candidate ratios are at most **1.0081**. Retain that
+observation rather than claiming uniform wall-time parity from the median;
+this change targets compiler ownership, not a runtime speedup.
+
+Full manylinux build, repair, installed-wheel and matching-head CI acceptance
+remain separate gates. Later note-only commits do not change the qualified
+native/compiler inputs.
