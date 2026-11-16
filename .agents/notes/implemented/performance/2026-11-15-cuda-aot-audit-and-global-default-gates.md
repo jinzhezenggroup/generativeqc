@@ -179,6 +179,48 @@ relabel outcomes to conceal that interpreter dependency. Use explicit
 synthetic exact-cancellation regressions and both interpreters. No raw forces,
 independent references, production kernels or scientific limits change.
 
+## Accepted native consolidation and fresh qualification, 2026-11-16
+
+Actual accepted #3096 master `28d142e6b36414c1d176d83385e3e1d1d7330d09`
+changes eight native/codegen inputs. This is not a squash-only ancestry change:
+normal integration into P1b produces immutable acquisition source
+`3553cbf6d0bea1c00fb194365046778c5cd829d4`, native identity
+`e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7`.
+Do not drop those mainline changes or relabel the older 6c/788d data below.
+The complete previous capsules remain at published
+`38206e4885bf11318804f8b2bbe65678419379f6`, with original hashes and its
+a6b151/f747/395863 history chain.
+
+Finite n1 job 17494 rebuilds both Release libraries and passes the actual
+native profile tests: auto is matched `sm_120`; forced portable is matched
+`portable_cuda`, with intentionally different effective masks. Finite n2
+job 5318 actually compiles all 88 primary SM80/SM90 units with eight CPUs;
+this remains compile-only on an SM120 node, not A100/H100 execution.
+
+Finite n1/n2 jobs 17502/5319 use identical new ELF hashes on RTX5090 and
+RTX PRO6000 Blackwell, both SM120. The source/invalid-descriptor ABI checks
+pass for both libraries on both cards. Actual n1 CMake global ON/OFF checks
+retain the custom portable opt-in and global-disable override on three targets.
+Only the unchanged custom manifest input is shared by dual hash with ec205;
+no historical generated result, source, job or numerical observation is reused.
+
+All 32 fresh child processes complete, giving 128 complete E+analytic-force
+phases against independent Cartesian PySCF references. Production children
+forbid oracle imports. Exactly 96 phases pass; all 32 stock cold/warm TZVP
+force observations still fail the unchanged 1e-7 gate near 6.75801e-7.
+All energy/translation gates pass. Both acquisition jobs correctly terminate
+with exit one for those scientific failures, not a child-process crash.
+The fresh source therefore does not resolve #3092 or justify a performance
+ranking, per-shell qualification, global-default promotion or #3084 approval.
+
+Retained replay passes 112 numerical-evidence/default-gate integrity tests.
+The audit explicitly reports current-source observations and four failed
+arm/phase groups, rather than turning negative science into a green default.
+The independent #3099 CI repair is integrated without changing this native
+identity; its newer Git head is not substituted for actual acquisition source.
+
+The following section records the preceding, now historical acquisition.
+
 ## Mainline LAPACKE integration and fresh source qualification
 
 Accepted master `b06042c744ef2f546599c5085a88d3a3ef1cc1d6` changes actual

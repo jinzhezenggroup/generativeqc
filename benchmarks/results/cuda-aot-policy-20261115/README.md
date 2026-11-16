@@ -32,9 +32,9 @@ not certified merely because they are present in this manifest.
 
 `sm80-sm90-compile.json.xz` retains input identities, compiler logs, CUOBJDump resource
 text, toolchain versions and acquisition index for 88 translation units built
-from P1b source `6c0e89cfff07881d76f10f27de79b7bc509dd0d1`, native source identity
-`788daab81655bece6d505d8aefe0efaf20bf56b69f3f70abf985292ca1cb0e1a`.
-This includes global-AOT-disable and mainline LAPACKE repairs; previous
+from P1b source `3553cbf6d0bea1c00fb194365046778c5cd829d4`, native source identity
+`e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7`.
+This includes global-AOT-disable, LAPACKE and actual accepted #3096 native repairs; previous
 receipts are preserved at their own source identity, not relabeled.
 All 44 stock SM120 primary selections were retargeted, audit-only, to SM80 and
 SM90. Compilation succeeded for all 88 units. The generated primary full-range
@@ -42,8 +42,8 @@ Fock/force and declared mixed/streaming wrappers were included; optional
 competitors and exact SR/LR derivative packages were not.
 
 The acquisition used CUDA 12.9.86, GCC 11.4, C++20, the compiler adapter's release
-optimization and sccache 0.16.0 on n2, through finite Slurm job 5316
-(`main`, `gpu:pro6000:1`, one hour requested, visibility `0`). This node's actual
+optimization and sccache 0.16.0 on n2, through finite Slurm job 5318
+(`main`, `gpu:pro6000:1`, 8 CPUs, one hour requested, visibility `0`). This node's actual
 device is RTX PRO 6000 Blackwell/SM120: this was **not A100 or H100 execution**.
 No candidate was enabled in production or executed on a GPU. Resources are
 observations, not resource admission. The retained `scontrol` receipt records
@@ -71,14 +71,14 @@ fingerprint on future refactors. It never promotes a default.
 `sm120-endpoint-smoke.json.xz` retains both Release build contracts, native
 profile/ABI receipts, acquisition scripts, independent PySCF
 2.14.0 Cartesian reference results and all raw stock RHF E+analytic-force
-process records. Finite n1 build job 17486 rebuilds both binaries at the current
+process records. Finite n1 build job 17494 rebuilds both binaries at the current
 P1b acquisition identity above. Only the AOT profile differs. The native
 profile test passes for both auto (`sm_120`)
 and forced portable (`portable_cuda`), with a matched nonempty registry.
 The common bounded build disables Hessian AOT leaves and CPU stationary-force
 AOT; it is not a claim about a release distribution's full package/startup cost.
 
-Finite Slurm job 17487 (`main`, `gpu:5090:1`, 30 minutes) runs four fresh
+Finite Slurm job 17502 (`main`, `gpu:5090:1`, 30 minutes) runs four fresh
 processes per arm for each basis, balanced in order, on the same physical
 RTX 5090 UUID. Each process executes cold, warm, moved and moved-warm endpoints.
 Cold includes import, profile probe, construction, preparation and force host
@@ -114,7 +114,7 @@ the production workload's portable-profile slowdown.
 
 ## Same-binary second-card diagnostic
 
-`sm120-pro6000-endpoint-smoke.json.xz` retains finite job 5317 on n2
+`sm120-pro6000-endpoint-smoke.json.xz` retains finite job 5319 on n2
 (`main`, `gpu:pro6000:1`, 30 minutes): another 16 fresh processes and 64 complete
 phase observations. The RTX PRO 6000 Blackwell is a different physical card,
 also SM120. Both ELF hashes exactly match n1; this is not a rebuild. All SVP
@@ -124,7 +124,7 @@ but supplies no SM80/SM90 execution or GPU-only performance attribution.
 
 The earlier-source n2 loader attempt, job 5299, fails before any endpoint because its
 system glibc 2.35 cannot load the n1-built ELF's glibc 2.38 requirement. Its raw
-failure remains retained in published history. Job 5317 uses a
+failure remains retained in published history. Job 5319 uses a
 private copy of n1's glibc 2.39 loader
 and runtime for Python and every child, with recorded commands and library
 hashes. It changes neither system libraries nor Slurm device visibility.
@@ -132,7 +132,7 @@ Different host/Python environments still prohibit a card-only speed comparison.
 
 ## Actual global-disable build contract
 
-Job 17487 also configures the actual CUDA CMake build for SM80/SM90/SM120 with
+Job 17502 also configures the actual CUDA CMake build for SM80/SM90/SM120 with
 a custom portable manifest explicitly enabling derivative-shell packaging.
 With global AOT enabled, generated packages match that opt-in. With
 `GENERATIVEQC_ENABLE_AOT_SHELLS=OFF`, the actual generated derivative registry
@@ -151,9 +151,10 @@ Identical n1 build receipts are stored once; n2 references that bundle and
 checksums each transferred receipt. Heavy raw compile-command and CUOBJDump
 files remain in ignored acquisition storage, identified by path, size and hash.
 The complete preceding-source endpoint and compile bundles are recoverable at
-Git commit `a6b15115a63c83df224045337826787f409e35cf`, using the same paths;
+Git commit `38206e4885bf11318804f8b2bbe65678419379f6`, using the same paths;
 their original hashes are recorded in the current bundles. Its history chain
-retains `f747d8079ada10d6af99536c5d0fbecbc4fa13b0` and
+retains `a6b15115a63c83df224045337826787f409e35cf`,
+`f747d8079ada10d6af99536c5d0fbecbc4fa13b0` and
 `3958635e7687537d50ae3f61689ba257416b872c`. Historical failures
 and the old convergence diagnostic are not rewritten as current acceptance.
 The frozen manifest is losslessly compressed with both stored and original
