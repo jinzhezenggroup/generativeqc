@@ -6,10 +6,17 @@ import argparse
 import ast
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "python")]
+
+from generativeqc_compiler.integral.production_profile import (
+    _qualified_rys_task_classes,
+)
+
 DEFAULT_INVENTORY = ROOT / "manifests/maintenance/default_promotion_inventory.json"
 SCHEMA = "generativeqc.default-promotion-inventory"
 SCHEMA_VERSION = 1
@@ -408,13 +415,12 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
     for profile in profiles.values():
         if not isinstance(profile, dict):
             raise TypeError("Rys-task default target/class admission drifted")
-        classes = profile.get("preferred_rys_task_fock_shell_classes", [])
-        if (
-            not isinstance(classes, list)
-            or any(not isinstance(item, str) or not item for item in classes)
-            or len(classes) != len(set(classes))
-        ):
-            raise ValueError("Rys-task default target/class admission drifted")
+        try:
+            _qualified_rys_task_classes(profile, architecture="sm_120")
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Rys-task default target/class admission drifted"
+            ) from error
         enabled = profile.get("prefer_rys_task_fock", False)
         if not isinstance(enabled, bool):
             raise TypeError("Rys-task default target/class admission drifted")

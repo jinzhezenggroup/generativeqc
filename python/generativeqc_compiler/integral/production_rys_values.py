@@ -29,7 +29,7 @@ def direct_rys_value_candidates(
     Root counts belong to derivative-free IR; unsupported roots and component
     mappings are explicit omissions, never recurrence substitutions.
     """
-    if not profile.optional_fock_variants:
+    if "rys_value" not in profile.packaging.fock_variants:
         return ()
     candidates = []
     for incumbent in profile.selections:

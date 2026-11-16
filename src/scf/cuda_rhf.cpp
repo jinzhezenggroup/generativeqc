@@ -4873,17 +4873,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   const std::uint64_t available_generated_force_mask = generated::enabled_shell_class_mask() &
                                                        host_present_shell_class_mask &
                                                        ~ssss_shell_class_mask;
-  // Do not build a second class queue for a portable topology too small to
+  // Do not build a second class queue for an opted-in topology too small to
   // fill one persistent worker round per force class. The threshold follows
   // actual work and the resource-derived worker grid, never a GPU/molecule name.
   // Larger materialized and all bounded plans retain generated force consumers.
-  const bool portable_angular_force =
-      generated::selected_profile().portable && !bounded_direct_streaming &&
-      cuda_policy::portable_force_prefers_angular_queue(total_shell_quartets,
-                                                        available_generated_force_mask,
-                                                        plan.persistent_quartet_worker_blocks);
+  const generated::ForceExecutionPolicy& force_policy = generated::selected_force_policy();
+  const bool small_work_angular_force =
+      force_policy.small_work_angular_queue && !bounded_direct_streaming &&
+      cuda_policy::force_prefers_angular_queue(total_shell_quartets, available_generated_force_mask,
+                                               plan.persistent_quartet_worker_blocks);
   const std::uint64_t explicit_generated_force_shell_class_mask =
-      portable_angular_force ? 0U : available_generated_force_mask;
+      small_work_angular_force ? 0U : available_generated_force_mask;
   // Fock-only AOT entries (currently psss) are deliberately not added to the
   // force queue. The force dispatcher is a separate registry and returns
   // ``cudaErrorNotSupported`` for classes without a validated force consumer.
@@ -4935,18 +4935,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
       (bounded_resident_psss_force_enabled ? (std::uint64_t{1} << kPsssShellClass) : 0U);
   const std::uint64_t uncovered_force_shell_class_mask =
       host_present_shell_class_mask & ~covered_force_shell_class_mask;
-  // A tuned compatible profile is a production qualification claim. Once all
-  // canonical s/p/d classes are covered, never let a missing registry entry
-  // silently resurrect the handwritten generic bounded mathematics: fail
-  // closed so the coverage regression is visible. Explicit AOT class filters
-  // remain diagnostic/oracle controls, while portable/unmeasured profiles and
-  // higher-l classes retain the bounded correctness fallback.
-  const generated::ProfileInfo& selected_aot_profile = generated::selected_profile();
-  const std::uint64_t unexpected_tuned_spd_fallback_mask =
+  // Only an explicit bounded-force ownership contract can forbid the existing
+  // correctness fallback. Profile labels do not establish that contract, and
+  // explicit AOT class filters remain diagnostic/oracle controls.
+  const std::uint64_t unexpected_spd_fallback_mask =
       uncovered_force_shell_class_mask & kCanonicalSpdShellClassMask;
-  if (options.compute_forces && bounded_direct_streaming && selected_aot_profile.tuned &&
-      selected_aot_profile.compatible && !aot_shell_class_selection_override_requested() &&
-      unexpected_tuned_spd_fallback_mask != 0U) {
+  if (cuda_policy::bounded_force_coverage_rejected(
+          options.compute_forces, force_policy.require_bounded_spd_coverage,
+          bounded_direct_streaming, aot_shell_class_selection_override_requested(),
+          unexpected_spd_fallback_mask)) {
     fill_global_failure(outputs, cuda_status(cudaErrorNotSupported));
     return outputs;
   }
