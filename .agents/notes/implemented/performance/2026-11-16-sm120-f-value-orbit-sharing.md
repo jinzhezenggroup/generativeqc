@@ -138,6 +138,25 @@ workaround is introduced. Authoritative audit writers update only current
 source-identity fields. All scientific, historical, archival and acceptance
 fields are unchanged.
 
+## Clean committed-source replay
+
+Code commit **abdfa61c40c087057d4ca22ed288face5e8e34b0** is checked out in the
+independent native snapshot, clean before and after. The 153-second configure/
+incremental replay makes **zero compiler requests** and retains the exact
+library bytes, SHA256 and native source identity above. The actual four sm120
+kernel resources and SASS sections still match the full-matrix candidate.
+This authenticates committed inputs and their dependency graph; it is not a
+fresh cold compilation.
+
+Slurm job **17577** repeats all **64** complete independent ABBA HF endpoints
+and all **53** profile/safety/forced-bounded tests with no skips or failures.
+Iteration, Fock-build and precision-work counts agree. Maximum independent
+energy/force errors are about **6.31e-14 / 8.04e-11**; maximum baseline/candidate
+differences are **4.45e-15 / 2.39e-15**. Diagnostic median/maximum execute ratios
+are **0.9973 / 1.00284**. Retain the separate patch-stage outlier rather than
+replacing it with the better clean-run timing. This follow-up evidence changes
+notes only, not the qualified production source or artifact.
+
 ## Follow-up: provenance-only stationary recompilation
 
 This one value-generator edit also rebuilds 16 native stationary CUDA wrappers.
