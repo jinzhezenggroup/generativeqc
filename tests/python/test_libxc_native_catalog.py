@@ -16,6 +16,7 @@ from generativeqc_compiler.xc.capability_transition import (
 )
 from generativeqc_compiler.xc.libxc_bulk_capabilities import available_capabilities
 
+from tools import check_libxc_native_catalog as presentation_checker
 from tools.generativeqc_validation import libxc_catalog as catalog
 from tools.generativeqc_validation.libxc_native_domain import native_domain_stage
 
@@ -649,3 +650,44 @@ def test_historical_seam_does_not_authenticate_mutated_provenance(
             )
         with pytest.raises(ValueError):
             replay_recorded_source(changed)
+
+
+def test_generated_view_drift_is_advisory_only_when_requested(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(presentation_checker, "capability_regressions", lambda *_: ())
+    current = {"summary": {}, "stale": True, "endpoints": []}
+    retained = {"summary": {}, "stale": False, "endpoints": ["old"]}
+    with pytest.raises(ValueError, match="differs from retained snapshot"):
+        presentation_checker.check_generated_views(current, retained, "live", "old")
+    presentation_checker.check_generated_views(
+        current, retained, "live", "old", allow_stale=True
+    )
+    output = capsys.readouterr().out
+    assert "historical" in output and "not a current qualification" in output
+    assert current["stale"] is True and current["endpoints"] == []
+
+
+def test_markdown_drift_remains_strict_by_default() -> None:
+    with pytest.raises(ValueError, match="rendered native catalog is stale"):
+        presentation_checker.check_generated_views({}, {}, "live", "old")
+
+
+@pytest.mark.parametrize("mode", ["write", "require_current"])
+def test_presentation_option_cannot_relax_explicit_claim_modes(mode: str) -> None:
+    with pytest.raises(ValueError, match="cannot be combined"):
+        presentation_checker.check(
+            presentation_checker.MANIFEST,
+            allow_stale_generated_views=True,
+            **{mode: True},
+        )
+
+
+def test_presentation_option_still_checks_evidence_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(presentation_checker, "file_hash", lambda _: "incorrect")
+    with pytest.raises(ValueError, match="campaign evidence bytes changed"):
+        presentation_checker.check(
+            presentation_checker.MANIFEST, allow_stale_generated_views=True
+        )

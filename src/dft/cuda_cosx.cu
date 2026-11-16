@@ -14,7 +14,7 @@
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid_task_view.cuh"
 #include "generated_cosx_contractions.cuh"
-#include "generated_one_electron_values.cuh"
+#include "generated_cosx_one_electron_values.cuh"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 
@@ -173,7 +173,7 @@ __device__ double finite_or_flag(double value, int* error) {
 __global__ void esp_integrals_kernel(const double* basis, std::size_t natom, std::size_t nprimitive,
                                      std::size_t nao, const double* points, std::size_t npoint,
                                      double* esp, int* error) {
-  namespace one = generativeqc::scf::generated_one_electron;
+  namespace one = generativeqc::scf::generated_cosx_one_electron;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t total = npoint * nao * nao;

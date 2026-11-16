@@ -61,9 +61,14 @@ python tools/generate_one_electron_kernels.py \
   --inventory /tmp/one_electron_inventory_g.json
 ```
 
-The g switch is deliberately incompatible with `--policy-output`: current
-production scheduling and endpoint evidence cover through f only. Structural
-g emission therefore cannot silently become an executable production claim.
+The full-DF CMake build explicitly requests g for its SCF value and gradient
+owners. COSX instead requests `--owner cosx --max-angular-momentum 3`: its
+`AoBasis` contract rejects shells above f before primitive dispatch. This emits
+separate `generated_cosx_one_electron_{values,derivatives}.cuh` headers, with
+consumer-specific namespaces and include guards. Different bounds must not share
+inline C++ definitions across translation units. The owner changes emitted
+symbols, not mathematical IR or qualification status; selecting a larger bound
+alone does not establish endpoint acceptance.
 
 `src/scf/cuda/one_electron_values.cu` owns bounded contraction loops and output
 consumers in a separate translation unit. It borrows the existing normalized

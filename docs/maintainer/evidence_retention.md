@@ -280,9 +280,15 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-95,376,107 bytes. This includes an exact 2,171,627-byte addition for
+95,753,574 bytes. This includes an exact 2,171,627-byte addition for
 the [two approved HF/DFT figure datasets](../../benchmarks/results/paper-hfdft-cold3-20261115/README.md),
-including their original measurements, readable tables and source reconstruction. Many individually sub-limit files cannot
+including their original measurements, readable tables and source reconstruction.
+A separately approved 377,467-byte increase retains the complete 377,913-byte
+[Direct J/K runtime-policy qualification](../../benchmarks/results/issue597-direct-jk-policy-20261114/README.md)
+in PR #3095, using the prior 446 bytes of remaining capacity. This exact indexed
+total adds no unallocated headroom and preserves the original raw evidence,
+per-file limit, incoming-review budget and scientific checks.
+Many individually sub-limit files cannot
 bypass this aggregate guard;
 classification exceptions cannot waive it. Permanent fixtures under
 `tests/reference_data/`, `tests/data/`, audited `upstream/` sources and
