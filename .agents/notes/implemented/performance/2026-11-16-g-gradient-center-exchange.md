@@ -97,7 +97,7 @@ or infer that arbitrary concurrent large owners now fit the container.
   IDs. The complete focused module passes 306 tests. Keep its canonical helper
   dependencies before reversed callers; do not restore redundant heavy bodies.
 
-The final focused one-electron/catalog/CI-budget suites pass 776 tests with 63
+The pre-refresh focused one-electron/catalog/CI-budget suites pass 776 tests with 63
 host-run skips. The pinned `ty==0.0.82` check, all 604 compiler modules and the
 complete applicable pre-commit hooks pass. Before the master refresh, official
 catalog regeneration changes only its two current source identities;
@@ -122,6 +122,18 @@ changes. Resolve the catalog's binary merge from the upstream snapshot, retainin
 its resource-manifest receipt, then regenerate current metadata. Relative to that
 upstream snapshot only two current source identities and 28 changed-input lists
 change; no historical measurements, summaries or qualification receipts change.
+
+After that refresh, 2,154 focused one-electron/AOT/CI/catalog/profile tests pass
+with 63 host-run skips. One additional native identity/probe-ABI test cannot
+load a checkout library until the matching combined build finishes; preserve
+that gate rather than supplying an old artifact or weakening its source check.
+The pinned type check, all 605 compiler modules, default-promotion inventory and
+applicable full pre-commit hooks pass. The g header and its complete sm120 owner
+command remain byte-identical to the qualified code above in a one-off proof.
+The clean combined `bd9d6cc30` library/CLI rebuild and its independent Direct-HF
+qualification are still in progress at this evidence checkpoint. Do not relabel
+the earlier clean `6bd41de6f` library as that combined artifact. Whole-wheel
+acceptance and current Libxc resource/lifetime acceptance remain unclaimed.
 
 ## Rejected alternatives and boundaries
 
