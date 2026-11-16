@@ -168,6 +168,41 @@ int main(int argc, char** argv) {
     const generativeqc::dft::MolecularGrid grid(
         system, generativeqc::dft::GridSpec{1, 12, 8, 16, 3, 1.0e-12});
     const std::vector<double> density{0.8, 0.2, 0.2, 0.6};
+    {
+      auto unsupported = system;
+      unsupported.shells.front().angular_momentum = 4;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(unsupported, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              "CUDA COSX rejected-g fixture is not a valid full-DF basis");
+      const auto rejects_g = [](auto&& operation) {
+        try {
+          operation();
+        } catch (const std::invalid_argument& error) {
+          return std::string(error.what()).find("through f") != std::string::npos;
+        }
+        return false;
+      };
+      require(rejects_g([&] {
+                generativeqc::dft::CudaCosxStagingPlan plan(unsupported, grid.points(),
+                                                            grid.weights(), 7, device);
+              }),
+              "CUDA COSX values must reject g before primitive dispatch");
+      require(rejects_g([&] {
+                (void)generativeqc::dft::cuda_cosx_point_derivative_reference(
+                    unsupported, grid.points(), grid.weights(), density,
+                    generativeqc::dft::CosxDensityConvention::rhf_spin_summed, 7, device);
+              }),
+              "CUDA COSX point derivatives must reject g before primitive dispatch");
+      const generativeqc::dft::MolecularGrid unsupported_grid(
+          unsupported, generativeqc::dft::GridSpec{1, 2, 2, 4, 3, 1.0e-12});
+      require(rejects_g([&] {
+                (void)generativeqc::dft::cuda_cosx_molecular_energy_derivative(
+                    unsupported_grid, density,
+                    generativeqc::dft::CosxDensityConvention::rhf_spin_summed, 7, device);
+              }),
+              "CUDA COSX molecular derivatives must reject g before primitive dispatch");
+    }
     const auto cpu = generativeqc::dft::build_cosx_reference(
         system, grid.points(), grid.weights(), density,
         generativeqc::dft::CosxDensityConvention::rhf_spin_summed);

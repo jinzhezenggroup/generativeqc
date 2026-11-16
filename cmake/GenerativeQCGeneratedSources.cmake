@@ -1133,6 +1133,29 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --derivatives --max-angular-momentum 4
       --output "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}")
 
+  # AoBasis rejects shells above f at every COSX entry point. Keep full-DF's g
+  # primitives out of these translation units, with distinct symbols for ODR safety.
+  set(GENERATIVEQC_COSX_ONE_ELECTRON_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_one_electron_values.cuh")
+  set(GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_one_electron_derivatives.cuh")
+  generativeqc_register_generated_sources(
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_one_electron_kernels.py"
+    OUTPUTS "${GENERATIVEQC_COSX_ONE_ELECTRON_HEADER}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
+    ARGS --owner cosx --max-angular-momentum 3
+      --output "${GENERATIVEQC_COSX_ONE_ELECTRON_HEADER}")
+  generativeqc_register_generated_sources(
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_one_electron_kernels.py"
+    OUTPUTS "${GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_kernels.py"
+    ARGS --owner cosx --derivatives --max-angular-momentum 3
+      --output "${GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER}")
+
   set(GENERATIVEQC_COSX_CONTRACTION_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_contractions.cuh")
   generativeqc_register_generated_sources(

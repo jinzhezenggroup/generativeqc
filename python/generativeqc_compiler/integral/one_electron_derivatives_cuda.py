@@ -9,6 +9,7 @@ from .expr import Graph
 from .ir_serialization import integral_to_payload
 from .one_electron_cuda import (
     _component_layout,
+    _emission_symbols,
     _emit_component_index,
     _emit_pair_geometry,
     _emit_support_cuda,
@@ -290,17 +291,17 @@ def _emit_gradient_helpers(
 
 def emit_one_electron_derivatives_cuda(
     maximum_angular_momentum: int = 3,
+    *,
+    owner: str | None = None,
 ) -> typing.Any:
-    """Emit primitive gradient roots; normalized AO weights belong to the caller."""
+    """Emit gradients in an optional consumer namespace; the caller owns AO weights.
+
+    Use distinct owners when linking specializations with different shell bounds.
+    The bound and owner are emission choices, not changes to mathematical IR.
+    """
     maximum = _validate_maximum_angular_momentum(maximum_angular_momentum)
-    prefix = (
-        _emit_support_cuda(2 * maximum + 1)
-        .replace(
-            "GENERATIVEQC_GENERATED_ONE_ELECTRON_VALUES_CUH",
-            "GENERATIVEQC_GENERATED_ONE_ELECTRON_DERIVATIVES_CUH",
-        )
-        .replace("generated_one_electron {", "generated_one_electron_derivatives {")
-    )
+    namespace, _ = _emission_symbols(owner, derivatives=True)
+    prefix = _emit_support_cuda(2 * maximum + 1, owner=owner, derivatives=True)
     return "\n".join(
         [
             prefix,
@@ -312,7 +313,7 @@ def emit_one_electron_derivatives_cuda(
             _emit_axis_permutations(maximum),
             _emit_gradient_helpers(False, maximum),
             _emit_gradient_helpers(True, maximum),
-            "}  // namespace generativeqc::scf::generated_one_electron_derivatives",
+            f"}}  // namespace {namespace}",
             "#endif",
             "",
         ]
