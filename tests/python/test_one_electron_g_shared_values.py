@@ -173,7 +173,15 @@ def _raw_norm(exponent: float, component: str) -> float:
     return value
 
 
-@pytest.mark.parametrize("angular", list(product(range(5), repeat=2)))
+@pytest.mark.parametrize(
+    "angular,primitive_exponents",
+    [
+        (angular, exponents)
+        for angular in product(range(5), repeat=2)
+        for exponents in ((0.8, 0.35), (0.03, 14.0), (18.0, 0.05))
+        if 4 in angular or exponents == (0.8, 0.35)
+    ],
+)
 @pytest.mark.parametrize(
     "variant",
     [
@@ -187,11 +195,20 @@ def _raw_norm(exponent: float, component: str) -> float:
     ],
 )
 def test_emitted_g_components_against_libcint(
-    emitted_g_values: typing.Any, angular: tuple[int, int], variant: str
+    emitted_g_values: typing.Any,
+    angular: tuple[int, int],
+    primitive_exponents: tuple[float, float],
+    variant: str,
 ) -> None:
-    """Cover all 1,225 Cartesian pairs, not an interpreter of the original DAG."""
+    """Check every pair and both diffuse/tight g orders against Libcint.
+
+    Scalar covariance permutes all axes and may exchange Gaussian centers, so
+    unequal exponents and non-symmetric external positions must remain covered.
+    The unchanged through-f family retains its ordinary-exponent control cases.
+    """
     gto = pytest.importorskip("pyscf.gto")
-    alpha, beta, charge = 0.8, 0.35, 2.3
+    alpha, beta = primitive_exponents
+    charge = 2.3
     a, b, c = _geometry(variant)
     components = tuple(cartesian_components(l) for l in angular)
     mol = gto.M(

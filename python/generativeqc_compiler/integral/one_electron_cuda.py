@@ -3,14 +3,14 @@
 The native contraction layer owns normalized coefficients and output layouts.
 Standalone generation defaults to s/p/d/f; full-DF CUDA builds request g.
 Pair geometry remains hoisted out of the nuclear loop and S/T share scalar
-subexpressions. High-angular alternatives additionally reuse exact ancestors
-before their component switch without evaluating inactive components.
+subexpressions. G-bearing scalars share joint-axis and Gaussian-center orbits,
+then reuse exact ancestors without evaluating inactive components.
 """
 
 import re
 import typing
 from functools import cache
-from itertools import product
+from itertools import permutations, product
 
 from .cuda import CudaEmitter
 from .expr import Expr, Graph, Node
@@ -148,18 +148,142 @@ def _emit_pair_geometry() -> typing.Any:
     return "\n".join(lines + emitter.lines + ["  return pair;", "}"])
 
 
-def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str:
-    """Lower high-angular alternatives with exact, non-speculative shared CSE.
+@cache
+def _canonical_value_component_map(
+    angular: tuple[int, int],
+) -> tuple[tuple[int, int, bool], ...]:
+    """Reach one scalar representative with simultaneous Cartesian permutations.
 
-    Existing Graph value numbering identifies shared ancestors. Only nodes
-    needed by every component in the shell pair are emitted before its switch.
-    Child emitters inherit definitions without evaluating inactive work.
-    The complete <=f artifact remains on its established scalar lowering.
+    Scalars permit all six axis permutations, unlike a fixed-axis derivative.
+    Equal shells additionally permit A/B exchange. Prefer the identity and no
+    exchange on ties so representative entries require no coordinate changes.
     """
+    components = tuple(cartesian_components(value) for value in angular)
+    mapping = []
+    for first, second in product(*components):
+        alternatives = []
+        for exchanged in (False, True) if angular[0] == angular[1] else (False,):
+            pair = (second, first) if exchanged else (first, second)
+            for permutation, axes in enumerate(permutations("xyz")):
+                transformed = tuple(
+                    "".join(
+                        axis * component.count(source)
+                        for axis, source in zip("xyz", axes, strict=True)
+                    )
+                    for component in pair
+                )
+                index = components[0].index(transformed[0]) * len(components[1])
+                index += components[1].index(transformed[1])
+                alternatives.append((index, permutation, exchanged))
+        canonical = min(alternatives, key=lambda entry: (entry[0], entry[2], entry[1]))
+        mapping.append(canonical)
+    return tuple(mapping)
+
+
+def _emit_value_symmetries() -> str:
+    """Emit g-only scalar orbit maps and rounded Cartesian field transforms.
+
+    Radial quantities are already rounded by ``make_pair``. Copy them unchanged
+    and permute or exchange only the coordinate/exponent ownership, just as the
+    gradient emitter's axis covariance does. This is a mathematical symmetry,
+    not a promise of bitwise floating-point equivalence.
+    """
+    _, fields = _pair_geometry_inventory()
+    axis_fields = sorted(
+        {field[:-2] for field in fields if field.endswith(("_x", "_y", "_z"))}
+    )
+    lines = [
+        "struct CanonicalValueComponent { unsigned index, permutation; bool exchanged; };",
+        "__device__ __forceinline__ PairGeometry permute_value_pair(const PairGeometry& pair, unsigned permutation) {",
+        "  PairGeometry result = pair;",
+        "  switch (permutation) {",
+    ]
+    for permutation, axes in enumerate(permutations("xyz")):
+        if not permutation:
+            continue
+        lines.append(f"    case {permutation}U:")
+        for field in axis_fields:
+            for axis, source in zip("xyz", axes, strict=True):
+                if axis != source:
+                    lines.append(
+                        f"      result.{field}_{axis} = pair.{field}_{source};"
+                    )
+        lines.append("      break;")
+    lines += ["  }", "  return result;", "}"]
+    lines += [
+        "__device__ __forceinline__ PairGeometry exchange_value_pair(const PairGeometry& pair) {",
+        "  PairGeometry result = pair;",
+        "  result.alpha = pair.beta; result.beta = pair.alpha;",
+    ]
+    for first, second in (("a", "b"), ("pa", "pb")):
+        for axis in "xyz":
+            lines += [
+                f"  result.{first}_{axis} = pair.{second}_{axis};",
+                f"  result.{second}_{axis} = pair.{first}_{axis};",
+            ]
+    lines += ["  return result;", "}"]
+    lines += [
+        "struct ValueCenter { double x, y, z; };",
+        "__device__ __forceinline__ ValueCenter permute_value_center(double c_x, double c_y, double c_z, unsigned permutation) {",
+        "  switch (permutation) {",
+    ]
+    for permutation, axes in enumerate(permutations("xyz")):
+        if permutation:
+            values = ", ".join("c_" + axis for axis in axes)
+            lines.append(f"    case {permutation}U: return {{{values}}};")
+    lines += ["  }", "  return {c_x, c_y, c_z};", "}"]
+    for angular in ((0, 4), (1, 4), (2, 4), (3, 4), (4, 4)):
+        lines += [
+            f"__device__ __forceinline__ CanonicalValueComponent canonical_value_{angular[0]}{angular[1]}(unsigned component) {{",
+            "  switch (component) {",
+        ]
+        for index, (canonical, permutation, exchanged) in enumerate(
+            _canonical_value_component_map(angular)
+        ):
+            if index != canonical:
+                lines.append(
+                    f"    case {index}U: return {{{canonical}U, {permutation}U, {str(exchanged).lower()}}};"
+                )
+        lines += ["  }", "  return {component, 0U, false};", "}"]
+    return "\n".join(lines)
+
+
+def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str:
+    """Lower scalar g orbits with non-speculative sharing between representatives.
+
+    Joint coordinate/power permutations select one canonical representative;
+    reversing unequal shells additionally transposes the component pair. Keep
+    representatives in a separate noinline body rather than recursive dispatch.
+    Existing Graph value numbering hoists only ancestors needed by every
+    representative. Invalid indices refuse before any transform or arithmetic,
+    and the complete <=f artifact stays on its established scalar lowering.
+    """
+    name = "attraction" if attraction else "overlap_kinetic"
+    result_type, invalid = ("double", "NAN") if attraction else ("ST", "ST{NAN, NAN}")
+    arguments = "const PairGeometry& pair, unsigned component"
+    if attraction:
+        arguments += ", double c_x, double c_y, double c_z"
+    count_first, count_second = (len(cartesian_components(value)) for value in angular)
+    if angular[0] > angular[1]:
+        external = ", c_x, c_y, c_z" if attraction else ""
+        return "\n".join(
+            [
+                f"static __device__ __forceinline__ {result_type} {name}_{angular[0]}{angular[1]}({arguments}) {{",
+                f"  if (component >= {count_first * count_second}U) return {invalid};",
+                f"  const unsigned transposed = (component % {count_second}U) * {count_first}U + component / {count_second}U;",
+                f"  return {name}_{angular[1]}{angular[0]}(exchange_value_pair(pair), transposed{external});",
+                "}",
+            ]
+        )
+    mapping = _canonical_value_component_map(angular)
     target = Graph()
-    roots_by_case = []
+    roots_by_case = {}
     boys_count = sum(angular) + 1
-    for components in product(*(cartesian_components(l) for l in angular)):
+    for index, components in enumerate(
+        product(*(cartesian_components(value) for value in angular))
+    ):
+        if mapping[index][0] != index:
+            continue
         # Keep each scientific DAG's original operand ordering. Global source
         # IDs can reorder n-ary sums/products even before scalar emission.
         graph = Graph()
@@ -182,18 +306,13 @@ def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str
             _, roots = _geometry_boundary(
                 kernel, (overlap.value, kernel.value), target=target
             )
-        roots_by_case.append(roots)
-    name = "attraction" if attraction else "overlap_kinetic"
-    result_type, invalid = ("double", "NAN") if attraction else ("ST", "ST{NAN, NAN}")
-    arguments = "const PairGeometry& pair, unsigned component"
-    if attraction:
-        arguments += ", double c_x, double c_y, double c_z"
+        roots_by_case[index] = roots
     lines = [
-        f"static __device__ __noinline__ {result_type} {name}_{angular[0]}{angular[1]}({arguments}) {{",
-        f"  if (component >= {len(roots_by_case)}U) return {invalid};",
+        f"static __device__ __noinline__ {result_type} {name}_{angular[0]}{angular[1]}_canonical({arguments}) {{",
+        f"  if (component >= {count_first * count_second}U) return {invalid};",
     ]
     common = set.intersection(
-        *(set(target.topological_order(roots)) for roots in roots_by_case)
+        *(set(target.topological_order(roots)) for roots in roots_by_case.values())
     )
     shared = CudaEmitter(target, {})
     if attraction:
@@ -211,7 +330,7 @@ def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str
     lines.extend(shared.lines)
 
     lines.append("  switch (component) {")
-    for index, roots in enumerate(roots_by_case):
+    for index, roots in roots_by_case.items():
         emitter = shared.fork()
         emitter.emit(roots)
         result = (
@@ -224,6 +343,23 @@ def _emit_shared_shell_helper(attraction: bool, angular: tuple[int, int]) -> str
         lines.extend([f"      return {result};", "    }"])
     lines.append("  }")
     lines.extend([f"  return {invalid};", "}"])
+    lines += [
+        f"static __device__ __forceinline__ {result_type} {name}_{angular[0]}{angular[1]}({arguments}) {{",
+        f"  if (component >= {count_first * count_second}U) return {invalid};",
+        f"  const auto canonical = canonical_value_{angular[0]}{angular[1]}(component);",
+        "  auto rotated = permute_value_pair(pair, canonical.permutation);",
+        "  if (canonical.exchanged) rotated = exchange_value_pair(rotated);",
+    ]
+    external = ""
+    if attraction:
+        lines.append(
+            "  const auto center = permute_value_center(c_x, c_y, c_z, canonical.permutation);"
+        )
+        external = ", center.x, center.y, center.z"
+    lines += [
+        f"  return {name}_{angular[0]}{angular[1]}_canonical(rotated, canonical.index{external});",
+        "}",
+    ]
     return "\n".join(lines)
 
 
@@ -442,6 +578,7 @@ def emit_one_electron_values_cuda(
             _emit_support_cuda(2 * maximum, owner=owner),
             _emit_pair_geometry(),
             _emit_component_index(maximum),
+            *([_emit_value_symmetries()] if maximum == 4 else []),
             _emit_operator_helpers(False, maximum),
             _emit_operator_helpers(True, maximum),
             f"}}  // namespace {namespace}",

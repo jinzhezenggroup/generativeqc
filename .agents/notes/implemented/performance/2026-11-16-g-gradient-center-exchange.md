@@ -124,16 +124,25 @@ upstream snapshot only two current source identities and 28 changed-input lists
 change; no historical measurements, summaries or qualification receipts change.
 
 After that refresh, 2,154 focused one-electron/AOT/CI/catalog/profile tests pass
-with 63 host-run skips. One additional native identity/probe-ABI test cannot
-load a checkout library until the matching combined build finishes; preserve
-that gate rather than supplying an old artifact or weakening its source check.
+with 63 host-run skips. The additional native identity/probe-ABI test initially
+waits for a matching library; it subsequently passes against the real combined
+artifact rather than an old library or a weakened source check.
 The pinned type check, all 605 compiler modules, default-promotion inventory and
 applicable full pre-commit hooks pass. The g header and its complete sm120 owner
 command remain byte-identical to the qualified code above in a one-off proof.
-The clean combined `bd9d6cc30` library/CLI rebuild and its independent Direct-HF
-qualification are still in progress at this evidence checkpoint. Do not relabel
-the earlier clean `6bd41de6f` library as that combined artifact. Whole-wheel
-acceptance and current Libxc resource/lifetime acceptance remain unclaimed.
+The clean combined `bd9d6cc30ec70c8fe05fbbc948ef6cd535a69247` library/CLI
+rebuild succeeds with the source clean before and after compilation. Slurm job
+17518 passes all 16 independent Direct-HF endpoints with identical baseline
+iteration/Fock counts. Maximum energy/force errors are 6.22e-14 Hartree /
+8.04e-11 Hartree/Bohr. Its distinct library SHA-256 is
+`6a32b8fae0d791d63159fbb2cd9a5a6184b59e577a87ae130290c5c324b3c004`;
+the artifact, matching ABI test, reports and cache statistics are retained in
+`merged-code-native/`. The 2,999-second build requests four-way compilation and
+records 178 stage hits / 771 misses; broad master/public-header invalidation
+and concurrent isolated owner requests mean this is not a controlled cold-wheel
+speedup measurement. Do not relabel the earlier `6bd41de6f` library as the
+combined artifact. Whole-wheel acceptance and current Libxc resource/lifetime
+acceptance remain unclaimed.
 
 ## Rejected alternatives and boundaries
 
