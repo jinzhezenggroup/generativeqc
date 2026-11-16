@@ -84,6 +84,15 @@ metadata and raster font rendering can differ across Matplotlib versions;
 byte-identical newly rendered PNGs are not an acceptance criterion.
 Output paths inside `benchmarks/results` are rejected before replay begins.
 
+Figure provenance binds the **committed LF SVG bytes** at merge
+`0597b33e1b687d63f87c80584b8343aaef4384b1`. The exact Windows publication-preparation
+CRLF checkout hash is retained separately as `recorded_publication_checkout`.
+The reader accepts only these two explicitly named whole-file identities and
+checks that the recorded CRLF view is reversibly identical to the committed LF
+asset. Arbitrary hash mismatches, edited figures and unrecorded mixed line
+endings remain errors. Scientific receipt bytes and acquisition identities are
+never normalized by this figure-view handling.
+
 ## Measured source and new GPU acquisition
 
 | Cohort | Measured revision | Native source identity |

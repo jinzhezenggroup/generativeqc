@@ -127,7 +127,7 @@
     },
     {
       "path": "provenance.json.xz",
-      "sha256": "c49ec57ba0f98ff443e446d0690ffadc1c57fe0257e31c5f2f6b4473abe72ae9"
+      "sha256": "a38de5df668c82479a4ab1a73f2af784d5c8d1a89d065900675ecc04c34aeca1"
     },
     {
       "path": "measured-source.json.xz",

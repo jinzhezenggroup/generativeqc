@@ -289,6 +289,24 @@ def summary_csv(rows: list[dict]) -> bytes:
     return stream.getvalue().encode()
 
 
+def bound_figure_bytes(raw: bytes, binding: dict) -> bytes:
+    """Accept only the published LF asset or its explicitly retained CRLF view."""
+    if binding.get("schema") != "generativeqc.published-svg-binding.v1":
+        raise ValueError("unsupported published figure binding")
+    if digest(raw) == binding["sha256"] and b"\r" not in raw:
+        return raw
+    historical = binding["recorded_publication_checkout"]
+    if digest(raw) == historical["sha256"] and historical["line_endings"] == "CRLF":
+        published = raw.replace(b"\r\n", b"\n")
+        if (
+            b"\r" not in published
+            and digest(published) == binding["sha256"]
+            and published.replace(b"\n", b"\r\n") == raw
+        ):
+            return published
+    raise ValueError("associated figure bytes changed")
+
+
 def compare_svg(rows: list[dict], raw: bytes) -> dict:
     """Read plotted coordinates back from SVG, independently of rendering code."""
     namespace = "{http://www.w3.org/2000/svg}"
@@ -502,9 +520,8 @@ def verify(directory: Path = DEFAULT) -> dict:
         if wins != {p: provenance["expected"][p + "_wins"] for p in ("cold", "warm")}:
             raise ValueError("timing summary differs")
         figure = ROOT / provenance["figure"]["path"]
-        if digest(figure.read_bytes()) != provenance["figure"]["sha256"]:
-            raise ValueError("associated figure bytes changed")
-        plotted = compare_svg(rows, figure.read_bytes())
+        published_figure = bound_figure_bytes(figure.read_bytes(), provenance["figure"])
+        plotted = compare_svg(rows, published_figure)
         result[device] = {
             "qualification": checks,
             "inputs": inputs,

@@ -46,8 +46,8 @@
     {
       "path": "provenance.json.xz",
       "role": "reproduction",
-      "bytes": 5140,
-      "sha256": "234ed7308eb04adbfdc0ff877aa581baeba6e4403e542e036045274ee9705e49"
+      "bytes": 5332,
+      "sha256": "4f13dcaf7ec64ae64ab1a16f9542e05588d1a2b21577a92d3fd5df53bcc8e76b"
     },
     {
       "path": "measured-source.json.xz",
@@ -59,7 +59,7 @@
       "path": "evidence.json",
       "role": "evidence",
       "bytes": 4702,
-      "sha256": "44538b1b67b716ec07a34371e5d642b5100d2a294eb136feaaef7709a61a9bef"
+      "sha256": "ecdc8732fdcdec4e92a12ab55c5eedf65a251f233a55c327b9d7b963b9f31be9"
     }
   ]
 }

@@ -280,7 +280,7 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-95,375,141 bytes. This includes an exact 2,170,661-byte addition for
+95,376,107 bytes. This includes an exact 2,171,627-byte addition for
 the [two approved HF/DFT figure datasets](../../benchmarks/results/paper-hfdft-cold3-20261115/README.md),
 including their original measurements, readable tables and source reconstruction. Many individually sub-limit files cannot
 bypass this aggregate guard;

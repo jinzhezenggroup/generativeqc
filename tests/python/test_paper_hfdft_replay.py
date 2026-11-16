@@ -199,3 +199,57 @@ def test_svg_values_are_independently_checked() -> None:
     assert tampered != raw
     with pytest.raises(ValueError, match="SVG values"):
         replay.compare_svg(rows, tampered)
+
+
+def test_only_explicit_svg_byte_representations_are_accepted() -> None:
+    published = b"<svg>\n  <g/>\n</svg>\n"
+    checkout = published.replace(b"\n", b"\r\n")
+    binding = {
+        "schema": "generativeqc.published-svg-binding.v1",
+        "sha256": replay.digest(published),
+        "recorded_publication_checkout": {
+            "sha256": replay.digest(checkout),
+            "line_endings": "CRLF",
+        },
+    }
+    assert replay.bound_figure_bytes(published, binding) == published
+    assert replay.bound_figure_bytes(checkout, binding) == published
+    for unexpected in (
+        published.replace(b"\n", b"\r\n", 1),
+        checkout.replace(b"<g/>", b"<path/>"),
+    ):
+        with pytest.raises(ValueError, match="figure bytes"):
+            replay.bound_figure_bytes(unexpected, binding)
+
+
+@pytest.mark.parametrize("line_endings", ["LF", "CRLF"])
+def test_actual_cohorts_replay_with_published_svg_serialization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, line_endings: str
+) -> None:
+    """Exercise the documented real-data path, not just synthetic loader records."""
+    root, dataset = replay.ROOT, replay.DEFAULT
+    monkeypatch.syspath_prepend(str(root / "python"))
+    reference = Path("benchmarks/results/readme-refresh-20261026/oracles.json.xz")
+    (tmp_path / reference).parent.mkdir(parents=True)
+    (tmp_path / reference).write_bytes((root / reference).read_bytes())
+    for device in ("h100", "rtx5090"):
+        provenance = replay.read_xz(
+            (dataset / device / "provenance.json.xz").read_bytes()
+        )
+        path = Path(provenance["figure"]["path"])
+        # Construct a canonical committed-file fixture independently of the loader.
+        published = (root / path).read_bytes().replace(b"\r\n", b"\n")
+        assert replay.digest(published) == provenance["figure"]["sha256"]
+        contents = (
+            published if line_endings == "LF" else published.replace(b"\n", b"\r\n")
+        )
+        (tmp_path / path).parent.mkdir(exist_ok=True)
+        (tmp_path / path).write_bytes(contents)
+    monkeypatch.setattr(replay, "ROOT", tmp_path)
+    result = replay.verify(dataset)
+    assert result["h100"]["wins"] == {"cold": 63, "warm": 62}
+    assert result["rtx5090"]["wins"] == {"cold": 64, "warm": 64}
+    for cohort in result.values():
+        assert len(cohort["records"]) == 384
+        assert cohort["numeric_counts"] == {"qualified": 348, "failed": 36}
+        assert cohort["plot_replay"]["range_endpoints_checked"] == 512
