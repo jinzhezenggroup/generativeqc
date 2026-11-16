@@ -67,6 +67,15 @@ Local evidence and reproducible drivers are retained under
   The objects are 10,405,048 and 15,436,960 bytes. The cache server's reaped-worker
   maximum RSS is 3,625,192 KiB. Its timing/resource scope is these two owners,
   not a cold wheel build.
+- `compiled-comparison.json`: both original owners also finish, with the same
+  architecture/flags and zero hits / sixteen cacheable misses. Their combined
+  object bytes fall from 78,145,944 to 25,842,008; reaped-worker maximum RSS falls
+  from 11,072,680 to 3,625,192 KiB (10.56 to 3.46 GiB). The sum of observed owner
+  compile times is 2,100.78 versus 631.32 seconds. These requests overlap other
+  qualification work on the host: this is not an isolated timing experiment,
+  whole-wheel percentage speedup or CUDA-method performance claim. All 60 common
+  device-function resource records across the three architectures retain their
+  register, stack, shared and local byte counts.
 - `raw/oracle-report.json`: Slurm job 17504 on an RTX 5090 executes the actual
   scoped value and gradient headers, 22,994 primitive records per launch, with
   64/128/256 threads. All 498 independently Libcint-recontracted Cartesian and
@@ -83,6 +92,13 @@ Local evidence and reproducible drivers are retained under
   Compared with the frozen parent, all iteration and Fock-build counts match;
   maximum energy/force errors are 6.22e-14 / 8.04e-11. This is a complete native
   product regression, not a COSX-method or installed-wheel gate.
+- The exact code commit `405d789c47bee429a6b560320292f32697cf2e0d` is then rebuilt
+  from a clean source tree. Slurm job 17507 repeats all 16 complete independent
+  Direct-HF endpoints and preserves all parent iteration/Fock-build counts;
+  maximum energy/force errors are 6.40e-14 / 8.04e-11. The resulting library SHA
+  is `42609686426e4c7f1659f9c80e8721ffc4cb03aa540fe11194e1cb443a55e2a6`.
+  `final/` retains its source identity, cache statistics, artifact identity and
+  endpoint report. Later changes to this note do not change that qualified code.
 - `catalog-preservation.json`: refreshing dependency audit inputs preserves the
   Libxc summary, qualified endpoints, historical receipts and transition list.
   It does not relabel stale evidence as current acceptance.
