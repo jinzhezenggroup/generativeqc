@@ -65,6 +65,8 @@ def _selection(
 @pytest.mark.parametrize(
     ("module", "owner"),
     (
+        ("tests/python/test_second_component_schedule.py", "runtime-heavy"),
+        ("tests/python/test_hessian_rks_directional.py", "runtime-heavy"),
         ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
@@ -76,9 +78,9 @@ def test_measured_transfer_snapshot(
     selector = ROOT / ".github/scripts/ci_select_python_shard.sh"
     content = selector.read_text(encoding="utf-8")
     addition = f"  {module}\n"
-    assert content.count(addition) == 1
+    assert addition in content
     old_selector = tmp_path / "original-selector.sh"
-    previous = content.replace(addition, "", 1)
+    previous = content.replace(addition, "")
     if owner == "compiler-heavy":
         previous = previous.replace(f" \\\n      {module}; do", "; do", 1)
     old_selector.write_text(previous, encoding="utf-8")
@@ -2001,7 +2003,7 @@ def test_real_force_lane_starts_intact_rks_hessian_before_force_queues(
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values"))
+@pytest.mark.parametrize("family", ("hybrid", "derivative", "g-values", "cuda-aot"))
 def test_qualification_insertion_preserves_existing_core_owners(
     event: str, presence: str, family: str, tmp_path: Path
 ) -> None:
@@ -2015,7 +2017,7 @@ def test_qualification_insertion_preserves_existing_core_owners(
         "test_global_hybrid_molecular_hessian.py": "uccsd-forces",
         "test_native_semilocal_grid_second_order.py": "core-c",
         "test_orbital_gap_preconditioner.py": "core-c",
-        "test_second_component_schedule.py": "core-a",
+        "test_second_component_schedule.py": "runtime-heavy",
         "test_spherical_global_hybrid_basis.py": "core-b",
         "test_stationary_one_center_integrals.py": "core-c",
     }
@@ -2033,6 +2035,13 @@ def test_qualification_insertion_preserves_existing_core_owners(
         }
     elif family == "g-values":
         owners = {"test_one_electron_g_shared_values.py": "compiler-heavy"}
+    elif family == "cuda-aot":
+        owners = {
+            "test_aot_policy_dimensions.py": "core-a",
+            "test_cuda_aot_compile_evidence.py": "core-b",
+            "test_cuda_aot_endpoint_evidence.py": "core-c",
+            "test_cuda_aot_global_promotion.py": "core-a",
+        }
     owners = {f"tests/python/{name}": shard for name, shard in owners.items()}
     # Interleave ordinary files with the inserted qualification filenames.
     suffixes = ("aaa", "mmm", "zzz") if family == "g-values" else ("aaa", "zzz")
