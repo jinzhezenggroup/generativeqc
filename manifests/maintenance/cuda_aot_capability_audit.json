@@ -1,4 +1,154 @@
 {
+  "compile_evidence": {
+    "native_source_identity": "e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7",
+    "path": "benchmarks/results/cuda-aot-policy-20261115/sm80-sm90-compile.json.xz",
+    "qualification_boundary": "Observed compiler resources are not admission or device/endpoint qualification; exact derivative packages and optional competitors are not covered.",
+    "scope": "audit-only primary full-range Fock/force and declared mixed/streaming wrappers; no optional competitors or exact SR/LR packages; no device execution or endpoint qualification",
+    "sha256": "3010edde02e9408def5fdd91099b9f4483332560fa7f7032099a81bf80754b73",
+    "source_commit": "3553cbf6d0bea1c00fb194365046778c5cd829d4",
+    "status": "historical-source-only",
+    "translation_units": 88
+  },
+  "endpoint_smoke_evidence": {
+    "compute_capability": [
+      12,
+      0
+    ],
+    "device_name": "NVIDIA GeForce RTX 5090",
+    "device_uuid": "45f177f933ac0e4ef4732beeaf6d413d",
+    "library_sha256": {
+      "auto": "4f649768fbd172dd5861e9d73fc72655c47804ee7fa03e49633d2e29e27b1e8a",
+      "portable": "a82103618a41757a376f4900cc02ad914916a7bf615d9676db017987da6be312"
+    },
+    "native_source_identity": "e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7",
+    "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-endpoint-smoke.json.xz",
+    "qualification_boundary": "Diagnostic water/RHF route smoke only; no per-shell numerical coverage, no valid quartet counters, no default promotion or performance ranking. Failed stock gates remain failed.",
+    "results": {
+      "def2-svp": {
+        "auto": {
+          "phases": {
+            "cold": {
+              "maximum_energy_error": 1.3358203432289883e-12,
+              "maximum_force_error": 5.610525395140231e-08,
+              "maximum_translation_error": 7.151397529714387e-15,
+              "status": "passed"
+            },
+            "moved": {
+              "maximum_energy_error": 4.121147867408581e-13,
+              "maximum_force_error": 4.3897755546903894e-08,
+              "maximum_translation_error": 1.3124917819240522e-14,
+              "status": "passed"
+            },
+            "moved_warm": {
+              "maximum_energy_error": 4.121147867408581e-13,
+              "maximum_force_error": 4.389775410361396e-08,
+              "maximum_translation_error": 1.268082860939046e-14,
+              "status": "passed"
+            },
+            "warm": {
+              "maximum_energy_error": 1.3073986337985843e-12,
+              "maximum_force_error": 5.610525306322389e-08,
+              "maximum_translation_error": 4.8199291780015585e-15,
+              "status": "passed"
+            }
+          },
+          "processes": 4
+        },
+        "portable": {
+          "phases": {
+            "cold": {
+              "maximum_energy_error": 1.3216094885137863e-12,
+              "maximum_force_error": 5.6105291636535104e-08,
+              "maximum_translation_error": 6.944098074335159e-15,
+              "status": "passed"
+            },
+            "moved": {
+              "maximum_energy_error": 3.979039320256561e-13,
+              "maximum_force_error": 4.389777723007998e-08,
+              "maximum_translation_error": 7.920747391310101e-15,
+              "status": "passed"
+            },
+            "moved_warm": {
+              "maximum_energy_error": 3.694822225952521e-13,
+              "maximum_force_error": 4.389777685017554e-08,
+              "maximum_translation_error": 7.147060721024445e-15,
+              "status": "passed"
+            },
+            "warm": {
+              "maximum_energy_error": 1.3358203432289883e-12,
+              "maximum_force_error": 5.6105288527910635e-08,
+              "maximum_translation_error": 7.474056096246073e-15,
+              "status": "passed"
+            }
+          },
+          "processes": 4
+        }
+      },
+      "def2-tzvp": {
+        "auto": {
+          "phases": {
+            "cold": {
+              "maximum_energy_error": 1.2818190953112207e-11,
+              "maximum_force_error": 6.758009117521779e-07,
+              "maximum_translation_error": 2.169358442882796e-14,
+              "status": "failed-scientific-gate"
+            },
+            "moved": {
+              "maximum_energy_error": 3.552713678800501e-13,
+              "maximum_force_error": 4.484141085823925e-08,
+              "maximum_translation_error": 2.2855849157732422e-14,
+              "status": "passed"
+            },
+            "moved_warm": {
+              "maximum_energy_error": 3.552713678800501e-13,
+              "maximum_force_error": 4.484141083915729e-08,
+              "maximum_translation_error": 1.751420189433084e-14,
+              "status": "passed"
+            },
+            "warm": {
+              "maximum_energy_error": 1.2789769243681803e-11,
+              "maximum_force_error": 6.758009133620013e-07,
+              "maximum_translation_error": 1.8579755789449592e-14,
+              "status": "failed-scientific-gate"
+            }
+          },
+          "processes": 4
+        },
+        "portable": {
+          "phases": {
+            "cold": {
+              "maximum_energy_error": 1.27613475342514e-11,
+              "maximum_force_error": 6.758010325652597e-07,
+              "maximum_translation_error": 2.906095503130146e-14,
+              "status": "failed-scientific-gate"
+            },
+            "moved": {
+              "maximum_energy_error": 3.410605131648481e-13,
+              "maximum_force_error": 4.484141956210587e-08,
+              "maximum_translation_error": 9.664578165535787e-15,
+              "status": "passed"
+            },
+            "moved_warm": {
+              "maximum_energy_error": 3.126388037344441e-13,
+              "maximum_force_error": 4.484141835582253e-08,
+              "maximum_translation_error": 1.2422354811469916e-14,
+              "status": "passed"
+            },
+            "warm": {
+              "maximum_energy_error": 1.2789769243681803e-11,
+              "maximum_force_error": 6.758010325270958e-07,
+              "maximum_translation_error": 3.1357728913494753e-14,
+              "status": "failed-scientific-gate"
+            }
+          },
+          "processes": 4
+        }
+      }
+    },
+    "sha256": "cd92c7543819ca7c4bf0336fe52ad702ccc6c9c86e15a9b2ff977f5a10dd714a",
+    "source_commit": "3553cbf6d0bea1c00fb194365046778c5cd829d4",
+    "source_status": "historical-source-only"
+  },
   "historical_context": [
     {
       "authority": "historical-source-bound-only-not-current-qualification",
@@ -5033,6 +5183,150 @@
       }
     }
   ],
+  "same_binary_card_comparison": {
+    "primary_device_uuid": "45f177f933ac0e4ef4732beeaf6d413d",
+    "qualification_boundary": "Same-binary, same-SM diagnostic only. Different host/runtime environments preclude isolating GPU-only performance; neither card supplies SM80/SM90 execution or global-default acceptance.",
+    "secondary": {
+      "compute_capability": [
+        12,
+        0
+      ],
+      "device_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "device_uuid": "54595246dbdca633dc387bd8eea3831a",
+      "library_sha256": {
+        "auto": "4f649768fbd172dd5861e9d73fc72655c47804ee7fa03e49633d2e29e27b1e8a",
+        "portable": "a82103618a41757a376f4900cc02ad914916a7bf615d9676db017987da6be312"
+      },
+      "native_source_identity": "e247af213bad1a576a3cac67be90091694b41d8e719573bfcc4eb2fc705113c7",
+      "path": "benchmarks/results/cuda-aot-policy-20261115/sm120-pro6000-endpoint-smoke.json.xz",
+      "qualification_boundary": "Diagnostic water/RHF route smoke only; no per-shell numerical coverage, no valid quartet counters, no default promotion or performance ranking. Failed stock gates remain failed.",
+      "results": {
+        "def2-svp": {
+          "auto": {
+            "phases": {
+              "cold": {
+                "maximum_energy_error": 1.3358203432289883e-12,
+                "maximum_force_error": 5.610526323737708e-08,
+                "maximum_translation_error": 1.1468256899682672e-14,
+                "status": "passed"
+              },
+              "moved": {
+                "maximum_energy_error": 4.831690603168681e-13,
+                "maximum_force_error": 4.389775666840262e-08,
+                "maximum_translation_error": 1.472866967278108e-14,
+                "status": "passed"
+              },
+              "moved_warm": {
+                "maximum_energy_error": 4.831690603168681e-13,
+                "maximum_force_error": 4.3897756890447226e-08,
+                "maximum_translation_error": 1.3136193521834372e-14,
+                "status": "passed"
+              },
+              "warm": {
+                "maximum_energy_error": 1.3216094885137863e-12,
+                "maximum_force_error": 5.610526234919866e-08,
+                "maximum_translation_error": 1.124621229475764e-14,
+                "status": "passed"
+              }
+            },
+            "processes": 4
+          },
+          "portable": {
+            "phases": {
+              "cold": {
+                "maximum_energy_error": 1.3073986337985843e-12,
+                "maximum_force_error": 5.6105293452790583e-08,
+                "maximum_translation_error": 1.0705845931990865e-14,
+                "status": "passed"
+              },
+              "moved": {
+                "maximum_energy_error": 4.547473508864641e-13,
+                "maximum_force_error": 4.389777841142667e-08,
+                "maximum_translation_error": 7.276731300853712e-15,
+                "status": "passed"
+              },
+              "moved_warm": {
+                "maximum_energy_error": 4.547473508864641e-13,
+                "maximum_force_error": 4.389777955374208e-08,
+                "maximum_translation_error": 1.2806596061398778e-14,
+                "status": "passed"
+              },
+              "warm": {
+                "maximum_energy_error": 1.2931877790833823e-12,
+                "maximum_force_error": 5.610529237379258e-08,
+                "maximum_translation_error": 1.331140059290803e-14,
+                "status": "passed"
+              }
+            },
+            "processes": 4
+          }
+        },
+        "def2-tzvp": {
+          "auto": {
+            "phases": {
+              "cold": {
+                "maximum_energy_error": 1.283240180782741e-11,
+                "maximum_force_error": 6.758009257201714e-07,
+                "maximum_translation_error": 2.298682078016867e-14,
+                "status": "failed-scientific-gate"
+              },
+              "moved": {
+                "maximum_energy_error": 3.979039320256561e-13,
+                "maximum_force_error": 4.484141062979785e-08,
+                "maximum_translation_error": 2.842431151561797e-14,
+                "status": "passed"
+              },
+              "moved_warm": {
+                "maximum_energy_error": 3.836930773104541e-13,
+                "maximum_force_error": 4.484141052994283e-08,
+                "maximum_translation_error": 2.897205045315765e-14,
+                "status": "passed"
+              },
+              "warm": {
+                "maximum_energy_error": 1.2818190953112207e-11,
+                "maximum_force_error": 6.758009214596905e-07,
+                "maximum_translation_error": 1.9348238289307318e-14,
+                "status": "failed-scientific-gate"
+              }
+            },
+            "processes": 4
+          },
+          "portable": {
+            "phases": {
+              "cold": {
+                "maximum_energy_error": 1.2846612662542611e-11,
+                "maximum_force_error": 6.758010098403822e-07,
+                "maximum_translation_error": 2.1087298573974067e-14,
+                "status": "failed-scientific-gate"
+              },
+              "moved": {
+                "maximum_energy_error": 3.410605131648481e-13,
+                "maximum_force_error": 4.4841419245952516e-08,
+                "maximum_translation_error": 1.9091065533993756e-14,
+                "status": "passed"
+              },
+              "moved_warm": {
+                "maximum_energy_error": 3.410605131648481e-13,
+                "maximum_force_error": 4.484141927815332e-08,
+                "maximum_translation_error": 1.881177505436149e-14,
+                "status": "passed"
+              },
+              "warm": {
+                "maximum_energy_error": 1.2860823517257813e-11,
+                "maximum_force_error": 6.758010090528177e-07,
+                "maximum_translation_error": 1.7823416353923704e-14,
+                "status": "failed-scientific-gate"
+              }
+            },
+            "processes": 4
+          }
+        }
+      },
+      "sha256": "b2209aea061bf8a321dc8df6beb7703adb7807c0ed151efdd76991d98197a721",
+      "source_commit": "3553cbf6d0bea1c00fb194365046778c5cd829d4",
+      "source_status": "historical-source-only"
+    }
+  },
   "schema": "generativeqc.cuda-aot-capability-audit",
   "schema_version": 1,
   "shared_primary_force_contract": {

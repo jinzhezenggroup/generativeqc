@@ -82,6 +82,22 @@ The existing strict checker accepts the measured ledger after updating only the
 manifest SHA. Do not remove the manifest integrity check, reset resources without
 measurement, or claim numerical/default qualification from this metadata update.
 
+## Global-disable integration follow-up
+
+Separating portable metadata from packaging exposed a caller that had used
+`--profile portable` as the global derivative-AOT off switch. That is insufficient
+for a valid custom portable manifest with `compile_derivative_shells=true`.
+The repair at `038aedeccf3964b58acec499cc9684f423a7a93f` carries an explicit
+disabled-packages request from CMake to the generator, preserving the global
+build contract without recoupling classification and capability.
+
+Finite n1 job 17476 exercises actual CMake ON/OFF generation for SM80/SM90/SM120
+under that custom opt-in and independently checks the resulting inventories.
+It does not execute or qualify those derivative packages. New builds and
+endpoint receipts retain the new source identity; the preceding measurements
+remain historical. See the retained CUDA AOT evidence README for the receipts
+and unchanged failed stock-force gates.
+
 ## Revisit when
 
 New compiled routes need independently modeled packaging/admission, or a proposed
