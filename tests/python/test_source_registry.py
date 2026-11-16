@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import http.client
 import io
 import json
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -158,8 +161,23 @@ def test_registry_derived_manifests_are_byte_stable() -> None:
         ) == source_registry.render_derived_manifest(registry, spec)
 
 
+@pytest.mark.parametrize(
+    "transient_failure",
+    [
+        None,
+        http.client.IncompleteRead(b"alpha", 12),
+        TimeoutError("transfer timed out"),
+        ConnectionResetError("connection reset"),
+        urllib.error.HTTPError("https://example.invalid", 503, "unavailable", {}, None),
+        urllib.error.HTTPError(
+            "https://example.invalid", 429, "rate limited", {}, None
+        ),
+    ],
+)
 def test_sync_is_pinned_and_normalizes_before_writing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    transient_failure: Exception | None,
 ) -> None:
     upstream = b"alpha  \n beta\t\n"
     normalized = b"alpha\n beta\n"
@@ -190,15 +208,72 @@ def test_sync_is_pinned_and_normalizes_before_writing(
     registry_path = tmp_path / "manifest.json"
     registry_path.write_text(json.dumps(registry))
     monkeypatch.setattr(source_registry, "ROOT", tmp_path)
+    responses = []
+    failed_response = mock.Mock()
+    if transient_failure is not None:
+        failed_response.read.side_effect = transient_failure
+        responses.append(contextlib.closing(failed_response))
+    responses.append(contextlib.closing(io.BytesIO(upstream)))
+    monkeypatch.setattr(source_registry.time, "sleep", lambda delay: None)
     monkeypatch.setattr(
         source_registry.urllib.request,
         "urlopen",
-        lambda request, timeout: contextlib.closing(io.BytesIO(upstream)),
+        mock.Mock(side_effect=responses),
     )
     written = source_registry.sync_source("sample", registry_path)
     assert written == [tmp_path / "upstream/sample/data.txt"]
     assert written[0].read_bytes() == normalized
     assert source_registry.verify(registry_path)["local_files"] == 1
+    if transient_failure is not None:
+        assert failed_response.close.called
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        http.client.IncompleteRead(b"partial", 532618),
+        TimeoutError("transfer timed out"),
+        urllib.error.HTTPError("https://example.invalid", 503, "unavailable", {}, None),
+    ],
+)
+def test_fetch_has_bounded_retries_and_preserves_failure(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    fetch = mock.Mock(side_effect=failure)
+    delays = []
+    monkeypatch.setattr(source_registry.urllib.request, "urlopen", fetch)
+    monkeypatch.setattr(source_registry.time, "sleep", delays.append)
+
+    with pytest.raises(
+        source_registry.SourceRegistryError, match="pinned source"
+    ) as error:
+        source_registry._fetch("https://example.invalid/data", label="pinned source")
+
+    assert error.value.__cause__ is failure
+    assert 1 < fetch.call_count <= 3
+    assert 0 < sum(delays) <= 3
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_fetch_does_not_retry_permanent_http_errors(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    failure = urllib.error.HTTPError(
+        "https://example.invalid", status, "refused", {}, None
+    )
+    monkeypatch.setattr(
+        source_registry.urllib.request, "urlopen", mock.Mock(side_effect=failure)
+    )
+    monkeypatch.setattr(
+        source_registry.time,
+        "sleep",
+        lambda delay: pytest.fail("permanent HTTP failures must not be retried"),
+    )
+
+    with pytest.raises(source_registry.SourceRegistryError) as error:
+        source_registry._fetch("https://example.invalid/data", label="pinned source")
+
+    assert error.value.__cause__ is failure
 
 
 def test_sync_refuses_unexpected_upstream_bytes(
