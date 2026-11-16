@@ -101,6 +101,8 @@ int profile_prepare(const char* path, int dimension, int systems, int spins, int
     facts[6] = previous && same_topology(*previous, host);
     facts[7] = host.matrix_profile.has_value();
     facts[8] = admitted.requires_provider_context();
+    facts[9] = host.persistent_force_angular_order_count;
+    facts[10] = host.persistent_fock_angular_order_count;
     previous = std::move(host);
     return 0;
   } catch (...) {

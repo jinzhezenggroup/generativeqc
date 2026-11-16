@@ -1,0 +1,28 @@
+JobId=2040 JobName=bash
+   UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A
+   Priority=4294899930 Nice=0 Account=(null) QOS=(null)
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0
+   DerivedExitCode=0:0
+   RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A
+   SubmitTime=2026-11-14T18:01:20 EligibleTime=2026-11-14T18:01:20
+   AccrueTime=Unknown
+   StartTime=2026-11-14T18:01:20 EndTime=2026-11-14T18:21:20 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-11-14T18:01:20 Scheduler=Main
+   Partition=main AllocNode:Sid=node5:3088239
+   ReqNodeList=node5 ExcNodeList=(null)
+   NodeList=node5
+   BatchHost=node5
+   NumNodes=1 NumCPUs=48 NumTasks=1 CPUs/Task=2 ReqB:S:C:T=0:0:*:*
+   TRES=cpu=48,mem=240000M,node=1,billing=48
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   JOB_GRES=gpu:5090:1
+     Nodes=node5 CPU_IDs=0-47 Mem=240000 GRES=gpu:5090:1(IDX:0)
+   MinCPUsNode=2 MinMemoryCPU=5000M MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=NO Contiguous=0 Licenses=(null) Network=(null)
+   Command=bash
+   WorkDir=/home/jzzeng
+   Power=
+   TresPerNode=gres:gpu:5090:1
+   MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT

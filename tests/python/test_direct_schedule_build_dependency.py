@@ -86,3 +86,62 @@ target_sources(generativeqc_direct_native PRIVATE probe.cpp)
         timeout=60,
         env=environment,
     )
+
+
+def test_cpu_profile_consumer_generates_schedule(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Compile the real CPU profile consumer using the host codegen registration."""
+    (tmp_path / "probe.cpp").write_text("int probe;\n")
+    (tmp_path / "CMakeLists.txt").write_text(f'''
+cmake_minimum_required(VERSION 3.24)
+project(HostScheduleDependency LANGUAGES CXX)
+set(Python3_EXECUTABLE "{sys.executable}")
+include("{ROOT / "cmake/GenerativeQCGenerated.cmake"}")
+include("{ROOT / "cmake/GenerativeQCGeneratedSources.cmake"}")
+add_library(probe STATIC probe.cpp)
+set(CMAKE_CURRENT_SOURCE_DIR "{ROOT}")
+set(PROJECT_SOURCE_DIR "{ROOT}")
+set(GENERATIVEQC_ENABLE_CUDA OFF)
+generativeqc_register_host_generated_sources(probe)
+''')
+    environment = {**os.environ, "PYTHONPATH": str(ROOT / "python")}
+    for command in (
+        [
+            "cmake",
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(tmp_path / "build"),
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={required_native_cxx.cache}",
+            f"-DCMAKE_CXX_COMPILER={required_native_cxx.compiler}",
+        ],
+        [
+            "cmake",
+            "--build",
+            str(tmp_path / "build"),
+            "--target",
+            "generativeqc_direct_resident_psss_schedule_codegen",
+        ],
+    ):
+        subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=environment,
+        )
+    required_native_cxx.compile_object(
+        ROOT / "src/scf/cuda/hf_matrix_profile.cpp",
+        tmp_path / "profile.o",
+        args=[
+            "-std=c++20",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+            "-I",
+            str(tmp_path / "build/generated"),
+        ],
+    )
