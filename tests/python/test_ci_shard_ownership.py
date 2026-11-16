@@ -67,6 +67,7 @@ def _selection(
     (
         ("tests/python/test_second_component_schedule.py", "runtime-heavy"),
         ("tests/python/test_hessian_rks_directional.py", "runtime-heavy"),
+        ("tests/python/test_d3_public_second_order.py", "runtime-heavy"),
         ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
     ),
@@ -1688,7 +1689,8 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
                 "tests/python/test_ecp_stuttgart_dft.py",
             ]
         elif shard == "runtime-heavy":
-            assert selected[:4] == [
+            assert selected[:5] == [
+                "tests/python/test_d3_public_second_order.py",
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
                 "tests/python/test_correlation_convergence.py",
@@ -1790,6 +1792,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
                 "test_uccsd_physical_response.py",
             ],
             "runtime": [
+                "test_d3_public_second_order.py",
                 "test_uccsd_triples_response.py",
                 "test_native_stationary_phased_budget.py",
                 "test_correlation_convergence.py",
@@ -1887,7 +1890,7 @@ def test_real_loadfile_prioritizes_whole_files_without_changing_nodes_or_fixture
         for path in [*tmp_path.glob("gw*.jsonl"), *tmp_path.glob("fixtures-*.txt")]:
             path.unlink()
     assert inventories[0] == inventories[1]
-    assert first_files == [set(ordinary[:4]), set(priority)]
+    assert first_files == [set(ordinary[:4]), set(priority[:4])]
 
 
 @pytest.mark.parametrize(
