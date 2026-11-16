@@ -1,6 +1,6 @@
 # Decision: share scalar g values across coordinate and center orbits
 
-Status: implemented; final clean native and whole-wheel acceptance pending
+Status: implemented; complete whole-wheel acceptance pending
 Date: 2026-11-16
 
 ## Problem
@@ -98,15 +98,28 @@ Complete multiarchitecture object SHA-256:
 The production one-electron/AOT/CI/catalog-focused suite passes 2,234 tests
 with 63 host-run skips. The pinned `ty==0.0.82` check, all 605 compiler modules,
 default-promotion inventory and ordinary catalog integrity also pass. The
-separate matching-library profile/ABI gate awaits the new clean native artifact;
-do not use the older library to satisfy its source-identity contract.
+separate matching-library profile/ABI module subsequently passes all 47 cases
+against the new clean native artifact, not an older source identity.
 
 The clean post-master-merge `bd9d6cc30` library, ABI and 16 independent Direct-HF
 endpoints are qualified separately in the preceding gradient note. They precede
-this value change and must not be relabeled as its final library. At this
-initial checkpoint the final clean matching value-change library/CLI and
-Direct-HF gate remain pending, as do manylinux build/link/repair and installed
-wheel acceptance. Current Libxc resource/lifetime acceptance is unclaimed;
+this value change and must not be relabeled as its final library. A subsequent
+clean complete sm120 Release library/CLI build at code commit
+`f6159c523f7e7cd56de2b092dc22f2fdba045de6` passes with portable automatic XC
+AOT and the source clean before and after compilation. Slurm job 17523 passes
+all 16 independent Direct-HF RHF/UHF, Cartesian/spherical and
+cold/warm/moved/restored endpoints, preserving all baseline iteration/Fock
+counts. Maximum energy/force errors are 6.40e-14 Hartree / 8.04e-11
+Hartree/Bohr. Its library SHA-256 is
+`b8d8ba567b0bb74d702beefea1872c425c76dcb09052311798b4dab0b7dde7d3`.
+The actual artifact, source/ABI proof and reports are frozen in
+`clean-code-native/`. The 639-second incremental build records 16 CUBIN hits
+and 70 stage misses; this is not a cold-wheel speedup measurement. These
+Direct-HF endpoints retain the existing through-f method domain; changed g
+arithmetic is qualified by the complete S/Hcore/T/V owner above.
+
+Manylinux build/link/repair and installed-wheel acceptance remain unverified.
+Current Libxc resource/lifetime acceptance is unclaimed;
 official catalog refresh changes only two current source identities, not
 historical measurements or receipts.
 
