@@ -48,6 +48,13 @@ def replay(inputs: dict, monkeypatch: pytest.MonkeyPatch, changes: dict) -> dict
         "src/cc/new_solver.cpp",
         "src/posthf/mp2_energy.cpp",
         "src/integrals/AGENTS.md",
+        "tools/generate_df_ao_native.py",
+        "tools/generate_df_ccsd_core.py",
+        "tools/generate_df_ccsd_hoisted.py",
+        "tools/generate_df_ccsd_native.py",
+        "tools/generate_df_ccsd_spectator_pairs.py",
+        "tools/generate_rccsd_native.py",
+        "tools/generate_uccsd_native.py",
     ],
 )
 def test_unrelated_changes_retain_all_measured_contexts(
@@ -63,7 +70,11 @@ def test_unrelated_changes_retain_all_measured_contexts(
 
 @pytest.mark.parametrize(
     "path",
-    ["src/dft/new_xc_kernel.cu", "python/generativeqc_compiler/xc/spatial_cuda.py"],
+    [
+        "src/dft/new_xc_kernel.cu",
+        "python/generativeqc_compiler/xc/spatial_cuda.py",
+        "python/generativeqc_compiler/integral/weighted_eri_cuda.py",
+    ],
 )
 def test_cuda_kernel_retains_cpu_qualification(
     inputs: dict, monkeypatch: pytest.MonkeyPatch, path: str
@@ -474,3 +485,17 @@ def test_unmeasured_shared_build_generators_require_scoped_revalidation(
     # Once actually measured, subsequent scientific edits also expire reuse.
     changed = {**live, path: "0" * 64}
     assert changed_inputs(live, changed, backend=backend, product=product) == [path]
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("product", ["compiled", "energy", "forces"])
+def test_unknown_df_generator_is_not_exempted_by_posthf_ownership(
+    backend: str, product: str
+) -> None:
+    path = "tools/generate_df_new_shared_owner.py"
+    assert changed_inputs({}, {path: "0" * 64}, backend=backend, product=product) == [
+        path
+    ]
+    assert changed_inputs({path: "0" * 64}, {}, backend=backend, product=product) == [
+        path
+    ]
