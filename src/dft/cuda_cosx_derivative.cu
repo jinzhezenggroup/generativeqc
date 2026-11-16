@@ -14,8 +14,8 @@
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid_task_view.cuh"
 #include "generated_cosx_derivative_contractions.cuh"
-#include "generated_one_electron_derivatives.cuh"
-#include "generated_one_electron_values.cuh"
+#include "generated_cosx_one_electron_derivatives.cuh"
+#include "generated_cosx_one_electron_values.cuh"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
 
@@ -131,8 +131,8 @@ __global__ void esp_probe_derivative_kernel(const double* basis, std::size_t nat
                                             std::size_t nprimitive, std::size_t nao,
                                             const double* points, std::size_t npoint, double* esp,
                                             double* esp_derivative, int* error) {
-  namespace one = generativeqc::scf::generated_one_electron;
-  namespace derivative = generativeqc::scf::generated_one_electron_derivatives;
+  namespace one = generativeqc::scf::generated_cosx_one_electron;
+  namespace derivative = generativeqc::scf::generated_cosx_one_electron_derivatives;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -209,7 +209,7 @@ __global__ void esp_probe_derivative_kernel(const double* basis, std::size_t nat
 __global__ void esp_value_kernel(const double* basis, std::size_t natom, std::size_t nprimitive,
                                  std::size_t nao, const double* points, std::size_t npoint,
                                  double* esp, int* error) {
-  namespace one = generativeqc::scf::generated_one_electron;
+  namespace one = generativeqc::scf::generated_cosx_one_electron;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -399,7 +399,7 @@ __global__ void contract_molecular_esp_kernel(const double* basis, std::size_t n
                                               const double* symmetric_projection,
                                               std::size_t npoint, double energy_factor,
                                               double* nuclear_gradient, int* error) {
-  namespace derivative = generativeqc::scf::generated_one_electron_derivatives;
+  namespace derivative = generativeqc::scf::generated_cosx_one_electron_derivatives;
   const double* primitives = basis + 3 * natom;
   const double* records = primitives + 2 * nprimitive;
   const std::size_t matrix = nao * nao;
@@ -454,13 +454,13 @@ __global__ void contract_molecular_esp_kernel(const double* basis, std::size_t n
         const double primitive_weight = primitives[2 * ia + 1] * primitives[2 * ib + 1];
         for (unsigned ti = 0; ti < first_terms; ++ti) {
           const unsigned first_component =
-              generativeqc::scf::generated_one_electron::component_index(
+              generativeqc::scf::generated_cosx_one_electron::component_index(
                   static_cast<unsigned>(first[4 + 4 * ti]),
                   static_cast<unsigned>(first[5 + 4 * ti]),
                   static_cast<unsigned>(first[6 + 4 * ti]));
           for (unsigned tj = 0; tj < second_terms; ++tj) {
             const unsigned second_component =
-                generativeqc::scf::generated_one_electron::component_index(
+                generativeqc::scf::generated_cosx_one_electron::component_index(
                     static_cast<unsigned>(second[4 + 4 * tj]),
                     static_cast<unsigned>(second[5 + 4 * tj]),
                     static_cast<unsigned>(second[6 + 4 * tj]));

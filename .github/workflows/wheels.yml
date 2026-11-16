@@ -134,9 +134,11 @@ jobs:
           # hashes the CMake/NVCC command line; otherwise generated-source and
           # generated-include paths make identical compilations miss across runs.
           # Package all structural Libxc providers independently of CUDA SM.
-          # Bound the whole Ninja graph, including large host C++ units.
+          # A full-matrix pair of DF-source and one-electron compilations still
+          # OOMs the 12 GiB cgroup at concurrency two. Bound the whole graph,
+          # including large host C++ units, until cold-wheel evidence admits more.
           CIBW_ENVIRONMENT: >-
-            CMAKE_BUILD_PARALLEL_LEVEL=2
+            CMAKE_BUILD_PARALLEL_LEVEL=1
             GENERATIVEQC_ENABLE_CUDA=ON
             GENERATIVEQC_ENABLE_AOT_SHELLS=ON
             SKBUILD_CMAKE_DEFINE="GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON"
