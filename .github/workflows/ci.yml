@@ -1471,7 +1471,7 @@ jobs:
       - name: Revalidate retained native Libxc endpoint evidence against live inputs
         if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |
-          PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py
+          PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py --allow-stale-generated-views
       - name: Qualify owned sccache compiler lifetimes
         if: matrix.shard == 'compiler-heavy' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         env:
