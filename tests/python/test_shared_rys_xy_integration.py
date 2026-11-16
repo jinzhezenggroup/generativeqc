@@ -54,8 +54,7 @@ def test_companion_architecture_capability_and_qualified_mapping(
         "pppp": 96,
     }
     assert shared_rys_xy_companions(profile("sm_120")) == ()
-    if architecture == "sm_80":
-        assert shared_rys_xy_companions(selected, weighted_z=True) == ()
+    assert len(shared_rys_xy_companions(selected, weighted_z=True)) == 2
     assert not shared_rys_xy_companions(
         replace(
             selected,
@@ -114,7 +113,10 @@ def test_unweighted_companion_follows_declared_capability(
         "dppp",
         "pppp",
     }
-    assert not shared_rys_xy_companions(selected, weighted_z=True)
+    assert {
+        item.incumbent.spec.name
+        for item in shared_rys_xy_companions(selected, weighted_z=True)
+    } == {"dppp", "pppp"}
 
 
 def test_policy_strict_parse_refusal_and_frozen_identity(
@@ -259,8 +261,13 @@ def _compile_registry(
     legacy: bool = False,
     weighted: bool = False,
     weighted_available: bool = True,
+    architecture: str = "sm_90",
 ) -> Path:
-    selected = profile()
+    selected = (
+        resolve_production_profile(MANIFEST, architecture, "portable")
+        if weighted
+        else profile(architecture)
+    )
     if not weighted_available:
         selected = replace(
             selected,
@@ -293,14 +300,19 @@ constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaErrorNotSupported=801;
 constexpr int cudaDevAttrComputeCapabilityMajor=1, cudaDevAttrComputeCapabilityMinor=2;
 inline int cudaGetDevice(int* d) { *d=0; return 0; }
 extern int gpu_major;
-inline int cudaDeviceGetAttribute(int* v, int a, int) { *v=a==1?gpu_major:0; return 0; }
+extern int gpu_minor;
+inline int cudaDeviceGetAttribute(int* v, int a, int) { *v=a==1?gpu_major:gpu_minor; return 0; }
 """)
     declarations = re.findall(
         r'extern "C" cudaError_t (\w+)\((.*?)\);', registry, re.DOTALL
     )
     stubs = [
         '#include "scf/aot_shell_registry.hpp"\n#include "scf/shared_rys_weighted_z.hpp"',
-        "int gpu_major=9; int primary=0,candidate=0;",
+        (
+            f"int gpu_major={selected.target.compute_capability_major};"
+            f"int gpu_minor={selected.target.compute_capability_minor};"
+            "int primary=0,candidate=0;"
+        ),
         "int candidate_error=0;",
     ]
     for symbol, args in declarations:
@@ -324,7 +336,7 @@ inline int cudaDeviceGetAttribute(int* v, int a, int) { *v=a==1?gpu_major:0; ret
 #include <cstdio>
 using namespace generativeqc::scf::generated;
 int main() {
-  select_profile_for_device(0,9,0);
+  select_profile_for_device(0,gpu_major,gpu_minor);
   const auto mask = enabled_shared_rys_xy_fock_shell_class_mask();
   unsigned cls=0; while(cls<64 && !(mask & (1ULL<<cls))) ++cls;
   auto launch = [&](unsigned c, bool u=false, double* correction=nullptr) {
@@ -343,7 +355,7 @@ int main() {
   assert(launch_shell_class_fock(cls,nullptr,false,1,nullptr,nullptr,nullptr,
     nullptr,nullptr,nullptr,0,nullptr,nullptr,nullptr,nullptr,nullptr)==0);
   assert(primary==4 && candidate==2);
-  gpu_major=8; select_profile_for_device(0,8,0);
+  gpu_major=99; select_profile_for_device(0,gpu_major,gpu_minor);
   assert(enabled_shared_rys_xy_fock_shell_class_mask()==0);
   assert(launch(cls)!=0 && candidate==2);
   std::puts("companion-selection-and-no-post-enqueue-retry:PASS");
@@ -352,9 +364,9 @@ int main() {
     )
     if legacy:
         source.write_text(
-            source.read_text()
-            .replace("select_profile_for_device(0,9,0);", "")
-            .replace("select_profile_for_device(0,8,0);", "")
+            source.read_text().replace(
+                "select_profile_for_device(0,gpu_major,gpu_minor);", ""
+            )
         )
     if weighted:
         program = source.read_text()

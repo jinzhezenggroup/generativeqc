@@ -11,10 +11,11 @@ import pytest
 from generativeqc_compiler.integral.production_emission import (
     emit_shared_rys_xy_fock_shard,
 )
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.production_shared_rys_xy import (
     shared_rys_xy_companions,
 )
-from test_shared_rys_xy_integration import ROOT, _compile_registry, profile
+from test_shared_rys_xy_integration import MANIFEST, ROOT, _compile_registry, profile
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,8 +24,25 @@ if TYPE_CHECKING:
     from generativeqc_compiler.common.resources import ResourceIdentity
 
 
-def test_weighted_companion_has_independent_capability_and_mapping() -> None:
-    selected = profile()
+@pytest.mark.parametrize(
+    "architecture",
+    (
+        "sm_80",
+        "sm_86",
+        "sm_87",
+        "sm_89",
+        "sm_90",
+        "sm_100",
+        "sm_103",
+        "sm_110",
+        "sm_120",
+        "sm_121",
+    ),
+)
+def test_weighted_companion_has_independent_capability_and_mapping(
+    architecture: str,
+) -> None:
+    selected = resolve_production_profile(MANIFEST, architecture, "portable")
     weighted = shared_rys_xy_companions(selected, weighted_z=True)
     assert {c.incumbent.spec.name: c.plan.block_threads for c in weighted} == {
         "dppp": 192,
@@ -40,8 +58,6 @@ def test_weighted_companion_has_independent_capability_and_mapping() -> None:
     )
     assert not shared_rys_xy_companions(without, weighted_z=True)
     assert len(shared_rys_xy_companions(without)) == 2
-    for architecture in ("sm_80", "sm_89", "sm_100", "sm_120"):
-        assert not shared_rys_xy_companions(profile(architecture), weighted_z=True)
     for item in weighted:
         emitted = emit_shared_rys_xy_fock_shard(
             selected, (item.incumbent,), weighted_z=True
@@ -51,11 +67,34 @@ def test_weighted_companion_has_independent_capability_and_mapping() -> None:
         )
 
 
+def test_weighted_companion_capability_is_not_a_profile_name_restriction() -> None:
+    selected = profile("sm_120")
+    assert not shared_rys_xy_companions(selected, weighted_z=True)
+    declared = replace(
+        selected,
+        selections=tuple(
+            replace(
+                item,
+                capabilities=item.capabilities | {"shared_rys_weighted_z_fock"},
+            )
+            if item.spec.name in ("dppp", "pppp")
+            else item
+            for item in selected.selections
+        ),
+    )
+    assert len(shared_rys_xy_companions(declared, weighted_z=True)) == 2
+
+
 @pytest.mark.parametrize(
     "legacy,available", ((False, True), (False, False), (True, True))
 )
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90", "sm_120", "sm_121"))
 def test_weighted_actual_registry_fallback_and_no_post_enqueue_retry(
-    tmp_path: Path, required_native_cxx: NativeCxx, legacy: bool, available: bool
+    tmp_path: Path,
+    required_native_cxx: NativeCxx,
+    legacy: bool,
+    available: bool,
+    architecture: str,
 ) -> None:
     exe = _compile_registry(
         tmp_path,
@@ -63,6 +102,7 @@ def test_weighted_actual_registry_fallback_and_no_post_enqueue_retry(
         legacy=legacy,
         weighted=True,
         weighted_available=available,
+        architecture=architecture,
     )
     subprocess.run([exe], check=True, capture_output=True, text=True, timeout=20)
 

@@ -36,13 +36,15 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 
-def weighted_plan(name: str, **changes: object) -> FusedShellPlan:
-    """Use the fixed materialized restricted SM90 value owner."""
+def weighted_plan(
+    name: str, *, architecture: str = "sm_90", **changes: object
+) -> FusedShellPlan:
+    """Use the fixed restricted value mapping on the requested target."""
     plan = build_fused_shell_plan(
         FUSED_SHELL_SPEC_BY_NAME[name],
         consumers=(KernelConsumer.FOCK,),
         recurrence="rys3",
-        target=cuda_target_info("sm_90"),
+        target=cuda_target_info(architecture),
     )
     return build_fused_shell_plan(
         plan.spec,
@@ -94,8 +96,70 @@ def test_weighted_z_roundtrip_identity_and_production_refusal(name: str) -> None
         )
     with pytest.raises(ValueError, match="requires shared Rys x/y"):
         replace(plan.schedule, fock_shared_rys_xy=False)
-    with pytest.raises(ValueError, match="requires the qualified SM90"):
-        replace(plan.kernel, target=cuda_target_info("sm_120"))
+
+
+@pytest.mark.parametrize(
+    "architecture",
+    (
+        "sm_80",
+        "sm_86",
+        "sm_87",
+        "sm_89",
+        "sm_90",
+        "sm_100",
+        "sm_103",
+        "sm_110",
+        "sm_120",
+        "sm_121",
+    ),
+)
+@pytest.mark.parametrize("name,threads", (("pppp", 96), ("dppp", 192)))
+def test_weighted_z_uses_legal_target_not_architecture_whitelist(
+    architecture: str, name: str, threads: int
+) -> None:
+    """Known and conservative targets share an implementation, not evidence."""
+    plan = weighted_plan(name, architecture=architecture)
+    assert plan.kernel.target.architecture == architecture
+    assert plan.block_threads == threads
+    assert plan.schedule.fock_shared_rys_xy
+    assert plan.schedule.fock_shared_rys_weighted_z
+    assert _schedule_from_payload(schedule_payload(plan.schedule)) == plan.schedule
+    assert emit_shell_class_fused_cuda(plan.spec, plan)
+
+
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90", "sm_120"))
+def test_weighted_z_retains_target_resource_validation(architecture: str) -> None:
+    plan = weighted_plan("dppp", architecture=architecture)
+    insufficient = replace(plan.kernel.target, maximum_threads_per_block=128)
+    with pytest.raises(ValueError):
+        replace(plan.kernel, target=insufficient)
+
+
+@pytest.mark.parametrize("name", ("dpds", "ddps", "dpdp", "ddpp"))
+def test_weighted_z_retains_mathematical_family_boundary(name: str) -> None:
+    from tools.generativeqc_validation.shared_rys_xy_fixture import fixture_plan
+
+    plan = fixture_plan(name, shared=True)
+    with pytest.raises(ValueError, match="DPPP/PPPP"):
+        replace(
+            plan.kernel,
+            schedule=replace(plan.schedule, fock_shared_rys_weighted_z=True),
+        )
+
+
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90", "sm_120"))
+@pytest.mark.parametrize("weighted", (False, True))
+def test_weighted_fixture_uses_requested_generation_target(
+    architecture: str, weighted: bool
+) -> None:
+    from tools.generativeqc_validation.shared_rys_weighted_z_fixture import (
+        companion_plan,
+    )
+
+    plan = companion_plan("pppp", weighted=weighted, architecture=architecture)
+    assert plan.kernel.target.architecture == architecture
+    assert plan.schedule.fock_shared_rys_xy
+    assert plan.schedule.fock_shared_rys_weighted_z is weighted
 
 
 @pytest.mark.parametrize(

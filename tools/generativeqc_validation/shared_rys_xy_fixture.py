@@ -71,14 +71,16 @@ def raw_exchange_reference(
     return exchange
 
 
-def fixture_plan(name: str, *, shared: bool) -> FusedShellPlan:
+def fixture_plan(
+    name: str, *, shared: bool, architecture: str = "sm_90"
+) -> FusedShellPlan:
     """Pin a component mapping without declaring production qualification."""
     spec = FUSED_SHELL_SPEC_BY_NAME[name]
     plan = build_fused_shell_plan(
         spec,
         consumers=(KernelConsumer.FOCK,),
         recurrence=f"rys{sum(spec.angular) // 2 + 1}",
-        target=cuda_target_info("sm_90"),
+        target=cuda_target_info(architecture),
     )
     return build_fused_shell_plan(
         plan.spec,
