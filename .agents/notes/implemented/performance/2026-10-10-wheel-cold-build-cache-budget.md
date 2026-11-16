@@ -64,6 +64,10 @@ timings once available.
 
 ## References
 
+The later `2026-11-15-wheel-cold-build-resource-envelope.md` supersedes the
+unbounded build-tool parallelism decision after repeated hosted-runner
+disconnects. The partial-cache save contract remains in force.
+
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/38003071721/job/114065497728
 - https://github.com/actions/cache/blob/55cc8345863c7cc4c66a329aec7e433d2d1c52a9/action.yml
 - https://github.com/actions/cache/blob/55cc8345863c7cc4c66a329aec7e433d2d1c52a9/save/README.md

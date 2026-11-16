@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ctypes
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -18,6 +18,70 @@ from generativeqc_compiler.integral.weighted_eri_cuda import (
 )
 
 from tools.generativeqc_validation.weighted_eri import primitive_variables
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+@pytest.mark.parametrize("angular", ((1, 0, 0, 0), (2, 1, 1, 1)))
+def test_shared_cuda_arithmetic_links_from_multiple_header_consumers(
+    angular: tuple[int, int, int, int], native_cxx: Any, tmp_path: Path
+) -> None:
+    """Execute CUDA-emitted math across two owners with real host noinline/ODR.
+
+    The CUDA transport is erased, not the callable's linkage or noinline
+    boundary. Existing complete-class native adapters separately exercise all
+    high-order partitions, output layouts, precision modes and screening.
+    """
+    kernel = build_weighted_eri_kernel(build_weighted_eri_ir(angular), (0,))
+    header = emit_weighted_eri_header((), backend="cpu")
+    header += (
+        "\n#define __device__\n#define __noinline__ __attribute__((noinline))\n"
+        "namespace generativeqc::scf::generated_weighted_eri {\n"
+        + emit_weighted_eri_function(kernel, "shared_arithmetic", cuda_noinline=True)
+        + "}\n"
+    )
+    (tmp_path / "arithmetic.hpp").write_text(header)
+    owners = []
+    for name in ("first", "second"):
+        owner = tmp_path / f"{name}.cpp"
+        owner.write_text(
+            '#include "arithmetic.hpp"\n'
+            "using namespace generativeqc::scf::generated_weighted_eri;\n"
+            f'extern "C" void {name}(const Geometry* geometry, const double* weights, double* output) {{\n'
+            "  const auto result = shared_arithmetic(*geometry, weights);\n"
+            "  output[0] = result.value;\n"
+            "  for (unsigned center = 0; center < 4; ++center)\n"
+            "    for (unsigned axis = 0; axis < 3; ++axis)\n"
+            "      output[1 + 3 * center + axis] = result.center[center][axis];\n}\n"
+        )
+        owners.append(owner)
+    library = tmp_path / "shared.so"
+    native_cxx.build_shared(
+        owners,
+        library,
+        compile_args=("-std=c++20", "-O2", "-ffp-contract=off"),
+    )
+    loaded = ctypes.CDLL(str(library))
+    exponents = np.array([0.6, 0.8, 1.1, 0.9])
+    centers = np.arange(12).reshape(4, 3) * 0.07
+    inputs = geometry(exponents, centers)
+    weights = np.array([0.73123456789])
+    variables = primitive_variables(exponents, centers, 9)
+    variables["component_weight_0"] = weights[0]
+    roots = [kernel.value, *(root for center in kernel.gradients for root in center)]
+    expected = np.array([kernel.graph.evaluate(root, variables) for root in roots])
+    for name in ("first", "second"):
+        function = getattr(loaded, name)
+        function.argtypes = (
+            ctypes.POINTER(Geometry),
+            np.ctypeslib.ndpointer(dtype=np.float64),
+            np.ctypeslib.ndpointer(dtype=np.float64),
+        )
+        observed = np.empty(13)
+        function(ctypes.byref(inputs), weights, observed)
+        np.testing.assert_allclose(observed, expected, atol=3e-12, rtol=3e-12)
+
 
 CLASSES = ((0, 0, 0, 0), (1, 0, 0, 0), (2, 0, 1, 0), (2, 1, 1, 0), (2, 2, 1, 0))
 

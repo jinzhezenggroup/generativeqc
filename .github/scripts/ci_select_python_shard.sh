@@ -153,6 +153,9 @@ fi
 # expensive enough to earn an explicit shard.
 dist_mode=loadfile
 slow_paths=(
+  # This transferred supplemental qualification never had an ordinary modulo
+  # slot. Exclude it before supplemental core dispatch, not after enumeration.
+  tests/python/test_second_component_schedule.py
   # Cold queue 43237971940: all 13 molecular Hessian cases passed but used
   # 2120 worker-seconds in core-c; uccsd-forces finished in 273 seconds.
   # Move the intact function-scoped suite to that worksteal lane, preserving
@@ -227,6 +230,12 @@ slow_paths=(
 # core-a timed out and runtime-heavy finished in 550 s. Transfer whole files
 # to its existing loadfile workers, retaining every ordinary core modulo slot.
 measured_core_runtime_paths=(
+  # Cold protected run 43767173517 exhausted core-a's test deadline while
+  # these intact Hessian modules used at least 690 + 450 worker-seconds.
+  # Runtime-heavy finished in 503 s. Preserve ordinary/no-slot ownership while
+  # moving every case to its file-locality lane, also sharing the RKS fixture.
+  tests/python/test_second_component_schedule.py
+  tests/python/test_hessian_rks_directional.py
   # Cold runs 40143589924 / 40145048394 exhausted core-a while this
   # intact closure audit cost 443 / 441 worker-seconds. Runtime-heavy
   # completed in 1114 / 1252 s without probe-cache hits; retain every
@@ -453,6 +462,14 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Molecular curvature now shares the lighter force lane; slow_paths keeps
     # its former supplemental no-slot semantics without reassigning core files.
     declare -A supplemental_core_owner=(
+      # P1b/P1c/evidence add four audit files. Their ordinary insertion moved
+      # 2227 existing files; gates run 43770757909 exhausted core-c at 99%.
+      # Give only these new qualifications no-slot owners, preserving the
+      # accepted-master workload and cache locality across the whole stack.
+      [tests/python/test_aot_policy_dimensions.py]=0
+      [tests/python/test_cuda_aot_compile_evidence.py]=1
+      [tests/python/test_cuda_aot_endpoint_evidence.py]=2
+      [tests/python/test_cuda_aot_global_promotion.py]=0
       # Derivative AD adds nine files. In PR run 42410861878 their insertion
       # moved 1272 existing modules, including scalar-ECP HVPs from core-a
       # into core-c's molecular Hessian queue, which exhausted the 30m cap.

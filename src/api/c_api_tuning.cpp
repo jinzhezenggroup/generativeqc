@@ -9,6 +9,7 @@
 
 #include "runtime/cuda_device_facts.hpp"
 #include "scf/aot_shell_registry.hpp"
+#include "scf/shared_rys_weighted_z.hpp"
 #endif
 
 extern "C" {
@@ -47,6 +48,23 @@ generativeqc_status generativeqc_cuda_tuning_device(
       generativeqc::scf::generated::enabled_fock_shell_class_mask();
   output->enabled_mixed_fock_shell_class_mask =
       generativeqc::scf::generated::enabled_mixed_fock_shell_class_mask();
+  output->enabled_rys_value_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_rys_fock_shell_class_mask();
+  output->enabled_k_block_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_k_block_fock_shell_class_mask();
+  output->enabled_rys_task_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_rys_task_fock_shell_class_mask();
+  output->enabled_shared_rys_xy_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_shared_rys_xy_fock_shell_class_mask();
+  output->enabled_shared_rys_weighted_z_fock_shell_class_mask =
+      generativeqc::scf::generated::enabled_shared_rys_weighted_z_fock_shell_class_mask();
+  output->preferred_streaming_fock_shell_class_mask =
+      generativeqc::scf::generated::preferred_streaming_fock_shell_class_mask() &
+      output->enabled_fock_shell_class_mask;
+  output->preferred_rys_task_fock_shell_class_mask =
+      generativeqc::scf::generated::preferred_rys_task_fock_shell_class_mask();
+  output->available_shared_rys_xy_streaming_fock_shell_class_mask =
+      generativeqc::scf::generated::available_shared_rys_xy_streaming_fock_shell_class_mask();
   const cudaError_t restored = cudaSetDevice(previous);
   if (runtime != cudaSuccess || driver != cudaSuccess || restored != cudaSuccess)
     return GENERATIVEQC_STATUS_CUDA_ERROR;
