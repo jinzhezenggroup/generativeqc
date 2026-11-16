@@ -169,6 +169,18 @@ macro(generativeqc_configure_cuda_backend target)
   # other CUDA compilers; callers can also select this path explicitly.
   if(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK AND
      CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA" AND NOT APPLE)
+    # Cached-tensor and packed-Fock launches retain the same Cartesian
+    # recurrence bodies. Compile them once without changing their device ABI;
+    # other backends keep the independently compiled source owners above.
+    set(_generativeqc_direct_tensor_fock_source
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/direct_tensor_fock_kernels.cu")
+    file(GENERATE OUTPUT "${_generativeqc_direct_tensor_fock_source}" CONTENT
+      "#include \"scf/cuda/direct_cached_tensor_kernels.cu\"\n#include \"scf/cuda/direct_packed_fock_kernels.cu\"\n")
+    list(REMOVE_ITEM GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      src/scf/cuda/direct_cached_tensor_kernels.cu
+      src/scf/cuda/direct_packed_fock_kernels.cu)
+    list(APPEND GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      "${_generativeqc_direct_tensor_fock_source}")
     add_library(generativeqc_direct_native STATIC ${GENERATIVEQC_DIRECT_NATIVE_SOURCES}
                 "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
                 "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
