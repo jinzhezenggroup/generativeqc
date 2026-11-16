@@ -1,7 +1,8 @@
 """Recompute the retained native Libxc catalog and enforce exact transition acks.
 
-Run this command in CI against the checked-out source. It uses real retained
-native measurements without loading a library, compiling code or probing a GPU.
+Run this command explicitly when reviewing retained or new acceptance claims,
+not as a routine PR/merge-group freshness gate. It uses real retained native
+measurements without loading a library, compiling code or probing a GPU.
 """
 
 from __future__ import annotations
