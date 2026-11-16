@@ -156,6 +156,9 @@ slow_paths=(
   # This transferred supplemental qualification never had an ordinary modulo
   # slot. Exclude it before supplemental core dispatch, not after enumeration.
   tests/python/test_second_component_schedule.py
+  # This supplemental suite also has no ordinary modulo slot. Its expensive
+  # module fixture must be excluded here before supplemental core dispatch.
+  tests/python/test_d3_public_second_order.py
   # Cold queue 43237971940: all 13 molecular Hessian cases passed but used
   # 2120 worker-seconds in core-c; uccsd-forces finished in 273 seconds.
   # Move the intact function-scoped suite to that worksteal lane, preserving
@@ -236,6 +239,10 @@ measured_core_runtime_paths=(
   # moving every case to its file-locality lane, also sharing the RKS fixture.
   tests/python/test_second_component_schedule.py
   tests/python/test_hessian_rks_directional.py
+  # Protected run 43819312426 ended at 99% with two late cold copies of
+  # this public-curvature fixture; one setup-dominated case took 225 s.
+  # Runtime-heavy finished in 796 s. Keep all cases on its loadfile workers.
+  tests/python/test_d3_public_second_order.py
   # Cold runs 40143589924 / 40145048394 exhausted core-a while this
   # intact closure audit cost 443 / 441 worker-seconds. Runtime-heavy
   # completed in 1114 / 1252 s without probe-cache hits; retain every
