@@ -462,6 +462,14 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # Molecular curvature now shares the lighter force lane; slow_paths keeps
     # its former supplemental no-slot semantics without reassigning core files.
     declare -A supplemental_core_owner=(
+      # P1b/P1c/evidence add four audit files. Their ordinary insertion moved
+      # 2227 existing files; gates run 43770757909 exhausted core-c at 99%.
+      # Give only these new qualifications no-slot owners, preserving the
+      # accepted-master workload and cache locality across the whole stack.
+      [tests/python/test_aot_policy_dimensions.py]=0
+      [tests/python/test_cuda_aot_compile_evidence.py]=1
+      [tests/python/test_cuda_aot_endpoint_evidence.py]=2
+      [tests/python/test_cuda_aot_global_promotion.py]=0
       # Derivative AD adds nine files. In PR run 42410861878 their insertion
       # moved 1272 existing modules, including scalar-ECP HVPs from core-a
       # into core-c's molecular Hessian queue, which exhausted the 30m cap.

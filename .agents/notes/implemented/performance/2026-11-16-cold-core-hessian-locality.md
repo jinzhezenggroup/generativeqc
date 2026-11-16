@@ -81,3 +81,42 @@ integration of actual accepted #3096 and both repairs, 1769 focused contracts
 pass; normal and optimized Libxc integrity checks, Ruff and Bash checks pass.
 The PR diff against accepted master remains seven operational/test/note paths,
 with no native input change. Full protected CI still determines acceptance.
+
+## Preserve workload ownership when the AOT qualification files arrive
+
+The next exact gates head `cbcc498b647ddcc9d64a4064b425b5e1a1290e0e`
+fails core-c job `132985948630` in run `43770757909`: the actual test step
+times out at its unchanged 30-minute deadline after reaching 99%, without a
+completed JUnit report. Retain its log, annotations and debug artifact
+`14184614699`; a printed near-complete percentage is not acceptance.
+
+An executable historical replay with separate Git indexes establishes an
+additional root cause. P1b adds `test_aot_policy_dimensions.py`; P1c adds
+`test_cuda_aot_global_promotion.py`; evidence adds the compile/endpoint replay
+modules. Inserting the first one or two into ordinary sorted modulo enumeration
+changes the owners of **2227 existing files** against accepted #3096 master.
+The four-file evidence inventory changes 2228, including the two intentional
+Hessian transfers. These are actual shell-selector/inventory observations,
+not a source-shape hypothesis or a numerical assertion.
+
+Assign only those four new qualification modules explicit supplemental owners,
+using the existing no-modulo-slot mechanism. Keep every case and the accepted
+master's existing file ownership, apart from the two separately measured
+Hessian transfers. This prevents each new layer of the same PR stack from
+silently moving unrelated numerical/codegen workloads and cold probe locality
+between the three core workers. No runtime deadline or scientific gate changes.
+
+The insertion regression exercises all five events and tracked, missing,
+untracked and absent states, retaining exactly-once selection and every
+unrelated ordinary owner. Historical replay inputs/results remain under
+`aot-shard-insertion-historical-diagnosis-v2.*` in the ignored validation
+directory; live repository indexes are never replaced. Fresh complete author
+and protected runs remain required to qualify this final distribution.
+
+The final insertion regression passes all 100 targeted cases, and 1789
+integrated CI/coverage/cache contracts pass. Replaying the actual master,
+P1b, P1c and evidence inventories under the fixed selector proves zero
+unrelated owner migrations at every partial stack. Against the original
+accepted-master selector, exactly the two intentional measured Hessian
+transfers remain. Bash, Ruff and whitespace checks pass; native inputs and
+all existing deadlines remain unchanged.
