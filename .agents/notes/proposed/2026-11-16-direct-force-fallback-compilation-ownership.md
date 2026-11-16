@@ -1,7 +1,13 @@
 # Proposal: compile shared force-class and bounded-fallback bodies once
 
-Status: proposed; sm120 prototypes complete, full force matrix running
+Status: superseded by qualified private NVIDIA-RDC compilation ownership
 Date: 2026-11-16
+
+The force include-wrapper is adopted in
+`../implemented/performance/2026-11-16-direct-force-fallback-compilation-ownership.md`.
+Retain this investigation record, including the less useful arithmetic-only
+module and narrower Fock-group alternatives. Its intermediate checkpoints are
+historical, not current production acceptance claims.
 
 ## Remaining cost
 
@@ -104,11 +110,39 @@ original tasks sum to 1,743.576 seconds, so these overlapping observations do
 not establish a substantial cold-build win. The larger owner's memory cost
 also needs explicit wheel-matrix qualification; it must not recreate an OOM.
 
-Unchanged full-wheel **80;90-real;120-real**, compute80 PTX, complete original
-and candidate owner requests are running under independent owned foreground
-sccache servers and finite deadlines. This force-unity owner is not production
-code and has not passed native device-link, independent full endpoint or clean
-source gates. Do not substitute the narrower pair's qualification for it.
+At this checkpoint, unchanged full-wheel **80;90-real;120-real**, compute80 PTX,
+complete original and candidate requests were still running. The completed
+matrix is recorded below; the narrower tensor/Fock pair's qualification does
+not qualify this separate force experiment.
+
+## Completed full force matrix
+
+All three requests finish successfully under independent owned foreground
+sccache servers and finite deadlines. The complete original group versus the
+single include-wrapper, with unchanged **80;90-real;120-real** and compute80 PTX:
+
+- Object sum: **178,165,680 -> 143,452,816 bytes** (19.48% smaller).
+- Identically extracted PTX dumps: **177,680,559 -> 152,347,547 bytes**
+  (14.26% smaller).
+- Function copies: **960 -> 680**, **957 -> 678**, **1,058 -> 778** for
+  sm80, sm90 and sm120. No function identity is added or removed, and every
+  retained register/stack/shared/local resource record matches.
+- Every candidate SASS section matches an original copy. The two original sm120
+  `__internal_accurate_pow` copies already differ; the wrapper matches the
+  bounded-fallback copy. Do not claim that all original copies were identical.
+- Observed requests: **2,635.695 + 547.543 -> 2,867.417 seconds**, about 9.92%
+  lower summed observations. Each request has **three hits / five misses**;
+  requests overlap. This is not a controlled cold build or wheel speedup.
+- Reaped-worker maximum RSS: bounded **5,710,904 KiB**, class **1,751,424 KiB**,
+  wrapper **6,068,284 KiB**. The wrapper increases the largest observed worker
+  by about 6.3%; retain serial wheel compilation and the 12-GiB container cap.
+
+Authoritative receipts are `force-wheel-comparison.json` and
+`force-wheel-matrix/` under the evidence directory. At this checkpoint a private
+NVIDIA-RDC-only CMake wrapper was staged for actual native build/link and
+endpoint tests, before publication or clean-source qualification. See the
+implemented record for subsequent acceptance. Non-RDC/CuMetal and the separate
+angular-force WPO owner retain their original source ownership.
 
 ## Acceptance boundaries
 

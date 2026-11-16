@@ -181,6 +181,18 @@ macro(generativeqc_configure_cuda_backend target)
       src/scf/cuda/direct_packed_fock_kernels.cu)
     list(APPEND GENERATIVEQC_DIRECT_NATIVE_SOURCES
       "${_generativeqc_direct_tensor_fock_source}")
+    # The bounded and class-domain force launchers retain the same high-order
+    # gradient callees. Share their compilation, not the separate angular-force
+    # owner's whole-program launch-bound policy.
+    set(_generativeqc_direct_force_fallback_source
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/direct_force_fallback_kernels.cu")
+    file(GENERATE OUTPUT "${_generativeqc_direct_force_fallback_source}" CONTENT
+      "#include \"scf/cuda/direct_force_class_domains.cu\"\n#include \"scf/cuda/direct_bounded_fallback.cu\"\n")
+    list(REMOVE_ITEM GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      src/scf/cuda/direct_force_class_domains.cu
+      src/scf/cuda/direct_bounded_fallback.cu)
+    list(APPEND GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      "${_generativeqc_direct_force_fallback_source}")
     add_library(generativeqc_direct_native STATIC ${GENERATIVEQC_DIRECT_NATIVE_SOURCES}
                 "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
                 "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
