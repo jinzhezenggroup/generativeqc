@@ -43,10 +43,16 @@ def test_optional_variants_do_not_control_primary_coverage(architecture: str) ->
     profile = resolve_production_profile(MANIFEST, architecture)
     lean = replace(
         profile,
-        optional_fock_variants=False,
+        packaging=replace(profile.packaging, fock_variants=frozenset()),
         preferred_rys_task_fock_shell_classes=None,
     )
-    expanded = replace(lean, optional_fock_variants=True)
+    expanded = replace(
+        lean,
+        packaging=replace(
+            lean.packaging,
+            fock_variants=frozenset({"rys_value", "rys_task", "k_block"}),
+        ),
+    )
     assert lean.selections == expanded.selections
     assert lean.portable == expanded.portable and lean.tuned == expanded.tuned
     for inventory in (

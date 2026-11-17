@@ -22,6 +22,7 @@ from tools.generativeqc_validation.cuda_aot_policy import (
     MANIFEST,
     PHASES,
     ROOT,
+    _decode_retained_policy_format,
     capability_audit,
     check_defaults,
     default_policies,
@@ -297,6 +298,40 @@ def test_stock_defaults_are_retained_not_requalified(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "field", ("small_work_angular_queue", "require_bounded_spd_coverage")
+)
+def test_force_execution_policy_changes_require_qualification(
+    tmp_path: Path, field: str
+) -> None:
+    """Moving a policy out of profile labels must not remove promotion gates."""
+    inventory = fixture_root(tmp_path)
+    path = tmp_path / MANIFEST
+    manifest = json.loads(path.read_text())
+    policy = manifest["architectures"]["sm_120"]["force_policy"]
+    policy[field] = not policy[field]
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(
+        ValueError, match="fresh global-default promotion campaign required"
+    ):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+@pytest.mark.parametrize("family", ("rys_value", "k_block", "rys_task"))
+def test_single_family_packaging_changes_still_require_qualification(
+    tmp_path: Path, family: str
+) -> None:
+    inventory = fixture_root(tmp_path)
+    path = tmp_path / MANIFEST
+    manifest = json.loads(path.read_text())
+    manifest["architectures"]["portable_cuda"]["packaging"]["fock_variants"] = [family]
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(
+        ValueError, match="fresh global-default promotion campaign required"
+    ):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
+
+
+@pytest.mark.parametrize(
     "mutation",
     (
         "packaging",
@@ -317,11 +352,11 @@ def test_a_global_manifest_change_cannot_be_laundered_by_refreshing_an_audit(
     profile = manifest["architectures"]["sm_120"]
     portable = manifest["architectures"]["portable_cuda"]
     if mutation == "packaging":
-        portable["optional_fock_variants"] = True
+        portable["packaging"]["fock_variants"] = ["rys_value", "k_block", "rys_task"]
     elif mutation == "preference":
         profile["prefer_rys_task_fock"] = False
     elif mutation == "derivatives":
-        portable["compile_derivative_shells"] = True
+        portable["packaging"]["derivative_shells"] = True
     elif mutation == "class":
         profile["preferred_rys_task_fock_shell_classes"] = []
     elif mutation == "recurrence":
@@ -424,13 +459,22 @@ def retained_campaign(
     manifest = json.loads(path.read_text())
     manifest["architectures"]["sm_120"]["prefer_rys_task_fock"] = False
     path.write_text(json.dumps(manifest))
-    baseline = json.loads(
+    retained_policies = json.loads(
         lzma.decompress(
             (
                 tmp_path / inventory["retained_baseline"]["effective_policies"]
             ).read_bytes()
         )
-    )["sm_120"]
+    )
+    _decode_retained_policy_format(
+        retained_policies,
+        json.loads(
+            lzma.decompress(
+                (tmp_path / inventory["retained_baseline"]["manifest"]).read_bytes()
+            )
+        ),
+    )
+    baseline = retained_policies["sm_120"]
     candidate = default_policies(path)["sm_120"]
     policies = {"baseline": baseline, "candidate": candidate}
     payload = campaign()

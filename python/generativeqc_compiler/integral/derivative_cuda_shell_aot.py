@@ -63,7 +63,7 @@ def cuda_derivative_shell_packages(
     target. Absent explicit compilation policy, retain the native fallback.
     """
 
-    if not profile.compile_derivative_shells:
+    if not profile.packaging.derivative_shells:
         return ()
     if any(
         radial.family

@@ -11,6 +11,7 @@ from .capabilities import (
 )
 from .cuda_schedule import ScheduleKind, schedule_candidates
 from .ir import KernelConsumer, build_integral_ir
+from .production_contracts import RYS_TASK_FOCK_CLASS_SETS
 from .production_selection import KernelSelection
 from .rys_task import task_parallel_rys_eligible
 
@@ -24,10 +25,10 @@ def direct_rys_task_candidates(
     """Reuse exact K admission with a bounded, lane-local value producer.
 
     Inventory intersects existing compiled streaming consumers. Higher orders,
-    unavailable classes and portable builds retain their exact incumbent; no
+    unavailable classes and profiles omitting this family retain their exact incumbent; no
     molecule, method or runtime density enters source selection.
     """
-    if not profile.optional_fock_variants:
+    if "rys_task" not in profile.packaging.fock_variants:
         return ()
     candidates = []
     for incumbent in profile.selections:
@@ -81,15 +82,15 @@ def preferred_rys_task_candidates(
 ) -> tuple[KernelSelection, ...]:
     """Apply an explicit default preference independently of compiled capability.
 
-    An admitted preference uses shared classes unless an exact tuned profile
-    replaces them, including an empty explicit opt-out.
-    They never transfer through compatibility. Missing override capability is a
-    manifest error; unsupported shared defaults retain the incumbent instead.
+    An admitted preference uses shared classes unless a resolved in-scope
+    override replaces them, including an empty explicit opt-out. Target scope
+    is resolved independently of tuning metadata. Missing override capability
+    is a manifest error; unsupported shared defaults retain the incumbent.
     """
     if not profile.prefer_rys_task_fock:
         return ()
-    preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-    override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None
+    preferred = set(RYS_TASK_FOCK_CLASS_SETS["bounded_spd"])
+    override = profile.preferred_rys_task_fock_shell_classes
     candidates = direct_rys_task_candidates(profile)
     if override is not None:
         preferred = set(override)

@@ -321,13 +321,35 @@ Optional production code shapes are declared per manifest row through the
 `capabilities` list. The current names are `streaming_fock`, `mixed_fock`, and
 `local_packed_streaming_fock`; an omitted list keeps those wrappers disabled.
 This metadata is profile-scoped and does not promote a candidate by itself.
-`optional_fock_variants` controls whether alternative Rys-value, Rys-task and
-restricted K-block families are compiled beside the primary kernels. It defaults
-to `true`; the portable profile sets it to `false` to bound first-launch module
-loading. Primary coverage and native fallbacks remain available. This build-size
-choice is independent of the target architecture and tuning provenance. An exact
-profile that disables variants must also remove any preference for an omitted
-variant; a stale preference remains an error.
+Build packaging, runtime preference and native force execution have separate
+contracts, independent of the profile's `kind` and display/match flags:
+
+- `packaging.fock_variants` lists any subset of `rys_value`, `rys_task` and
+  `k_block`. Omission includes all three; an empty list omits all alternative
+  families. The stock portable profile uses an empty list to bound first-launch
+  module loading, without removing primary coverage or native fallbacks.
+- `packaging.derivative_shells` independently includes exact derivative shell
+  packages, defaulting to `false`. The global derivative build switch remains
+  authoritative even when a profile opts in.
+- `prefer_rys_task_fock` enables the default preference, not compilation. The
+  [Rys-task selection contract](direct_rys_tasks.md) defines shared class sets,
+  explicit target scopes and resource admission. An explicit preference for an
+  unavailable family/class is rejected, regardless of the profile label.
+- `force_policy.small_work_angular_queue` opts into the materialized small-work
+  crossover described above; it defaults to `true`. The stock SM120 profile
+  explicitly disables it, while the stock portable profile enables it.
+- `force_policy.require_bounded_spd_coverage` requires explicit generated/native
+  ownership of present canonical s/p/d force classes for bounded force requests.
+  Missing ownership is rejected rather than silently falling back, except under
+  explicit diagnostic class filters. It defaults to `false` for every stock
+  profile, preserving bounded correctness fallbacks. It does not affect
+  energy-only requests or classes outside s/p/d.
+
+These controls do not qualify a new architecture or imply a performance gain.
+The old top-level `optional_fock_variants` and `compile_derivative_shells` fields
+are rejected; custom manifests must use the explicit packaging object. The
+[policy-separation decision](../../.agents/notes/implemented/architecture/2026-11-16-aot-profile-policy-separation.md)
+records the default-preservation rationale.
 
 Large-shell tuning uses a staged compiler pipeline. Equivalent schedules share
 one separately compiled correctness oracle per component mapping; tiled oracle

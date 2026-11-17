@@ -5,12 +5,15 @@ namespace generativeqc::scf::generated {
 namespace {
 
 constexpr ProfileInfo kGenericProfile{"generic_cuda", "portable_cuda", 0, 0, false, true, false};
+constexpr ForceExecutionPolicy kGenericForcePolicy{true, false};
 
 }  // namespace
 
 void select_profile_for_device(int, int, int) noexcept {}
 
 const ProfileInfo& selected_profile() noexcept { return kGenericProfile; }
+
+const ForceExecutionPolicy& selected_force_policy() noexcept { return kGenericForcePolicy; }
 
 const char* selected_registry_status() noexcept { return "aot_disabled"; }
 

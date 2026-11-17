@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-10
 
+The metadata-based override and portable restrictions below are superseded by
+[explicit policy separation](2026-11-16-aot-profile-policy-separation.md).
+The historical rationale and qualification evidence remain unchanged.
+
 ## Problem
 
 PR #2228 established a shared nine-class Rys-K preference for compiled,

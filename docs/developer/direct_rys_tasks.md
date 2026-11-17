@@ -1,10 +1,9 @@
 # Independent task-parallel Direct Rys-K
 
-Without an explicit exact-tuned override, compiled non-portable CUDA profiles
-default to value-only `_rys_task` AOT variants
+Profiles explicitly enabling `prefer_rys_task_fock` use value-only `_rys_task` AOT variants
 for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`, `dpps` and `dspp`
 Direct exchange classes when the target supports their packed-task schedule.
-Other classes and generic portable profiles retain the incumbent recurrence
+Other classes and profiles without that preference retain the incumbent recurrence
 with the independently selected queue schedule. Selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
@@ -16,27 +15,39 @@ also set `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill` to roll back both promotions
 `integral/production_rys_tasks.py` intersects the compiled streaming-Fock
 inventory with `rys_task.py`'s bounded value capability. Eligibility requires
 one through three Rys roots, s/p/d shells, at most a p shell on the fourth center,
-and at most 64 Cartesian components. `preferred_rys_task_candidates` uses the
-same nine-class algorithmic policy on any compiled non-portable target. The
+and at most 64 Cartesian components. `packaging.fock_variants` must include
+`rys_task` to compile these alternatives. `preferred_rys_task_candidates` uses the
+same nine-class algorithmic policy on any target explicitly enabling preference. The
 compiler validates the actual target's schedule and the runtime intersects
 enabled incumbent coverage. A target need not repeat the full scientific
 numerical matrix just because its compute capability differs. Performance
 results remain device-specific evidence, not an assumed cross-GPU speedup.
 
-An exact tuned profile can replace this shared default with an explicit
-`preferred_rys_task_fock_shell_classes` list in the production manifest. A missing
-field means use the shared default; an explicit empty list disables preference.
-Every override entry must be present in the actual target's generated candidate
-inventory, otherwise generation rejects the stale or unsupported override.
-Compatible and non-tuned profiles discard the source profile's override and use
-the shared default; portable profiles always retain the incumbent. Unsupported
-shared-default classes retain their incumbent rather than causing an error.
+`preferred_rys_task_fock_shell_classes` independently selects classes and the
+scope of their evidence. The stock SM120 profile references the shared policy
+without copying its nine class names:
 
-This reconciles the shared capability policy with independently measured profile
-choices: exact-profile evidence can change the class set without compiler edits,
-but absence of that evidence does not disable the shared policy. It deliberately
-replaces the earlier proposed rule that all unqualified profiles must retain the
-incumbent. See the [integration decision](../../.agents/notes/implemented/architecture/2026-10-10-rys-task-profile-overrides.md).
+```json
+{
+  "class_set": "bounded_spd",
+  "architectures": ["sm_120"]
+}
+```
+
+A scoped explicit list uses `classes` instead of `class_set`. A missing field
+uses the shared class set; an empty `classes` list disables preference within its
+scope. A literal list or an object without `architectures` is an explicit
+all-target experiment, not cross-target performance evidence. Outside a declared
+scope, a compatible profile uses the shared candidate policy only if
+`prefer_rys_task_fock` is enabled. Neither `tuned` nor `portable` decides scope.
+Unsupported shared-default classes retain the incumbent; every explicit in-scope
+entry must have compiled capability, otherwise generation rejects the stale or
+unsupported preference. Construction still freezes the admitted route.
+
+The stock portable profile omits optional task variants and disables preference;
+the stock SM120 profile compiles them and enables the scoped shared set. This
+keeps the existing defaults without making SM120 a prerequisite for the
+algorithm. See the [policy-separation decision](../../.agents/notes/implemented/architecture/2026-11-16-aot-profile-policy-separation.md).
 
 `lowering/fock_rys_task.py` changes execution ownership: each lane in a
 128-thread packed CTA owns a complete admitted quartet. Its four 32-lane

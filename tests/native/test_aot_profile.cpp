@@ -30,13 +30,16 @@ int main() {
 
   generated::select_profile_for_device(0, properties.major, properties.minor);
   const auto& profile = generated::selected_profile();
+  const auto& force_policy = generated::selected_force_policy();
   const char* status = generated::selected_registry_status();
   const auto force_mask = generated::enabled_shell_class_mask();
   const auto fock_mask = generated::enabled_fock_shell_class_mask();
   std::cout << "sm_" << properties.major << properties.minor << ' ' << profile.name
             << " tuned=" << profile.tuned << " portable=" << profile.portable
             << " compatible=" << profile.compatible << " registry=" << status
-            << " force_mask=" << force_mask << " fock_mask=" << fock_mask << '\n';
+            << " force_mask=" << force_mask << " fock_mask=" << fock_mask
+            << " angular_queue=" << force_policy.small_work_angular_queue
+            << " strict_coverage=" << force_policy.require_bounded_spd_coverage << '\n';
 
   const generated::ProfileInfo* expected = nullptr;
   std::uint64_t compiled_force_mask = 0;
@@ -89,5 +92,18 @@ int main() {
   // Environment selection may disable generated classes, but cannot invent
   // coverage absent from the selected compiled consumer inventory.
   if ((force_mask & ~compiled_force_mask) != 0 || (fock_mask & ~compiled_fock_mask) != 0) return 7;
+#if defined(GENERATIVEQC_TEST_MOCK_DEVICES)
+  // The host discovery stub provides an unmatched second device. Real CTest
+  // jobs may expose only one GPU, or a second GPU with the same compiled SM.
+  if (cudaSetDevice(1) != cudaSuccess) return 8;
+  const auto& fallback_policy = generated::selected_force_policy();
+  if (!fallback_policy.small_work_angular_queue || fallback_policy.require_bounded_spd_coverage)
+    return 9;
+  if (cudaSetDevice(0) != cudaSuccess) return 10;
+  const auto& restored = generated::selected_force_policy();
+  if (restored.small_work_angular_queue != force_policy.small_work_angular_queue ||
+      restored.require_bounded_spd_coverage != force_policy.require_bounded_spd_coverage)
+    return 11;
+#endif
   return 0;
 }
