@@ -12,17 +12,21 @@ if TYPE_CHECKING:
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = (ROOT / "src/scf/cuda/one_electron_derivatives.cu").read_text()
+SOURCE = (ROOT / "src/scf/cuda/one_electron_gradient_launch.cuh").read_text()
 
 
 def test_implicit_pairs_preserve_triangular_batch_and_warp_ownership(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Check every lane and repair sqrt rounding at 64-bit ordinal boundaries."""
-    begin = SOURCE.index("/** Decode the complete triangular AO domain")
-    end = SOURCE.index("__global__ void serial_gradient(", begin)
+    addressing = _block(SOURCE, "__device__ std::size_t implicit_pair_first(")
+    cooperative = _block(
+        SOURCE, "__global__ void implicit_nucleus_cooperative_gradient("
+    )
     source = tmp_path / "pairs.cpp"
-    source.write_text(PREFIX + SOURCE[begin:end] + PAIR_DRIVER)
+    source.write_text(
+        PREFIX + addressing + "\ntemplate <class Program>\n" + cooperative + PAIR_DRIVER
+    )
     executable = native_cxx.build_executable(
         [source], tmp_path / "pairs", compile_args=["-std=c++17", "-O2"]
     )
@@ -33,14 +37,13 @@ def test_implicit_launch_validation_and_sticky_failure(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     """Fake only CUDA submission, retaining the actual native admission code."""
-    launch = _block(SOURCE, "cudaError_t launch_generated_one_electron_gradient(")
-    launch, replaced = re.subn(
-        r"(\w+)\s*<<<.*?>>>\(.*?\);",
-        lambda match: f'launch("{match.group(1)}", blocks, threads);',
+    launch = _block(SOURCE, "cudaError_t launch_gradient_family(")
+    launch = re.sub(
+        r"\w+<Program>\s*<<<(?P<configuration>.*?)>>>\s*\((?P<arguments>.*?)\);",
+        lambda match: f"submit({match['configuration']}, {match['arguments']});",
         launch,
         flags=re.DOTALL,
     )
-    assert replaced == 5
     source = tmp_path / "launch.cpp"
     source.write_text(PREFIX + LAUNCH_PREFIX + launch + LAUNCH_DRIVER)
     executable = native_cxx.build_executable(
@@ -118,6 +121,7 @@ PREFIX = r"""
 #define __device__
 constexpr unsigned kCooperativeLanes=32,kCooperativeGroups=4,kWarpThreads=32;
 namespace generated { struct PairGeometry {}; }
+struct TestProgram { using Geometry=generated::PairGeometry; };
 struct Dimension { std::size_t x; } blockIdx,blockDim,threadIdx;
 struct OneElectronDeviceView {
   std::int32_t batch_size=1,nbf=1;
@@ -129,9 +133,10 @@ struct OneElectronWeightView {
   double overlap_scale=1,kinetic_scale=1,attraction_scale=1;
 };
 std::vector<std::pair<std::int64_t,std::int64_t>> visits;
+template <class Program>
 void contract_pair_nucleus_cooperative(OneElectronDeviceView,std::int64_t first,
     std::int64_t second,OneElectronWeightView,double sign,double*,
-    generated::PairGeometry*) {
+    typename Program::Geometry*) {
   assert(sign==-1);
   visits.emplace_back(first,second);
 }
@@ -155,7 +160,8 @@ int main() {
         for(unsigned lane=0;lane<kCooperativeLanes;++lane) {
           threadIdx.x=task%kCooperativeGroups*kCooperativeLanes+lane;
           visits.clear();
-          implicit_nucleus_cooperative_gradient(batch,count,{},mask?active:nullptr,-1,nullptr);
+          implicit_nucleus_cooperative_gradient<TestProgram>(
+              batch,count,{},mask?active:nullptr,-1,nullptr);
           if(lane==0) {
             ordered=visits;
             for(auto pair:visits) ++counts[pair];
@@ -189,13 +195,33 @@ constexpr unsigned kDerivativeThreads=128;
 struct NucleusCooperativeSchedule {
   static constexpr unsigned schedule_code=3,block_threads=128,groups_per_block=4;
 };
-std::vector<std::string> kernels;
+enum class PairDomain { implicit_pairs, explicit_pairs, system_or_shell };
+std::vector<PairDomain> kernels;
 int sticky_error,fail_launch;
 cudaError_t cudaPeekAtLastError() { return sticky_error; }
-void launch(const char* name,unsigned blocks,unsigned threads) {
-  assert(blocks && threads==128);
-  kernels.emplace_back(name);
+void record_submission(unsigned blocks,unsigned threads,unsigned shared,
+                       cudaStream_t stream,PairDomain domain) {
+  assert(blocks && threads==128 && shared==0 && stream==0);
+  kernels.push_back(domain);
   if(int(kernels.size())==fail_launch) sticky_error=7;
+}
+void submit(unsigned blocks,unsigned threads,unsigned shared,cudaStream_t stream,
+            OneElectronDeviceView,OneElectronWeightView,const std::uint8_t*,
+            double,double*) {
+  record_submission(blocks,threads,shared,stream,PairDomain::system_or_shell);
+}
+void submit(unsigned blocks,unsigned threads,unsigned shared,cudaStream_t stream,
+            OneElectronDeviceView batch,std::size_t count,OneElectronWeightView,
+            const std::uint8_t*,double,double*) {
+  const auto n=std::size_t(batch.nbf);
+  assert(count==n*(n+1)/2);
+  record_submission(blocks,threads,shared,stream,PairDomain::implicit_pairs);
+}
+void submit(unsigned blocks,unsigned threads,unsigned shared,cudaStream_t stream,
+            OneElectronDeviceView,const std::int32_t* first,const std::int32_t* second,
+            std::size_t count,OneElectronWeightView,const std::uint8_t*,double,double*) {
+  assert(first && second && count);
+  record_submission(blocks,threads,shared,stream,PairDomain::explicit_pairs);
 }
 """
 
@@ -211,13 +237,13 @@ int main() {
   const auto call=[&](unsigned schedule,const std::int32_t* first=nullptr,
                      const std::int32_t* second=nullptr,std::size_t count=0) {
     kernels.clear();
-    return launch_generated_one_electron_gradient(batch,first,second,count,{},nullptr,
+    return launch_gradient_family(batch,first,second,count,{},nullptr,
                                                    schedule,1,&output,0);
   };
   assert(call(3)==cudaSuccess);
-  assert((kernels==std::vector<std::string>{"implicit_nucleus_cooperative_gradient"}));
+  assert((kernels==std::vector<PairDomain>{PairDomain::implicit_pairs}));
   assert(call(3,indices,indices,1)==cudaSuccess);
-  assert((kernels==std::vector<std::string>{"nucleus_cooperative_gradient"}));
+  assert((kernels==std::vector<PairDomain>{PairDomain::explicit_pairs}));
   assert(call(3,indices,nullptr,1)==cudaErrorInvalidValue && kernels.empty());
   assert(call(3,nullptr,nullptr,1)==cudaErrorInvalidValue && kernels.empty());
   assert(call(0)==cudaErrorInvalidValue && kernels.empty());

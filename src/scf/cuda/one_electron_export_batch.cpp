@@ -264,7 +264,9 @@ generativeqc_status build_cuda_one_electron_integrals_batch_impl(
   constexpr unsigned threads = 128U;
   const unsigned blocks = static_cast<unsigned>((pair_launch_elements + threads - 1U) / threads);
   cuda_error = launch_generated_one_electron_values(
-      one_electron_view(device_batch), device_pair_first, device_pair_second, pair_count,
+      one_electron_view(device_batch,
+                        *std::max_element(host.shell_angular.begin(), host.shell_angular.end())),
+      device_pair_first, device_pair_second, pair_count,
       cuda_policy::one_electron_value_mapping_requested(), device_overlap, device_hcore, stream);
   if (cuda_error != cudaSuccess) {
     detail = "generated CUDA one-electron value launch failed";

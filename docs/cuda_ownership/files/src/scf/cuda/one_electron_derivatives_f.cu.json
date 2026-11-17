@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/one_electron_derivatives_f.cu",
+  "reason": "Private host bridge instantiating the compiler-owned through-f derivative program on the shared weighted-gradient launch implementation; no independent derivative formula.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives"
+}

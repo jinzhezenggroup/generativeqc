@@ -396,6 +396,31 @@ def _emit_gradient_helpers(
     return "\n".join(lines)
 
 
+def _emit_native_derivative_binding(maximum: int, namespace: str) -> str:
+    """Bind native traversal to typed scalar helpers owned by the compiler."""
+    owner = "::" + namespace
+    return f"""struct Program {{
+  static constexpr unsigned maximum_angular_momentum = {maximum};
+  using Geometry = PairGeometry;
+  __device__ __forceinline__ static Geometry make_pair(double a, double b,
+      double ax, double ay, double az, double bx, double by, double bz) {{
+    return {owner}::make_pair(a, b, ax, ay, az, bx, by, bz);
+  }}
+  __device__ __forceinline__ static unsigned component_index(unsigned x, unsigned y, unsigned z) {{
+    return {owner}::component_index(x, y, z);
+  }}
+  __device__ __forceinline__ static auto overlap_kinetic_gradient(const Geometry& pair,
+      unsigned first, unsigned second) {{
+    return {owner}::overlap_kinetic_gradient(pair, first, second);
+  }}
+  __device__ __forceinline__ static auto attraction_gradient(const Geometry& pair,
+      unsigned first, unsigned second, double x, double y, double z) {{
+    return {owner}::attraction_gradient(pair, first, second, x, y, z);
+  }}
+}};
+"""
+
+
 def emit_one_electron_derivatives_cuda(
     maximum_angular_momentum: int = 3,
     *,
@@ -420,6 +445,7 @@ def emit_one_electron_derivatives_cuda(
             _emit_axis_permutations(maximum),
             _emit_gradient_helpers(False, maximum),
             _emit_gradient_helpers(True, maximum),
+            _emit_native_derivative_binding(maximum, namespace),
             f"}}  // namespace {namespace}",
             "#endif",
             "",
