@@ -1037,14 +1037,14 @@ ScfResult run_rks(
                          ks.physical_residual < residual_tolerance &&
                          (!ordinary_primary || residual_max_abs(final_residual) <=
                                                    std::min(1.0e-8, options.density_tolerance));
-      if (result.converged && (evaluate_xc.program || options.retain_ks_state)) {
+      if (result.converged && (evaluate_xc.program || options.certify_ks_export)) {
         // Export diagonalizes this last F[D], not the pre-rebuild operator.
         // Certify its projector now so a rejected closure can spend the
         // unused SCF budget instead of publishing an unexportable state.
         orbitals = generalized_eigen(final.fock, orthogonalizer, n);
         projected = density_from_orbitals(orbitals.vectors, n, occupied, 2.0);
         const double canonical_change = density_rms(projected, density);
-        const double canonical_tolerance = options.retain_ks_state
+        const double canonical_tolerance = options.certify_ks_export
                                                ? residual_tolerance
                                                : std::min(1.0e-8, options.density_tolerance);
         double maximum_change = 0.0;

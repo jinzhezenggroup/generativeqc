@@ -21,6 +21,10 @@ required by the existing export validator.
 
 ## Decision
 
+The consumer-selection rule in this initial decision is superseded by
+[explicit export certification](2026-11-17-explicit-ks-export-certification.md).
+The bounded closure and physical acceptance thresholds remain unchanged.
+
 Run the existing final-Fock projector check for retained curated states too,
 for both RKS and UKS. Retained states use the owner's physical residual tolerance
 for both RMS and maximum-entry density reconstruction, matching the stationarity
@@ -50,6 +54,12 @@ native Hessian/HVP, a representative Ni saddle or continuum rotational
 invariance; those separate PR gates remain open.
 
 ## Degenerate UKS occupation boundary
+
+The initial guard below is superseded by
+[explicit export certification](2026-11-17-explicit-ks-export-certification.md).
+It passes all 149 native CTests at `199084bb3` but fails the independent Cs and
+mixed RSH/DF force controls (43 passed, two failed). Do not restore the blanket
+stabilized-occupation exemption for production export consumers.
 
 Full native CI on the subsequently integrated source exposes the retained
 LDA/PBE OH state regression in `generativeqc_uks_state_tests` on both GCC and

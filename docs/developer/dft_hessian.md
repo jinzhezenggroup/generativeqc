@@ -295,6 +295,14 @@ intentional primitive-free builds remain valid without enabling dependent
 response owners. Explicitly enabling the Hessian with those primitives disabled
 remains a configuration error; the prerequisite check is not bypassed.
 
+The CPU DFT method explicitly requests `ScfOptions::certify_ks_export` when
+retaining a publishable physical KS state. The bounded RKS/UKS closure certifies
+the unshifted final-Fock projector at the export stationarity tolerance, even
+if earlier proposals used occupation stabilization. `retain_ks_state` alone
+only retains the already evaluated physical Fock and does not request that
+stronger certificate or change a retention-only consumer's occupation root.
+The independent physical-frame exporter still validates every derivative read.
+
 The bridge locks the prepared batch context, authenticates its current token,
 borrows the actual Fock/basis/grid/correction owners and verifies the requested
 elements, geometry, charge and multiplicity against them. It exports a verified
