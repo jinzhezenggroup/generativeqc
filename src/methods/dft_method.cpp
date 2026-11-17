@@ -1587,14 +1587,22 @@ class KsPreparedState final : public KsSingleOwnerPort {
         dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient) &&
         spec.exchange.approximation == scf::FockApproximation::Exact &&
         spec.exchange.op == scf::FockOperator::FullRange && !execution_plan_.d4_correction;
+    // A range-separated nonlocal owner (WB97M-V) carries its full-range J and
+    // global-hybrid K in this Fock owner; its long-range correction keeps its
+    // own derivative consumer. Only that measured composition is admitted.
+    const bool range_separated_nonlocal = execution_plan_.nonlocal_correlation &&
+                                          (execution_plan_.range_exchange || range_strategy_) &&
+                                          global_hybrid;
     const bool direct_full_range =
         (pure_coulomb || global_hybrid) && strategy.backend == scf::FockBackend::Cuda &&
         spec.derivative_order == 0 && spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
         spec.coulomb.approximation == scf::FockApproximation::Exact &&
         spec.coulomb.op == scf::FockOperator::FullRange &&
         options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
-        !execution_plan_.range_exchange && !range_strategy_ &&
-        !execution_plan_.nonlocal_correlation && system_.ecp_terms.empty() &&
+        ((!execution_plan_.range_exchange && !range_strategy_ &&
+          !execution_plan_.nonlocal_correlation) ||
+         range_separated_nonlocal) &&
+        system_.ecp_terms.empty() &&
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     // This schedule contracts the authenticated final density. Its arithmetic

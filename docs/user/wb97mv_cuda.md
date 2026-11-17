@@ -196,16 +196,17 @@ tile count and planned geometry/Becke concurrency. Tiling leaves the discrete
 grid, density cutoff and FP64 response equations unchanged.
 These bounds exclude existing SCF state, compiler processes, CUDA modules and
 driver-managed recurrence stacks. Host work includes snapshot validation and
-exports, tiling, and total-density/VV10-active-domain packing. The VV10 cutoff
-is `rho >= 1e-10` on both pair legs, using the same active-branch convention as
-SCF.
+exports, tiling, and total-density/VV10-active-domain packing. The VV10 domain
+is `rho >= 1e-10` and `|weight| > 1e-14` on both pair legs, using the same
+active-branch convention as SCF.
 
 Matched GPU4PySCF comparisons must configure the same VV10 density mask in both
-SCF and analytic forces. Native MolecularV1 and GPU4PySCF 1.8.1 both use
-`rho >= 1e-10`; PySCF CPU uses `rho >= 1e-8`. GPU4PySCF additionally screens
-`|weight| <= 1e-14`, while native consumers retain nonzero signed weights and
-their derivatives. Matching the density cutoff and grid coordinates therefore
-does not match every screening operation. The live OMol25 runner binds the
+SCF and analytic forces. Native MolecularV1 (policy
+`vv10-molecular-rho-ge-1e-10-absw-gt-1e-14-v3`) and GPU4PySCF 1.8.1 both use
+`rho >= 1e-10` and screen `|weight| <= 1e-14` in SCF and forces; PySCF CPU uses
+`rho >= 1e-8`. Screened points drop out of both pair legs, the beta term and the
+weight derivative. On H100 water-96 they are about 9% of the points with
+`rho >= 1e-10` and contribute below FP64 resolution of the total energy. The live OMol25 runner binds the
 native density policy in its protocol and records the comparator's separate
 weight screening. Historical receipts retain their original density policy;
 the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates are unchanged. See the

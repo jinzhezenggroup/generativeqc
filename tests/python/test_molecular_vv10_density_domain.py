@@ -47,3 +47,27 @@ def test_old_policy_identity_cannot_silently_replay_new_domain() -> None:
             original_nonlocal_correlation("vv10"),
             density_policy="vv10-molecular-rho-ge-1e-8-v1",
         )
+
+
+def test_near_zero_quadrature_weights_leave_the_domain() -> None:
+    """|w| <= 1e-14 is inactive on both pair legs; larger signed weights stay."""
+    spec = original_nonlocal_correlation("vv10")
+    owner = FixedDensityNonlocalCorrelation(
+        spec, density_policy=MOLECULAR_VV10_DENSITY_POLICY
+    )
+    rho = np.array([0.4, 0.3, 0.2, 0.1, 0.5])
+    weights = np.array([1e-14, -1e-14, np.nextafter(1e-14, 1.0), -2e-14, 0.0])
+    points = np.arange(15).reshape(5, 3) / 10
+    gradient = rho[:, None] * np.array([[0.1, -0.2, 0.3]])
+    actual_w, actual_rho, actual_g, active = owner._density_domain(
+        weights, rho, gradient
+    )
+    np.testing.assert_array_equal(active, [False, False, True, True, False])
+    np.testing.assert_array_equal(actual_w[active], weights[active])
+    np.testing.assert_array_equal(actual_rho[~active], 1)
+    np.testing.assert_array_equal(actual_g[~active], 0)
+    expected = nonlocal_energy_reference(
+        points[active], weights[active], rho[active], gradient[active], spec
+    )
+    actual = nonlocal_energy_reference(points, actual_w, actual_rho, actual_g, spec)
+    assert actual == pytest.approx(expected, abs=1e-30, rel=2e-14)

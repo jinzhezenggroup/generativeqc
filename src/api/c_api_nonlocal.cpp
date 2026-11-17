@@ -13,6 +13,7 @@
 #include "api/handles.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "generativeqc/generativeqc.h"
+#include "xc_cpu_generated.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/grid_task_view.cuh"
 #include "runtime/cuda_resources.cuh"
@@ -409,7 +410,8 @@ generativeqc_internal_nonlocal_cuda_force_execute_v1(generativeqc_nonlocal_cuda_
     generativeqc::runtime::CudaDeviceScope device(owner->device);
     auto* errors = owner->errors.get();
     generativeqc::dft::nlc::enqueue_vv10_molecular_domain_cuda(
-        owner->stream, owner->point_count, owner->density_threshold, owner->weights,
+        owner->stream, owner->point_count, owner->density_threshold,
+        generativeqc::dft::generated::kMolecularVv10WeightThreshold, owner->weights,
         owner->raw_density, owner->raw_gradient, owner->effective_weights, owner->effective_density,
         owner->effective_gradient, errors + 1);
     const auto* selected = std::getenv("GENERATIVEQC_VV10_PAIR_SCHEDULE");

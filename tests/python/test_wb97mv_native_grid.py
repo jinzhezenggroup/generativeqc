@@ -315,7 +315,14 @@ def _independent_potential(
             2 * vsigma[:, 2] * fields[1, 1:4] + vsigma[:, 1] * fields[0, 1:4]
         )
     total = fields.sum(axis=0)
-    active = total[0] >= 1e-8 if nonlocal_active is None else nonlocal_active
+    active = (
+        fixture.get(
+            "nonlocal_active",
+            (total[0] >= 1e-10) & (np.abs(fixture["weights"]) > 1e-14),
+        )
+        if nonlocal_active is None
+        else nonlocal_active
+    )
     if active.any():
         vrho, vsigma = nonlocal_feature_derivatives_reference(
             fixture["points"][active],
@@ -617,6 +624,45 @@ def test_live_molecular_grid_reference_and_response(spins: int, physical: bool) 
                 atol=3e-9,
                 rtol=2e-6,
             )
-    active = np.count_nonzero(_fields(jets, fixture["density"]).sum(axis=0)[0] >= 1e-8)
+    active = np.count_nonzero(
+        (_fields(jets, fixture["density"]).sum(axis=0)[0] >= 1e-10)
+        & (np.abs(fixture["weights"]) > 1e-14)
+    )
     assert result["active"] == active
     assert result["reference_pairs"] == result["response_pairs"] == active**2
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_native_signed_weight_boundary_matches_trimmed_grid(
+    probe: Path, spins: int
+) -> None:
+    """Both VV10 pair legs use the fixed signed-weight domain, including equality."""
+    fixture = _fixture(spins)
+    threshold = 1e-14
+    fixture["weights"][:7] = (
+        0,
+        threshold / 2,
+        -threshold / 2,
+        threshold,
+        -threshold,
+        np.nextafter(threshold, np.inf),
+        -np.nextafter(threshold, np.inf),
+    )
+    keep = np.abs(fixture["weights"]) > threshold
+    trimmed = dict(fixture)
+    for name in ("points", "weights"):
+        trimmed[name] = fixture[name][keep].copy()
+    trimmed["jets"] = fixture["jets"][:, keep].copy()
+    actual, expected = _native(probe, fixture), _native(probe, trimmed)
+    # The fixture's final point is vacuum. Pair counts distinguish exact-boundary
+    # admission even when an erroneous tiny-weight contribution rounds away.
+    count = np.count_nonzero(keep) - 1
+    for result in (actual, expected):
+        assert result["prepared"] == result["applied"] == 0
+        assert result["active"] == count
+        assert result["reference_pairs"] == result["response_pairs"] == count**2
+    # Semilocal terms still include the removed tiny weights, below this bound.
+    for field in ("potential", "response"):
+        np.testing.assert_allclose(
+            actual[field], expected[field], atol=2e-12, rtol=2e-10
+        )

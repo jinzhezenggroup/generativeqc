@@ -69,6 +69,8 @@ enum class Vv10Variant { vv10, rvv10 };
 using namespace generativeqc::dft::nlc;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1}, gridDim{1};
 std::uint64_t pair_visits{};
+double probe_weight_threshold{};
+extern "C" void set_weight_threshold(double value) { probe_weight_threshold = value; }
 int last_admission_rejected = -1;
 void atomicExch(int* out, int value) { *out = value; }
 void atomicAdd(unsigned long long* out, unsigned long long value) { *out += value; }
@@ -94,7 +96,8 @@ int evaluate(double first_weight, double first_density, double* out, double firs
   double vrho[n]{}, vsigma[n]{}, point_derivative[3*n]{}, weight_derivative[n]{};
   int domain_error = 0, pair_error = 0, collect_error = 0;
   threadIdx.x = 0;
-  molecular_domain_kernel(n, 1e-12, weights, density, gradient, ew, rho, grad, &domain_error);
+  molecular_domain_kernel(n, 1e-12, probe_weight_threshold, weights, density, gradient, ew, rho,
+                          grad, &domain_error);
   for (std::size_t i = 0; i < n; ++i) {
     threadIdx.x = i;
     local_scales_kernel<Variant, true>(n, 6.0, 0.01, ew, rho, grad, omega, kappa,
@@ -194,6 +197,8 @@ extern "C" int run_scf(int variant, int mask, double weight, double density, dou
         ct.POINTER(ct.c_double),
     ]
     native.run.restype = ct.c_int
+    native.set_weight_threshold.argtypes = [ct.c_double]
+    native.set_weight_threshold.restype = None
     native.run_scf.argtypes = native.run.argtypes
     native.run_scf.restype = ct.c_int
     native.run_gradient.argtypes = [
@@ -418,3 +423,24 @@ def test_linear_admission_preserves_outputs_order_and_executed_pair_visits(
         assert outputs[1] == outputs[0]
     assert outputs[1][5:7] == outputs[0][5:7]
     assert outputs[1][-1] == outputs[0][-1]
+
+
+@pytest.mark.parametrize("variant", [0, 1], ids=["vv10", "rvv10"])
+def test_weight_threshold_screens_near_zero_weights_on_both_legs(
+    signed_weight_probe: ct.CDLL, variant: int
+) -> None:
+    """Policy v3: |w| <= threshold is inactive; larger signed weights stay active."""
+    signed_weight_probe.set_weight_threshold(1e-14)
+    try:
+        for weight in (1e-14, -1e-14, 0.0, -0.0, 5e-15):
+            actual = _run(signed_weight_probe, variant, weight)
+            assert actual[5] == 1.0  # Inactive rows carry the negative-zero marker.
+            assert actual[1:5] == [0.0, 0.0, 0.0, 0.0]
+            assert actual[7:13] == [0.0] * 6
+        for weight in (2e-14, -2e-14, 0.2):
+            actual = _run(signed_weight_probe, variant, weight)
+            assert actual[5] == float(weight < 0.0)
+            assert actual[4] != 0.0
+            assert actual[12] == actual[4]
+    finally:
+        signed_weight_probe.set_weight_threshold(0.0)

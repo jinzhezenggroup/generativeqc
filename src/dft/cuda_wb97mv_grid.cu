@@ -224,7 +224,8 @@ __global__ void discover(const double* fields, const double* weights, const doub
     if (!isfinite(total) || !isfinite(weights[point])) atomicExch(status, 1);
     for (unsigned axis = 0; axis < 3; ++axis)
       if (!isfinite(points[3 * point + axis])) atomicExch(status, 1);
-    if (total >= ad::vv10_density_threshold) active[size++] = point;
+    if (total >= ad::vv10_density_threshold && fabs(weights[point]) > ad::vv10_weight_threshold)
+      active[size++] = point;
   }
   *selected = size;
 }

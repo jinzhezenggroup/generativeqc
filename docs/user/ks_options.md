@@ -287,8 +287,11 @@ reuse and guarded pure-J density-first contraction in orders six/seven. The
 method authenticates the actual J/K source and resident final-density token,
 not a functional name. Pure J permits independent D4/gCP terms; nonzero
 exchange, bilinear seeds and partial AO masks retain component contraction.
-HF, UKS, fitted, ECP, RSH, nonlocal and D4-hybrid consumers keep their previous
-order-six/seven defaults. All resource and derivative-capability guards remain.
+The WB97M-V Direct owner also qualifies: its full-range J plus exact global-hybrid
+K traversal uses the same schedule while its long-range K correction keeps its own
+traversal. HF, UKS, fitted, ECP, other RSH, other nonlocal and D4-hybrid consumers
+keep their previous order-six/seven defaults. All resource and
+derivative-capability guards remain.
 
 `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
 Explicit `=1` or `=spatial-reuse` selects the earlier spatial consumer;

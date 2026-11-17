@@ -20,6 +20,7 @@ from .grid import ExplicitGrid, MolecularGrid, checked_int
 from .nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
     MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
 )
 from .nonlocal_reference import (
     nonlocal_energy_reference,
@@ -222,7 +223,9 @@ class FixedDensityNonlocalCorrelation:
             raise ValueError(
                 "molecular nonlocal density/gradient must be finite and density nonnegative"
             )
-        active = rho >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)
+        active = (rho >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)) & (
+            np.abs(weights) > float(MOLECULAR_VV10_WEIGHT_THRESHOLD)
+        )
         return (
             np.where(active, weights, 0.0),
             np.where(active, rho, 1.0),

@@ -582,7 +582,8 @@ __global__ void reduce_energy_ordered_kernel(std::size_t npoint, const double* e
   }
 }
 
-__global__ void molecular_domain_kernel(std::size_t npoint, double threshold, const double* weights,
+__global__ void molecular_domain_kernel(std::size_t npoint, double threshold,
+                                        double weight_threshold, const double* weights,
                                         const double* density, const double* gradient,
                                         double* effective_weights, double* effective_density,
                                         double* effective_gradient, int* failed) {
@@ -598,7 +599,10 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
     const bool valid = isfinite(rho) && rho >= 0.0 && isfinite(gx) && isfinite(gy) &&
                        isfinite(gz) && isfinite(weight);
     if (!valid) atomicExch(failed, 1);
-    const bool inactive = !valid || rho < threshold;
+    // Near-zero quadrature weights are outside the molecular domain as well.
+    // A zero threshold keeps every weight, including signed zeros, active.
+    const bool inactive =
+        !valid || rho < threshold || (weight_threshold > 0.0 && fabs(weight) <= weight_threshold);
     // Distinguish screened density rows from active signed-zero weights without
     // allocating an additional point mask.
     effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight);
@@ -705,20 +709,22 @@ void enqueue_vv10_force_key_compare_cuda(cudaStream_t stream, std::size_t point_
 }
 
 void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_count,
-                                        double density_threshold, const double* weights,
-                                        const double* density, const double* density_gradient,
-                                        double* effective_weights, double* effective_density,
+                                        double density_threshold, double weight_threshold,
+                                        const double* weights, const double* density,
+                                        const double* density_gradient, double* effective_weights,
+                                        double* effective_density,
                                         double* effective_density_gradient, int* numerical_error) {
   if (stream == nullptr || !point_count || !std::isfinite(density_threshold) ||
-      density_threshold <= 0.0 || weights == nullptr || density == nullptr ||
-      density_gradient == nullptr || effective_weights == nullptr || effective_density == nullptr ||
+      density_threshold <= 0.0 || !std::isfinite(weight_threshold) || weight_threshold < 0.0 ||
+      weights == nullptr || density == nullptr || density_gradient == nullptr ||
+      effective_weights == nullptr || effective_density == nullptr ||
       effective_density_gradient == nullptr || numerical_error == nullptr)
     throw std::invalid_argument("invalid resident molecular VV10 domain request");
   runtime::cuda_resource_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), stream));
   constexpr unsigned threads = 128;
   molecular_domain_kernel<<<launch_blocks(point_count, threads), threads, 0, stream>>>(
-      point_count, density_threshold, weights, density, density_gradient, effective_weights,
-      effective_density, effective_density_gradient, numerical_error);
+      point_count, density_threshold, weight_threshold, weights, density, density_gradient,
+      effective_weights, effective_density, effective_density_gradient, numerical_error);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 

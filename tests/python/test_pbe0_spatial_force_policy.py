@@ -216,5 +216,43 @@ int main() {
   reject_hybrid([](auto& value) { value.execution_plan_.d4_correction = true; });
   reject([](auto& value) { value.system_.ecp_terms.push_back(1); });
   reject([](auto& value) { value.system_.atoms[0].ecp_core = 2; });
+  // WB97M-V: nonlocal correlation with a separately owned range correction.
+  // Its exact full-range J + global-hybrid K source is admitted; the LR
+  // correction keeps its own traversal outside this predicate.
+  Method wb97mv;
+  wb97mv.execution_plan_.nonlocal_correlation = true;
+  wb97mv.execution_plan_.range_exchange = true;
+  wb97mv.range_strategy_ = true;
+  assert(wb97mv.qualified_spatial_force_default());
+  for (bool range_exchange : {false, true})
+    for (bool range_strategy : {false, true}) {
+      auto variant = wb97mv;
+      variant.execution_plan_.range_exchange = range_exchange;
+      variant.range_strategy_ = range_strategy;
+      assert(variant.qualified_spatial_force_default() == (range_exchange || range_strategy));
+    }
+  {
+    auto pure = wb97mv;
+    pure.fock_.strategy_value.spec.exchange.present = false;
+    assert(!pure.qualified_spatial_force_default());
+    auto d4 = wb97mv;
+    d4.execution_plan_.d4_correction = true;
+    assert(!d4.qualified_spatial_force_default());
+    auto fitted = wb97mv;
+    fitted.options_.density_fitting_mode = 1;
+    assert(!fitted.qualified_spatial_force_default());
+    auto small = wb97mv;
+    small.fock_.diagnostic_value.nbf = 383;
+    assert(!small.qualified_spatial_force_default());
+    auto open_shell = wb97mv;
+    open_shell.execution_plan_.spin_channels = 2;
+    assert(!open_shell.qualified_spatial_force_default());
+    scf::DirectForcePrecisionRequest mixed;
+    mixed.mixed_grid = true;
+    assert(!wb97mv.qualified_spatial_force_default(&mixed));
+    auto local_rsh = wb97mv;
+    local_rsh.execution_plan_.nonlocal_correlation = false;
+    assert(!local_rsh.qualified_spatial_force_default());
+  }
 }
 """

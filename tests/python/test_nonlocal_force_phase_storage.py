@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 # Exercise the current molecular domain, including its exact inclusive boundary.
 THRESHOLD = 1e-10
+WEIGHT_THRESHOLD = 1e-14
 COEFFICIENT = Fraction(3, 5)
 
 
@@ -51,7 +52,7 @@ def cuda_runtime() -> tuple[Any, ct.CDLL]:
 
 
 def _inputs(count: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Retain signed and active zero weights, plus initially screened rows."""
+    """Retain signed weights, plus density- and zero-weight-screened rows."""
     rng = np.random.default_rng(9821 + count)
     points = rng.normal(size=(count, 3))
     weights = rng.uniform(0.1, 1.1, size=count)
@@ -75,7 +76,7 @@ def _reference(
     spec: NonlocalCorrelationSpec,
 ) -> np.ndarray:
     """Apply MolecularV1 then independently evaluate feature/geometry seeds."""
-    inactive = density < THRESHOLD
+    inactive = (density < THRESHOLD) | (np.abs(weights) <= WEIGHT_THRESHOLD)
     effective_weights = np.where(inactive, 0.0, weights)
     effective_density = np.where(inactive, 1.0, density)
     effective_gradient = np.where(inactive[:, None], 0.0, gradient)
@@ -387,8 +388,8 @@ def test_automatic_pair_schedule_matches_sparse_independent_oracle(
     """Cross the automatic admission boundary with bounded physical pair work.
 
     Spread a small independently differentiated domain across a large molecular
-    grid. Screened rows must stay zero, while signed and positive-zero active
-    weights retain their feature, coordinate and quadrature responses. Unset and
+    grid. Screened rows, including zero weights, must stay zero, while signed
+    active weights retain their feature, coordinate and quadrature responses. Unset and
     empty selectors both exercise production automatic selection, not an opt-in.
     """
     cp, library = cuda_runtime

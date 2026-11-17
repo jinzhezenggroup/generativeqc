@@ -221,8 +221,10 @@ relative-response and density-first force consumers when the method supplies
 the existing authenticated full-range, full-precision Direct RKS eligibility
 hint. The admission policy remains in `src/dft/cuda_spd_force_policy.hpp` and
 `src/methods/dft_method.cpp`; this default does not widen its size, spin, source,
-precision or operator coverage. Generic HF and RSH consumers without that hint
-retain their previous defaults.
+precision or operator coverage. The WB97M-V Direct owner supplies the hint for
+the full-range part that its RSH derivative consumer already splits off; the
+long-range correction traversal is unchanged. Generic HF and other RSH consumers
+without that hint retain their previous defaults.
 
 The order-six owner shares primitive preparation and the relative Coulomb
 response DAG across Cartesian components and derivative centers. Pure-J

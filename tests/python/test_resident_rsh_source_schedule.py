@@ -67,7 +67,7 @@ struct Binding { size_t nbf{1}; explicit operator bool() const { return true; } 
 Binding prepared_cuda_direct_derivative_binding(const PreparedFockPlan&) { return {}; }
 std::array<double, 3> scratch{};
 int full_status{}, range_status{};
-bool full_submitted{}, range_submitted{};
+bool full_submitted{}, range_submitted{}, spatial_forwarded{};
 void publish(CudaDerivativeSourceKind kind, size_t channels,
              const CudaDerivativeSourceConsumer& consumer) {
   consumer({kind, CudaDerivativeConvention::Force, 0, reinterpret_cast<void*>(1),
@@ -77,8 +77,12 @@ void publish(CudaDerivativeSourceKind kind, size_t channels,
 }
 generativeqc_status consume_prepared_cuda_direct_shell_full_range_derivatives_device(
     const PreparedFockPlan& plan, const double*, const double*, size_t,
-    const CudaDerivativeSourceConsumer& consumer, std::string&) {
+    const CudaDerivativeSourceConsumer& consumer, std::string&, bool separate_sources,
+    bool allow_spatial_default) {
+  // The canonical split keeps separate full-range channels for the consumer.
+  assert(separate_sources);
   full_submitted = true;
+  spatial_forwarded = allow_spatial_default;
   if (full_status) return GENERATIVEQC_STATUS_CUDA_ERROR;
   scratch = {2 * plan.resolved.spec.coulomb.coefficient,
              5 * plan.resolved.spec.exchange.coefficient, 0};
@@ -141,8 +145,12 @@ int main(int argc, char** argv) {
   };
   double density = 1;
   std::string detail;
+  // The method-owned s/p/d qualification reaches only the full-range traversal.
+  const bool allow_spatial = scenario % 2 == 0;
   auto status = consume_prepared_cuda_direct_rsh_energy_derivatives_device(
-      plan, correction, &density, unrestricted ? &density : nullptr, 1, consume, detail);
+      plan, correction, &density, unrestricted ? &density : nullptr, 1, consume, detail,
+      allow_spatial);
+  if (full_submitted) assert(spatial_forwarded == allow_spatial);
   if (scenario == 3) {
     assert(status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && callbacks == 0);
     assert(!full_submitted && !range_submitted);

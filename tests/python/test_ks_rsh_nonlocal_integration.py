@@ -99,7 +99,8 @@ struct Xc {
     event("nonlocal"); result += 7.0;
   }
 };
-namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-12; }
+namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-12;
+                      constexpr double kMolecularVv10WeightThreshold = 1e-14; }
 namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T&&...) { event("domain"); }
 template<class... T> void enqueue_vv10_cuda_device(T&&...) { event("pairs"); }
