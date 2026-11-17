@@ -254,7 +254,7 @@ def _partials(fixture: dict, fields: np.ndarray, direction: np.ndarray) -> tuple
         if spins == 1
         else np.vstack((direction[:5] + direction[5:10], direction[10:]))
     )
-    active = np.flatnonzero(total[0] >= 1e-8)
+    active = np.flatnonzero((total[0] >= 1e-10) & (np.abs(total[5]) > 1e-14))
     nonlocal_base, nonlocal_moving = np.zeros_like(total), np.zeros_like(total)
     for kind in ("pair", "local"):
         graph, roots = nonlocal_field_program(kind)
@@ -289,6 +289,11 @@ def _partials(fixture: dict, fields: np.ndarray, direction: np.ndarray) -> tuple
 
 def _displaced(fixture: dict, left: float, right: float) -> tuple:
     shifted = dict(fixture)
+    shifted["nonlocal_active"] = fixture.get(
+        "nonlocal_active",
+        (_fields(fixture["jets"], fixture["density"]).sum(axis=0)[0] >= 1e-10)
+        & (np.abs(fixture["weights"]) > 1e-14),
+    )
     shifted["jets"] = (
         fixture["jets"]
         + left * fixture["left_ao"]
@@ -322,7 +327,9 @@ def _energy(fixture: dict, density: np.ndarray) -> float:
         deriv=0,
     )[0]
     total = fields.sum(axis=0)
-    active = fixture.get("nonlocal_active", total[0] >= 1e-8)
+    active = fixture.get(
+        "nonlocal_active", (total[0] >= 1e-10) & (np.abs(fixture["weights"]) > 1e-14)
+    )
     nonlocal_energy = (
         nonlocal_energy_reference(
             fixture["points"][active],
@@ -576,7 +583,8 @@ def test_native_moving_grid_matches_ad_and_retains_bounded_right_cache(
     )
     np.testing.assert_allclose(actual["mixed"], [mixed], atol=2e-11, rtol=2e-9)
     active = np.count_nonzero(
-        _fields(fixture["jets"], fixture["density"]).sum(axis=0)[0] >= 1e-8
+        (_fields(fixture["jets"], fixture["density"]).sum(axis=0)[0] >= 1e-10)
+        & (np.abs(fixture["weights"]) > 1e-14)
     )
     assert actual["nuclear_reference_pairs"] == active**2
     # Three valid and one final revoked direction traverse pairs, independent of
@@ -639,8 +647,8 @@ def test_actual_molecular_moving_grid_against_independent_values(
     ):
         fixture[name] = values
     fixture["nonlocal_active"] = (
-        _fields(fixture["jets"], fixture["density"]).sum(axis=0)[0] >= 1e-8
-    )
+        _fields(fixture["jets"], fixture["density"]).sum(axis=0)[0] >= 1e-10
+    ) & (np.abs(fixture["weights"]) > 1e-14)
     # The molecular probe uses arbitrary signed D motion, not a PSD path.
     # As in the fixed-grid qualification, disable only Libxc's optional FHC
     # projection on separate handles; default-oracle interior tests stay intact.
@@ -752,3 +760,33 @@ runpy.run_path('tools/generate_wb97mv_nuclear_grid.py', run_name='__main__')
             timeout=30,
         )
     assert outputs[0].read_bytes() == outputs[1].read_bytes()
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_native_screened_weight_pullbacks_match_fixed_domain(spins: int) -> None:
+    """Nonzero moving weights must not revive screened VV10 points."""
+    fixture = _data(spins)
+    threshold = 1e-14
+    fixture["weights"][:7] = (
+        0,
+        threshold / 2,
+        -threshold / 2,
+        threshold,
+        -threshold,
+        np.nextafter(threshold, np.inf),
+        -np.nextafter(threshold, np.inf),
+    )
+    # Keep nonzero weight tangents on the screened rows. Unlike the fixed-grid
+    # potential, their erroneous nuclear VV10 pullbacks are not tiny.
+    actual = _native_action(fixture)
+    energy, potential, response, mixed = _compiler_action(fixture)
+    count = np.count_nonzero(np.abs(fixture["weights"]) > threshold)
+    assert actual["nuclear_reference_pairs"] == count**2
+    assert actual["nuclear_response_pairs"] == 4 * count**2
+    for name, expected in (
+        ("energy", [energy]),
+        ("potential", potential.ravel()),
+        ("response", response.ravel()),
+        ("mixed", [mixed]),
+    ):
+        np.testing.assert_allclose(actual[name], expected, atol=2e-11, rtol=2e-9)
