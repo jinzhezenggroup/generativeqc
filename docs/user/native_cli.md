@@ -55,10 +55,16 @@ Tagged releases, when published, are listed on
 
 ## Native CPU B3LYP Hessian and HVP
 
-The default `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` build links canonical
+With the default stationary CPU primitive inventory enabled,
+`GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` links canonical
 Gaussian/VWN-RPA B3LYP RKS/UKS and its canonical uncut two-body D3(BJ), ATM-off
 composition into the native CPU executable. Both commands use the same native
-batch/response owner as the Python API, with no interpreter or runtime compiler:
+batch/response owner as the Python API, with no interpreter or runtime compiler.
+
+The Hessian option defaults to the selected
+`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` value. Disabling the primitive
+first-derivative inventory therefore also disables the default Hessian endpoint;
+explicitly requesting the Hessian while disabling that prerequisite is an error.
 
 ```bash
 generativeqc hessian molecule.xyz --method 'b3lyp-d3(bj)-rks' \

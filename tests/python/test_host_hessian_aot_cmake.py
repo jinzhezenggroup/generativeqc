@@ -18,6 +18,54 @@ from generativeqc_compiler.xc.atomic_grid_native import emit_atomic_grid_header
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize(
+    "primitive_ad,explicit_hessian,expected",
+    [("OFF", None, "OFF"), ("ON", None, "ON"), ("OFF", "ON", None)],
+)
+def test_native_hessian_default_respects_primitive_inventory(
+    tmp_path: Path,
+    required_native_cxx: Any,
+    primitive_ad: str,
+    explicit_hessian: str | None,
+    expected: str | None,
+) -> None:
+    """Keep primitive-free builds valid without weakening explicit prerequisites."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required to exercise native feature selection")
+    build = tmp_path / "build"
+    command = [
+        cmake,
+        "-S",
+        str(ROOT),
+        "-B",
+        str(build),
+        "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+        "-DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF",
+        "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF",
+        "-DGENERATIVEQC_BUILD_TESTS=OFF",
+        "-DGENERATIVEQC_BUILD_CLI=OFF",
+        f"-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT={primitive_ad}",
+        f"-DGENERATIVEQC_COMPILER_CACHE={required_native_cxx.cache}",
+        f"-DCMAKE_CXX_COMPILER={required_native_cxx.compiler}",
+        f"-DPython3_EXECUTABLE={sys.executable}",
+    ]
+    if explicit_hessian is not None:
+        command.append(f"-DGENERATIVEQC_ENABLE_HOST_KS_HESSIAN={explicit_hessian}")
+    result = subprocess.run(
+        command, capture_output=True, text=True, check=False, timeout=120
+    )
+    if expected is None:
+        assert result.returncode != 0
+        assert "requires linked stationary CPU primitive AD" in (
+            result.stdout + result.stderr
+        )
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        cache = (build / "CMakeCache.txt").read_text()
+        assert f"GENERATIVEQC_ENABLE_HOST_KS_HESSIAN:BOOL={expected}" in cache
+
+
 def test_cpu_only_cmake_target_and_inventory_reconfiguration(
     tmp_path: Path, required_native_cxx: Any
 ) -> None:

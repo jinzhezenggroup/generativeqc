@@ -90,7 +90,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake"
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN
-       "Link native CPU stationary full-range GGA-hybrid Hessian execution" ON)
+       "Link native CPU stationary full-range GGA-hybrid Hessian execution"
+       ${GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT})
 if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
   set(GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES ON)
   set(GENERATIVEQC_ENABLE_HOST_KS_RESPONSE ON)

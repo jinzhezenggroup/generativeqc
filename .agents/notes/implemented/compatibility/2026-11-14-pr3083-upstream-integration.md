@@ -132,6 +132,30 @@ reaction saddle or raw continuum rotational invariance. Those scientific gates
 remain separate from the integration and must not be waived to mark this PR
 ready.
 
+## Primitive-free configuration regression
+
+The first integrated CI run `43991950248` exposes a real default-selection
+conflict: CUDA resource builds and lightweight native probes explicitly disable
+stationary CPU primitives, but the newly default-on host Hessian still forces
+its dependent response owner on. Its existing prerequisite check then correctly
+refuses configuration. Do not delete that guard or enable the expensive
+primitive inventory behind a caller's explicit OFF request.
+
+Default `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN` to the selected
+`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` value. Ordinary native builds
+still enable both by default. Clean primitive-free builds now default the
+dependent Hessian off, while an explicit incompatible Hessian ON request still
+fails. Three real-project CMake configure tests cover those combinations; the
+existing transitive production-codegen CMake regression also passes. No CI
+scientific test, physical threshold or explicit capability request is removed.
+
+The separate source-matched 58-module local run exposes the curated CsH(-)
+final-projector defect and is stopped after that failure. A later four-worker
+run reaches its 1,200-second bound without a completed summary and is not
+counted as passed. The curated-state repair is documented in
+`../numerics/2026-11-17-curated-cpu-ks-final-projector.md`; bounded focused
+qualification does not turn unfinished broader coverage into acceptance.
+
 ## Revisit when
 
 A later source-matched qualification completes the remaining scientific gates.

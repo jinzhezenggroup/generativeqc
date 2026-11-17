@@ -492,7 +492,7 @@ ScfResult run_uks_impl(
            std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
                std::min(1.0e-8, options.density_tolerance))) {
         result.converged = true;
-        if (evaluate_xc.program) {
+        if (evaluate_xc.program || options.retain_ks_state) {
           // The physical export reconstructs occupations from the final F[D].
           // A small commutator alone does not certify that last projector.
           ca = generalized_eigen(final.fock.alpha, x, n);
@@ -501,6 +501,8 @@ ScfResult run_uks_impl(
           projected_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
           const double canonical_a = density_rms(projected_a, alpha);
           const double canonical_b = density_rms(projected_b, beta);
+          const double canonical_tolerance =
+              options.retain_ks_state ? residual_gate : std::min(1.0e-8, options.density_tolerance);
           double maximum_change = 0.0;
           for (std::size_t index = 0; index < alpha.size(); ++index) {
             maximum_change = std::max(maximum_change, std::abs(projected_a[index] - alpha[index]));
@@ -509,9 +511,8 @@ ScfResult run_uks_impl(
           diagnostic.density_change = std::max(density_change, std::max(canonical_a, canonical_b));
           result.density_rms =
               std::max(result.density_rms, std::hypot(canonical_a, canonical_b) / std::sqrt(2.0));
-          result.converged =
-              std::max(canonical_a, canonical_b) < std::min(1.0e-8, options.density_tolerance) &&
-              maximum_change <= 1.0e-8;
+          result.converged = std::max(canonical_a, canonical_b) < canonical_tolerance &&
+                             maximum_change <= canonical_tolerance;
           runtime::sample_cpu_capacity(runtime::add_capacity(
               runtime::add_capacity(plan.cpu_observation_capacity(), diis.numeric_capacity()),
               runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners(),

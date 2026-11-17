@@ -281,13 +281,19 @@ result diagnostics. WB97M-V uses the separate compiler-AD owner described below.
 
 ## Linked native CPU B3LYP endpoint
 
-`GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` (the default) links the host scalar and
+`GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` (the default when stationary CPU
+first-derivative primitives are enabled) links the host scalar and
 response prerequisites into the native core. It enables the private synchronous
 `api/ks_host_hessian.hpp` bridge, the canonical B3LYP RKS/UKS Python Hessian/HVP
 route, and the CPU CLI. This is independent of CUDA Hessian-AOT selection.
 The initial linked electronic inventory is exact Gaussian/VWN-RPA B3LYP;
 the native catalog also supplies its canonical two-body, ATM-off D3(BJ) total
 program without duplicating electronic coefficients or dispersion fit data.
+
+The Hessian default follows `GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` so
+intentional primitive-free builds remain valid without enabling dependent
+response owners. Explicitly enabling the Hessian with those primitives disabled
+remains a configuration error; the prerequisite check is not bypassed.
 
 The bridge locks the prepared batch context, authenticates its current token,
 borrows the actual Fock/basis/grid/correction owners and verifies the requested
