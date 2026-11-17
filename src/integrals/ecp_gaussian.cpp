@@ -63,7 +63,7 @@ unsigned component_index(const Powers& powers, unsigned offset) {
 
 std::vector<Powers> cartesian_pairs(unsigned first, unsigned second) {
   std::vector<Powers> result;
-  result.reserve(components(first) * components(second));
+  result.reserve(runtime::size_mul(components(first), components(second)));
   for (int first_x = static_cast<int>(first); first_x >= 0; --first_x)
     for (int first_y = static_cast<int>(first) - first_x; first_y >= 0; --first_y)
       for (int second_x = static_cast<int>(second); second_x >= 0; --second_x)

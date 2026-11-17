@@ -7,10 +7,14 @@ the same native executable and a small native launcher.
 
 ## Build and install
 
-Native CLI builds require CMake, a C++20 compiler, nlohmann-json 3.7+,
+Native CLI builds require CMake, a C++20 compiler, build-time Python with
+NumPy 1.24+ for the default host Hessian generators, nlohmann-json 3.7+,
 OpenSSL Crypto and libarchive. On Debian/Ubuntu the extra packages are
 `nlohmann-json3-dev`, `libssl-dev` and `libarchive-dev`.
 On macOS with Homebrew, install `nlohmann-json`, `openssl@3` and `libarchive`.
+If multiple Python installations exist, select the NumPy-bearing interpreter
+with `-DPython3_EXECUTABLE=/path/to/python`. Neither Python nor NumPy is required
+to execute the installed native CLI.
 
 For a CPU build:
 

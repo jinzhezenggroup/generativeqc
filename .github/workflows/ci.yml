@@ -1807,23 +1807,6 @@ jobs:
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
-      - name: Build CPU benchmark library
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
-          cmake -S . -B build-benchmark -G Ninja \
-            -DGENERATIVEQC_ENABLE_CUDA=OFF \
-            -DGENERATIVEQC_BUILD_TESTS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DGENERATIVEQC_COMPILER_CACHE=ccache
-          cmake --build build-benchmark --target generativeqc --parallel
-      - name: Show CPU benchmark ccache statistics
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: ccache --show-stats
-      - name: Summarize compiler cache
-        if: always() && env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: python3 tools/report_ci_ccache.py --label "CPU CodSpeed"
       - name: Prepare Python 3.11 environment
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         env:
@@ -1834,6 +1817,24 @@ jobs:
         run: |
           uv pip install --python .venv/bin/python \
             numpy pytest pytest-codspeed==5.0.3
+      - name: Build CPU benchmark library
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
+          cmake -S . -B build-benchmark -G Ninja \
+            -DGENERATIVEQC_ENABLE_CUDA=OFF \
+            -DGENERATIVEQC_BUILD_TESTS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE="${GITHUB_WORKSPACE}/.venv/bin/python" \
+            -DGENERATIVEQC_COMPILER_CACHE=ccache
+          cmake --build build-benchmark --target generativeqc --parallel
+      - name: Show CPU benchmark ccache statistics
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: ccache --show-stats
+      - name: Summarize compiler cache
+        if: always() && env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: python3 tools/report_ci_ccache.py --label "CPU CodSpeed"
       - name: Qualify PR CodSpeed comparison
         id: baseline
         if: github.event_name == 'pull_request' && env.GENERATIVEQC_CODSPEED_RUN != '0'

@@ -492,7 +492,11 @@ ScfResult run_uks_impl(
            std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
                std::min(1.0e-8, options.density_tolerance))) {
         result.converged = true;
-        if (evaluate_xc.program || options.retain_ks_state) {
+        // Curated occupation stabilization preserves a qualified stationary
+        // projector at a degenerate frontier. Do not replace that root with an
+        // arbitrary unshifted eigensolver ordering; derivative export still
+        // applies its independent physical-state certification.
+        if (evaluate_xc.program || (options.retain_ks_state && !stabilize_occupations)) {
           // The physical export reconstructs occupations from the final F[D].
           // A small commutator alone does not certify that last projector.
           ca = generalized_eigen(final.fock.alpha, x, n);

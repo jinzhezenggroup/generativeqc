@@ -49,6 +49,24 @@ are retained. Small-system state/force acceptance does not qualify a 25--40-atom
 native Hessian/HVP, a representative Ni saddle or continuum rotational
 invariance; those separate PR gates remain open.
 
+## Degenerate UKS occupation boundary
+
+Full native CI on the subsequently integrated source exposes the retained
+LDA/PBE OH state regression in `generativeqc_uks_state_tests` on both GCC and
+Clang. The existing curated occupation stabilizer preserves a physically
+stationary integer-occupation projector at a degenerate frontier. An extra raw
+unshifted eigensolver ordering can choose another occupied subspace and must
+not turn that already-qualified SCF root into exhausted-budget nonconvergence.
+
+Retain the original curated stabilized-occupation physical closure rather than
+adding the new raw-projector check to that path. Ordinary retained curated
+states still receive the new RMS/max-entry export-projector gate. Automatic
+point-program policy is unchanged. Unshifted energy, per-spin commutators,
+density, electron trace, idempotency and iteration-budget checks remain intact;
+the derivative-state exporter independently certifies every public request.
+The existing native OH retained/unretained and exhausted-budget tests remain
+required; none of their numerical acceptance checks is removed or relaxed.
+
 ## Revisit when
 
 The SCF owner and final-state export share a single typed canonical-projector

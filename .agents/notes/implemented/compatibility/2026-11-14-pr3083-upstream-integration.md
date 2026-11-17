@@ -186,6 +186,49 @@ integration. Fresh build and regression records are retained separately under
 `/data/jzzeng/pr3083-ready-20261117/`. The practical-scale and Ni saddle gates
 remain open; this integration does not resume stopped long chemistry jobs.
 
+## CI bootstrap and explicit evidence-storage review
+
+Fresh CI on `9ecff2600` exposes two integration prerequisites independent of
+the passing native scientific controls. The CPU benchmark configures the new
+default Hessian generators before preparing its NumPy-bearing environment.
+Move the existing Python/dependency steps before CMake and explicitly select
+that interpreter. Do not disable Hessian generation or drop the benchmark's
+physical endpoint coverage to hide the missing build dependency.
+
+The aggregate evidence budget was exactly full on current master. This branch
+adds only its original 66,270-byte `evidence.json` and 7,475-byte README. Propose
+an explicit, exactly 73,745-byte storage-policy increase in the same PR, with
+no unallocated capacity. Preserve both files byte-for-byte; do not delete
+scientific evidence or disguise it under another directory to satisfy CI.
+The independent per-file, 2-MiB incoming-review and scientific acceptance gates
+are unchanged. This is a reviewable storage-policy change, not a claim that
+the retained failed or incomplete calculations passed.
+
+The earlier current-master CI also exposes two actual CUDA host-consumer build
+failures. Wheel builds intentionally have no `CUDA::cudart` imported target;
+reuse their provider-free header/import interface instead of linking a provider
+that the wheel contract forbids. SDK and CuMetal consumers retain their normal
+runtime interface. The host response also includes the generated split-hybrid
+registry through shared composition metadata. Give it the generated include
+directory and an explicit dependency on a shared registry-generation owner,
+not an incidental core compilation race. CPU-only default builds are unchanged.
+Two executable CMake probes compile the actual linked host-response consumer
+for native-interface and provider-free wheel modes without executing GPU work.
+
+The transitive-codegen configure regression now explicitly selects its running
+Python interpreter, matching the benchmark bootstrap and documented NumPy
+build prerequisite. CodeQL also flags the pre-existing narrow unsigned
+Cartesian-pair product in the modified ECP owner: route that allocation count
+through the existing checked `runtime::size_mul` helper before conversion can
+lose range. No Gaussian arithmetic, ordering or physical tolerance changes.
+
+The two host-consumer build probes pass (201.99 seconds), four actual configure
+controls pass (13.28 seconds), and 177 benchmark-policy/retention tests pass.
+The occupation-stabilization fix passes eleven selected native CTest groups,
+including the previously failing UKS state group. A separate newer 13-module
+scientific rerun reaches its 900-second limit without a completed summary and
+is not passed. Earlier completed scientific receipts remain source-specific.
+
 ## Revisit when
 
 A later source-matched qualification completes the remaining scientific gates.

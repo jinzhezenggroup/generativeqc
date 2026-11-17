@@ -66,6 +66,93 @@ def test_native_hessian_default_respects_primitive_inventory(
         assert f"GENERATIVEQC_ENABLE_HOST_KS_HESSIAN:BOOL={expected}" in cache
 
 
+@pytest.mark.parametrize("wheel", [False, True])
+def test_cuda_linked_host_response_compiles_with_its_own_build_inputs(
+    tmp_path: Path, required_native_cxx: Any, wheel: bool
+) -> None:
+    """Compile the real host consumer without building or executing GPU kernels.
+
+    SDK/CuMetal consumers receive a mocked runtime-header interface, while
+    wheels must remain provider-free. Both need the real shared registry before
+    compiling host code. This is not CUDA device or numerical qualification.
+    """
+    cmake = shutil.which("cmake")
+    ninja = shutil.which("ninja")
+    if cmake is None or ninja is None:
+        pytest.skip("CMake and Ninja are required for the host build-graph probe")
+    toolkit = tmp_path / "toolkit"
+    toolkit.mkdir()
+    (toolkit / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaStream_t = void*;\n"
+    )
+    runtime_target = (
+        ""
+        if wheel
+        else "add_library(CUDA::cudart INTERFACE IMPORTED)\n"
+        f'target_include_directories(CUDA::cudart INTERFACE "{toolkit.as_posix()}")\n'
+    )
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(host_cuda_consumer LANGUAGES CXX)\n"
+        f'set(PROJECT_SOURCE_DIR "{ROOT.as_posix()}")\n'
+        f'set(Python3_EXECUTABLE "{sys.executable}")\n'
+        "set(GENERATIVEQC_ENABLE_CUDA ON)\n"
+        f'set(GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS "{toolkit.as_posix()}")\n'
+        f"set(GENERATIVEQC_PYTHON_WHEEL {'ON' if wheel else 'OFF'})\n"
+        f'include("{ROOT.as_posix()}/cmake/GenerativeQCHostHessianAot.cmake")\n'
+        f'include("{ROOT.as_posix()}/cmake/GenerativeQCCudaImplib.cmake")\n'
+        "add_library(leaves INTERFACE)\n"
+        f'target_include_directories(leaves INTERFACE "{ROOT.as_posix()}/src")\n'
+        "set_target_properties(leaves PROPERTIES GENERATIVEQC_HOST_SCALAR_INVENTORY\n"
+        f'  "{ROOT.as_posix()}/manifests/host_hessian_aot_b3lyp.json")\n'
+        "add_library(core STATIC probe.cpp)\n"
+        + runtime_target
+        + "generativeqc_add_host_ks_response(host_response leaves core LINK_INTO_CORE)\n"
+        + "generativeqc_register_generated_sources(\n"
+        "  NAME generativeqc_split_hybrid_registry_codegen\n"
+        '  GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_xc_split_hybrid_registry.py"\n'
+        '  OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_split_hybrid_registry.cuh"\n'
+        '  ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_split_hybrid_registry.cuh")\n'
+    )
+    (tmp_path / "probe.cpp").write_text("int probe() { return 0; }\n")
+    build = tmp_path / "build"
+    configured = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(build),
+            "-G",
+            "Ninja",
+            f"-DCMAKE_MAKE_PROGRAM={ninja}",
+            f"-DCMAKE_CXX_COMPILER={required_native_cxx.compiler}",
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={required_native_cxx.cache}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert configured.returncode == 0, configured.stdout + configured.stderr
+    compiled = subprocess.run(
+        [
+            cmake,
+            "--build",
+            str(build),
+            "--target",
+            "host_response",
+            "--parallel",
+            "2",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+
+
 def test_cpu_only_cmake_target_and_inventory_reconfiguration(
     tmp_path: Path, required_native_cxx: Any
 ) -> None:

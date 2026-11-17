@@ -143,7 +143,16 @@ function(generativeqc_add_host_ks_response target leaves core)
     target_compile_definitions(${target} PRIVATE
       GENERATIVEQC_HAS_CUDA=$<BOOL:${GENERATIVEQC_ENABLE_CUDA}>)
     if(GENERATIVEQC_ENABLE_CUDA)
-      target_link_libraries(${target} PRIVATE CUDA::cudart)
+      # Shared composition metadata is generated even for this CPU response owner.
+      target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+      add_dependencies(${target} generativeqc_split_hybrid_registry_codegen)
+      if(GENERATIVEQC_PYTHON_WHEEL)
+        # The core owns lazy provider imports; this archive borrows their headers.
+        generativeqc_ensure_cuda_wheel_import_interface()
+        target_link_libraries(${target} PRIVATE generativeqc_cuda_wheel_imports)
+      else()
+        target_link_libraries(${target} PRIVATE CUDA::cudart)
+      endif()
     endif()
   else()
     target_link_libraries(${target} PUBLIC "${core}")
