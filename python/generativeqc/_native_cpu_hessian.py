@@ -539,7 +539,13 @@ def run_native_cpu(
     solver_options: GMRESOptions | None = None,
     max_eri_primitives: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
-    """Run one native primal, consume it synchronously, and detach the result."""
+    """Detach one native response, retaining electronic and total primal energies.
+
+    The SCF energy excludes the separately composed D3 contribution, matching
+    the public Python-owned second-order endpoint's diagnostic contract.
+    The native assembly timing includes its complete synchronous response phase;
+    endpoint timing additionally includes primal preparation and execution.
+    """
     from dataclasses import replace
 
     started = time.perf_counter()
@@ -579,7 +585,15 @@ def run_native_cpu(
             {
                 **result.diagnostics,
                 "endpoint_seconds": time.perf_counter() - started,
+                "assembly_seconds": result.diagnostics["execution_seconds"],
+                "assembly_scope": "complete-native-response",
                 "public_calculator_endpoint": True,
+                "scf_energy": primal.energy
+                - (0 if primal.dispersion is None else primal.dispersion.energy),
+                "total_energy": primal.energy,
+                "dispersion_energy": 0
+                if primal.dispersion is None
+                else primal.dispersion.energy,
                 "scf_iterations": primal.iterations,
                 "scf_fock_builds": primal.fock_builds,
                 "scf_executed_backend": primal.executed_backend,

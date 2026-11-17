@@ -45,6 +45,7 @@ def closure_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include <vector>
 #include "solver/self_consistent.hpp"
+#include "runtime/df_progress_trace.hpp"
 struct Matrix : std::vector<double> {
  using std::vector<double>::vector;
  std::shared_ptr<int> lifetime;
@@ -54,6 +55,7 @@ namespace dft {
 struct EnergyComponents { double value{}; };
 }
 namespace runtime {
+namespace df_progress = generativeqc::runtime::df_progress;
 template<class... T> std::size_t vector_capacities(const T&...) { return 0; }
 std::size_t vector_bytes(const Matrix&) { return 0; }
 std::size_t add_capacity(std::size_t a, std::size_t b) { return a+b; }
@@ -83,6 +85,7 @@ struct Result {
 struct Options {
  unsigned max_iterations; double energy_tolerance=1e-12, density_tolerance=1e-10;
  bool retain_ks_state=true;
+ bool certify_ks_export=false;
 };
 unsigned observed_progress{}, strict_entries{}, full_calls{}, eigen_calls{};
 struct IncrementalState {

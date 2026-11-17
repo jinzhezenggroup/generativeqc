@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ def _configure(binary: Path, *extra: str) -> None:
             "Ninja",
             "-DGENERATIVEQC_ENABLE_CUDA=OFF",
             "-DGENERATIVEQC_BUILD_TESTS=OFF",
+            f"-DPython3_EXECUTABLE={sys.executable}",
             *extra,
         ],
         check=True,

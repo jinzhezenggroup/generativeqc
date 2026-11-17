@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-17
 
+The subsequent [energy-only consumer decision](2026-11-17-energy-only-ks-export-intent.md)
+narrows which owners request certification; the export checks and measurements
+recorded here remain unchanged.
+
 ## Problem
 
 `ScfOptions::retain_ks_state` promises a read of the already evaluated physical

@@ -628,7 +628,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       options_.nonlocal_grid = nonlocal_grid_.get();
     }
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
-    options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
+    options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA && options_.certify_ks_export;
     options_.certify_ks_export = options_.retain_ks_state;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -832,6 +832,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept {
     // Method metadata cannot re-enable a force excluded by this prepared owner.
+    if (backend_ == GENERATIVEQC_BACKEND_CPU_REFERENCE && !options_.retain_ks_state)
+      return GENERATIVEQC_PROPERTY_ENERGY;
     if (has_energy_only_df_capacity_promise())
       return capabilities_.supported_properties & ~GENERATIVEQC_PROPERTY_FORCES;
     return capabilities_.supported_properties |
@@ -4028,7 +4030,9 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     generativeqc_batch_flags flags, const core::System* auxiliary_basis,
     const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0) {
-  if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
+  constexpr generativeqc_batch_flags supported_flags =
+      GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | GENERATIVEQC_BATCH_DISABLE_KS_EXPORT;
+  if ((flags & ~supported_flags) != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
 #if !GENERATIVEQC_HAS_CUDA
@@ -4037,6 +4041,11 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
+  const bool disable_export = (flags & GENERATIVEQC_BATCH_DISABLE_KS_EXPORT) != 0;
+  if (disable_export && context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "disabling KS export requires a CPU KS owner");
+  options.certify_ks_export = !disable_export;
   if (dispersion) {
     if (!dispersion_bytes || execution_plan.d4_correction || dispersion->kind < 1 ||
         dispersion->kind > 3)

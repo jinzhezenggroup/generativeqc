@@ -144,6 +144,14 @@ fresh float64 `(nsystems,)` array with NaN in failed slots. An individual failed
 record may still contain native scalar diagnostics: inspect `succeeded` before
 consuming its energy. Forces are `None` for failed or energy-only items.
 
+CPU DFT batches default to `ks_export=True`, retaining the certified stationary
+state required by force, Hessian and response consumers. Set `ks_export=False`
+only for energy-only use: the same native SCF owner retains its ordinary physical
+convergence and occupation-stabilization rules, but no derivative snapshot is
+published and force requests are rejected. Explicit `singlepoint(...,
+properties=("energy",))` CPU DFT calls select this energy-only mode automatically.
+SCF convergence alone is not a certificate of an exportable canonical projector.
+
 (python-batch-errors)=
 ## Batch failures and strict mode
 

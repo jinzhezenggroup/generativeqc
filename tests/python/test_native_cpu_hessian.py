@@ -53,6 +53,9 @@ def test_public_native_cpu_is_raw_detached_and_never_enters_python_response(
     calc = calculator(spins, bj)
     preflight(calc)
     atoms = geometry(spins)
+    with calc.prepare_batch([atoms], multiplicities=[spins], warm_start=False) as batch:
+        primal = batch.execute(strict=True, properties=("energy",)).items[0]
+    dispersion_energy = 0 if primal.dispersion is None else primal.dispersion.energy
 
     def reject_legacy(*arguments: Any, **keywords: Any) -> None:
         raise AssertionError("native CPU Hessian entered the legacy numerical owner")
@@ -71,6 +74,15 @@ def test_public_native_cpu_is_raw_detached_and_never_enters_python_response(
         diagnostic = result.diagnostics
         assert diagnostic["numerical_runtime"] == "native-cpp-cpu"
         assert diagnostic["public_calculator_endpoint"]
+        assert diagnostic["endpoint_seconds"] >= diagnostic["assembly_seconds"]
+        assert diagnostic["assembly_seconds"] == diagnostic["execution_seconds"]
+        assert diagnostic["scf_energy"] == pytest.approx(
+            primal.energy - dispersion_energy, abs=2e-11
+        )
+        assert diagnostic["total_energy"] == pytest.approx(primal.energy, abs=2e-11)
+        assert diagnostic["dispersion_energy"] == pytest.approx(
+            dispersion_energy, abs=2e-11
+        )
         assert diagnostic["max_eri_primitives"] == 100_000_000
         assert not diagnostic["runtime_compilation"]
         assert not diagnostic["displaced_scf_evaluations"]
@@ -85,6 +97,21 @@ def test_public_native_cpu_is_raw_detached_and_never_enters_python_response(
         == len(atoms) * 3 * product.diagnostics["d3_pair_visits"]
     )
     calc.clear_cache()
+
+
+def test_energy_only_owner_cannot_publish_a_derivative_snapshot() -> None:
+    """Declining export preserves energy execution, never derivative admission."""
+    calc = calculator(1, False)
+    atoms = geometry(1)
+    try:
+        with calc.prepare_batch([atoms], warm_start=False, ks_export=False) as batch:
+            assert batch.execute(strict=True, properties=("energy",)).items[0].converged
+            with pytest.raises(ValueError, match="ks_export=True"):
+                batch.execute(properties=("energy", "forces"))
+            with pytest.raises(RuntimeError, match="final state"):
+                execute_batch(calc, batch, atoms, charge=0, multiplicity=1)
+    finally:
+        calc.clear_cache()
 
 
 @pytest.mark.parametrize("spins", [1, 2])

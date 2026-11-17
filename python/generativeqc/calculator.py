@@ -3081,12 +3081,17 @@ class Calculator:
         warm_start: bool = True,
         shell_class_profiling: bool = False,
         inactive_eigensolver_profiling: bool = False,
+        ks_export: bool = True,
         resource_plan: typing.Any = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
         """Prepare a persistent native ragged batch for repeated execution.
 
         The profiling options are CUDA performance diagnostics and should
         remain disabled during normal endpoint timing.
+
+        CPU DFT callers may set ``ks_export=False`` for energy-only execution
+        without a stationary derivative snapshot. Such batches reject forces
+        and cannot supply Hessian/response consumers; ordinary SCF gates remain.
 
         Systems, charges and multiplicities use :ref:`python-batch-values`.
         Preparation validates/copies system data into a separately owned plan.
@@ -3114,6 +3119,7 @@ class Calculator:
             warm_start=warm_start,
             shell_class_profiling=shell_class_profiling,
             inactive_eigensolver_profiling=inactive_eigensolver_profiling,
+            ks_export=ks_export,
             resource_plan=resource_plan,
         )
 
@@ -3836,13 +3842,19 @@ class Calculator:
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
             # scientific implementation in the single-system path. Energy-only
-            # must use the same SCF owner, final-state gates and optimization
-            # selection; requesting derivatives changes only the consumer.
+            # uses the same SCF owner and physical convergence gates. An explicit
+            # energy-only request does not promise a canonical derivative export.
             with self.prepare_batch(
                 [native_atoms],
                 charges=[charge],
                 multiplicities=[multiplicity],
                 warm_start=False,
+                ks_export=not (
+                    not default_properties
+                    and requested_properties == {"energy"}
+                    and self._device_name == "cpu"
+                    and self._capabilities.family == "density_functional"
+                ),
                 resource_plan=resource_plan,
             ) as batch:
                 execution_properties = requested_properties - PROPERTY_NAMES

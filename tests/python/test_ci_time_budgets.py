@@ -323,7 +323,7 @@ def test_full_qualification_has_a_separate_finite_budget(
     (
         ("core-a", 60, 30),
         ("core-b", 60, 35),
-        ("core-c", 60, 30),
+        ("core-c", 60, 35),
         ("uccsd-forces", 60, 30),
         ("runtime-heavy", 60, 35),
         ("posthf", 60, 35),

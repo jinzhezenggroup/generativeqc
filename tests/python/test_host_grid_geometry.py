@@ -226,6 +226,54 @@ def test_weight_direction_matches_independent_displaced_products_and_adjoint(
         )
 
 
+@pytest.mark.parametrize("atoms", [2, 3, 5])
+def test_sparse_weight_adjoint_matches_displaced_partition(
+    native: Any, atoms: int
+) -> None:
+    """Check the compiled contraction, not how its pair loops are spelled.
+
+    A single nonzero point sensitivity exercises partition normalization across
+    all centers. Independent displaced weights retain that coupling even when
+    the pair-local derivative implementation is reorganized.
+    """
+    centers = np.array(
+        [[0.7 * atom, (-1) ** atom * 0.6, 0.13 * atom * atom] for atom in range(atoms)]
+    )
+    numbers = (1,) * atoms
+    motion = np.sin(np.arange(3 * atoms) + 1).reshape(atoms, 3) * 0.1
+    with _owner(native, 1, numbers=numbers, centers=centers) as (handle, data):
+        weights = data[1]
+        index = int(np.argmax(abs(weights)))
+        sensitivity = np.zeros_like(weights)
+        sensitivity[index] = -0.7
+        gradient = np.empty_like(centers)
+        assert (
+            native.host_grid_adjoint(handle, _pointer(sensitivity), _pointer(gradient))
+            == 0
+        )
+        point, raw, owner = data[0][index], data[2][index], int(data[3][index])
+    displaced = []
+    with localcontext() as context:
+        context.prec = 60
+        step = Decimal("1e-16")
+        for sign in (1, -1):
+            shifted = [
+                [
+                    Decimal(str(value)) + sign * step * Decimal(str(tangent))
+                    for value, tangent in zip(center, direction, strict=True)
+                ]
+                for center, direction in zip(centers, motion, strict=True)
+            ]
+            moved_point = [
+                Decimal(str(value)) + sign * step * Decimal(str(tangent))
+                for value, tangent in zip(point, motion[owner], strict=True)
+            ]
+            displaced.append(decimal_partition([moved_point], shifted, 3)[0][owner])
+        expected = float((displaced[0] - displaced[1]) / (2 * step)) * raw * -0.7
+    assert np.sum(gradient * motion) == pytest.approx(expected, abs=3e-12, rel=3e-10)
+    np.testing.assert_allclose(gradient.sum(axis=0), 0, atol=3e-12)
+
+
 @pytest.mark.parametrize("version", [1, 4])
 def test_weight_direction_failures_aliases_and_late_nonfinite_recover(
     native: Any, version: int
