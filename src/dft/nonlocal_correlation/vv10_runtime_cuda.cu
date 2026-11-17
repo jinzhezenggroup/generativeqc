@@ -600,7 +600,9 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold,
                        isfinite(gz) && isfinite(weight);
     if (!valid) atomicExch(failed, 1);
     // Near-zero quadrature weights are outside the molecular domain as well.
-    const bool inactive = !valid || rho < threshold || fabs(weight) <= weight_threshold;
+    // A zero threshold keeps every weight, including signed zeros, active.
+    const bool inactive =
+        !valid || rho < threshold || (weight_threshold > 0.0 && fabs(weight) <= weight_threshold);
     // Distinguish screened density rows from active signed-zero weights without
     // allocating an additional point mask.
     effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight);
