@@ -219,10 +219,11 @@ also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Nonlocal CUDA calculations retain their separate policy: large device-fused,
-density-fitted, strict-FP64 RKS with gradient-dependent XC uses 512 SCF points on
-full-rate FP64 matrix devices, requiring at least 512 AOs, 524288 grid points
-and 1 GiB free device memory. Other nonlocal owners retain 256.
+Nonlocal CUDA calculations retain their separate policy for large device-fused,
+strict-FP64 RKS with gradient-dependent XC on full-rate FP64 matrix devices,
+requiring at least 512 AOs, 524288 grid points and 1 GiB free device memory:
+density-fitted owners use 512 SCF points and Direct owners 1024. Other nonlocal
+owners, including low-rate FP64 devices, retain 256.
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
