@@ -24,6 +24,7 @@ from generativeqc_compiler.dft.grid import (
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
     MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
 )
 from generativeqc_compiler.method import (
     D4_METHOD_SUFFIX,
@@ -351,6 +352,8 @@ class KsOptions:
                 "version": MOLECULAR_VV10_DENSITY_POLICY,
                 "threshold": str(MOLECULAR_VV10_DENSITY_THRESHOLD),
                 "active_comparison": ">=",
+                "weight_threshold": str(MOLECULAR_VV10_WEIGHT_THRESHOLD),
+                "weight_active_comparison": "abs >",
             }
         return payload
 
