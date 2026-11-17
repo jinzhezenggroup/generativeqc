@@ -131,6 +131,11 @@ print(first.energies)
 
 ## Benchmarks
 
+The dated cohorts below retain their measured-source policies. Current HF force
+endpoints use [strict physical stationarity](docs/user/application_precision.md);
+the historical HF timings do not qualify this corrected force policy. No
+updated HF performance ranking is implied without a fresh complete cohort.
+
 **HF/DFT energy + analytic forces — RTX 5090 (2026-11-11)**
 
 Fresh measurements of master `4024f95b8` plus exact nuclear-derivative and
