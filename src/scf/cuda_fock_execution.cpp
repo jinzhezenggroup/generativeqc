@@ -201,7 +201,7 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
 generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail) {
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail, bool allow_spatial_default) {
   const auto binding = prepared_cuda_direct_derivative_binding(plan);
   auto* source = plan.cuda_direct_source();
   const auto& primary = plan.strategy();
@@ -234,8 +234,10 @@ generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
     // the full-range channels before the LR traversal reuses their storage.
     // Its existing RangeCorrection transport reconstructs SR = Full - LR;
     // neither a host force array nor another integral owner is needed.
+    // The method owner authenticates the full-range composition for the
+    // density-first s/p/d schedule; the LR traversal below is unchanged.
     const auto status = consume_prepared_cuda_direct_shell_full_range_derivatives_device(
-        plan, density, beta, matrix_elements, consumer, detail);
+        plan, density, beta, matrix_elements, consumer, detail, true, allow_spatial_default);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     return consume_cuda_direct_shell_rsh_energy_derivatives_device(
         source, p.spin, 0.0, 0.0, c.exchange.coefficient, c.exchange.omega, density, beta,

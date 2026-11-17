@@ -615,7 +615,7 @@ generativeqc_status CudaStationaryController::gradient(
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       status = composite ? scf::consume_prepared_cuda_direct_rsh_energy_derivatives_device(
                                fock, *range, density.alpha, density.beta, density.matrix_elements,
-                               consume, detail)
+                               consume, detail, allow_spatial_default)
                          : scf::consume_prepared_cuda_direct_shell_full_range_derivatives_device(
                                fock, density.alpha, density.beta, density.matrix_elements, consume,
                                detail,
