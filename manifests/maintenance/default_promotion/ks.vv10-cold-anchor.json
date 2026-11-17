@@ -1,0 +1,21 @@
+{
+  "id": "ks.vv10-cold-anchor",
+  "classification": "already-default",
+  "controls": [
+    "ks-runtime:GENERATIVEQC_VV10_COLD_SEED_STAGE"
+  ],
+  "owner_issues": [
+    3004
+  ],
+  "sources": [
+    "src/dft/application_precision.hpp",
+    "src/dft/cuda_ks.cpp"
+  ],
+  "rationale": "Qualified strict Standard WB97M-V owners (Direct and fitted) anchor VV10 on the native cold guess, as transported densities already do, instead of first solving the semilocal/RSH-only provisional problem whose DIIS history is discarded when VV10 enters. Physical target energy/MO-gradient convergence, canonical density/force proofs, fresh energy epochs, CDIIS resets and finite proposal budgets are unchanged. Mixed, budget, strict, device-chunk and other unqualified owners keep the seed stage. Unset is the qualified default; explicit 1 restores the seed stage. No new storage, GPU-model/size hardcoding or CPU/reference production dependency.",
+  "revisit_condition": "Require complete clean cold/warm energy+analytic-force endpoints with work counts on the affected owners before extending the guard to mixed or budget owners. Re-measure water-12 Direct, where the anchored start trades one Fock for one extra SCF pair sweep.",
+  "evidence": [
+    "benchmarks/results/h100-wb97mv-cold-20261117/README.md",
+    ".agents/notes/implemented/performance/2026-11-17-h100-wb97mv-cold-anchor-and-tiles.md",
+    "tests/python/test_application_precision_admission.py"
+  ]
+}

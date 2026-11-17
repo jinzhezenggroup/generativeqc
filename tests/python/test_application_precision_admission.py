@@ -37,6 +37,11 @@ int main() {
   assert(!admit_nonlocal_rms_handoff(true, true, false, false, false));
   assert(!admit_nonlocal_rms_handoff(true, true, true, true, false));
   assert(!admit_nonlocal_rms_handoff(true, true, true, false, true));
+  using generativeqc::dft::skip_nonlocal_cold_seed_stage;
+  assert(skip_nonlocal_cold_seed_stage(true, true));
+  assert(!skip_nonlocal_cold_seed_stage(false, true));
+  assert(!skip_nonlocal_cold_seed_stage(true, false));
+  assert(!skip_nonlocal_cold_seed_stage(false, false));
   assert(nonlocal_proposal_residual(true, 5e-6, 1.8e-4) < 1e-5);
   assert(!(nonlocal_proposal_residual(false, 5e-6, 1.8e-4) < 1e-5));
   assert(!(nonlocal_proposal_residual(true, std::numeric_limits<double>::quiet_NaN(), 1e-6) < 1e-5));
