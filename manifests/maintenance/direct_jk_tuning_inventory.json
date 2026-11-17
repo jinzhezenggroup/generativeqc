@@ -14,16 +14,16 @@
       "retirement_condition": "Move only after a compiler/profile owner can reproduce the bounded staging contract without increasing endpoint memory or work."
     }
   ],
-  "pending_qualification": [
-    "FP64 matrix calibration has canonical exact-stack admission and a real prepared production consumer, but no measured production profile is shipped. Persistent-ERI selection remains a resource-bounded AO fallback, not a screened-work/reuse profitability model.",
-    "Persistent queue-domain profiles are compiler-owned build inputs, not a runtime target/workload autotune winner; defaults retain force=7 and Fock=6.",
-    "Matched RTX 5090 cold/warm/moved-warm RHF/UHF energy/force endpoint qualification and independent scientific oracle gates remain required before claiming #597 complete."
+  "qualification_contract": [
+    "Exact-stack v2 HfMatrixProfile records carry explicit endpoint-qualified DirectJkTopologyProfile selections inside their AO/batch domain. Product calibration alone never implies a resident-ERI crossover or queue schedule.",
+    "Persistent queue domains are runtime-selectable within compiler-emitted bounds; allocation and reset keep the bounded compiled superset. Defaults retain force=7 and Fock=6, and no new measured production winner is shipped.",
+    "A topology promotion requires complete resident-versus-actual-screened-quartet endpoint evidence, expected Fock reuse and geometry-rebuild frequency, setup/storage accounting and independent scientific gates. Source-matched default regression evidence is distinct from synthetic-profile legality tests."
   ],
   "migrated_settings": [
     {
       "name": "calibrated-hf-matrix-profile-admission",
       "source": "src/scf/cuda/hf_matrix_profile.hpp",
-      "owner": "HfMatrixProfile / prepared HostBatch matrix admission and tensor binding",
+      "owner": "HfMatrixProfile v2 / exact-stack, workload-bounded preparation, topology and tensor binding",
       "required_tokens": [
         "HfMatrixProfile",
         "admit_hf_matrix_profile"
@@ -32,7 +32,7 @@
     {
       "name": "persistent-eri-topology-admission",
       "source": "src/scf/cuda/rhf_policy.hpp",
-      "owner": "SmallHfProfitabilityProfile / resolved HostBatch topology identity",
+      "owner": "DirectJkTopologyProfile / SmallHfProfitabilityProfile / resolved HostBatch topology identity",
       "required_tokens": [
         "SmallHfProfitabilityProfile",
         "resolve_small_hf_profitability"
@@ -41,7 +41,7 @@
     {
       "name": "persistent-angular-order-domains",
       "source": "python/generativeqc_compiler/integral/direct_resident_schedule.py",
-      "owner": "DirectPersistentScheduleProfile / generated queue allocation, reset and dispatch contract",
+      "owner": "DirectPersistentScheduleProfile compiled bounds / admitted DirectJkTopologyProfile runtime dispatch and topology identity",
       "required_tokens": [
         "DirectPersistentScheduleProfile",
         "emit_direct_resident_psss_schedule_header"

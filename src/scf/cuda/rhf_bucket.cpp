@@ -490,10 +490,26 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   // The same decision must select both the Cartesian density/Fock transforms
   // here and the quartet device arena in execute_hf_cuda_bucket. A reference
   // export is a physical-state contract, not a matrix-direct packing request.
-  if (!pack_host_batch(systems, initial_densities, candidate, unrestricted,
-                       options.export_physical_reference && !reference_quartets,
-                       options.compute_forces || reference_quartets, ResidentPsssPolicy::Build,
-                       HostBasisPacking::Scf, topology_target, {}, topology_profile)) {
+  const std::size_t spin_count = unrestricted ? 2 : 1;
+  const auto* requested_profile =
+      systems.empty() || systems.size() > std::numeric_limits<std::size_t>::max() / spin_count
+          ? nullptr
+          : topology_profile.for_workload(topology_target, molecule::ao_count(systems.front()),
+                                          systems.size(), systems.size() * spin_count);
+  const bool same_profile =
+      *plan && (requested_profile ? (*plan)->topology.matrix_profile &&
+                                        *(*plan)->topology.matrix_profile == *requested_profile
+                                  : !(*plan)->topology.matrix_profile);
+  bool allow_persistent_eri = !*plan || (*plan)->persistent_eri_enabled || !same_profile;
+  const auto pack_candidate = [&] {
+    candidate = HostBatch{};
+    return pack_host_batch(systems, initial_densities, candidate, unrestricted,
+                           options.export_physical_reference && !reference_quartets,
+                           options.compute_forces || reference_quartets, ResidentPsssPolicy::Build,
+                           HostBasisPacking::Scf, topology_target, {}, topology_profile,
+                           allow_persistent_eri);
+  };
+  if (!pack_candidate()) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
@@ -577,6 +593,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     }
   }
   std::vector<initial_guess::PreliminaryDiagnostic> seed_diagnostics;
+  (*plan)->persistent_eri_enabled = allow_persistent_eri;
   if (options.preliminary_guess) {
     seed_diagnostics.resize(systems.size());
     for (std::size_t index = 0; index < seed_diagnostics.size(); ++index) {
@@ -603,31 +620,37 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     }
   };
   std::vector<RhfBucketItem> outputs = execute_driver();
-  const bool retry_without_matrix_context = !options.reference_provider_initialization_owner &&
-                                            !(*plan)->initialized &&
-                                            (*plan)->retry_without_matrix_context;
-  if (!(*plan)->initialized) {
-    if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
+  for (unsigned attempt = 0;
+       attempt < 2 && !(*plan)->initialized && !options.reference_provider_initialization_owner;
+       ++attempt) {
+    const bool retry_matrix =
+        (*plan)->matrix_context_enabled && (*plan)->retry_without_matrix_context;
+    const bool retry_eri = (*plan)->persistent_eri_enabled && (*plan)->retry_without_persistent_eri;
+    if (!retry_matrix && !retry_eri) break;
+    const bool matrix_context_enabled = (*plan)->matrix_context_enabled && !retry_matrix;
+    allow_persistent_eri = (*plan)->persistent_eri_enabled && !retry_eri;
+    if (!try_retire_rhf_cuda_bucket_plan(plan))
       throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
-  }
-  if (retry_without_matrix_context) {
     execution_plan_reused = false;
-    // Provider setup or graph capture can reject a cuBLAS implementation on a
-    // particular CUDA release. Rebuild once with the numerically identical
-    // native kernel so public CUDA execution remains available.
+    // Retire every old pointer before repacking transforms or rebuilding the
+    // arena. Each optional feature can be disabled only once; neither retry
+    // changes screening, precision, equations or the CUDA backend.
+    if (retry_eri && !pack_candidate()) {
+      fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      return outputs;
+    }
     *plan = new (std::nothrow) CudaRhfBucketPlan{};
     if (*plan == nullptr) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
-    (*plan)->matrix_context_enabled = false;
+    (*plan)->matrix_context_enabled = matrix_context_enabled;
+    (*plan)->persistent_eri_enabled = allow_persistent_eri;
     outputs = execute_driver();
-    for (auto& output : outputs) ++output.scf.precision.execution_retries;
-    if (!(*plan)->initialized) {
-      if (*plan && !try_retire_rhf_cuda_bucket_plan(plan))
-        throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
-    }
+    for (auto& output : outputs) output.scf.precision.execution_retries += attempt + 1;
   }
+  if (!(*plan)->initialized && !try_retire_rhf_cuda_bucket_plan(plan))
+    throw ProviderInitializationUnavailable("original CUDA reference owner could not retire");
   for (std::size_t index = 0; index < seed_diagnostics.size(); ++index) {
     auto& diagnostic = seed_diagnostics[index];
     auto& result = outputs[index].scf;

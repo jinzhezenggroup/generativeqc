@@ -9,6 +9,8 @@
 #include <sstream>
 #include <string>
 
+#include "generated_direct_resident_psss_schedule.cuh"
+
 namespace generativeqc::scf::cuda_policy {
 namespace {
 constexpr std::size_t kMaximumProfileBytes = 8192;
@@ -78,7 +80,7 @@ HfMatrixProfileAdmission admit_hf_matrix_profile(std::string_view payload,
   auto& stack = record.context;
   auto& target = stack.target;
   int release = 0, fast = 0;
-  if (!key(stream, "generativeqc-hf-matrix-profile-v1") || !key(stream, "source_identity") ||
+  if (!key(stream, "generativeqc-hf-matrix-profile-v2") || !key(stream, "source_identity") ||
       !read_identity(stream, stack.source_identity, 64) || !key(stream, "provider") ||
       !key(stream, "nvidia") || !key(stream, "versions") ||
       !(stream >> stack.driver_version >> stack.runtime_version >> stack.toolkit_version >>
@@ -109,7 +111,11 @@ HfMatrixProfileAdmission admit_hf_matrix_profile(std::string_view payload,
         record.calibration.cublas_fp64_flops_per_nanosecond >>
         record.calibration.cublas_bytes_per_nanosecond) ||
       !key(stream, "provider_setup_nanoseconds") ||
-      !(stream >> record.provider_setup_nanoseconds) || !key(stream, "end"))
+      !(stream >> record.provider_setup_nanoseconds) || !key(stream, "direct_jk") ||
+      !(stream >> record.direct_jk.persistent_eri_ao_limit >>
+        record.direct_jk.maximum_persistent_eri_bytes >>
+        record.direct_jk.force_angular_order_count >> record.direct_jk.fock_angular_order_count) ||
+      !key(stream, "end"))
     return invalid;
   stream >> std::ws;
   if (!stream.eof()) return invalid;
@@ -121,6 +127,14 @@ HfMatrixProfileAdmission admit_hf_matrix_profile(std::string_view payload,
       record.minimum_matrices > record.maximum_matrices ||
       record.maximum_dimension > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
       record.maximum_matrices > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+      record.direct_jk.persistent_eri_ao_limit > record.maximum_dimension ||
+      record.direct_jk.maximum_persistent_eri_bytes == 0 ||
+      record.direct_jk.force_angular_order_count < 3 ||
+      record.direct_jk.force_angular_order_count >
+          cuda_execution::kPersistentForceAngularOrderCount ||
+      record.direct_jk.fock_angular_order_count < 3 ||
+      record.direct_jk.fock_angular_order_count >
+          cuda_execution::kPersistentFockAngularOrderCount ||
       !tensor::CudaMatrixProductAdmission::resolve(stack.target, record.maximum_dimension,
                                                    record.maximum_matrices, record.matrix_profile())
            .calibrated())

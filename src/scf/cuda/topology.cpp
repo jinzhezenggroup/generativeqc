@@ -116,7 +116,8 @@ bool pack_host_batch(const std::vector<core::System>& systems,
                      bool require_direct_transform, ResidentPsssPolicy resident_psss,
                      HostBasisPacking packing, const runtime::CudaTargetInfo& target,
                      cuda_policy::SmallHfProfitabilityProfile profile,
-                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile) {
+                     const cuda_policy::HfMatrixProfileAdmission& matrix_profile,
+                     bool allow_persistent_eri) {
   if (systems.empty() || systems.size() != initial_densities.size()) return false;
   const bool df_values = packing == HostBasisPacking::DfValues;
   // The DF owner independently expands public spherical AOs after packing.
@@ -137,19 +138,24 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   host.nbf = molecule::ao_count(systems.front());
   host.direct_nbf = molecule::cartesian_ao_count(systems.front());
   host.spin_count = unrestricted ? 2 : 1;
+  host.persistent_force_angular_order_count = kPersistentForceAngularOrderCount;
+  host.persistent_fock_angular_order_count = kPersistentFockAngularOrderCount;
   std::size_t fock_states = 0;
   if (!runtime::checked_multiply(systems.size(), host.spin_count, fock_states)) return false;
   if (!df_values && !matrix_direct) {
-    if (matrix_profile.status == cuda_policy::HfMatrixProfileStatus::Admitted &&
-        matrix_profile.profile && matrix_profile.profile->context.target == target &&
-        matrix_profile.profile->covers(host.nbf, systems.size()) &&
-        matrix_profile.profile->covers(host.nbf, fock_states)) {
-      host.matrix_profile = matrix_profile.profile;
+    if (const auto* admitted =
+            matrix_profile.for_workload(target, host.nbf, systems.size(), fock_states)) {
+      host.matrix_profile = *admitted;
       profile.matrix = host.matrix_profile->matrix_profile();
+      const auto& topology = host.matrix_profile->direct_jk;
+      profile.fallback_persistent_eri_ao_limit = topology.persistent_eri_ao_limit;
+      profile.maximum_persistent_eri_bytes = topology.maximum_persistent_eri_bytes;
+      host.persistent_force_angular_order_count = topology.force_angular_order_count;
+      host.persistent_fock_angular_order_count = topology.fock_angular_order_count;
     }
     const auto resolved = cuda_policy::resolve_small_hf_profitability(
         target, {host.nbf, fock_states, systems.size(), fock_states}, profile);
-    host.persistent_eri = resolved.persistent_eri;
+    host.persistent_eri = allow_persistent_eri && resolved.persistent_eri;
     host.matrix_admission = resolved.matrix;
   } else if (!df_values) {
     // Matrix-only reference exporters own a separate capacity/initialization
@@ -409,8 +415,12 @@ bool same_topology(const HostBatch& first, const HostBatch& second) {
   return first.nbf == second.nbf && first.direct_nbf == second.direct_nbf &&
          first.matrix_admission == second.matrix_admission &&
          first.matrix_profile == second.matrix_profile &&
-         first.persistent_eri == second.persistent_eri && first.spin_count == second.spin_count &&
-         first.atom_offsets == second.atom_offsets && first.atom_systems == second.atom_systems &&
+         first.persistent_eri == second.persistent_eri &&
+         first.persistent_force_angular_order_count ==
+             second.persistent_force_angular_order_count &&
+         first.persistent_fock_angular_order_count == second.persistent_fock_angular_order_count &&
+         first.spin_count == second.spin_count && first.atom_offsets == second.atom_offsets &&
+         first.atom_systems == second.atom_systems &&
          first.atomic_numbers == second.atomic_numbers &&
          first.system_shell_offsets == second.system_shell_offsets &&
          first.shell_atoms == second.shell_atoms && first.shell_angular == second.shell_angular &&

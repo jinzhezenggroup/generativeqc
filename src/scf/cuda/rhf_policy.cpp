@@ -256,10 +256,9 @@ SmallHfProfitabilityPolicy resolve_small_hf_profitability(
   policy.estimate = estimate_small_hf_workload(target, workload);
   if (workload.nbf == 0) return policy;
 
-  // Persistent-ERI selection is intentionally still compatibility-only in this
-  // slice. Its derived n^4 storage/work facts are exposed above, but the direct
-  // route also needs screened shell-quartet work and expected SCF reuse before
-  // a profitability comparison is meaningful.
+  // The incumbent or an explicitly endpoint-qualified profile supplies the
+  // crossover. Matrix rates and n^4 storage alone cannot rank residency against
+  // actual screened shell work at the expected Fock/geometry reuse frequency.
   const auto eri_budget = resolve_target_memory_budget(
       target.total_global_memory, profile.maximum_persistent_eri_bytes,
       kUnknownTargetFixedTopologyArenaBytes, kFixedTopologyArenaDeviceMemoryDivisor);
