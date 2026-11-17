@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/one_electron_values_f.cu",
+  "reason": "Private host bridge instantiating the compiler-owned through-f value policy on shared pair schedules; no independent S/T/V operator arithmetic.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "one_electron_values"
+}
