@@ -165,12 +165,14 @@ manifests. Preserve upstream's new measured campaigns, resource receipt,
 previous-summary bytes and all archived manifests/snapshots; recompute only
 exact transition acknowledgements and the unmeasured CUDA capability audit.
 
-Unlike the earlier `50482bc35` baseline, this newer baseline contains measured
-qualified stages. The integrated scientific dependency identities change for
-222 functionals and invalidate 20 qualified stages: compiled CPU, compiled
+Unlike the earlier `50482bc35` baseline, the newer retained previous-summary
+contains measured qualified stages. Upstream already records 20 demotions;
+the integrated catalog preserves them and also changes 222 functional
+identities. Those retained demotions cover compiled CPU, compiled
 CUDA, GPU runtime, molecular SCF and forces for `GGA_X_APBE`, `LDA_C_VWN_4`,
 `MGGA_X_GVT4` and `MGGA_X_LTA`. Each transition has an exact revision-bound
-acknowledgement. No functional is removed, no old receipt is rewritten and no
+acknowledgement recomputed for the new identities. There is no additional
+stage loss relative to upstream. No functional is removed, no old receipt is rewritten and no
 new measurement is claimed. The current catalog has zero qualified endpoints;
 the historical presentation remains advisory and the current-source scientific
 acceptance gate remains unfulfilled. Resetting the previous summary or copying
