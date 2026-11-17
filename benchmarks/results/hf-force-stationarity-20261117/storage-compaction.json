@@ -170,6 +170,38 @@
       "bytes": 14056,
       "sha256": "67e350bb6cf15cb9a103f9d45c8e5f7d6f3c6f3b8a377b5535b35018b0f6aabe",
       "lexeme_sha256": "428755188dd3838f96d0910e4b15d007dbb3c444dee5629188e2227e8ccf37eb"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-e06ecd9-issue-51-graph-native-candidate.json",
+      "original_bytes": 40836,
+      "original_sha256": "185e7dbf83fe360cd74d6d38916baa150e3c09ff54dff409601539095f5911f3",
+      "bytes": 25998,
+      "sha256": "6c5f6f6ea493c53b4c5e3c9de89c7c8f8e92348b64c5ef0179cca627d4108e06",
+      "lexeme_sha256": "5e4b6b8407ce2c9ad2a0d1062102eda525a7605e53378506e8564d90ee9923dc"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-e6d94ee-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24643,
+      "original_sha256": "2c8c9a4998ef2f463b2513df0d2dc3518b1876e9f67e50c65ba3e77b57a6f1b0",
+      "bytes": 14100,
+      "sha256": "3702407f8b2a0be7c1e7d08ea5df3ccbf7776466cab9828264e79a4bea4a1725",
+      "lexeme_sha256": "50d86ba79ff767f81a933ce352c0cd676bba4b2ac702be260c1e19f3a591d845"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-ccdd250-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24621,
+      "original_sha256": "70d2a9e07fb8f0398097ddb64325582d66f9bf3c305764b2ea7e42e40abf8124",
+      "bytes": 14078,
+      "sha256": "7c7a39f5d9e2e966fd7a9c2fb60b4ae213572a9a6875f82c6b2e96e26e578fb6",
+      "lexeme_sha256": "ca05c3d0e169c33c8e93b7b0d7212099d1f0c61f07ccbda6cf59d479071c1541"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-35af36c-water-tetramer-def2-svp-spherical-b4-iteration-noisy.json",
+      "original_bytes": 24620,
+      "original_sha256": "7fd9a6db75d31b9f0e475d704a2e19ecc1b8488b59f434c5344c20c4da31cad3",
+      "bytes": 14077,
+      "sha256": "26f64216f26c3756a9158ca943b6914c3a0b5e955433ddc182c6e6e025bfbb1f",
+      "lexeme_sha256": "ec0c61972819fdba312ae529481c9427a67bc34c8af3b96be0bdbbecf905f4d0"
     }
   ],
   "master_reconciliation": {
@@ -178,5 +210,10 @@
     "reason": "Master independently transports this exact original payload through compressed-manifest.v1 and manifest.json.xz. Preserve that lossless migration rather than replacing its wrapper with a minified historical document.",
     "current_whitespace_entries": 20,
     "current_whitespace_saved_bytes": 258449
+  },
+  "gpu4pyscf_comparator": {
+    "additional_whitespace_entries": 4,
+    "additional_whitespace_saved_bytes": 46467,
+    "reason": "Preserve all default comparator failures, strict controls and complete endpoint outputs within the unchanged aggregate cap; no numerical token changes or evidence deletion."
   }
 }

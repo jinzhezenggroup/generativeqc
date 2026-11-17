@@ -1,5 +1,82 @@
 # Default HF force-stationarity qualification, 2026-11-17
 
+**Latest comparator result:** stock GPU4PySCF also fails the `1e-7` force gate
+on these cases; see the comparator section below. The stricter prototype is
+not a justified default promotion merely because it passes that gate. The
+earlier master-relative slowdown and all failed scientific samples remain
+retained; no default change is shipped or gate retroactively marked passed.
+
+## GPU4PySCF comparator: default accuracy versus strict accuracy
+
+Finite RTX5090 Slurm jobs 17690 and 17691 measure GPU4PySCF 1.8.1, PySCF
+2.14.0 and CuPy 13.6.0, using the exact retained Cartesian direct-RHF water
+SVP/TZVP inputs and independently converged CPU force arrays. Stock GPU4PySCF
+controls are unmodified: energy `1e-9`, gradient tolerance unset, direct-SCF
+threshold `1e-13`, stock DIIS and 50 maximum cycles. The installed source uses
+`sqrt(conv_tol)` when the gradient tolerance is unset. No reference density is
+injected and no extra final cycle is artificially added.
+
+Maximum force-component error, Hartree/Bohr, across all relevant fresh repeats:
+
+| Basis / phase | Stock master GQC | Stock GPU4PySCF |
+| --- | ---: | ---: |
+| SVP / cold | 5.61053e-8 | 1.12874e-6 |
+| SVP / moved | 4.38978e-8 | 5.93425e-7 |
+| TZVP / cold | 6.75801e-7 | 1.29161e-7 |
+| TZVP / moved | 4.48414e-8 | 5.67409e-7 |
+
+The master column is the unchanged source-bound n1 cohort in
+`performance.json.xz`, commit `8f4166f0c6a692045eaf568c814b868aa1057482`,
+both profiles. The comparator column contains three fresh processes per basis,
+including the initial pilot, with every result retained. In the original TZVP
+cold case GPU4PySCF is about five times more accurate, but both miss `1e-7`;
+on the moved case and SVP native master is more accurate. These are comparable
+default error scales, **not equality on every endpoint or a universal bound**.
+
+Every comparator energy passes `1e-9`; of its 30 force observations only three
+pass `1e-7` (TZVP warm). Unchanged scientific gates therefore classify 9/36
+total stock endpoints as valid, including six energy-only observations. An
+explicit diagnostic changes only GPU4PySCF `conv_tol_grad` to `1e-9`: all 24
+endpoints pass, maximum force error `2.28321e-10`. The two integrated native
+profiles contribute 48 additional endpoints, all passing, maximum force error
+`1.87033e-9`. This demonstrates convergence-limited force errors, not a reason
+to call the failed stock results equal to strict results.
+
+Complete synchronous E+force timings and semantic work are retained. Median
+SVP moved time is 2.692 s stock GPU4PySCF, 9.598 s strict GPU4PySCF, 0.433 s
+repair auto and 0.256 s repair portable. TZVP moved is respectively 8.058 s,
+25.102 s, 1.570 s and 1.101 s. Stock comparator moved work is seven counted
+cycles / eight actual potential evaluations; strict SVP/TZVP takes 31/29
+cycles and 32/30 potential evaluations. Native repair takes 12 cycles / 13
+Fock builds. Recorded `get_fock` Python calls are not equated to physical
+potential evaluations. Warm runs use each engine's own fixed post-update
+density; GPU4PySCF reruns stock SCF rather than a forced zero-cycle shortcut.
+
+**These times are not an optimized-reference speed ranking.** This installation
+has no cuTENSOR distribution and reports its CuPy contraction fallback. The
+strict setting is a diagnostic, not a search for the fastest comparator that
+passes `1e-7`. Cold initialization/cache effects, the pilot, all force arrays,
+actual call counters, exact acquisition sources, installed source/library
+identities, Slurm visibility and job receipts are in `gpu4pyscf.json.xz`.
+Replay all 108 endpoints with:
+
+```bash
+python3 benchmarks/results/hf-force-stationarity-20261117/gpu4pyscf_replay.py
+```
+
+Following the user's request to assess comparator default accuracy, these data
+do not justify imposing the slower strict prototype as a mandatory stock fix.
+Keep PR #3108 Draft; do not merge a default slowdown to meet a stronger implicit
+accuracy target than this comparator supplies. Any deliberately stronger force
+contract needs explicit policy and independent qualification; these results do
+not relax existing gates or erase the master-relative regression. This limited
+study does not qualify UHF, DF, H100/A100, PRO6000 or larger systems.
+
+Four additional unbound historical JSONs are whitespace-compacted solely to
+retain this evidence within the unchanged cap, saving 46,467 bytes. Exact
+numeric/string lexemes and failures are preserved; `storage-compaction.json`
+records original Git byte identities and the additional saving.
+
 This is independent scientific qualification for issue #3092, not a performance
 ranking or a claim that every system satisfies a universal force-error bound.
 The repair separates force admission from energy-only orbital-gradient stopping;

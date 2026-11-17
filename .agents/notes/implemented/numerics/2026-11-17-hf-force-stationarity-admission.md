@@ -130,6 +130,37 @@ then rebuilding and asserting independently computed source identity in job
 17685, produces the real baseline. Future reused-build comparisons must verify
 actual ELF/source identity, not infer it from a successful configure/build exit.
 
+## Comparator follow-up: do not infer a stricter default contract
+
+After the user asked whether GPU4PySCF supplies the same default accuracy,
+finite RTX5090 jobs 17690/17691 execute 108 complete endpoints across stock
+GPU4PySCF 1.8.1, an explicitly tighter comparator and both native prototypes.
+Exact Cartesian direct-RHF water SVP/TZVP fixtures and the independent CPU
+oracle are unchanged. Three fresh stock comparator chains per basis give
+maximum cold/moved force errors `1.12874e-6`/`5.93425e-7` (SVP) and
+`1.29161e-7`/`5.67409e-7` (TZVP), despite all energies passing `1e-9`.
+Only three of 30 stock comparator force endpoints pass `1e-7`; every result
+and failure is retained. Explicit `conv_tol_grad=1e-9` instead passes every
+comparator endpoint, maximum force error `2.28321e-10`.
+
+Thus master and GPU4PySCF stock settings have comparable error scales on
+these examples, not identical force accuracy. GPU4PySCF is about five times
+more accurate for the original TZVP cold geometry; native master is more
+accurate for the moved geometry and SVP. The observation does not establish
+a card/SM120 mathematical defect or a universal default force-error guarantee.
+It also does not justify forcing the 20--26% slower strict prototype onto the
+default path solely to exceed comparator accuracy. Keep the unmerged prototype
+Draft and retain its failed master-relative performance gate. The user's new
+comparator-based requirement must inform an explicit accuracy-contract decision,
+not silently relabel failed `1e-7` samples as passes or erase earlier evidence.
+
+Complete endpoint times/work are retained but the installed comparator uses
+CuPy contractions without cuTENSOR. The tighter setting is a diagnostic, not
+a minimally accurate performance optimum. Do not promote a speed claim from
+that environment or generalize these two direct-RHF cases to DF/UHF/other GPUs.
+See the comparator section and independently replayable `gpu4pyscf.json.xz`
+in `benchmarks/results/hf-force-stationarity-20261117/`.
+
 ## Matching the DF oracle
 
 Do not compare different fitted operators under the direct-HF energy gate.
