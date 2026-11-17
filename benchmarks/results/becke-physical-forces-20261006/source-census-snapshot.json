@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "17f9317a2495c142941d7390d465fcf79887d643",
+  "file_count": 1,
+  "total_bytes": 65978,
+  "purpose": "Only frozen build metadata and source-checksum streams. Independent scientific inputs, full observables, failed populations and numerical gates remain in the checkout. No Release or external backup. Exact original bytes are recovered from an already published ancestor without a network fetch.",
+  "files": [
+    {
+      "path": "benchmarks/results/becke-physical-forces-20261006/source-files.sha256.gz",
+      "bytes": 65978,
+      "sha256": "3ea66e50fec796a0f1caebf852727eb4871df256b7314b482c6291bff6c541d1",
+      "git_blob_sha1": "fd6bd7d2e696bd42ac99b1f27cb0003c33848407",
+      "git_mode": "100644"
+    }
+  ]
+}

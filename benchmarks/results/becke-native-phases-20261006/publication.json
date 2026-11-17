@@ -19,12 +19,6 @@
       "sha256": "1a5cede44b5b7318bed326818012296402e32a1ce2605c5013a0993d9a841b6a"
     },
     {
-      "bytes": 67754,
-      "path": "source-files.sha256",
-      "role": "input",
-      "sha256": "a783ca9724f32326bbc14e4a42011939d3dfa52f10eada8f8074b6c9676e3fa2"
-    },
-    {
       "bytes": 8672,
       "path": "source.patch.xz",
       "role": "source-patch",
@@ -45,8 +39,14 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 396,
-      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
+      "bytes": 1227,
+      "sha256": "8424e6302ae2f6bdd7d2d1faa62111a10872dfb91c980de1415d92c5b302ab02"
+    },
+    {
+      "path": "source-census-snapshot.json",
+      "role": "input",
+      "bytes": 780,
+      "sha256": "15a6d438bc19e50b874c1ef4194d32e3aba1ad45e863088fd4e0f97f40bb9ecb"
     }
   ],
   "reproduction": {
@@ -55,7 +55,7 @@
       "benchmarks/results/becke-native-phases-20261006/reproduce.sh"
     ],
     "prerequisites": "finite main/gpu:5090:1 Slurm, CUDA 12.9 sm_120, ccache, compute-sanitizer, compiler dependencies, NumPy/pytest/CuPy. PYTHON and CUDA_ROOT select installations; preserve scheduler visibility.",
-    "source_restore": "Keep the bundle outside the checkout. Restore source.revision, apply source.patch, then run the recipe from the restored checkout. Both included headers and generated mathematical source must match."
+    "source_restore": "Keep the bundle outside the checkout. Restore source.revision, apply source.patch, then run the recipe from the restored checkout. Both included headers and generated mathematical source must match. Restore the exact source census from source-census-snapshot.json into the external reproduction bundle first; independent observations remain offline."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

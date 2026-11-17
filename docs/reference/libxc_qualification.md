@@ -55,6 +55,7 @@ Each context retains its own executed library identity in the snapshot.
 | `fbf57c111c7c885efbc0cd1457e6a7732c9e3d95` | `ba63873931ccffae7d9b2cea01831028f9bcf04a9903b818da76bd1539f64d64` | `c2d1b725fb754e72d35ca5829ba9a067974703c6a98bc4e4cefb44ea6abc256c` |
 | `fb8cbabd90fe77c07609987bfeea06162177ed21` | `9c225b7f02856f3a472786fcbe4b135ada91ff634c3809e6669f02e2212002ff` | `de2c01a15769c7942338ec9158e0fc0a517f5f447ae23c84475b0a6f5289121e` |
 | `fb8cbabd90fe77c07609987bfeea06162177ed21` | `9c225b7f02856f3a472786fcbe4b135ada91ff634c3809e6669f02e2212002ff` | `de2c01a15769c7942338ec9158e0fc0a517f5f447ae23c84475b0a6f5289121e` |
+| `df42f93bbace0f16fb5b3dec77552384c9da9101` | `48a2277a0d48ca65f6fa6c6ff9453f4b6d399b635e4bca771f58e01d463acb13` | `93909e00bc0460033a6e1e8c21ef12efdcc9a054cb9a11eb150e454bd3ea1b69` |
 
 ## Targeted revalidation
 
@@ -93,6 +94,14 @@ ABI, build and unknown shared inputs require compatibility review and targeted r
 | `GGA_X_APBE` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `MGGA_X_GVT4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 | `MGGA_X_GVT4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `GGA_X_APBE` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `GGA_X_APBE` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `LDA_C_VWN_4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `LDA_C_VWN_4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `MGGA_X_GVT4` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `MGGA_X_GVT4` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `MGGA_X_LTA` | cpu | energy, forces | changed endpoint dependencies; targeted numerical regression required |
+| `MGGA_X_LTA` | cuda | energy, forces | changed endpoint dependencies; targeted numerical regression required |
 
 ## Qualified registrations
 
@@ -133,5 +142,10 @@ added functionals: none
 removed functionals: none
 identity changes: none
 promotions: none
-demotions: none
+demotions:
+  compiled-cpu: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  compiled-cuda: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  gpu-runtime: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  molecular-scf: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
+  forces: GGA_X_APBE, LDA_C_VWN_4, MGGA_X_GVT4, MGGA_X_LTA
 ```

@@ -1,0 +1,222 @@
+{
+  "schema": "generativeqc.lossless-json-storage-audit.v1",
+  "scope": "Existing lossless compressed-manifest-v1 and gzip transports only. Every original byte, scientific value, source identity, failed population and frozen receiver is unchanged. No history or network access is required to recover observations.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-guards-20261102/audit/EXPERIMENT_AUDIT.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 115632,
+      "original_sha256": "12af37b4dc29f38a64558a32e81f8d1fbb613ed872a88278c79fe036df54b4fb",
+      "stored_bytes": 23534,
+      "payload": "benchmarks/results/h100-sm90-cd2b-guards-20261102/audit/EXPERIMENT_AUDIT.json.xz",
+      "payload_sha256": "1430aefea58231de99fdb0a3c2ab3931245707cd62bf08be2aa60cf8968b9211"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/facade-correction-result-audit-sol-v1/audit-report.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 105375,
+      "original_sha256": "051a370c0ece1ab8b1ebc743adbfa7ab6a77276cb43e0c3164f2688315908798",
+      "stored_bytes": 14426,
+      "payload": "benchmarks/results/h100-sm90-cd2b-public-guards-20261103/facade-correction-result-audit-sol-v1/audit-report.json.xz",
+      "payload_sha256": "3792a2e207fe1a86171606a9ece528e463027b3fd62f7dfd7852eb848c99fdaf"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/df-molecular-v1-download-manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 66852,
+      "original_sha256": "e7dd2525e82bc484c0ca69056e3553be70f66811620091f224abb99d70169844",
+      "stored_bytes": 15138,
+      "payload": "benchmarks/results/h100-sm90-cd2b-20261102/df-molecular-v1-download-manifest.json.xz",
+      "payload_sha256": "4a6167ee9a33df05a30dbe2e38bdeb4dd7d74c4effc7f65eb8348c69708903b3"
+    },
+    {
+      "path": "benchmarks/results/h100-sm90-cd2b-20261102/screening-v1-download-manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 62841,
+      "original_sha256": "79ed7c0b10a5fde05e7bdaf7875c0791e0695167d863434b991600c1b97c8a82",
+      "stored_bytes": 13603,
+      "payload": "benchmarks/results/h100-sm90-cd2b-20261102/screening-v1-download-manifest.json.xz",
+      "payload_sha256": "94284290492addec97861c52643ffd21ee7518c6ad1fdfb10992b51400878b6e"
+    },
+    {
+      "path": "benchmarks/results/issue311-force-state/manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 65794,
+      "original_sha256": "a2e2d054a9c776ee314572cd57d001c4e2fd431c509262d395ce77a3ac421c05",
+      "stored_bytes": 13605,
+      "payload": "benchmarks/results/issue311-force-state/manifest.json.xz",
+      "payload_sha256": "d736e1ec4351e74de2d0105274078cc6ae8c7c8af82b12603c7ea3ae2dad6d21"
+    },
+    {
+      "path": "benchmarks/results/issue284-occupied-exchange/raw-evidence.manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 65552,
+      "original_sha256": "c6358d60929c156e93c2d7fb8dc6438e3cc2be0d61d3754e60cbf387c5a8be04",
+      "stored_bytes": 14166,
+      "payload": "benchmarks/results/issue284-occupied-exchange/raw-evidence.manifest.json.xz",
+      "payload_sha256": "c4540804b32e1b9f51819e4445eb2da383773bc0e5b5fe4f19e950db61060056"
+    },
+    {
+      "path": "benchmarks/results/issue409-packed-values/manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 64138,
+      "original_sha256": "cab4c029806c3130bdef612831e85450a3b269db26eee42d772d7c0c5ad44ff7",
+      "stored_bytes": 11173,
+      "payload": "benchmarks/results/issue409-packed-values/manifest.json.xz",
+      "payload_sha256": "b7c42194c7ae66934a26780236c5817a8edfbc18ea0eb375c63d339d5009f855"
+    },
+    {
+      "path": "benchmarks/results/issue308-large-diagnostics/manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 52137,
+      "original_sha256": "ecb05baea58db41a667d06d67a5b456e282b4613968d20b3d76798be49f1a943",
+      "stored_bytes": 13893,
+      "payload": "benchmarks/results/issue308-large-diagnostics/manifest.json.xz",
+      "payload_sha256": "dae77be0068f4f344c886b612eade8c4ad6fbfd29c4f65f2866510c9524042c4"
+    },
+    {
+      "path": "benchmarks/results/unified-k-work-20261009/storage-recovery.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 65494,
+      "original_sha256": "1ff21ea20a60c3b1668cc5bc6b4e2aceb3777b9c53b6b26bdb1ee082fdd794b7",
+      "stored_bytes": 16145,
+      "payload": "benchmarks/results/unified-k-work-20261009/storage-recovery.json.xz",
+      "payload_sha256": "6166d2fbdee3ee59c4282f7a2cc223d7ace028e2142fc7ffd6c2ca7dd00a524f"
+    },
+    {
+      "path": "benchmarks/results/build-ledger-current.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 63277,
+      "original_sha256": "4c2fb570a573338485d75408825c5874153a5b8e056976a17c8b9b3551b7d6c7",
+      "stored_bytes": 6681,
+      "payload": "benchmarks/results/build-ledger-current.json.xz",
+      "payload_sha256": "e31cbedb106afe882502b077a4abe10e32063b46212e5d3112d68e052dabe2de"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/ammonia-def2-svp-spherical-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 5751,
+      "original_sha256": "cada40197d79eda875afe1fb32d29df7c354b3f1cfcb810f98675553173ab45c",
+      "stored_bytes": 1229,
+      "payload": "benchmarks/results/issue206-post418/raw/ammonia-def2-svp-spherical-b1-qualification.json.gz",
+      "payload_sha256": "0bc58938948a696635e2b1d079e26b2d1ddf58dbf1ae3e5ee9dbf97664403c9b"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/manifest.json",
+      "storage": "gzip",
+      "original_bytes": 57537,
+      "original_sha256": "59c7f93160a1c2af64ce4fd5a67aae63f95506f6cca9ad67a1be47b6e5a57b3d",
+      "stored_bytes": 7596,
+      "payload": "benchmarks/results/issue206-post418/raw/manifest.json.gz",
+      "payload_sha256": "63bde749caa367b03a3d5b90d20ae1f1dc8e2aae0d8ad6a5fd0aeddb964b5c75"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/oh-def2-svp-spherical-uhf-b1-forces.json",
+      "storage": "gzip",
+      "original_bytes": 53519,
+      "original_sha256": "aba298c128934c7fc7f4a2cd81a8f0c4018bb76224bb92d84baefc8c02dba078",
+      "stored_bytes": 5337,
+      "payload": "benchmarks/results/issue206-post418/raw/oh-def2-svp-spherical-uhf-b1-forces.json.gz",
+      "payload_sha256": "280ac0b4b7dbb76834c26d1798b0c81cbee5388dbf87e4b6befd4e8c76db5684"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/oh-def2-svp-spherical-uhf-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 5519,
+      "original_sha256": "1b26ae5464dc1defabfadaf67199349d3d45ef0768e59374bda73044c0307290",
+      "stored_bytes": 1220,
+      "payload": "benchmarks/results/issue206-post418/raw/oh-def2-svp-spherical-uhf-b1-qualification.json.gz",
+      "payload_sha256": "7625b05a430c0d96c4ff639b9917471d9724d51fea9534f66321fdbadc9be48c"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-32mer-4s4-def2-svp-spherical-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 20121,
+      "original_sha256": "b8ac25c632608ad94bb4d94315c038cd54633e1527927de868378f02ac298564",
+      "stored_bytes": 2160,
+      "payload": "benchmarks/results/issue206-post418/raw/water-32mer-4s4-def2-svp-spherical-b1-qualification.json.gz",
+      "payload_sha256": "9c31604e3ccd3c88da480d623c88fe7d8a98590ff60bd8c70e34b9b81e9c4dd5"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-hexadecamer-2s4-def2-svp-spherical-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 12767,
+      "original_sha256": "3c4f48477030fb2e7b764cd70485ac592a2893dc8f815bfba0a745069a35ea59",
+      "stored_bytes": 1975,
+      "payload": "benchmarks/results/issue206-post418/raw/water-hexadecamer-2s4-def2-svp-spherical-b1-qualification.json.gz",
+      "payload_sha256": "8dbbcf9ab59a640932aef27a54c4e4eeb2caebb8a521e1be2a76ccbc6b18ad93"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-octamer-s4-def2-svp-spherical-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 9058,
+      "original_sha256": "c1b74edae01676455cd4bbae0417913c388d79ee18dcf14bfcbe1475c94a5050",
+      "stored_bytes": 1600,
+      "payload": "benchmarks/results/issue206-post418/raw/water-octamer-s4-def2-svp-spherical-b1-qualification.json.gz",
+      "payload_sha256": "3fffa85ee640d335515c196ffba0a18970bc4fc12dd78f307665d7f5beb6ee80"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-octamer-s4-def2-svp-spherical-b4-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 34370,
+      "original_sha256": "2cf60b1c71fd150fe06cf0c242fc8f4518d8af10c8a6ef0d929e4b7710fca0d1",
+      "stored_bytes": 3061,
+      "payload": "benchmarks/results/issue206-post418/raw/water-octamer-s4-def2-svp-spherical-b4-qualification.json.gz",
+      "payload_sha256": "683aa2b195da9e4bfdc4150da8aab22a9680cd23a45abcce4babee1da92d0dc6"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-tetramer-def2-svp-spherical-b1-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 7177,
+      "original_sha256": "56517eee8b7950485332bdf4a54d50dcc0227f290c079aa35950757faa5807bd",
+      "stored_bytes": 1401,
+      "payload": "benchmarks/results/issue206-post418/raw/water-tetramer-def2-svp-spherical-b1-qualification.json.gz",
+      "payload_sha256": "0ba9251517843bc7b05d95c63fd1259ee5435a423e385e3b01cd61c89231fd67"
+    },
+    {
+      "path": "benchmarks/results/issue206-post418/raw/water-tetramer-def2-svp-spherical-b4-qualification.json",
+      "storage": "gzip",
+      "original_bytes": 26887,
+      "original_sha256": "44e340f780e208243a96ce77c0bd000165649cc929dd93e117259743941ecffc",
+      "stored_bytes": 2303,
+      "payload": "benchmarks/results/issue206-post418/raw/water-tetramer-def2-svp-spherical-b4-qualification.json.gz",
+      "payload_sha256": "09f66fadbc9f46f8a3fdc399840bcf537e2a11f4130dc9a5356fc6553e257baf"
+    },
+    {
+      "path": "benchmarks/results/shared-automatic-aot-20261027/manifest.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 51077,
+      "original_sha256": "2f767f7db410ede20504b6a2d49240caceac5f34e7ff6519d688a4047ffc0e9c",
+      "stored_bytes": 9965,
+      "payload": "benchmarks/results/shared-automatic-aot-20261027/manifest.json.xz",
+      "payload_sha256": "4a970f1f92bf750b2e19dd04f00e6f59607bc848bc0fb3256f6971be03bf1b66"
+    },
+    {
+      "path": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.json",
+      "storage": "compressed-manifest-v1",
+      "original_bytes": 52655,
+      "original_sha256": "78252e26bc512d53221d6048eea1622e94255a65dd28c537b68df19432b019db",
+      "stored_bytes": 11741,
+      "payload": "benchmarks/results/h100-cold-force-fixed30-20261105/review/audit-report.json.xz",
+      "payload_sha256": "94f7f0e48447738bebb450824185efa1dc098ea4f458b88efb8b43d8d17e4195"
+    },
+    {
+      "path": "benchmarks/results/cuda-ownership/one-electron/summary.json",
+      "storage": "xz",
+      "original_bytes": 61496,
+      "original_sha256": "08a7ea3b27b18d3cda86054abef266a8bdb490e405f6406fc7b0c6c8063295c1",
+      "stored_bytes": 11984,
+      "payload": "benchmarks/results/cuda-ownership/one-electron/summary.json.xz",
+      "payload_sha256": "f0a6b789d14ef41ac5feeee93c57c1b20cf5ed2e0c6b5195ee6ed60cdcd403e2"
+    },
+    {
+      "path": "benchmarks/results/cuda-ownership/df/summary.json",
+      "storage": "xz",
+      "original_bytes": 67686,
+      "original_sha256": "afcf99c0a7b0654e457c2fdd71eda1249012ee79b8f8529f65cc4b15831266ec",
+      "stored_bytes": 13700,
+      "payload": "benchmarks/results/cuda-ownership/df/summary.json.xz",
+      "payload_sha256": "197d5e73ceb05167d7eac3aa5b8ceabbc7b58568ea389d428a37ca714204a3ba"
+    }
+  ]
+}

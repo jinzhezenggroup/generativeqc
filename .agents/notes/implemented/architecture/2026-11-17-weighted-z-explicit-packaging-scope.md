@@ -92,6 +92,16 @@ Raw report SHA-256:
 The original artifact is GitHub Actions artifact `14288506931`; a local copy
 is retained under `/data/jzzeng/pr3105-ready-20261117/ci-resource-artifact/`.
 
+## Subsequent upstream integration
+
+Integrating `master@8f4166f0c` resolves only the derived CUDA audit's source
+identity conflict. Retain upstream's Libxc manifest, measured campaign,
+previous-summary baseline and its 20 already-recorded stage demotions without
+modification. There are no additional catalog transitions from this packaging
+change. The sealed default decisions and measured resource ledger remain
+unchanged. The passing CI run `43994318226` belongs to `15a15e563`; a new head
+requires fresh checks and must not inherit that run's source qualification.
+
 ## References
 
 This supersedes the unresolved stock-packaging disposition in
