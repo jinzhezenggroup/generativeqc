@@ -704,12 +704,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
                 system_.ecp_terms.empty() &&
                 std::none_of(system_.atoms.begin(), system_.atoms.end(),
                              [](const auto& atom) { return atom.ecp_core != 0; });
-            // Nonlocal SCF panels keep their fitted admission. Force batching
-            // admits the same strict fused RKS owner independently of fitting.
+            // Nonlocal SCF panels admit strict fused RKS owners with or without
+            // fitting; fitted panels keep their 512-point policy. Force batching
+            // admits the same owner independently of fitting.
             options_.xc_tile_points = dft::automatic_ks_scf_tile(
-                0, fitted_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
+                0, fused_rks_fp64, available >= (1ULL << 30), basis_.nao, grid_.point_count(),
                 execution_plan_.nonlocal_correlation, target.compute_capability_major,
-                target.fp32_fp64_ratio);
+                target.fp32_fp64_ratio, fitted_rks_fp64);
             if (automatic_force && admitted_cuda_stationary_binding() &&
                 !application_gradient_qualification()) {
               options_.xc_force_tile_points = dft::automatic_ks_force_tile(
