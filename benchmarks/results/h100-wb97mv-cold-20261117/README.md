@@ -12,8 +12,9 @@ rankings.
 
 `results.json.xz` retains every process: per-call seconds, energies, SCF iterations,
 Fock/Veff builds, VV10 work counters, resolved SCF tiles, raw-record hashes and the
-independent qualification status with maximum errors. `acquisition.tar.xz` retains
-the build, runner, endpoint, profiling and collection scripts and arm lists.
+independent qualification status with maximum errors. The build, runner,
+endpoint, profiling and collection scripts and arm lists are retained with the raw
+records in the remote directory below.
 Independent qualification uses the tracked
 [readme-refresh-20261026](../readme-refresh-20261026/README.md) oracles with the
 reviewed reference-reuse contract and the original gates (energy 1e-5 Eh/atom,
