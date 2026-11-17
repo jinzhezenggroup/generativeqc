@@ -68,6 +68,30 @@ development prefix. Setting `OPENSSL_ROOT_DIR` and `CMAKE_PREFIX_PATH` to the
 existing `/home/jzzeng/miniconda3` prefix fixes that environmental prerequisite;
 no project dependency check is bypassed and no system package is modified.
 
+## Current-manifest resource requalification
+
+The integrated head `b537e98671b8c0171557ce18dfaa993099c8119f` passes
+197 focused tests, but its first remote direct-J/K resource gate correctly
+rejects the old manifest hash. CI run `43991003281`, job `133731277891`, performs
+a fresh 787.15-second CUDA 12.9.86 release compile (cache miss, return code zero)
+and measures all 102 co-located SM120 shard kernels. The generated scientific
+source, preprocessed source, headers, compiler flags/toolchain and every kernel's
+REG/STACK/SHARED/LOCAL exactly match the retained ledger. Its only drift is the
+whole-manifest hash introduced by explicit capability scoping.
+
+Regenerate the candidate with the qualification tool's `measured_ledger` helper
+from this authenticated current-head CI measurement. Validating and comparing
+the candidate passes; its only changed ledger field is `manifest_sha256`.
+Commit that measured hash deliberately, without changing any resource value or
+weakening identity checks. The first CI gate remains a historical failure; a
+subsequent current-head CI run is still required. This is static resource
+qualification, not fresh GPU numerical or complete-endpoint acceptance.
+
+Raw report SHA-256:
+`ccc262498c09f2918a23f66cc15b0c1376b5fda3722515d89db3a7769e5b11f9`.
+The original artifact is GitHub Actions artifact `14288506931`; a local copy
+is retained under `/data/jzzeng/pr3105-ready-20261117/ci-resource-artifact/`.
+
 ## References
 
 This supersedes the unresolved stock-packaging disposition in
