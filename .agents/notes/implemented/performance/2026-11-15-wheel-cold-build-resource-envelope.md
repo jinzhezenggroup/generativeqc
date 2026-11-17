@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-11-15
 
+The [November 18 allocation update](2026-11-18-pr3083-ci-fixture-locality.md)
+supersedes only the wheel build-step allowance after an observed step timeout.
+The resource isolation and serialization decisions below remain unchanged.
+
 ## Problem and evidence
 
 Master wheel runs 43580937901 and 43697904960 failed with GitHub's annotation

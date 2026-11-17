@@ -5,6 +5,7 @@ ci_prioritize_runtime_files() {
   # module moved to ecp-forces. Keep shared fixtures local and avoid a late
   # numerical tail from xdist's default ordering by descending test count.
   local -a priority=(
+    tests/python/test_host_ks_nuclear_response.py
     # Start the whole cold D3 curvature fixture before the ordinary queue;
     # loadfile shares its detached Hessian results without sharing live owners.
     tests/python/test_d3_public_second_order.py
