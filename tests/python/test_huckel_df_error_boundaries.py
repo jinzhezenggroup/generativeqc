@@ -75,6 +75,7 @@ unsigned live_arenas{}, host_fock_calls{}, reference_eigen_calls{};
 bool injection_enabled{true};
 bool in_seed{}, in_finalization{};
 bool expected_orbital_convergence{};
+bool force_owner{};
 
 std::size_t source_id(const core::System& system) {
   return static_cast<std::size_t>(system.atoms.at(0).atomic_number - 1);
@@ -192,7 +193,8 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(CudaDensityFittingJk
     const Matrix&, unsigned, double, double, Matrix& final_density,
     std::vector<CudaDensityFittingDeviceScfItem>& records, std::string&, const Matrix&, unsigned,
     bool qualified_owner, bool orbital_convergence) {
-  assert(qualified_owner && orbital_convergence == expected_orbital_convergence);
+  assert(qualified_owner == !force_owner);
+  assert(orbital_convergence == expected_orbital_convergence);
   if (boundary == Boundary::Compact && injection_enabled) return injected_status;
   if (boundary == Boundary::Iteration || boundary == Boundary::FinalHost)
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
@@ -260,10 +262,11 @@ generativeqc_status status_from_name(const std::string& name) {
 }
 
 int main(int argc, char** argv) {
-  assert(argc == 6);
+  assert(argc == 7);
   setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", argv[5], 1);
   unsetenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS");
-  expected_orbital_convergence = std::string(argv[5]) != "strict";
+  force_owner = std::stoi(argv[6]) != 0;
+  expected_orbital_convergence = !force_owner && std::string(argv[5]) != "strict";
   boundary = static_cast<Boundary>(std::stoi(argv[1]));
   injected_status = status_from_name(argv[2]);
   retry_status = status_from_name(argv[3]);
@@ -277,6 +280,7 @@ int main(int argc, char** argv) {
     systems[i].electron_count = 2;
   }
   ScfOptions options;
+  options.compute_forces = force_owner;
   options.max_iterations = 4;
   options.preliminary_guess.emplace();
   options.preliminary_guess->kind = initial_guess::PreliminaryKind::Huckel;
@@ -408,7 +412,23 @@ def df_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("cached", [False, True], ids=["owned-arena", "cached-arena"])
-@pytest.mark.parametrize("convergence", ["", "strict", "orbital-gradient"])
+@pytest.mark.parametrize(
+    "compute_forces,convergence",
+    [
+        (False, ""),
+        (False, "strict"),
+        (False, "orbital-gradient"),
+        (True, ""),
+        (True, "strict"),
+    ],
+    ids=[
+        "energy-default",
+        "energy-strict",
+        "energy-orbital",
+        "force-default",
+        "force-strict",
+    ],
+)
 @pytest.mark.parametrize(
     "failure", ["CUDA_ERROR", "OUT_OF_MEMORY", "NUMERICAL_FAILURE"]
 )
@@ -424,8 +444,14 @@ def df_error_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ],
 )
 def test_bucket_typed_failure_boundaries(
-    df_error_probe: Path, boundary: int, failure: str, cached: bool, convergence: str
+    df_error_probe: Path,
+    boundary: int,
+    failure: str,
+    cached: bool,
+    convergence: str,
+    compute_forces: bool,
 ) -> None:
+    """Strict force ownership must retain the same typed-error and cleanup guarantees."""
     subprocess.run(
         [
             str(df_error_probe),
@@ -434,6 +460,7 @@ def test_bucket_typed_failure_boundaries(
             "SUCCESS",
             str(int(cached)),
             convergence,
+            str(int(compute_forces)),
         ],
         check=True,
         capture_output=True,
@@ -446,12 +473,32 @@ def test_bucket_typed_failure_boundaries(
     "retry_failure",
     ["NUMERICAL_FAILURE", "CUDA_ERROR", "OUT_OF_MEMORY", "SCF_NOT_CONVERGED"],
 )
-@pytest.mark.parametrize("convergence", ["", "strict", "orbital-gradient"])
+@pytest.mark.parametrize(
+    "compute_forces,convergence",
+    [
+        (False, ""),
+        (False, "strict"),
+        (False, "orbital-gradient"),
+        (True, ""),
+        (True, "strict"),
+    ],
+    ids=[
+        "energy-default",
+        "energy-strict",
+        "energy-orbital",
+        "force-default",
+        "force-strict",
+    ],
+)
 @pytest.mark.parametrize(
     "boundary", [1, 3, 4], ids=["target-eigen", "compact-finalize", "host-finalize"]
 )
 def test_failed_core_retry_is_terminal(
-    df_error_probe: Path, boundary: int, retry_failure: str, convergence: str
+    df_error_probe: Path,
+    boundary: int,
+    retry_failure: str,
+    convergence: str,
+    compute_forces: bool,
 ) -> None:
     subprocess.run(
         [
@@ -461,6 +508,7 @@ def test_failed_core_retry_is_terminal(
             retry_failure,
             "1",
             convergence,
+            str(int(compute_forces)),
         ],
         check=True,
         capture_output=True,

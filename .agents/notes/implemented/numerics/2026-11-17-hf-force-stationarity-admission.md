@@ -60,6 +60,44 @@ forbidden. The original `1e-9` energy, `1e-7` force and `1e-7` translation
 acceptance gates remain unchanged. Actual device receipts must identify the
 source, binary, profile, physical device and finite Slurm allocation.
 
+## Retained device evidence
+
+The [source-bound qualification](../../../../benchmarks/results/hf-force-stationarity-20261117/README.md)
+retains successful finite Slurm jobs 17670 (RTX 5090) and 5324 (RTX PRO 6000
+Blackwell), four fresh processes per card/profile, identical ELF bytes across
+cards for each profile, and independent raw reference arrays. All 96 cases /
+576 endpoints, including 480 E+force endpoints, pass the original gates.
+Maximum energy/force/translation errors are `1.1221e-10`, `4.8488e-9` and
+`2.2471e-13`, respectively. The original TZVP cold/warm case passes all 32
+observations at maximum force error `1.3860e-9`; an earlier-source negative
+regression still fails at `6.7581e-7`. Both cards are SM120; no cross-SM or
+performance qualification follows from these results. Replay recomputes the
+errors and DF finite differences rather than trusting stored pass flags.
+
+## Matching the DF oracle
+
+Do not compare different fitted operators under the direct-HF energy gate.
+The shared PySCF basis exporter defaults to spherical auxiliary functions,
+whereas a Cartesian PySCF molecule inherits Cartesian auxiliary functions.
+Even after matching that representation, stock PySCF Cholesky DF is not the
+native default spectral metric with relative cutoff `1e-10`. That cutoff is
+gauge dependent: native Cartesian components have unit self-overlap, while
+raw PySCF Cartesian components need not. The initially mismatched comparisons
+are retained as failed setup observations, not production acceptance.
+
+The DF reference therefore constructs its metric and three-center integrals
+independently with PySCF/CINT, normalizes auxiliary components by independently
+computed self-overlaps, and retains the published default spectral cutoff.
+No native matrices, density seeds or fitted factors enter the oracle. Complete
+forces come from reconverged displaced energies, including retained-projector
+and auxiliary-center response. Two five-point steps (`0.01`, `0.02` Bohr) must
+agree within `5e-8`; their Richardson extrapolation supplies the independent
+reference. Displaced energies and unchanged metric ranks are retained. Public
+production controls and the `1e-9`/`1e-7` acceptance gates do not change.
+
+This explicitly fitted auxiliary model qualifies the shared force-stationarity
+owner, not every auxiliary selection, fit error, or default DF endpoint.
+
 ## Superseded scope
 
 - [Direct orbital-gradient default](2026-11-10-default-hf-orbital-gradient.md)

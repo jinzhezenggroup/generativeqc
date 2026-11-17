@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import importlib.abc
 import json
 import os
@@ -19,32 +20,90 @@ pytestmark = pytest.mark.skipif(
 
 _ORACLE = """
 import json, sys
+from dataclasses import replace
+import numpy as np
 import pyscf
-from pyscf import gto, lib, scf
+from pyscf import df, gto, lib, scf
 lib.num_threads(1)
 request = json.load(sys.stdin)
-records = {}
-for name, atoms in request['geometries'].items():
+
+def solve(atoms):
     molecule = gto.M(atom=atoms, unit='Bohr', basis=request['basis'],
                      spin=request['spin'], cart=True, verbose=0)
     solver = scf.UHF(molecule) if request['spin'] else scf.RHF(molecule)
     if request['mode'] == 'df':
         solver = solver.density_fit(auxbasis='def2-universal-jkfit')
-    solver.conv_tol = 1e-12
-    solver.conv_tol_grad = 1e-9
+        auxiliary = df.addons.make_auxmol(molecule, 'def2-universal-jkfit')
+        # Relative metric truncation is gauge dependent. Native Cartesian
+        # components have unit self-overlap; PySCF's raw Cartesian ones do not.
+        scale = 1 / np.sqrt(np.diag(auxiliary.intor('int1e_ovlp_cart')))
+        metric = scale[:,None] * auxiliary.intor('int2c2e_cart', hermi=1) * scale[None,:]
+        eigenvalues, eigenvectors = np.linalg.eigh(metric)
+        keep = eigenvalues > eigenvalues[-1] * 1e-10
+        three = df.incore.aux_e2(molecule, auxiliary, intor='int3c2e_cart', aosym='s2ij')
+        solver.with_df.auxmol = auxiliary
+        solver.with_df._cderi = np.ascontiguousarray(
+            (eigenvectors[:,keep] / np.sqrt(eigenvalues[keep])).T @ (scale[:,None] * three.T)
+        )
+        solver.oracle_metric_rank = int(np.sum(keep))
+    solver.conv_tol = 1e-13 if request['mode'] == 'df' else 1e-12
+    solver.conv_tol_grad = 1e-10 if request['mode'] == 'df' else 1e-9
     solver.max_cycle = 200
-    energy = solver.kernel()
+    solver.kernel()
     assert solver.converged
-    gradient = solver.nuc_grad_method()
+    return solver
+
+def finite_difference_forces(atoms, step):
+    forces = np.empty((len(atoms), 3))
+    samples = []
+    coordinates = np.array([position for _, position in atoms], dtype=float)
+    for atom in range(len(atoms)):
+        for axis in range(3):
+            energies = {}
+            ranks = []
+            for shift in (-2, -1, 1, 2):
+                displaced = coordinates.copy()
+                displaced[atom,axis] += shift * step
+                geometry = [(symbol, position) for (symbol, _), position in zip(atoms, displaced)]
+                displaced_solver = solve(geometry)
+                energies[shift] = displaced_solver.e_tot
+                ranks.append(displaced_solver.oracle_metric_rank)
+            forces[atom,axis] = (energies[2] - 8*energies[1] + 8*energies[-1] - energies[-2]) / (12*step)
+            samples.append({'atom': atom, 'axis': axis, 'energies': energies, 'ranks': ranks})
+    return forces, samples
+
+records = {}
+for name, atoms in request['geometries'].items():
+    solver = solve(atoms)
+    records[name] = {'energy': solver.e_tot}
     if request['mode'] == 'df':
-        gradient.auxbasis_response = True
-    records[name] = {'energy': energy, 'forces': (-gradient.kernel()).tolist()}
+        # Reconverged displaced energies include both the metric projector and
+        # auxiliary-center response; a full-rank analytic DF gradient does not.
+        fine, fine_samples = finite_difference_forces(atoms, 0.01)
+        coarse, coarse_samples = finite_difference_forces(atoms, 0.02)
+        assert all(rank == solver.oracle_metric_rank
+                   for sample in fine_samples + coarse_samples for rank in sample['ranks'])
+        difference = float(np.max(np.abs(fine - coarse)))
+        assert difference <= 5e-8, difference
+        forces = (16*fine - coarse) / 15
+        records[name].update(metric_rank=solver.oracle_metric_rank,
+                             fd_steps=[0.01, 0.02], fd_step_difference=difference,
+                             fd_samples=[fine_samples, coarse_samples])
+    else:
+        forces = -solver.nuc_grad_method().kernel()
+    records[name]['forces'] = forces.tolist()
 result = {'pyscf_version': pyscf.__version__, 'records': records}
 if request['mode'] == 'df':
     from tools.generativeqc_validation.correlation_df_oracle import basis_snapshot
-    result['auxiliary'] = basis_snapshot(
-        'def2-universal-jkfit', sorted(set(molecule.atom_charges()))
-    ).to_payload()
+    # The shared exporter defaults to spherical, whereas PySCF inherits cart.
+    auxiliary = replace(
+        basis_snapshot('def2-universal-jkfit', sorted(set(solver.mol.atom_charges()))),
+        representation='cartesian' if solver.with_df.auxmol.cart else 'spherical',
+    )
+    result['auxiliary'] = auxiliary.to_payload()
+    result['auxiliary_representation'] = auxiliary.representation
+    result['metric_relative_threshold'] = 1e-10
+    result['metric_normalization'] = 'unit self-overlap Cartesian components'
 json.dump(result, sys.stdout)
 """
 
@@ -122,6 +181,12 @@ def test_default_force_stationarity_against_independent_oracle(
         device="cuda",
         **settings,
     )
+    driver = ctypes.CDLL("libcuda.so.1")
+    device = ctypes.c_int()
+    device_uuid = (ctypes.c_ubyte * 16)()
+    assert driver.cuInit(0) == 0
+    assert driver.cuDeviceGet(ctypes.byref(device), 0) == 0
+    assert driver.cuDeviceGetUuid_v2(ctypes.byref(device_uuid), device) == 0
     assert calculator._energy_tolerance == 1e-9
     assert calculator._density_tolerance == 1e-5
     assert calculator._screening_tolerance == 1e-12
@@ -136,6 +201,7 @@ def test_default_force_stationarity_against_independent_oracle(
             _native.load_library(device="cuda", device_id=0)
         ),
         "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "device_uuid": bytes(device_uuid).hex(),
         "samples": [],
     }
     try:
@@ -173,12 +239,17 @@ def test_default_force_stationarity_against_independent_oracle(
                         "phase": phase,
                         "iterations": result.iterations,
                         "fock_builds": result.fock_builds,
+                        "warm_start_used": result.warm_start_used,
+                        "converged": result.converged,
+                        "executed_backend": result.executed_backend,
                         "energy": result.energy,
                         "forces": result.forces.tolist() if forces else None,
                         "errors": errors,
                     }
                 )
                 assert result.converged and result.executed_backend == "cuda"
+                if phase in ("warm", "moved_warm", "energy_to_forces"):
+                    assert result.warm_start_used
                 assert errors["energy"] <= 1e-9
                 if forces:
                     assert errors["forces"] <= 1e-7
