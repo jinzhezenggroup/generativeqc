@@ -138,12 +138,49 @@ def aggregate(records: list[dict]) -> list[dict]:
     return rows
 
 
+def stop_process_group(child: subprocess.Popen) -> None:
+    """Drain the owned group even when its launcher has already exited."""
+    deadline = time.monotonic() + 15
+    try:
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            child.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            pass
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                os.killpg(child.pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(min(0.05, remaining))
+    finally:
+        # Leader exit does not prove descendants stopped. This remains the
+        # invocation's own session, not a shared compiler-cache server.
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child.wait(timeout=5)
+
+
 def acquire(config: dict, output: Path) -> None:
     """Execute a fixed bounded matrix, preserving the first failed attempt."""
     allocation_metadata(config.get("qz_job_name"))
+    invocation = Path.cwd()
+    output = output.resolve()
+    source = Path(config["source"]).resolve()
+    inputs = Path(config["inputs"]).resolve()
+    interpreters = {}
+    for arm, command in config["interpreters"].items():
+        explicit_relative = not Path(command).is_absolute() and (
+            os.sep in command or (os.altsep is not None and os.altsep in command)
+        )
+        # Do not dereference a venv interpreter symlink to the system Python.
+        interpreters[arm] = str(invocation / command) if explicit_relative else command
     output.mkdir(parents=True, exist_ok=False)
-    source = Path(config["source"])
-    inputs = Path(config["inputs"])
     deadline = time.monotonic() + config["deadline_seconds"]
     receipt = {
         "schema": SCHEMA,
@@ -151,6 +188,13 @@ def acquire(config: dict, output: Path) -> None:
         "config": config,
         "commands": [],
         "allocation": allocation_metadata(config.get("qz_job_name")),
+        "resolved_paths": {
+            "invocation_directory": str(invocation),
+            "source": str(source),
+            "inputs": str(inputs),
+            "output": str(output),
+            "interpreters": interpreters,
+        },
     }
     save(output / "campaign.json", receipt)
     records = []
@@ -177,7 +221,7 @@ def acquire(config: dict, output: Path) -> None:
                             del env[inherited]
                     env.update(config["environment"], **config["arm_environment"][arm])
                     argv = [
-                        config["interpreters"][arm],
+                        interpreters[arm],
                         "-m",
                         "benchmarks.readme_defaults",
                         arm,
@@ -224,15 +268,20 @@ def acquire(config: dict, output: Path) -> None:
                                 )
                             )
                         except BaseException:
-                            os.killpg(child.pid, signal.SIGTERM)
                             try:
-                                child.wait(timeout=15)
-                            except subprocess.TimeoutExpired:
-                                os.killpg(child.pid, signal.SIGKILL)
-                                child.wait()
-                            row.update(
-                                status="interrupted", seconds=time.monotonic() - started
-                            )
+                                stop_process_group(child)
+                            except (
+                                OSError,
+                                subprocess.TimeoutExpired,
+                            ) as cleanup_error:
+                                row["cleanup_error"] = (
+                                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                                )
+                            finally:
+                                row.update(
+                                    status="interrupted",
+                                    seconds=time.monotonic() - started,
+                                )
                             raise
                     row.update(
                         returncode=code,
