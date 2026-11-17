@@ -63,7 +63,7 @@ def test_invalid_automatic_selector_fails_before_native_lowering(
 
 
 @pytest.mark.parametrize("automatic", (False, True))
-def test_d4_domain_is_selected_from_the_electronic_projection(
+def test_dispersion_domain_is_selected_from_the_electronic_projection(
     monkeypatch: pytest.MonkeyPatch, automatic: bool
 ) -> None:
     composite, electronic = object(), object()
@@ -80,7 +80,7 @@ def test_d4_domain_is_selected_from_the_electronic_projection(
         assert value is electronic
         return {"scf_domain": "curated-domain"}
 
-    monkeypatch.setattr(ks, "_d4_electronic_projection", project)
+    monkeypatch.setattr(ks, "_dispersion_electronic_projection", project)
     monkeypatch.setattr(ks, "_automatic_semilocal_name", automatic_name)
     monkeypatch.setattr(ks, "_is_pbe_d4_composition", lambda value: False)
     monkeypatch.setattr(ks, "_split_hybrid_record", lambda value: None)

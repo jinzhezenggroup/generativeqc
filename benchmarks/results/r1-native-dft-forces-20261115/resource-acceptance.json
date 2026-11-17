@@ -1,0 +1,63 @@
+{
+  "campaign_sha256": "3588f7252effd18b01cf1df310ded190d20a017447174829748aa0b578a62133",
+  "cuda_visible_devices": "0",
+  "driver_sha256": "d7d245ac88abef4cf6e654ced55031ce6596efa33e09e265fde6e189b3f7cf95",
+  "environment": {
+    "cuda_visible_devices": "0",
+    "gpu": "NVIDIA GeForce RTX 5090, GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d, 580.95.05",
+    "host": "node1",
+    "libxc": "7.0.0",
+    "numpy": "2.3.5",
+    "pyscf": "2.14.0",
+    "python": "3.13.9",
+    "slurm_job_id": "17439"
+  },
+  "host": "node1",
+  "junit_sha256": "ec71c002a85fbcc927303f6b704eba6dc8cddd142dc85ff4a65b9eadf5cb63c4",
+  "native_dynamic_dependencies": [
+    "libscipy_openblas.so",
+    "libcudart.so.12",
+    "libcublas.so.12",
+    "libcusolver.so.11",
+    "libstdc++.so.6",
+    "libm.so.6",
+    "libgcc_s.so.1",
+    "libc.so.6",
+    "ld-linux-x86-64.so.2"
+  ],
+  "native_library_sha256": "93909e00bc0460033a6e1e8c21ef12efdcc9a054cb9a11eb150e454bd3ea1b69",
+  "nonconvergence": {
+    "attempts": 2,
+    "max_iterations": 1,
+    "name": "MGGA_X_LTA",
+    "no_force_receipt": true,
+    "no_forces": true,
+    "no_warm_seed": true,
+    "spins": 1
+  },
+  "nonconvergence_test": "test_native_automatic_nonconvergence_has_no_force_receipt",
+  "pytest_command": [
+    "/home/jzzeng/qualification/qc-2227-r1-20261114-1991/venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/python/test_libxc_native_cuda_forces.py::test_native_automatic_force_minimum_and_below_budget",
+    "tests/python/test_libxc_native_cuda_forces.py::test_native_automatic_force_ragged_failure_and_recovery",
+    "tests/python/test_libxc_native_cuda_forces.py::test_native_automatic_nonconvergence_has_no_force_receipt",
+    "--basetemp=/home/jzzeng/qualification/qc-2227-r1-20261114-1991/evidence/catalog-current/safety-tmp",
+    "-o",
+    "cache_dir=/home/jzzeng/qualification/qc-2227-r1-20261114-1991/evidence/catalog-current/pytest-cache",
+    "--junitxml=/home/jzzeng/qualification/qc-2227-r1-20261114-1991/evidence/catalog-current/safety.xml"
+  ],
+  "pytest_log_sha256": "e5b49b08152b70d4ff32bb981d6162623df96921394ceffc20e0a063695ae1a4",
+  "pytest_passed": [
+    "test_native_automatic_force_minimum_and_below_budget[1]",
+    "test_native_automatic_force_minimum_and_below_budget[2]",
+    "test_native_automatic_force_ragged_failure_and_recovery"
+  ],
+  "runner_sha256": "812c1d4e4c0740673701035112d0f1caf5be63020345b6117c543c1315dd6a7e",
+  "schema": "generativeqc.libxc-scoped-safety.v1",
+  "scope": "Exactly four passed tests from the same scheduled job and build ELF as the independent campaign. The three resource/lifecycle cases and separate two-attempt nonconvergence assertions are authenticated by the retained original JUnit, driver and runner bytes. This is not installed-ELF identity or force qualification for unmeasured selectors.",
+  "slurm_job_id": "17439",
+  "source_census_sha256": "1d749518b5f831ada0f05b28859ad96ebd03809a6b1a386d9158bb9e711ba5fe"
+}

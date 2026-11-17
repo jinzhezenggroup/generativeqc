@@ -27,9 +27,18 @@ def decode_json(data: bytes, *, path: str | Path | None = None) -> Any:
 
 
 def load_json(path: Path) -> Any:
-    """Load ordinary, gzip-compressed or XZ-compressed JSON from the checkout."""
+    """Load local JSON, including authenticated compressed-manifest storage."""
     path = Path(path)
-    return decode_json(path.read_bytes(), path=path)
+    value = decode_json(path.read_bytes(), path=path)
+    if (
+        path.suffix == ".json"
+        and isinstance(value, dict)
+        and value.get("schema") == "generativeqc.compressed-manifest.v1"
+    ):
+        from tools.restore_retained_evidence import read_stored_json_bytes
+
+        return json.loads(read_stored_json_bytes(path))
+    return value
 
 
 def decode_record(

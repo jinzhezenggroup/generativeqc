@@ -117,10 +117,11 @@ Unrelated changes do not expire these claims: the catalog tracks dependencies
 per registration/backend/product and lists targeted revalidation requirements.
 Historical GPU measurements remain evidence for their original binary; inherited
 qualification is not a new measurement of a later binary or environment.
-The present endpoint inheritance is pending authentication of omitted native
-generator inputs. This does not alter runtime selector availability or declare
-the recorded numerical observations failed; the generated report distinguishes
-historical measurements from currently reusable qualification.
+Source-bound reruns can restore individual endpoint contexts after conservative
+invalidation for newly tracked generator dependencies. They do not retroactively
+authenticate an older incomplete census or change runtime selector availability;
+the generated report distinguishes historical measurements from currently
+reusable qualification.
 
 Recheck the retained evidence against the current checkout without running a
 calculation:

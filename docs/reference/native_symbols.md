@@ -10,6 +10,7 @@ capability authorities, serialization, and status handling.
 
 ## Index
 
+- [generativeqc_ks_nonlocal_grid_version_v1](#native-c-generativeqc-ks-nonlocal-grid-version-v1)
 - [generativeqc_ks_options_version](#native-c-generativeqc-ks-options-version)
 - [generativeqc_initial_guess_options_version](#native-c-generativeqc-initial-guess-options-version)
 - [generativeqc_initial_guess_capabilities_v1](#native-c-generativeqc-initial-guess-capabilities-v1)
@@ -248,6 +249,21 @@ capability authorities, serialization, and status handling.
 - [generativeqc_saddle_progress_v1](#native-c-generativeqc-saddle-progress-v1)
 - [generativeqc_saddle_cancellation_v1](#native-c-generativeqc-saddle-cancellation-v1)
 - [generativeqc_saddle_correct_v1](#native-c-generativeqc-saddle-correct-v1)
+
+(native-c-generativeqc-ks-nonlocal-grid-version-v1)=
+## generativeqc_ks_nonlocal_grid_version_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1 ( void ) ;
+```
+
+**Behavior.** Query support for the size-tagged independent nonlocal grid descriptor.
+
+**Outputs.** Returns 1; this is transport support, not scientific force admission.
+
+**Execution.** Pure synchronous query; no allocation or device initialization.
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -5782,7 +5798,7 @@ selects the force schedule independently with automatic SCF tiling.
 Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 
 ```cpp
-inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr )
+inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt )
 ```
 
 **Behavior.** Prepare a catalog KS graph, including range exchange, nonlocal correlation and
@@ -5791,6 +5807,7 @@ dispersion when present. The native library owns scientific assembly and admissi
 **Inputs.** name is a generated selector; identity optionally pins its exact MethodIR. method
 supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
 execution policy; this helper replaces method.ks_options with those controls.
+nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
 
 **Outputs.** Returns one owned Calculation.
 

@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.restore_retained_evidence import read_evidence_bytes
+
 ROOT = Path(__file__).resolve().parents[2]
 PAIRED = "becke-paired-warm-20261006"
 PHYSICAL = "becke-physical-endpoints-20261006"
@@ -21,7 +23,10 @@ PHYSICAL = "becke-physical-endpoints-20261006"
 class SharedSourceInventoryTests(unittest.TestCase):
     def test_identity_checked_before_cuda_setup(self) -> None:
         results = ROOT / "benchmarks/results"
-        original = (results / PHYSICAL / "source-files.sha256.gz").read_bytes()
+        original = read_evidence_bytes(
+            results / PHYSICAL / "source-files.sha256.gz",
+            manifest=results / PHYSICAL / "source-census-snapshot.json",
+        )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             bundle, shared = root / PAIRED, root / PHYSICAL

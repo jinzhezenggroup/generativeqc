@@ -263,7 +263,8 @@ void test_named_preparation_failures_and_lifetime() {
     extended_method.energy = -1;
     rejected(extended_method.base, &named, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     extended_method.energy = 0;
-    generativeqc::dft::NonlocalGridKsOptions extended_grid{};
+    generativeqc_ks_nonlocal_grid_options extended_grid{};
+    extended_grid.version = 1;
     extended_grid.base.base = grid;
     extended_grid.base.base.struct_size = sizeof(extended_grid);
     extended_grid.base.energy = -1;
@@ -284,6 +285,17 @@ void test_named_preparation_failures_and_lifetime() {
     extended_grid.base.base.struct_size = sizeof(extended_grid);
     named.name = "wb97m-v-rks";
     named.identity = nullptr;
+    require(generativeqc_ks_nonlocal_grid_version_v1() == 1,
+            "independent nonlocal-grid transport is unavailable");
+    extended_grid.version = 2;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    extended_grid.version = 1;
+    extended_grid.reserved = 1;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    extended_grid.reserved = 0;
+    grid.abi_version += 1;
+    rejected(extended_method.base, &named, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    grid.abi_version = GENERATIVEQC_ABI_VERSION;
     nonlocal =
         std::make_unique<generativeqc::Calculation>(context, system, extended_method.base, named);
     selector.assign(selector.size(), 'x');

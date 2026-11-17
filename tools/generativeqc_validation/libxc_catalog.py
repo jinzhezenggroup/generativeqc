@@ -38,6 +38,7 @@ from tools.generativeqc_validation.libxc_dependencies import (
 )
 from tools.generativeqc_validation.libxc_native_domain import native_domain_stage
 from tools.qualify_libxc_forces import force_stage_evidence
+from tools.restore_retained_evidence import read_stored_json_bytes
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -85,6 +86,8 @@ def load_json(path: Path) -> Any:
     data = path.read_bytes()
     if path.suffix == ".xz":
         data = lzma.decompress(data)
+    else:
+        data = read_stored_json_bytes(path)
     return json.loads(data)
 
 

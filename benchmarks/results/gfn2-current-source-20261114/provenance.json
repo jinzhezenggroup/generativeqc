@@ -170,5 +170,6 @@
       "cpu-build.log.xz": "646921f833d02f654edfb7e3c5d487ac637c4731ca71a1164dc3f51ec4391abf",
       "cuda-build-build-resume.log.xz": "1e0fb380070a8bc5118d7952c047bb49ff2f3296ee9b2e2f9cf3037e023c508f"
     }
-  }
+  },
+  "source_census_snapshot_sha256": "12beec4dc9175ebe4e3d2ca243b50845cd4268f9a9438d70d5d1db6194a53467"
 }

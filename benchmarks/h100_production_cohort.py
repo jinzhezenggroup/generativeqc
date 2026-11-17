@@ -13,7 +13,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from tools.restore_retained_evidence import read_evidence_bytes
+from tools.restore_retained_evidence import read_evidence_bytes, read_stored_json_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT
@@ -126,7 +126,11 @@ def artifact_bytes(name: str) -> bytes:
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Support cohort bytes differ: " + name)
     if path.is_file():
-        return path.read_bytes()
+        return (
+            read_stored_json_bytes(path)
+            if path.suffix == ".json"
+            else path.read_bytes()
+        )
     if name not in {
         "nsys-v1-analysis.tar.xz.part00",
         "nsys-v1-analysis.tar.xz.part01",
