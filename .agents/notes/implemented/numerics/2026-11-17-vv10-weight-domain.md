@@ -41,6 +41,10 @@ falls from 23.9 to 21.6 s. All 25 processes pass the original independent gates.
   selector-dependent domains would need separate policy versions anyway.
 - **Screening only the CUDA SCF kernel.** CPU, oracle, force and Hessian
   consumers would then integrate a different domain from the SCF.
+- **Other tile sizes or looser frozen inner solves** (measured on the v3 image).
+  Explicit 512/2048-point SCF or force tiles are 1.0–4.5 s slower cold; stopping
+  frozen inner solves at a fraction of the last target residual saves two
+  provisional Focks but needs four more full targets and pair sweeps (+8.7 s).
 
 ## Revisit when
 
