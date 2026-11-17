@@ -1,5 +1,9 @@
 # Decision: promote owner-bound Direct RHF orbital-gradient convergence
 
+The [force-stationarity admission correction](2026-11-17-hf-force-stationarity-admission.md)
+subsequently narrows this policy to energy-only endpoints. The observations and
+acceptance budgets below remain historical and are not relabeled.
+
 The subsequent [compact DF RHF alignment](2026-11-11-df-hf-orbital-stopping.md)
 extends the owner domain and removes the remaining orbital-policy density and
 energy-roundoff additions. The observations below retain their original source

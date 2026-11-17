@@ -412,18 +412,21 @@ int main() {
   setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", "orbital-gradient", 1);
   assert(hf_convergence_requested() == Convergence::OrbitalGradient);
   for (bool eligible : {false, true}) {
-    assert(resolve_hf_convergence_request(Convergence::Strict, eligible, 1e-9, 1e-5) ==
+   for (bool forces : {false, true}) {
+    const bool orbital = eligible && !forces;
+    assert(resolve_hf_convergence_request(Convergence::Strict, eligible, forces, 1e-9, 1e-5) ==
            Convergence::Strict);
-    assert(resolve_hf_convergence_request(Convergence::Default, eligible, 1e-9, 1e-5) ==
-           (eligible ? Convergence::OrbitalGradient : Convergence::Strict));
-    assert(resolve_hf_convergence_request(Convergence::OrbitalGradient, eligible, 1e-9, 1e-5) ==
-           (eligible ? Convergence::OrbitalGradient : Convergence::Invalid));
-    assert(resolve_hf_convergence_request(Convergence::Invalid, eligible, 1e-9, 1e-5) ==
+    assert(resolve_hf_convergence_request(Convergence::Default, eligible, forces, 1e-9, 1e-5) ==
+           (orbital ? Convergence::OrbitalGradient : Convergence::Strict));
+    assert(resolve_hf_convergence_request(Convergence::OrbitalGradient, eligible, forces, 1e-9, 1e-5) ==
+           (orbital ? Convergence::OrbitalGradient : Convergence::Invalid));
+    assert(resolve_hf_convergence_request(Convergence::Invalid, eligible, forces, 1e-9, 1e-5) ==
            Convergence::Invalid);
+   }
   }
   for (auto request : {Convergence::Default, Convergence::OrbitalGradient}) {
-    assert(resolve_hf_convergence_request(request, true, 1e-12, 1e-5) == Convergence::Strict);
-    assert(resolve_hf_convergence_request(request, true, 1e-9, 1e-10) == Convergence::Strict);
+    assert(resolve_hf_convergence_request(request, true, false, 1e-12, 1e-5) == Convergence::Strict);
+    assert(resolve_hf_convergence_request(request, true, false, 1e-9, 1e-10) == Convergence::Strict);
   }
   using R = RhfBlockConvergenceRequest;
   assert(parse_rhf_block_convergence_request(nullptr) == R::Off);

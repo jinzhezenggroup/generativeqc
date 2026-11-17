@@ -544,16 +544,20 @@ error, and it does not turn a failed dense-reference comparison into a pass.
 For an explicit stringent request, use e.g. `energy_tolerance=1e-12` and
 `density_tolerance=1e-10`.
 
-Standard all-electron FP64 **Direct and DF CUDA RHF default to orbital-gradient
-convergence**, matching the norm and threshold used by default GPU4PySCF.
+Standard all-electron FP64 **energy-only Direct and DF CUDA RHF default to
+orbital-gradient convergence**, matching the norm and threshold used by default
+GPU4PySCF. Requests that include forces retain the strict density and physical
+AO-commutator gates at the same public energy/density tolerances. The
+energy-only gradient threshold is not a bound on force error and must not
+authorize force publication.
 The SCF candidate uses `|delta E| < energy_tolerance` and
 `||2 C_vir^T F[D] C_occ||_F < sqrt(energy_tolerance)`. The physical Fock
 must belong to that same determinant; a DIIS-extrapolated Fock cannot supply
 the norm. The implementation evaluates `X^T(FDS-SDF)X/sqrt(2)` in the existing
 scratch storage. Screening, FP64 arithmetic, initial guess, final-state ownership
 and complete force evaluation remain in effect. Density change is diagnostic,
-not an additional orbital-policy candidate gate. Direct force finalization uses
-the same gradient norm; DF retains its separate complete physical-state proof,
+not an additional orbital-policy candidate gate. DF retains its separate
+complete physical-state proof,
 including its existing final AO-commutator, density/projector, trace,
 idempotency, canonicality and response-token checks.
 Either tighter energy or density controls restore the historical strict
@@ -562,7 +566,7 @@ stricter audit solves; the default must not weaken their reference calculation.
 
 Set `GENERATIVEQC_CUDA_RHF_CONVERGENCE=strict` before preparing the owner to
 retain the historical AO-maximum force-stationarity contract. Unset or empty
-selects the owner-bound default. UHF, ECP, mixed arithmetic,
+selects the owner-bound default. Force requests, UHF, ECP, mixed arithmetic,
 application-budget/Fast owners and physical-reference exports retain their
 strict gates by default. Explicit `orbital-gradient` requests reject these
 unsupported owners rather than inherit an unqualified stopping policy.

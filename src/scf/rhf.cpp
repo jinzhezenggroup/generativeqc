@@ -755,7 +755,7 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
   limits.allow_projector_checked_reuse = device_candidate && !reference_validation &&
                                          !options.export_physical_reference &&
                                          identity.model.spec.spin == FockSpin::Restricted;
-  if (!options.export_physical_reference && qualified_standard_owner &&
+  if (!options.compute_forces && !options.export_physical_reference && qualified_standard_owner &&
       identity.model.spec.spin == FockSpin::Restricted &&
       standard_scf_convergence_requested(options.energy_tolerance, options.density_tolerance))
     limits.stationarity_tolerance =
@@ -1517,8 +1517,8 @@ bool cuda_df_orbital_convergence(const ScfOptions& options, bool qualified_owner
       options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
       options.application_precision_budget == std::array<double, 3>{};
   const auto policy = cuda_policy::resolve_hf_convergence_request(
-      cuda_policy::hf_convergence_requested(), eligible, options.energy_tolerance,
-      options.density_tolerance);
+      cuda_policy::hf_convergence_requested(), eligible, options.compute_forces,
+      options.energy_tolerance, options.density_tolerance);
   if (policy == cuda_policy::HfConvergenceRequest::Invalid)
     throw std::invalid_argument("CUDA DF RHF convergence request is invalid or unsupported");
   return policy == cuda_policy::HfConvergenceRequest::OrbitalGradient;
@@ -2208,7 +2208,8 @@ ScfResult run_rhf_density_fitting_cuda_impl(
           options.max_iterations, options.energy_tolerance, options.density_tolerance,
           device_final_density, device_records, detail, data.one_electron.overlap,
           cuda_df_iteration_diis_history(options),
-          !options.export_physical_reference && qualified_standard_owner, orbital_convergence);
+          !options.compute_forces && !options.export_physical_reference && qualified_standard_owner,
+          orbital_convergence);
     });
     runtime::df_progress::number("compact_dispatch_status", device_status);
     if (device_status == GENERATIVEQC_STATUS_SUCCESS && device_records.size() == 1)
@@ -2824,7 +2825,8 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
           plan, hcore, orthogonalizer, initial_density, occupied, nuclear, options.max_iterations,
           options.energy_tolerance, options.density_tolerance, device_final_density, device_records,
           device_detail, overlap, cuda_df_iteration_diis_history(options),
-          !options.export_physical_reference && qualified_standard_owner, orbital_convergence);
+          !options.compute_forces && !options.export_physical_reference && qualified_standard_owner,
+          orbital_convergence);
     });
     if (device_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ||
         device_status == GENERATIVEQC_STATUS_CUDA_ERROR) {

@@ -37,6 +37,7 @@ struct EigenResult { Matrix vectors; };
 unsigned device_cycles{}, host_cycles{}, preparations{};
 int device_behavior{};
 bool expected_orbital_convergence{};
+bool expected_qualified_owner{true};
 namespace host_trace {
 struct Region { Region(const char*) {} void finish(){} };
 enum class EigenReason {fallback};
@@ -71,7 +72,8 @@ Matrix prepare_initial_density(const core::System&,const auto&,const Matrix&,std
 void discard_density_fitting_tensor_storage(DensityFittingScfData&){}
 struct CudaDensityFittingDeviceScfItem {bool converged{};unsigned iterations{};double energy{},energy_change{},density_rms{};std::uint64_t fock_builds{};};
 generativeqc_status run_cuda_density_fitting_rhf_device_scf(int*,const Matrix&,const Matrix&,const Matrix&,const std::vector<std::int32_t>&,const Matrix&,unsigned max_iterations,double,double,Matrix& final_density,std::vector<CudaDensityFittingDeviceScfItem>& records,std::string&,const Matrix&,unsigned,bool qualified_owner,bool orbital_convergence){
-  assert(qualified_owner && orbital_convergence == expected_orbital_convergence);
+  assert(qualified_owner == expected_qualified_owner &&
+         orbital_convergence == expected_orbital_convergence);
   if (device_behavior == 2) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   if (device_behavior == 3) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   if (device_behavior == 4) return GENERATIVEQC_STATUS_SUCCESS;
@@ -117,7 +119,7 @@ void validate_hf_warm_density(const core::System&,generativeqc_method,const std:
 }
 
 int main(int argc, char** argv) {
-  assert(argc == 2);
+  assert(argc == 3);
   setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", argv[1], 1);
   unsetenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS");
   expected_orbital_convergence = std::string(argv[1]) != "strict";
@@ -158,8 +160,19 @@ int main(int argc, char** argv) {
   device_behavior = 0;
   device_cycles = host_cycles = 0;
   ScfOptions options;
+  options.compute_forces = std::string(argv[2]) == "forces";
+  expected_qualified_owner = !options.compute_forces;
+  expected_orbital_convergence = expected_orbital_convergence && !options.compute_forces;
   options.max_iterations = 32;
   assert(options.density_fitting_host_retry);
+  if (options.compute_forces && std::string(argv[1]) == "orbital-gradient") {
+    try {
+      run_rhf_density_fitting_cuda_impl(system, auxiliary, options, 0, nullptr, nullptr);
+      assert(false);
+    } catch (const std::invalid_argument&) {}
+    assert(device_cycles == 0 && host_cycles == 0);
+    return 0;
+  }
   const auto ordinary = run_rhf_density_fitting_cuda_impl(
       system, auxiliary, options, 0, nullptr, nullptr);
   assert(device_cycles == 32 && host_cycles == 32);
@@ -183,8 +196,9 @@ int main(int argc, char** argv) {
 
 
 @pytest.mark.parametrize("convergence", ["", "strict", "orbital-gradient"])
+@pytest.mark.parametrize("forces", [False, True])
 def test_guess_has_one_scf_attempt_and_ordinary_df_keeps_retry(
-    tmp_path: Path, convergence: str
+    tmp_path: Path, convergence: str, forces: bool
 ) -> None:
     compiler = shutil.which("c++")
     if not compiler:
@@ -209,7 +223,10 @@ def test_guess_has_one_scf_attempt_and_ordinary_df_keeps_retry(
         compiler, tmp_path, [probe, ROOT / "src/methods/df_hf_guess.cpp"], binary
     )
     subprocess.run(
-        [str(binary), convergence], check=True, capture_output=True, timeout=10
+        [str(binary), convergence, "forces" if forces else "energy"],
+        check=True,
+        capture_output=True,
+        timeout=10,
     )
 
 
@@ -225,8 +242,9 @@ def test_df_convergence_owner_preserves_eligibility(tmp_path: Path) -> None:
 #include <cassert>
 int main() {
   using namespace generativeqc::scf;
-  for (unsigned condition = 0; condition < 7; ++condition) {
+  for (unsigned condition = 0; condition < 8; ++condition) {
     ScfOptions options;
+    options.compute_forces = false;
     bool qualified = true;
     unsetenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS");
     switch (condition) {
@@ -236,6 +254,7 @@ int main() {
       case 4: options.precision_mode = GENERATIVEQC_PRECISION_AUTO; break;
       case 5: options.application_precision_budget[0] = 1e-8; break;
       case 6: setenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS", "1", 1); break;
+      case 7: options.compute_forces = true; break;
     }
     unsetenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE");
     assert(cuda_df_orbital_convergence(options, qualified) == (condition == 0));
@@ -250,6 +269,7 @@ int main() {
   unsetenv("GENERATIVEQC_DF_DISABLE_DEVICE_DIIS");
   for (bool energy : {false, true}) {
     ScfOptions tight;
+    tight.compute_forces = false;
     (energy ? tight.energy_tolerance : tight.density_tolerance) = 1e-12;
     for (const char* request : {"", "strict", "orbital-gradient"}) {
       setenv("GENERATIVEQC_CUDA_RHF_CONVERGENCE", request, 1);

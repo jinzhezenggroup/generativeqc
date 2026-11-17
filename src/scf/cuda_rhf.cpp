@@ -785,7 +785,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            [](const auto& atom) { return atom.ecp_core != 0; });
       });
   const auto effective_convergence = cuda_policy::resolve_hf_convergence_request(
-      convergence_request, orbital_gradient_owner, options.energy_tolerance,
+      convergence_request, orbital_gradient_owner, options.compute_forces, options.energy_tolerance,
       options.density_tolerance);
   if (effective_convergence == cuda_policy::HfConvergenceRequest::Invalid) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);

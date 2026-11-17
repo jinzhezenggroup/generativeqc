@@ -1,5 +1,9 @@
 # Decision: align compact DF RHF stopping with stock GPU4PySCF
 
+The [force-stationarity admission correction](2026-11-17-hf-force-stationarity-admission.md)
+subsequently narrows this policy to energy-only endpoints. The observations and
+acceptance budgets below remain historical and are not relabeled.
+
 Status: implemented; independent device/endpoint qualification complete
 Date: 2026-11-11
 

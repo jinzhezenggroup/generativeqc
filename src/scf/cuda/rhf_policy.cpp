@@ -26,8 +26,10 @@ HfConvergenceRequest hf_convergence_requested() noexcept {
 }
 
 HfConvergenceRequest resolve_hf_convergence_request(HfConvergenceRequest request,
-                                                    bool eligible_owner, double energy_tolerance,
+                                                    bool eligible_owner, bool compute_forces,
+                                                    double energy_tolerance,
                                                     double density_tolerance) noexcept {
+  eligible_owner = eligible_owner && !compute_forces;
   if (request == HfConvergenceRequest::Invalid ||
       (request == HfConvergenceRequest::OrbitalGradient && !eligible_owner))
     return HfConvergenceRequest::Invalid;

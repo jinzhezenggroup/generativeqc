@@ -17,10 +17,13 @@ enum class HfConvergenceRequest { Default, Strict, OrbitalGradient, Invalid };
 HfConvergenceRequest parse_hf_convergence_request(const char* value) noexcept;
 HfConvergenceRequest hf_convergence_requested() noexcept;
 /** Resolve the default without granting unsupported owners a looser contract.
- * Invalid denotes an unsupported explicit request; tighter controls stay strict.
+ * Force publication requires the strict physical residual, not the looser
+ * energy-only orbital gradient. Invalid denotes an unsupported explicit request;
+ * tighter controls stay strict.
  */
 HfConvergenceRequest resolve_hf_convergence_request(HfConvergenceRequest request,
-                                                    bool eligible_owner, double energy_tolerance,
+                                                    bool eligible_owner, bool compute_forces,
+                                                    double energy_tolerance,
                                                     double density_tolerance) noexcept;
 
 /** Strict explicit controls, with an internal capability-bound default request. */
