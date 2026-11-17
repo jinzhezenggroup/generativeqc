@@ -544,7 +544,7 @@ def test_wheel_workflow_preserves_optional_budgets_and_required_gates() -> None:
         named["Verify wheel payload and CUDA linkage"]
     )
     publish = named["Publish bounded wheel compiler snapshot"]
-    assert publish["with"]["retention-days"] == 1
+    assert publish["with"]["retention-days"] == 7
     assert publish["with"]["compression-level"] == 0
     for entry in (
         package,
