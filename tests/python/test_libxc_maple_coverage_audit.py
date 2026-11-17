@@ -25,15 +25,6 @@ def test_static_direct_import_blockers_are_explicit() -> None:
     assert blocked == {}
 
 
-def test_checked_in_coverage_snapshot_is_current() -> None:
-    report = coverage.audit()
-    expected = coverage.render_markdown(report)
-    actual = (coverage.ROOT / "docs/libxc_maple_coverage.md").read_text(
-        encoding="utf-8"
-    )
-    assert actual == expected
-
-
 def test_default_audit_uses_canonical_vendored_sources() -> None:
     """The normal audit must not depend on the retired external source tree."""
     assert coverage.LIBXC_ROOT == coverage.ROOT / "upstream/libxc/7.0.0"

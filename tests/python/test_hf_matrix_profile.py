@@ -25,14 +25,23 @@ ROOT = Path(__file__).resolve().parents[2]
 POINTER = ctypes.c_void_p
 
 
-def payload(*, library: bool = True, sms: int = 170, memory: int = 32 << 30) -> str:
+def payload(
+    *,
+    library: bool = True,
+    sms: int = 170,
+    memory: int = 32 << 30,
+    eri_limit: int = 16,
+    eri_bytes: int = 1 << 30,
+    force_orders: int = 7,
+    fock_orders: int = 6,
+) -> str:
     """An intentionally synthetic, reproducible calibration for host probes."""
     rates = (
         "native 1000000 1 1\ncublas 1 1000000 1000000"
         if library
         else ("native 1 1000000 1000000\ncublas 1000000000 1 1")
     )
-    return f"""generativeqc-hf-matrix-profile-v1
+    return f"""generativeqc-hf-matrix-profile-v2
 source_identity {"a" * 64}
 provider nvidia
 versions 13000 12090 12090 12 9 1
@@ -46,6 +55,7 @@ bounds 1 32 1 100
 evidence_sha256 {"f" * 64}
 {rates}
 provider_setup_nanoseconds 0
+direct_jk {eri_limit} {eri_bytes} {force_orders} {fock_orders}
 end
 """
 
@@ -159,7 +169,7 @@ def prepare(
     variant: int = 0,
     available: bool = True,
 ) -> list[int]:
-    facts = (ctypes.c_uint64 * 9)()
+    facts = (ctypes.c_uint64 * 11)()
     assert (
         consumer.profile_prepare(
             str(path).encode() if path else None,
@@ -228,10 +238,55 @@ def test_another_synthetic_target_can_use_its_own_profile(
     assert prepare(consumer, path, variant=variant)[0:3] == [4, 1, 1]
 
 
+@pytest.mark.parametrize("sms,variant", [(16, 1), (170, 0)])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_topology_profile_reaches_real_packer_arena_and_cache(
+    consumer: ctypes.CDLL, tmp_path: Path, sms: int, variant: int, spins: int
+) -> None:
+    path = tmp_path / "profile"
+    consumer.profile_forget_previous()
+    baseline = prepare(consumer, None, dimension=17, spins=spins, variant=variant)
+    assert baseline[3] == 0 and baseline[9:11] == [7, 6]
+    path.write_text(
+        payload(library=False, sms=sms, eri_limit=32, force_orders=3, fock_orders=3),
+        encoding="utf-8",
+    )
+    resident = prepare(consumer, path, dimension=17, spins=spins, variant=variant)
+    assert resident[3] == 1 and resident[9:11] == [3, 3]
+    assert resident[4] > baseline[4] and resident[6] == 0
+    assert prepare(consumer, path, dimension=17, spins=spins, variant=variant)[6] == 1
+    path.write_text(payload(library=False, sms=sms, eri_limit=32), encoding="utf-8")
+    changed = prepare(consumer, path, dimension=17, spins=spins, variant=variant)
+    assert changed[3] == 1 and changed[9:11] == [7, 6] and changed[6] == 0
+    fallback = prepare(consumer, None, dimension=17, spins=spins, variant=variant)
+    assert fallback[3] == 0 and fallback[9:11] == [7, 6] and fallback[6] == 0
+
+
+@pytest.mark.parametrize("systems,spins", [(1, 1), (2, 1), (1, 2), (2, 2)])
+def test_profile_cannot_bypass_resident_tensor_memory_admission(
+    consumer: ctypes.CDLL, tmp_path: Path, systems: int, spins: int
+) -> None:
+    path = tmp_path / "profile"
+    required = systems * 7**4 * 8
+    for ceiling, admitted in [(required, 1), (required - 1, 0)]:
+        path.write_text(payload(eri_bytes=ceiling), encoding="utf-8")
+        facts = prepare(consumer, path, dimension=7, systems=systems, spins=spins)
+        assert facts[3] == admitted
+    path.write_text(payload(eri_limit=0), encoding="utf-8")
+    assert prepare(consumer, path, dimension=7, systems=systems, spins=spins)[3] == 0
+
+
 @pytest.mark.parametrize(
     "old,new",
     [
-        ("profile-v1", "profile-v2"),
+        ("profile-v2", "profile-v1"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 33 1073741824 7 6"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk -1 1073741824 7 6"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 16 0 7 6"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 16 1073741824 8 6"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 16 1073741824 7 7"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 16 1073741824 2 6"),
+        ("direct_jk 16 1073741824 7 6", "direct_jk 16 1073741824 7 2"),
         ("provider nvidia", "provider cumetal"),
         ("bounds 1 32 1 100", "bounds -1 32 1 100"),
         ("bounds 1 32 1 100", "bounds 1 0 1 100"),

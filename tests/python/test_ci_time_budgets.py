@@ -18,7 +18,7 @@ def _assert_cpu_budget(workflow: str) -> None:
             context = {"matrix.compiler": compiler, "github.event_name": event}
             minutes = expression(match[1], context)
             assert type(minutes) is int
-            assert minutes == (25 if compiler == "gcc" else 30)
+            assert minutes == 30
     assert "compiler: [gcc, clang]" in header
     assert "fail-fast: false" in header
     assert "continue-on-error:" not in header
@@ -133,7 +133,7 @@ def test_cpu_budgets_preserve_instrumentation_and_bound_cold_builds(
     assert budget
     context = {"matrix.compiler": compiler, "github.event_name": event}
     instrumented = compiler == "gcc" and event in {"schedule", "workflow_dispatch"}
-    assert expression(budget[1], context) == (25 if compiler == "gcc" else 30)
+    assert expression(budget[1], context) == 30
     for flag, enabled in (
         (
             "COVERAGE_COMPILE_FLAGS",
@@ -154,33 +154,35 @@ def test_cpu_budget_preserves_required_work_and_independent_master_cache_save() 
 @pytest.mark.parametrize(
     ("budget", "valid"),
     [
-        ("${{ matrix.compiler == 'gcc' && 25 || 30 }}", True),
+        ("30", True),
+        ("${{ matrix.compiler == 'gcc' && 30 || 30 }}", True),
         (
             (
                 "${{ matrix.compiler == 'gcc' && "
                 "(github.event_name == 'schedule' || "
-                "github.event_name == 'workflow_dispatch') && 25 || "
-                "matrix.compiler == 'clang' && 30 || 25 }}"
+                "github.event_name == 'workflow_dispatch') && 30 || "
+                "matrix.compiler == 'clang' && 30 || 30 }}"
             ),
             True,
         ),
+        ("${{ matrix.compiler == 'clang' && 30 || 25 }}", False),
         ("${{ matrix.compiler == 'clang' && 30 || 15 }}", False),
-        ("${{ matrix.compiler == 'clang' && 20 || 25 }}", False),
-        ("${{ matrix.compiler == 'clang' && 25 || 25 }}", False),
-        ("${{ matrix.compiler == 'clang' && 35 || 25 }}", False),
+        ("${{ matrix.compiler == 'clang' && 20 || 30 }}", False),
+        ("${{ matrix.compiler == 'clang' && 25 || 30 }}", False),
+        ("${{ matrix.compiler == 'clang' && 35 || 30 }}", False),
         (
             (
                 "${{ matrix.compiler == 'gcc' && "
                 "(github.event_name == 'schedule' || "
                 "github.event_name == 'workflow_dispatch') && 20 || "
-                "matrix.compiler == 'clang' && 30 || 25 }}"
+                "matrix.compiler == 'clang' && 30 || 30 }}"
             ),
             False,
         ),
         (
             (
                 "${{ github.event_name == 'merge_group' && 15 || "
-                "matrix.compiler == 'clang' && 30 || 25 }}"
+                "matrix.compiler == 'clang' && 30 || 30 }}"
             ),
             False,
         ),
@@ -269,14 +271,14 @@ def test_master_complete_cache_cannot_precede_the_python_seed() -> None:
 @pytest.mark.parametrize(
     "filename, job, shard, routine_minutes",
     [
-        ("ci.yml", "python", "core-a", 50),
+        ("ci.yml", "python", "core-a", 60),
         ("ci.yml", "python", "core-b", 60),
-        ("ci.yml", "python", "core-c", 40),
-        ("ci.yml", "python", "uccsd-forces", 40),
-        ("ci.yml", "python", "runtime-heavy", 45),
-        ("ci.yml", "python", "posthf", 45),
-        ("ci.yml", "python", "compiler-heavy", 45),
-        ("ci.yml", "python", "ecp-forces", 50),
+        ("ci.yml", "python", "core-c", 60),
+        ("ci.yml", "python", "uccsd-forces", 60),
+        ("ci.yml", "python", "runtime-heavy", 60),
+        ("ci.yml", "python", "posthf", 60),
+        ("ci.yml", "python", "compiler-heavy", 60),
+        ("ci.yml", "python", "ecp-forces", 60),
         ("cumetal-cuda.yml", "cuda-tests", "", 75),
     ],
 )
@@ -289,8 +291,7 @@ def test_full_qualification_has_a_separate_finite_budget(
     match = re.search(r"^\s*timeout-minutes: (.+)$", header, re.MULTILINE)
     assert match, "full qualification must have a finite timeout"
     budget = match[1]
-    # Evaluate the actual matrix context: extended shards have bounded routine exceptions,
-    # while every shard still receives the independent full-qualification budget.
+    # Evaluate each matrix context without pinning equivalent expression spellings.
     context = {"matrix.shard": shard}
     for event in ("schedule", "workflow_dispatch"):
         full = expression(budget, {**context, "github.event_name": event})
@@ -320,14 +321,14 @@ def test_full_qualification_has_a_separate_finite_budget(
 @pytest.mark.parametrize(
     ("shard", "job_minutes", "test_minutes"),
     (
-        ("core-a", 50, 30),
+        ("core-a", 60, 30),
         ("core-b", 60, 35),
-        ("core-c", 40, 30),
-        ("uccsd-forces", 40, 30),
-        ("runtime-heavy", 45, 35),
-        ("posthf", 45, 35),
-        ("compiler-heavy", 45, 35),
-        ("ecp-forces", 50, 30),
+        ("core-c", 60, 30),
+        ("uccsd-forces", 60, 30),
+        ("runtime-heavy", 60, 35),
+        ("posthf", 60, 35),
+        ("compiler-heavy", 60, 35),
+        ("ecp-forces", 60, 30),
     ),
 )
 def test_cold_python_setup_preserves_the_existing_test_deadline(

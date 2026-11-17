@@ -142,6 +142,12 @@ struct DeviceBatch {
    * stream before any consumer. Null preserves the FP64 gate. */
   float* direct_fp32_block_bounds{};
   float* direct_fp32_density_bounds{};
+  /** Prepared runtime queue domains. The sentinel preserves the compiler's
+   * bounded maximum for standalone callers; production supplies resolved
+   * profile/default values before capture. Low-order fused owners are retained.
+   */
+  unsigned persistent_force_angular_order_count{~0U};
+  unsigned persistent_fock_angular_order_count{~0U};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

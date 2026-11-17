@@ -31,6 +31,7 @@ from generativeqc_compiler.tensor.native_arena import analyze_native_copy_roundt
 
 from tools import generate_df_ccsd_hoisted as hoisted
 from tools.generate_rccsd_native import (
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _dim,
@@ -191,7 +192,7 @@ def auxiliary_accumulation() -> tuple[str, str]:
 
 
 def cpu_header() -> str:
-    """Expose exact work/storage queries and borrowed test/admission actions."""
+    """Share pair bounds and queries; omit host replay from CUDA parsing."""
     lines = [
         "// Generated occupied-spectator-pair DF actions; do not edit.",
         "#pragma once",
@@ -267,6 +268,7 @@ def cpu_header() -> str:
             + "; }",
         ]
         if name != "auxiliary_packed":
+            lines.append("#ifndef __CUDACC__")
             lines.append(
                 _cpu_function(
                     program,
@@ -277,6 +279,7 @@ def cpu_header() -> str:
                     batch_dim=batched,
                 )
             )
+            lines.append("#endif")
     majorant = build_ladder_pair_majorant(hoisted.programs()["auxiliary"])
     lines += [
         "struct NormInputs {",
@@ -298,6 +301,7 @@ def cpu_header() -> str:
         )
         + "}; }",
         _required_function(majorant.coefficients, "ladder_norm_arena_elements"),
+        "#ifndef __CUDACC__",
         _cpu_function(
             majorant.coefficients,
             "run_ladder_norm_cpu",
@@ -308,6 +312,7 @@ def cpu_header() -> str:
             },
             output_fields=("coefficient_0", "coefficient_1"),
         ),
+        "#endif",
         _positive_bound_function(
             majorant.coefficients, tuple(name for name, _, _ in majorant.factor_norms)
         ),
@@ -375,6 +380,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_spectator_pairs_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfpairs {",
     ]
+    kernel_pool = CudaKernelPool("df_pairs")
     for name, program in programs().items():
         batched = name.endswith("batched")
         lines.append(
@@ -395,6 +401,7 @@ def cuda_source() -> str:
                 ),
                 batch_dim=batched,
                 elide_native_copy_roundtrips=name != "auxiliary",
+                kernel_pool=kernel_pool,
             )
         )
     lines += [

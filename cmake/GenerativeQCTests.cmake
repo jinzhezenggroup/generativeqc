@@ -166,6 +166,13 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_hf_matrix_profile_cuda_tests
                        tests/native/test_hf_matrix_profile_cuda.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas SKIP_77)
+    add_executable(generativeqc_direct_jk_policy_benchmark EXCLUDE_FROM_ALL
+                   benchmarks/direct_jk_policy.cpp)
+    target_link_libraries(generativeqc_direct_jk_policy_benchmark PRIVATE
+                          generativeqc CUDA::cudart CUDA::cublas)
+    target_include_directories(generativeqc_direct_jk_policy_benchmark PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src"
+                               "${CMAKE_CURRENT_BINARY_DIR}/generated")
     generativeqc_native_test(generativeqc_direct_persistent_queue_cuda_tests
                        tests/native/test_direct_persistent_queue_cuda.cu
                        LIBRARIES CUDA::cudart SKIP_77)
@@ -589,8 +596,8 @@ macro(generativeqc_add_native_tests)
       src/dft/cuda_cosx_derivative.cu
       "${GENERATIVEQC_COSX_CONTRACTION_HEADER}"
       "${GENERATIVEQC_ERI_CPU_HEADER}"
-      "${GENERATIVEQC_ONE_ELECTRON_HEADER}"
-      "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}"
+      "${GENERATIVEQC_COSX_ONE_ELECTRON_HEADER}"
+      "${GENERATIVEQC_COSX_ONE_ELECTRON_DERIVATIVE_HEADER}"
       "${GENERATIVEQC_COSX_DERIVATIVE_CONTRACTION_HEADER}"
       "${GENERATIVEQC_ONE_ELECTRON_ST_CPU_HEADER}"
       "${GENERATIVEQC_DF_VALUE_CPU_HEADER}"

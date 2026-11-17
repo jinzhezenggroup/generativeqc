@@ -367,23 +367,29 @@ void launch_angular_force_quartets(
                 batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds, density,
                 active, forces, generated_shell_class_mask, coulomb_coefficient,
                 exchange_coefficient);
-      } else if constexpr (AngularOrder < kPersistentForceAngularOrderCount) {
-        const unsigned capacity_blocks = static_cast<unsigned>(
-            capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
-        two_electron_force_quartet_persistent_kernel<Unrestricted, AngularOrder, Mode>
-            <<<std::min(capacity_blocks, persistent_worker_blocks), detail::kDirectQuartetThreads,
-               0, stream>>>(batch, order_tile_count, order_tiles,
-                            persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, forces, generated_shell_class_mask,
-                            coulomb_coefficient, exchange_coefficient);
       } else {
-        two_electron_force_quartet_kernel<Unrestricted, AngularOrder, Mode>
-            <<<static_cast<unsigned>(capacities[AngularOrder] *
-                                     detail::direct_quartet_subtiles_per_tile(AngularOrder)),
-               detail::kDirectQuartetThreads, 0, stream>>>(
-                batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds, density,
-                active, forces, generated_shell_class_mask, coulomb_coefficient,
-                exchange_coefficient);
+        bool persistent_launched = false;
+        if constexpr (AngularOrder < kPersistentForceAngularOrderCount) {
+          if (AngularOrder < batch.persistent_force_angular_order_count) {
+            const unsigned capacity_blocks = static_cast<unsigned>(
+                capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
+            two_electron_force_quartet_persistent_kernel<Unrestricted, AngularOrder, Mode>
+                <<<std::min(capacity_blocks, persistent_worker_blocks),
+                   detail::kDirectQuartetThreads, 0, stream>>>(
+                    batch, order_tile_count, order_tiles, persistent_task_heads + AngularOrder,
+                    screening_tolerance, schwarz_bounds, density, active, forces,
+                    generated_shell_class_mask, coulomb_coefficient, exchange_coefficient);
+            persistent_launched = true;
+          }
+        }
+        if (!persistent_launched)
+          two_electron_force_quartet_kernel<Unrestricted, AngularOrder, Mode>
+              <<<static_cast<unsigned>(capacities[AngularOrder] *
+                                       detail::direct_quartet_subtiles_per_tile(AngularOrder)),
+                 detail::kDirectQuartetThreads, 0, stream>>>(
+                  batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds,
+                  density, active, forces, generated_shell_class_mask, coulomb_coefficient,
+                  exchange_coefficient);
       }
     }
     launch_angular_force_quartets<Unrestricted, AngularOrder + 1, Mode>(

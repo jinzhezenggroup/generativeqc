@@ -52,24 +52,42 @@ function(generativeqc_cuda_profile_arguments output)
   foreach(architecture IN LISTS architectures)
     list(APPEND arguments --target-architecture "sm_${architecture}")
   endforeach()
+  set(images ${_generativeqc_cuda_compile_architectures})
+  list(REMOVE_DUPLICATES images)
+  list(SORT images COMPARE NATURAL)
+  foreach(image IN LISTS images)
+    list(APPEND arguments --cuda-image "${image}")
+  endforeach()
   if(NOT GENERATIVEQC_AOT_PROFILE STREQUAL "auto")
     list(APPEND arguments --profile "${GENERATIVEQC_AOT_PROFILE}")
   endif()
+  set(overridden_targets)
   foreach(profile IN LISTS GENERATIVEQC_AOT_PROFILES)
-    if(profile MATCHES "^sm_([0-9]+)$")
-      if(NOT CMAKE_MATCH_1 IN_LIST architectures)
-        message(FATAL_ERROR "AOT profile ${profile} has no matching CUDA compile target")
-      endif()
-      list(APPEND arguments --profile-map "${profile}=${profile}")
-    elseif(NOT profile STREQUAL "")
+    if(profile STREQUAL "")
+      continue()
+    elseif(profile MATCHES "^sm_([0-9]+)=(.+)$")
+      set(target_architecture "${CMAKE_MATCH_1}")
+      set(selected_profile "${CMAKE_MATCH_2}")
+    elseif(profile MATCHES "^sm_([0-9]+)$")
+      set(target_architecture "${CMAKE_MATCH_1}")
+      set(selected_profile "${profile}")
+    else()
       list(LENGTH architectures target_count)
       if(NOT target_count EQUAL 1)
         message(FATAL_ERROR
-          "Named/portable GENERATIVEQC_AOT_PROFILES require one CUDA target; use GENERATIVEQC_AOT_PROFILE to apply one profile to all targets")
+          "Named/portable GENERATIVEQC_AOT_PROFILES require one CUDA target; use sm_XX=profile for per-target overrides")
       endif()
-      list(GET architectures 0 architecture)
-      list(APPEND arguments --profile-map "sm_${architecture}=${profile}")
+      list(GET architectures 0 target_architecture)
+      set(selected_profile "${profile}")
     endif()
+    if(NOT target_architecture IN_LIST architectures)
+      message(FATAL_ERROR "AOT profile override ${profile} has no matching CUDA compile target")
+    endif()
+    if(target_architecture IN_LIST overridden_targets)
+      message(FATAL_ERROR "Duplicate AOT profile override for sm_${target_architecture}")
+    endif()
+    list(APPEND overridden_targets "${target_architecture}")
+    list(APPEND arguments --profile-map "sm_${target_architecture}=${selected_profile}")
   endforeach()
   set(${output} "${arguments}" PARENT_SCOPE)
 endfunction()
@@ -151,6 +169,30 @@ macro(generativeqc_configure_cuda_backend target)
   # other CUDA compilers; callers can also select this path explicitly.
   if(GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK AND
      CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA" AND NOT APPLE)
+    # Cached-tensor and packed-Fock launches retain the same Cartesian
+    # recurrence bodies. Compile them once without changing their device ABI;
+    # other backends keep the independently compiled source owners above.
+    set(_generativeqc_direct_tensor_fock_source
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/direct_tensor_fock_kernels.cu")
+    file(GENERATE OUTPUT "${_generativeqc_direct_tensor_fock_source}" CONTENT
+      "#include \"scf/cuda/direct_cached_tensor_kernels.cu\"\n#include \"scf/cuda/direct_packed_fock_kernels.cu\"\n")
+    list(REMOVE_ITEM GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      src/scf/cuda/direct_cached_tensor_kernels.cu
+      src/scf/cuda/direct_packed_fock_kernels.cu)
+    list(APPEND GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      "${_generativeqc_direct_tensor_fock_source}")
+    # The bounded and class-domain force launchers retain the same high-order
+    # gradient callees. Share their compilation, not the separate angular-force
+    # owner's whole-program launch-bound policy.
+    set(_generativeqc_direct_force_fallback_source
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/direct_force_fallback_kernels.cu")
+    file(GENERATE OUTPUT "${_generativeqc_direct_force_fallback_source}" CONTENT
+      "#include \"scf/cuda/direct_force_class_domains.cu\"\n#include \"scf/cuda/direct_bounded_fallback.cu\"\n")
+    list(REMOVE_ITEM GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      src/scf/cuda/direct_force_class_domains.cu
+      src/scf/cuda/direct_bounded_fallback.cu)
+    list(APPEND GENERATIVEQC_DIRECT_NATIVE_SOURCES
+      "${_generativeqc_direct_force_fallback_source}")
     add_library(generativeqc_direct_native STATIC ${GENERATIVEQC_DIRECT_NATIVE_SOURCES}
                 "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
                 "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
@@ -271,12 +313,15 @@ macro(generativeqc_configure_cuda_backend target)
         "${GENERATIVEQC_AOT_GENERATED_DIRECTORY}/generativeqc_generated_shell_registry.cu")
     set(GENERATIVEQC_AOT_GENERATED_HEADER
         "${GENERATIVEQC_AOT_GENERATED_DIRECTORY}/generativeqc_generated_shell_registry.hpp")
+    set(GENERATIVEQC_AOT_GENERATED_POLICY
+        "${GENERATIVEQC_AOT_GENERATED_DIRECTORY}/generativeqc_aot_build_policy.json")
     generativeqc_register_generated_sources(
       GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_shell_kernels.py"
       OUTPUTS
         ${GENERATIVEQC_AOT_GENERATED_PROFILE_SOURCES}
         "${GENERATIVEQC_AOT_GENERATED_REGISTRY_SOURCE}"
         "${GENERATIVEQC_AOT_GENERATED_HEADER}"
+        "${GENERATIVEQC_AOT_GENERATED_POLICY}"
       DEPENDS
         "${GENERATIVEQC_AOT_SHELL_MANIFEST}"
       ARGS

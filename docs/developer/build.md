@@ -170,6 +170,35 @@ The fallback retains portable, untuned metadata; see the
 Explicit incompatible profile requests and invalid or ambiguous manifests
 remain errors.
 
+`auto` is build-time selection, not runtime autotuning. The advanced
+`GENERATIVEQC_AOT_PROFILES` list accepts explicit per-target entries, for example
+`-DGENERATIVEQC_AOT_PROFILES="sm_80=portable;sm_90=portable;sm_120=auto"`.
+Each target override supersedes the global `GENERATIVEQC_AOT_PROFILE` value;
+duplicate overrides (including a legacy `sm_120` entry combined with
+`sm_120=...`) and overrides without a compile target are errors. Legacy exact
+`sm_XX` entries still select that target's profile; a bare named/portable entry
+still requires one compile target. Both primary and derivative generators use
+the same normalized override contract. Image suffixes such as `120-real` and
+`120-virtual` control NVCC images independently of these profile choices.
+
+The generated `production_shell_kernels/generativeqc_aot_build_policy.json`
+records each target's requested/resolved profile and request origin, supplied
+CUDA images, compiled consumer/route masks, default preference masks, and
+packaging policy. No recorded image means the caller did not supply image
+provenance; the generator does not infer an executable image from a profile.
+Compiled masks precede environment, actual-device resource, precision and
+workload admission. A profile name is neither mathematical capability nor a
+scientific/performance qualification receipt.
+
+Custom schema-v2 manifests must explicitly set `compile_derivative_shells`
+and `prefer_rys_task_fock` when requesting those compiled consumers or default
+preferences. Both default to `false`; neither is inferred from `kind`, `tuned`
+or `portable`. The repository manifest explicitly retains the existing tuned
+and portable choices. `optional_fock_variants` remains the independent
+code-size/first-use packaging control. These advanced controls do not qualify
+a new target or promote a global default. Force-portable affects these shell
+bundles, not every architecture-specialized CUDA subsystem.
+
 The shared native direct-integral archive disables ptxas optimizer constants to
 keep its device-linked recurrence graph within the compiler constant-bank limit.
 This is scoped to that archive; independently compiled CUDA kernels retain their
@@ -185,7 +214,10 @@ cmake -S . -B build -G Ninja \
 ```
 
 Use `-DGENERATIVEQC_ENABLE_AOT_SHELLS=OFF` to omit generated shell bundles
-entirely. Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
+entirely, including derivative-shell packages explicitly enabled by a custom
+manifest. This global disable overrides per-profile packaging policy;
+portable profile metadata alone does not mean that its registry is empty.
+Use `-DGENERATIVEQC_AOT_PROFILE=portable` to explicitly select the
 generic CUDA path for every target, including measured architectures.
 
 Profile identity is not generated-shell coverage. The existing
@@ -209,6 +241,14 @@ from an unmatched or disabled registry. These masks do not replace additional
 consumer-specific resource, precision or workload admission checks, nor do
 they establish numerical or performance qualification. Rebuild native clients
 against the current full tuning descriptor when updating this pre-release API.
+
+The same probe exposes enabled Rys-value, K-block, Rys-task, shared-Rys x/y and
+weighted-Z route masks separately from `preferred_streaming_fock_shell_class_mask`
+and `preferred_rys_task_fock_shell_class_mask`. Preferences are intersected with
+enabled primary coverage. `available_shared_rys_xy_streaming_fock_shell_class_mask`
+also applies that companion's actual-device resource check; other consumer
+admission conditions still apply. These are diagnostic snapshots, not cached
+admission decisions or new hardware compatibility requirements for local profiles.
 
 Derivative shell registries follow the same target/profile mapping, including
 custom manifests. Portable targets and builds with shell AOT disabled retain
