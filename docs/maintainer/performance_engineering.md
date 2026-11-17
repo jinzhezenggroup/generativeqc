@@ -93,11 +93,20 @@ workload-local **warm** acceptance gate. Its results are not valid global-promot
 campaigns and are not automatically imported into the stock manifest.
 
 The [tuning inventory](../../manifests/maintenance/direct_jk_tuning_inventory.json)
-distinguishes retained bounds, migrated policy owners and pending qualification.
-Persistent-ERI admission belongs to `SmallHfProfitabilityProfile`: the no-calibration
-AO crossover remains 16, and resident ERI bytes are capped by the profile ceiling
+distinguishes retained bounds, migrated policy owners and qualification contracts.
+Persistent-ERI admission consumes the explicit `DirectJkTopologyProfile` in an
+admitted `HfMatrixProfile`, through `SmallHfProfitabilityProfile`. Without a
+compatible profile the AO crossover remains 16. Resident ERI bytes are capped by the profile ceiling
 and 1/32 of known target memory (at most 256 MiB for an unknown target).
-This is resource admission, not a screened-quartet/reuse profitability model.
+This is an explicit endpoint-tuned crossover plus resource admission, not a
+profitability estimate inferred from matrix-product rates. A crossover of zero
+disables residency; a larger qualified crossover can admit it above 16 AOs.
+Energy/force and exported-reference guards still constrain the actual route.
+An arena refusal retires the partial owner before repacking Cartesian transforms
+and retrying the bounded direct route. Compatible replays retain this resolved
+fallback; a changed admitted profile can request a new selection. Native matrix
+and direct-ERI retries are each finite, preserve the CUDA backend, and never
+change scientific screening or precision.
 The bucket lifecycle queries target facts once and passes them to both packing
 and execution. Packing records the resolved admission in immutable topology
 identity and prepares Cartesian transforms when resident storage is rejected.
@@ -111,17 +120,22 @@ the admitted record in capture identity. Historical checkpoints missing this
 control remain eligible for explicit warm import, not an exact restart.
 
 `DirectPersistentScheduleProfile` owns the persistent force/Fock angular-order
-domains emitted with the compiler's resident schedule header. Allocation, queue
-reset and kernel dispatch consume that same generated definition. The default
-domains remain seven force orders and six Fock orders. Smaller compiler profiles
-retain fixed-grid workers for the remaining orders; they are testable build
-inputs, not shipped runtime autotune winners. The 1024-task-per-shell-pair staging
+maximum domains emitted with the compiler's resident schedule header. Allocation
+and queue reset retain that bounded superset. The admitted runtime profile can
+select smaller force/Fock domains, from three through the compiled maximum;
+dispatch then uses the established fixed-grid workers for remaining orders.
+Low-order fused owners remain unchanged, including the order-three force
+grid-stride worker. Both runtime domains participate in immutable topology
+identity and are copied into the execution view before capture. Defaults remain
+seven force orders and six Fock orders. The 1024-task-per-shell-pair staging
 bound remains an explicit retained bounded-schedule choice.
 
-These ownership and resource contracts do not establish a new schedule winner or
-close device qualification. Persistent-ERI profitability still needs actual
-screened-work/reuse inputs and complete endpoint storage/setup accounting;
-angular queue-domain profiles remain compiler inputs. Any promotion must
+These ownership and resource contracts do not establish a new schedule winner.
+The topology fields must come from complete endpoint tuning, comparing resident
+construction/storage with the actual screened-quartet alternative at the
+qualified expected Fock reuse and geometry-rebuild frequency. Matrix calibration
+does not provide that evidence, and no automatic resident-vs-direct cost model
+or new production winner is shipped. Any promotion must
 retain independent energy/force gates and matched cold/warm/moved-warm RHF/UHF
 endpoint timings with semantic work counts. Synthetic-target host tests prove
 legality and cache behavior, not GPU performance.
@@ -140,10 +154,12 @@ identity observers (including unauthenticated import trampolines) retain the
 incumbent. Matrix-only/physical-reference exporters retain their separate
 provider-initialization and capacity contracts and do not consume this profile.
 
-The strict whitespace-separated v1 record has the following ordered fields:
+The strict whitespace-separated v2 record has the following ordered fields.
+Pre-release v1 records must be regenerated; they are not silently upgraded with
+unevidenced topology choices.
 
 ```text
-generativeqc-hf-matrix-profile-v1
+generativeqc-hf-matrix-profile-v2
 source_identity <64 lowercase hexadecimal characters>
 provider nvidia
 versions <driver> <runtime> <toolkit> <cuBLAS major> <minor> <patch>
@@ -158,6 +174,7 @@ evidence_sha256 <64 lowercase hexadecimal characters>
 native <launch ns> <effective FP64 FLOPs/ns> <effective bytes/ns>
 cublas <launch ns> <effective FP64 FLOPs/ns> <effective bytes/ns>
 provider_setup_nanoseconds <complete first-use setup ns>
+direct_jk <resident ERI AO crossover, 0 disables> <resident ERI byte ceiling> <force order count> <Fock order count>
 end
 ```
 
@@ -166,7 +183,10 @@ The native qualification test uses
 without constructing a BLAS handle. Bounds must cover the actual AO dimension
 and both physical-system count and physical-system count times spin count;
 they must not extrapolate measured
-rates beyond their qualified workload domain. Six primitive rates must be
+rates or explicit topology choices beyond their qualified workload domain.
+The resident crossover cannot exceed the maximum qualified AO dimension, the
+byte ceiling must be positive, and queue counts cannot exceed the compiler's
+bounded domains. Six primitive rates must be
 positive and finite; setup must be finite and nonnegative. The existing
 `launch + max(FLOPs/rate, bytes/rate)` model conservatively charges the **entire**
 provider setup cost rather than guessing an amortization from the maximum SCF
@@ -186,10 +206,24 @@ the native/cuBLAS dimension crossover remains 17.
 The opt-in Slurm-only `generativeqc_hf_matrix_profile_cuda_tests` target checks
 real preparation, native/cuBLAS bindings, plan invalidation, RHF/UHF batches,
 energy-only and energy/force cold/warm/moved-warm endpoints against independent
-PySCF fixtures. It uses **synthetic ordering inputs**, not measured tuning
+PySCF fixtures, including spherical s/p/d systems above the incumbent residency
+crossover. It checks both resident and direct routes and reduced runtime domains.
+It uses **synthetic ordering inputs**, not measured tuning
 winners; its diagnostics report endpoint wall time, actual iterations/Fock
 builds and owned device bytes, not a complete memory-peak or speedup claim.
 Run it through the same finite Slurm allocation as the queue test below.
+
+`generativeqc_direct_jk_policy_benchmark` is an explicitly built, non-CI timing
+runner for the same 2/18-AO, RHF/UHF, energy/force, single/batched workloads. Each
+repetition starts a fresh prepared owner and measures complete cold, warm and
+changed-geometry calls, emitting JSON lines with actual iteration/Fock work and
+owned device bytes and the allocation ledger's numeric high-water mark. That
+peak excludes untracked CUDA/opaque library storage; retain a separately sampled
+process GPU-memory trace when qualifying total device memory. Build the same runner
+against the baseline and candidate and alternate them in one finite exclusive
+Slurm allocation. Retain all populations, source/library hashes, compiler-cache
+statistics and independent oracle results; do not call synthetic ordering rates
+a measured schedule promotion.
 
 The native `generativeqc_direct_persistent_queue_cuda_tests` target checks actual
 device queue resets, optional FP32 buffers and guard words against the emitted

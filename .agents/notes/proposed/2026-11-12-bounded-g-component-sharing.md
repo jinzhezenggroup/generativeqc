@@ -121,3 +121,11 @@ device test was NOT RUN. Device numerical qualification, actual register/spill
 use and complete endpoint performance remain unverified. The same run's ECP
 and core-b test-step timeouts are separate unresolved qualification results,
 addressed by bounded test-scheduling follow-ups, not weakened scientific gates.
+
+## Subsequent scalar covariance work
+
+The later full-axis and Gaussian-center sharing decision is recorded separately
+in `../implemented/performance/2026-11-16-g-value-scalar-orbits.md`. It preserves
+the conservative CSE rationale here while independently qualifying the
+previously unimplemented permutation opportunity; do not substitute its source
+or measurements for this historical candidate.

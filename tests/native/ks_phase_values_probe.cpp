@@ -17,6 +17,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/resource_ledger.hpp"
+#include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/direct_jk_source_lease.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -73,6 +74,145 @@ struct Fixture {
     require(nao == molecule::ao_count(system) && nao >= 24, "fixture source admission domain");
   }
 };
+
+/** Composite windows retain geometry-only screening, local stores and census semantics. */
+void composite_source_windows(const Fixture& fixture) {
+  namespace kernels = scf::cuda_execution;
+  scf::CudaDirectJkPlan* raw{};
+  scf::CudaDirectJkDiagnostic diagnostic;
+  std::string detail;
+  require(scf::create_cuda_direct_jk_plan(0, {fixture.system}, 0, 0.0, 8ULL << 30, &raw, diagnostic,
+                                          detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+      raw, scf::destroy_cuda_direct_jk_plan);
+  require(plan->canonical_cartesian && plan->canonical_pairs && plan->canonical_pair_order,
+          "missing Cartesian pair fixture");
+  const auto& offsets = plan->canonical_pair_offsets.front();
+  constexpr double sentinel = -4321.25;
+  std::uint64_t checks = 0, null_checks = 0, candidates = 0;
+  double maximum_error = 0.0;
+  for (unsigned order = 0; order <= 12; ++order) {
+    const unsigned first = (order + 1U) / 2U, second = order / 2U;
+    const auto first_count = std::min<std::size_t>(3, offsets[first + 1] - offsets[first]);
+    const auto second_count = std::min<std::size_t>(3, offsets[second + 1] - offsets[second]);
+    require(first_count && second_count, "fixture does not cover every angular order");
+    const bool same = first == second;
+    const std::size_t dense =
+        same ? first_count * (first_count + 1U) / 2U : first_count * second_count;
+    const auto capacity = dense + 4U;
+    runtime::OwnedCudaBuffer<double> storage;
+    runtime::OwnedCudaBuffer<std::uint64_t> census, prefixes;
+    storage.allocate(0, 3U * capacity, plan->stream);
+    census.allocate(0, 6, plan->stream);
+    prefixes.allocate(0, first_count, plan->stream);
+    std::vector<std::uint64_t> prefix(first_count);
+    for (std::size_t row = 0; row < first_count; ++row)
+      prefix[row] =
+          (row ? prefix[row - 1] : 0U) + (row ? std::min<std::size_t>(row, second_count) : 0U);
+    cuda_check(cudaMemcpy(prefixes.get(), prefix.data(), first_count * sizeof(std::uint64_t),
+                          cudaMemcpyHostToDevice));
+    for (unsigned layout = 0; layout != 3; ++layout) {
+      const kernels::CanonicalPairRows rows{layout ? plan->canonical_pair_order : nullptr,
+                                            layout == 2 ? prefixes.get() : nullptr};
+      const std::size_t total = rows.prefix ? prefix.back() : dense;
+      for (const auto [begin, limit] : std::array<std::pair<std::size_t, std::size_t>, 5>{
+               {{0, 0}, {0, 1}, {1, 3}, {total ? total - 1U : 0U, 3}, {total, 3}}})
+        for (const auto [range, omega] :
+             std::array<std::pair<kernels::DirectCoulombRange, double>, 7>{
+                 {{kernels::DirectCoulombRange::Full, 0.0},
+                  {kernels::DirectCoulombRange::Long, 0.0},
+                  {kernels::DirectCoulombRange::Long, -0.0},
+                  {kernels::DirectCoulombRange::Long, 0.3},
+                  {kernels::DirectCoulombRange::Short, 0.5},
+                  {kernels::DirectCoulombRange::Long, std::nextafter(0.3, 1.0)},
+                  {kernels::DirectCoulombRange::Short, 4.7}}})
+          for (const double scale : {-0.075 / -0.425, -0.31, 0.0, -0.0})
+            for (const bool unrestricted : {false, true})
+              for (const double screening : {0.0, 1e100}) {
+                std::vector<double> values(3U * capacity, sentinel);
+                std::array<std::uint64_t, 6> counts{37, 91, 37, 91, 37, 91};
+                cuda_check(cudaMemcpyAsync(storage.get(), values.data(),
+                                           values.size() * sizeof(double), cudaMemcpyHostToDevice,
+                                           plan->stream));
+                cuda_check(cudaMemcpyAsync(census.get(), counts.data(), sizeof(counts),
+                                           cudaMemcpyHostToDevice, plan->stream));
+                for (unsigned variant = 0; variant < 3; ++variant)
+                  kernels::launch_canonical_jk_kernel(
+                      plan->stream, plan->canonical_batch, variant != 2 || scale == 0.0, 0, order,
+                      plan->canonical_pairs, rows, offsets[first], first_count, offsets[second],
+                      second_count, same, true, true, unrestricted,
+                      variant == 0 ? kernels::DirectCoulombRange::Full : range,
+                      variant == 0 ? 0.0 : omega, screening, plan->canonical_bounds, nullptr,
+                      nullptr, nullptr, census.get() + 2U * variant,
+                      storage.get() + capacity * variant + 2U, nullptr, nullptr, limit, begin,
+                      variant == 2 ? scale : 0.0);
+                cuda_check(cudaGetLastError());
+                cuda_check(cudaStreamSynchronize(plan->stream));
+                cuda_check(cudaMemcpy(values.data(), storage.get(), values.size() * sizeof(double),
+                                      cudaMemcpyDeviceToHost));
+                cuda_check(cudaMemcpy(counts.data(), census.get(), sizeof(counts),
+                                      cudaMemcpyDeviceToHost));
+                const auto expected_candidates =
+                    begin < total ? std::min({dense, limit, total - begin}) : 0U;
+                for (unsigned variant = 0; variant < 3; ++variant) {
+                  require(counts[2U * variant] == 37U + expected_candidates &&
+                              counts[2U * variant + 1U] == 91U,
+                          "source-window candidate/evaluated census changed");
+                  require(values[capacity * variant] == sentinel &&
+                              values[capacity * variant + 1U] == sentinel,
+                          "source store used global work_begin instead of tile-local indexing");
+                }
+                for (std::size_t slot = 2; slot < capacity; ++slot) {
+                  const auto selected = values[capacity + slot];
+                  const auto expected = selected == sentinel || scale == 0.0
+                                            ? selected
+                                            : selected + scale * values[slot];
+                  const auto actual = values[2U * capacity + slot];
+                  const auto error = std::abs(actual - expected);
+                  maximum_error = std::max(maximum_error, error);
+                  require(std::isfinite(actual) && error < 2e-12 * (1.0 + std::abs(expected)),
+                          "composite source changed arithmetic, screening or guard slots");
+                }
+                candidates += expected_candidates;
+                ++checks;
+              }
+    }
+    const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+    const auto matrix = dimension * dimension;
+    runtime::OwnedCudaBuffer<double> matrices;
+    matrices.allocate(0, 10U * matrix, plan->stream);
+    std::vector<double> values(10U * matrix, 0.0);
+    for (std::size_t index = 0; index < 2U * matrix; ++index)
+      values[index] = 0.02 * std::sin(static_cast<double>(index + 1));
+    for (const bool unrestricted : {false, true}) {
+      std::fill(values.begin() + 2U * matrix, values.end(), 0.0);
+      cuda_check(cudaMemcpyAsync(matrices.get(), values.data(), values.size() * sizeof(double),
+                                 cudaMemcpyHostToDevice, plan->stream));
+      for (unsigned variant = 0; variant < 2; ++variant)
+        kernels::launch_canonical_jk_kernel(
+            plan->stream, plan->canonical_batch, variant == 0, 0, order, plan->canonical_pairs, {},
+            offsets[first], first_count, offsets[second], second_count, same, true, true,
+            unrestricted, kernels::DirectCoulombRange::Long, 0.3, 0.0, plan->canonical_bounds,
+            matrices.get(), matrices.get() + (2U + 4U * variant) * matrix,
+            matrices.get() + (4U + 4U * variant) * matrix, nullptr, nullptr, nullptr, nullptr, 2, 0,
+            variant == 0 ? 0.0 : -0.31);
+      cuda_check(cudaGetLastError());
+      cuda_check(cudaStreamSynchronize(plan->stream));
+      cuda_check(cudaMemcpy(values.data(), matrices.get(), values.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost));
+      for (std::size_t index = 0; index < 4U * matrix; ++index)
+        require(std::abs(values[2U * matrix + index] - values[6U * matrix + index]) < 2e-12,
+                "nonnull coefficient with null source lost ordinary Cartesian Fock work");
+      ++null_checks;
+    }
+  }
+  std::cout << "{\"source_window_checks\":" << checks
+            << ",\"null_destination_checks\":" << null_checks
+            << ",\"source_candidates\":" << candidates
+            << ",\"maximum_error\":" << std::setprecision(17) << maximum_error << "}\n";
+  std::cout << "composite source windows passed\n";
+}
 
 /** Query the incumbent geometry-only screened traversal, without ERI storage. */
 void capacity(const Fixture& fixture) {
@@ -1290,6 +1430,7 @@ int main(int argc, char** argv) {
                  (std::string(argv[2]) == "capacity" || std::string(argv[2]) == "range-oracle" ||
                   std::string(argv[2]) == "combined-range-oracle" ||
                   std::string(argv[2]) == "combined-build-oracle" ||
+                  std::string(argv[2]) == "composite-source-windows" ||
                   std::string(argv[2]) == "range-mixed-oracle" ||
                   std::string(argv[2]) == "range-host-oracle" ||
                   std::string(argv[2]) == "full-host-oracle" ||
@@ -1301,7 +1442,8 @@ int main(int argc, char** argv) {
                   std::string(argv[2]) == "mixed-refinement" ||
                   std::string(argv[2]) == "mixed-source")),
             "usage: ks-phase-values-probe INPUT "
-            "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source]");
+            "[capacity|endpoint|endpoint-forces|mixed-refinement|mixed-source|composite-source-"
+            "windows]");
     const std::string mode = argc == 3 ? argv[2] : "";
     const bool disk = mode == "full-disk-oracle" || mode == "range-disk-oracle" ||
                       mode == "full-tiered-oracle" || mode == "range-tiered-oracle";
@@ -1321,7 +1463,9 @@ int main(int argc, char** argv) {
                               full_host_oracle || combined_oracle,
                           range_oracle || combined_oracle);
     std::cout << std::setprecision(17);
-    if (full_host_oracle) {
+    if (mode == "composite-source-windows") {
+      composite_source_windows(fixture);
+    } else if (full_host_oracle) {
       raw_oracle(fixture, false, !disk || tiered, disk);
       raw_oracle_uks(fixture, !disk || tiered, disk);
       host_staging_budget_oracle(fixture, true, disk);

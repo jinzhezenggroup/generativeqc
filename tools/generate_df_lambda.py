@@ -35,6 +35,7 @@ from tools.generate_df_ccsd_hoisted import contraction_query
 from tools.generate_df_ccsd_native import programs as virtual_programs
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
+    CudaKernelPool,
     _cuda_program,
     _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
@@ -449,6 +450,12 @@ def cuda_header() -> str:
 
 
 def cuda_source() -> str:
+    """Share local workers without changing retained-core symbol ownership.
+
+    The prepare/dynamic phases borrow the original core matrix kernels, so
+    that owner and both external-use phases must remain outside the pool.
+    """
+    kernel_pool = CudaKernelPool("df_lambda")
     lines = [
         "#include <algorithm>",
         '#include "generated_df_lambda_cuda.cuh"',
@@ -467,6 +474,7 @@ def cuda_source() -> str:
                 output_type(name),
                 input_overrides=inputs,
                 reset_error=False,
+                kernel_pool=kernel_pool,
             ),
             f"{output_type(name)} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]
@@ -491,6 +499,7 @@ def cuda_source() -> str:
                     state_type="StagedCudaState",
                     output_fields=tuple(program.outputs),
                     reset_error=False,
+                    kernel_pool=kernel_pool,
                 )
             )
         lines += [
@@ -505,6 +514,7 @@ def cuda_source() -> str:
                 prepared_contractions=f"s.{name}_contractions",
                 batch_dim=True,
                 arena_field="audit_arena" if name in audit_programs() else None,
+                kernel_pool=kernel_pool if name != "staged_core" else None,
             ),
             f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return "
             + (
@@ -530,6 +540,7 @@ def cuda_source() -> str:
             reset_error=False,
             prepared_contractions="s.contractions",
             batch_dim=True,
+            kernel_pool=kernel_pool,
         ),
         "MixedAuxiliaryOutputs run_mixed_auxiliary_cuda(MixedAuxiliaryCudaState& state){ return run_mixed_auxiliary(state); }",
         "void prepare_mixed_contractions(MixedAuxiliaryCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",

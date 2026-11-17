@@ -63,6 +63,20 @@ evidence is not deleted or relabeled current. The Libxc live catalog refresh
 changes only current source identities and revalidation input lists, not
 scientific statuses, executed identities, receipts or accepted product counts.
 
+## 2026-11-17 upstream integration
+
+The follow-up integrates master through `50482bc35`, including native direct-J/K
+topology policy and the offline Libxc acceptance boundary. The conflicting Libxc
+snapshot is retained from upstream, rather than refreshing historical scientific
+acceptance or resetting its previous-summary baseline. Consequently the original
+live-catalog freshness result above belongs to the original source revision, not
+this integration. `check_libxc_native_catalog.py --allow-stale-generated-views`
+passes with an explicit historical-presentation advisory; it reports zero current
+qualified products and does not confer current scientific acceptance. The normal
+strict presentation check still rejects the stale generated view. The live CUDA
+audit is regenerated against the integrated source; the sealed default baseline
+and failed scientific observations remain unchanged.
+
 ## Rejected alternatives
 
 - Enabling every optional family on portable would mix a compilation-cost and

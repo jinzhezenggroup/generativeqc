@@ -1012,6 +1012,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   };
   if (first_setup) {
     if (!make_page_layout(bounded_generated_task_capacity)) {
+      plan.retry_without_persistent_eri = requested_persistent_eri;
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1391,6 +1392,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
           runtime::resource_cuda_malloc_async(&resources.arena_, layout.bytes, resources.stream_);
     }
     if (cuda_error != cudaSuccess) {
+      if (requested_persistent_eri && cuda_error == cudaErrorMemoryAllocation) {
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) {
+          fill_global_failure(outputs, cuda_status(pending));
+          return outputs;
+        }
+        plan.retry_without_persistent_eri = true;
+      }
       fill_global_failure(outputs, cuda_status(cuda_error));
       return outputs;
     }
@@ -2074,6 +2083,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                            primitive_coefficients,
                            occupied};
   configure_direct_weighted_force_response(device_batch);
+  device_batch.persistent_force_angular_order_count = host.persistent_force_angular_order_count;
+  device_batch.persistent_fock_angular_order_count = host.persistent_fock_angular_order_count;
   device_batch.direct_fp32_block_screening = plan.fp32_block_screening;
   if (bounded_direct_streaming && plan.fp32_block_screening) {
     device_batch.direct_fp32_block_bounds =

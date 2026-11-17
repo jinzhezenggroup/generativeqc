@@ -2,8 +2,6 @@
 
 import ctypes
 import math
-import shutil
-import subprocess
 import typing
 from functools import cache
 from itertools import product
@@ -279,8 +277,14 @@ def test_interpreter_rejects_invalid_scientific_inputs() -> None:
             evaluate_one_electron_primitive(program, exponents, centers)
 
 
-@pytest.fixture(scope="module")
-def emitted_host(tmp_path_factory: typing.Any) -> typing.Any:
+@pytest.fixture(
+    scope="module", params=[(3, "cosx", None), (4, None, None), (4, None, 1200)]
+)
+def emitted_host(
+    request: pytest.FixtureRequest,
+    tmp_path_factory: typing.Any,
+    required_native_cxx: typing.Any,
+) -> typing.Any:
     """Execute emitted arithmetic on CPU to catch lowering/CSE boundary errors.
 
     This is explicitly a source-lowering test. CUDA compilation, device
@@ -290,19 +294,20 @@ def emitted_host(tmp_path_factory: typing.Any) -> typing.Any:
         emit_one_electron_values_cuda,
     )
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    maximum, owner, architecture = request.param
+    namespace = "generated_cosx_one_electron" if owner else "generated_one_electron"
     directory = tmp_path_factory.mktemp("one-electron-emitted-host")
-    source = emit_one_electron_values_cuda().replace("#include <cuda_runtime.h>", "")
+    source = emit_one_electron_values_cuda(maximum, owner=owner).replace(
+        "#include <cuda_runtime.h>", ""
+    )
     source = (
         source.replace("__device__", "")
         .replace("__forceinline__", "inline")
         .replace("__noinline__", "")
     )
+    source += f"\nnamespace one = generativeqc::scf::{namespace};\n"
     source += r"""
 extern "C" void evaluate(const double* inputs, double* outputs, unsigned count) {
-  namespace one = generativeqc::scf::generated_one_electron;
   for (unsigned i = 0; i < count; ++i) {
     const double* p = inputs + 14 * i;
     const auto pair = one::make_pair(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
@@ -316,21 +321,11 @@ extern "C" void evaluate(const double* inputs, double* outputs, unsigned count) 
     path = directory / "fixture.cpp"
     path.write_text(source)
     library_path = directory / "fixture.so"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O0",
-            "-shared",
-            "-fPIC",
-            str(path),
-            "-o",
-            str(library_path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=120,
+    arguments = ["-std=c++17", "-O0"]
+    if architecture is not None:
+        arguments.append(f"-D__CUDA_ARCH__={architecture}")
+    required_native_cxx.build_shared(
+        [path], library_path, compile_args=arguments, compile_timeout=120
     )
     library = ctypes.CDLL(str(library_path))
     pointer = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")

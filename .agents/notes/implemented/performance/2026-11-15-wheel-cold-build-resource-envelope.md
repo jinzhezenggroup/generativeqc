@@ -72,6 +72,33 @@ build/repair/installed-wheel/payload gates remain the endpoint acceptance test.
 Treat concurrency two as a conservative initial resource policy, not a measured
 optimum; revisit it with complete cold/warm runs and surviving resource evidence.
 
+### November 16 follow-up: surviving evidence requires serialization
+
+Master run 43803732735, created November 16, 2026 at 04:22:39 UTC, now retains
+the missing resource evidence. The wheel build runs with the unchanged full
+`80;90-real;120-real` architecture matrix and concurrency two. At 04:45:58–59
+UTC, both `df_source_kernels.cu` and `one_electron_derivatives.cu` fail because
+`ptxas` receives signal 9. Docker then reports `OOMKilled=true` and both memory
+limits equal to 12,884,901,888 bytes. The runner survives and saves completed
+compiler-cache entries. This is evidence of this container's OOM, not proof
+that the earlier lost-runner cases had the same cause or a measurement of either
+individual compiler's maximum memory.
+
+Reduce the wheel's whole-graph concurrency to one; do not add independent CUDA
+and AOT pools that could overlap two expensive owners anyway. This deliberately
+trades peak throughput for a bounded, reusable build attempt while generated
+owner reductions address the underlying compilation work. One compiler can
+still exceed the cgroup limit, so serialization alone is not wheel acceptance
+or a guaranteed cold-build speedup. Keep the 12 GiB isolation, finite six-hour
+job, exact architectures, ordinary optimizer settings, all scientific providers,
+failure-path cache retention and installed-wheel/payload gates. The executable
+CMake/Ninja test now verifies the actual cibuildwheel environment admits only
+one build task. Revisit concurrency only with complete successful wheel and
+surviving aggregate-memory evidence, not isolated worker RSS.
+
+The raw job log, job/step metadata and current PR checkpoint are retained under
+`/tmp/gqc-wheel-direct-source-only/github/`.
+
 ## References
 
 - https://github.com/jinzhezenggroup/generativeqc/actions/runs/43580937901

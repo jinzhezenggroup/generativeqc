@@ -71,7 +71,7 @@ def test_wheel_environment_bounds_actual_cmake_build_parallelism(
         _build_environment()["CIBW_ENVIRONMENT"]
     ).as_dictionary(prev_environment=os.environ)
     limit = int(environment["CMAKE_BUILD_PARALLEL_LEVEL"])
-    assert 1 <= limit <= 2
+    assert limit == 1
     probe = tmp_path / "probe.py"
     probe.write_text(
         "import json, pathlib, sys, time\n"

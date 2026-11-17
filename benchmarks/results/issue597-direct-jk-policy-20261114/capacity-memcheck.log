@@ -1,0 +1,5 @@
+========= COMPUTE-SANITIZER
+capacity-probe direct_peak=606640 resident_peak=8651336
+resident-capacity-fallback limit=4628988 peak=606640 rejected=1
+Bounded resident-ERI allocation fallback passed
+========= ERROR SUMMARY: 0 errors
