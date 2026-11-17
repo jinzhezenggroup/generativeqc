@@ -1301,6 +1301,9 @@
             "shared_rys_xy_fock",
             "shared_rys_weighted_z_fock"
           ],
+          "capability_architectures": {
+            "shared_rys_weighted_z_fock": ["sm_90"]
+          },
           "recurrence": "rys3",
           "schedule": {
             "kind": "subgroup_tasks",
@@ -1507,6 +1510,9 @@
             "shared_rys_xy_fock",
             "shared_rys_weighted_z_fock"
           ],
+          "capability_architectures": {
+            "shared_rys_weighted_z_fock": ["sm_90"]
+          },
           "recurrence": "rys4",
           "schedule": {
             "kind": "subgroup_tasks",

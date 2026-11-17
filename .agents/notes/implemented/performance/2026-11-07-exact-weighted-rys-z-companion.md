@@ -3,6 +3,10 @@
 Status: implemented capability; device qualification and production selection pending
 Date: 2026-11-07
 
+Subsequent admission change: the [2026-11-16 capability-bound decision](../architecture/2026-11-16-weighted-z-capability-not-sm-whitelist.md)
+removes the SM90 architecture whitelist without changing the arithmetic or
+relabeling the historical measurements below.
+
 ## Problem and decision
 
 The qualified DPPP/PPPP component owner shares unweighted XY tables but repeats

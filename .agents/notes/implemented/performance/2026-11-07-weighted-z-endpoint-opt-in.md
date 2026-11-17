@@ -3,6 +3,10 @@
 Status: implemented opt-in; single HF96 endpoint correctness pilot passed
 Date: 2026-11-07
 
+Subsequent admission change: the [2026-11-16 capability-bound decision](../architecture/2026-11-16-weighted-z-capability-not-sm-whitelist.md)
+allows declared companions on other legal targets. Explicit opt-in and the
+source/device scope of the historical pilot below remain unchanged.
+
 ## Decision and invariant
 
 The exact weighted-Z companion keeps the measured compiler arithmetic from

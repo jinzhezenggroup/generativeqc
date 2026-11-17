@@ -254,11 +254,10 @@ class CudaKernelIR:
         self.schedule.validate_for(self.target)
         component_count = self.integral.spec.component_count
         if self.schedule.fock_shared_rys_weighted_z and (
-            self.target.architecture != "sm_90"
-            or not isinstance(self.integral.spec, ShellClassSpec)
+            not isinstance(self.integral.spec, ShellClassSpec)
             or self.integral.spec.name not in ("dppp", "pppp")
         ):
-            raise ValueError("shared Rys weighted-Z requires the qualified SM90 owner")
+            raise ValueError("shared Rys weighted-Z requires a DPPP/PPPP value owner")
         if self.schedule.fock_shared_rys_xy and (
             not isinstance(self.integral.spec, ShellClassSpec)
             or self.integral.spec.name

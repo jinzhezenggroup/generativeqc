@@ -273,6 +273,13 @@ def test_incomplete_or_regressive_global_campaign_is_rejected(mutation: str) -> 
 
 
 def fixture_root(tmp_path: Path) -> dict:
+    """Seal a synthetic policy baseline before exercising checker mutations.
+
+    Checker controls must reach the acquisition/resource gate under test even
+    when the real repository has an intentionally unpromoted candidate. This
+    temporary baseline is never written to the repository or used as evidence;
+    the real stock decision remains independently enforced by the CLI checker.
+    """
     inventory = json.loads(
         (ROOT / "manifests/maintenance/cuda_aot_default_decisions.json").read_text()
     )
@@ -284,16 +291,43 @@ def fixture_root(tmp_path: Path) -> dict:
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
+    retained = inventory["retained_baseline"]
+    snapshot = tmp_path / retained["effective_policies"]
+    snapshot.write_bytes(
+        lzma.compress(
+            json.dumps(default_policies(tmp_path / MANIFEST), sort_keys=True).encode()
+        )
+    )
+    retained["effective_policies_sha256"] = file_hash(snapshot)
+    retained["status"] = "synthetic-checker-fixture-not-production-qualification"
     return inventory
 
 
-def test_stock_defaults_are_retained_not_requalified(tmp_path: Path) -> None:
+def test_unchanged_fixture_defaults_are_retained_not_requalified(
+    tmp_path: Path,
+) -> None:
     result = check_defaults(tmp_path, fixture_root(tmp_path), source_identity=SOURCE)
     assert result == {
         "changed_targets": [],
         "retained_defaults": True,
         "promotions": {},
     }
+
+
+def test_default_off_compiled_extension_still_requires_qualification(
+    tmp_path: Path,
+) -> None:
+    inventory = fixture_root(tmp_path)
+    manifest = tmp_path / MANIFEST
+    payload = json.loads(manifest.read_text())
+    for row in payload["architectures"]["portable_cuda"]["kernels"]:
+        if "shared_rys_weighted_z_fock" in row.get("capabilities", []):
+            row["capability_architectures"]["shared_rys_weighted_z_fock"].append(
+                "sm_80"
+            )
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="fresh global-default promotion"):
+        check_defaults(tmp_path, inventory, source_identity=SOURCE)
 
 
 @pytest.mark.parametrize(

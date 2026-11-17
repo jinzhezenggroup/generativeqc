@@ -27,9 +27,11 @@ from tools.generativeqc_validation.shared_rys_xy_fixture import (
 )
 
 
-def companion_plan(name: str, *, weighted: bool) -> FusedShellPlan:
-    """Keep the qualified SM90 mapping and vary only the typed capability."""
-    plan = fixture_plan(name, shared=True)
+def companion_plan(
+    name: str, *, weighted: bool, architecture: str = "sm_90"
+) -> FusedShellPlan:
+    """Validate the fixed mapping for the actual requested generation target."""
+    plan = fixture_plan(name, shared=True, architecture=architecture)
     return replace(
         plan,
         kernel=replace(
@@ -161,7 +163,9 @@ def _runner(metadata: dict, mode: str = "original") -> str:
     )
 
 
-def prepare_fixture(directory: Path, frozen_inputs: Path) -> dict:
+def prepare_fixture(
+    directory: Path, frozen_inputs: Path, *, architecture: str = "sm_90"
+) -> dict:
     """Emit two specializations and reuse all54 authenticated reference arrays."""
     directory.mkdir(parents=True, exist_ok=False)
     frozen = (frozen_inputs / "shared_rys_xy_fixture.cu").read_bytes()
@@ -178,7 +182,9 @@ def prepare_fixture(directory: Path, frozen_inputs: Path) -> dict:
     schedules, observers = {}, {}
     for name in CLASSES:
         for mode in ("xy", "weighted"):
-            plan = companion_plan(name, weighted=mode == "weighted")
+            plan = companion_plan(
+                name, weighted=mode == "weighted", architecture=architecture
+            )
             body = emit_shell_class_fused_cuda(plan.spec, plan)
             body = body.replace("generated_" + name, mode + "_" + name)
             body = body.replace(
@@ -213,6 +219,10 @@ def prepare_fixture(directory: Path, frozen_inputs: Path) -> dict:
                 )
     source.append(
         "\nint main() {cudaStream_t stream;CUDA(cudaStreamCreate(&stream));\n"
+        "  int device=0;CUDA(cudaGetDevice(&device));cudaDeviceProp properties{};\n"
+        "  CUDA(cudaGetDeviceProperties(&properties,device));\n"
+        '  std::printf("DEVICE name=%s compute_capability=%d.%d\\n",\n'
+        "      properties.name,properties.major,properties.minor);\n"
     )
     for name in CLASSES:
         for mode in ("xy", "weighted"):
@@ -232,6 +242,7 @@ def prepare_fixture(directory: Path, frozen_inputs: Path) -> dict:
     (directory / "shared_rys_xy_fixture.cu").write_text(text)
     result = {
         "scope": "existing independent arrays plus focused exact weighted-Z guard controls; no new references",
+        "target": plan.kernel.target.to_payload(),
         "source_sha256": hashlib.sha256(text.encode()).hexdigest(),
         "frozen_independent_source_sha256": receipt["source_sha256"],
         "array_declarations": 54,
@@ -257,8 +268,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--frozen-inputs", type=Path, required=True)
+    parser.add_argument("--architecture", default="sm_90")
     args = parser.parse_args()
-    print(json.dumps(prepare_fixture(args.output, args.frozen_inputs)))
+    print(
+        json.dumps(
+            prepare_fixture(
+                args.output, args.frozen_inputs, architecture=args.architecture
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

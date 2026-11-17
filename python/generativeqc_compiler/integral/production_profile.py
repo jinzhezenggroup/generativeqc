@@ -20,7 +20,10 @@ from generativeqc_compiler.common.cuda_target import (
     normalize_cuda_architecture,
 )
 
-from .capabilities import normalize_capabilities
+from .capabilities import (
+    normalize_capabilities,
+    normalize_capability_architectures,
+)
 from .cuda_schedule import (
     AlgebraForm,
     AlgebraFusion,
@@ -421,6 +424,29 @@ def _optional_nonnegative_number(
     return value
 
 
+def _capabilities_from_row(
+    name: str, row: Mapping[str, object]
+) -> tuple[frozenset[str], tuple[tuple[str, tuple[str, ...]], ...]]:
+    """Validate manifest-scoped packaging without limiting algorithm legality.
+
+    A portable profile can share schedules without shipping every companion on
+    every target. Unscoped capabilities retain their explicit opt-in semantics;
+    scoped ones are available only on the targets declared by that manifest.
+    Preserve scopes in the selection so retargeting cannot transfer availability.
+    """
+    capabilities = normalize_capabilities(name, row.get("capabilities"))
+    scopes = normalize_capability_architectures(
+        name, row.get("capability_architectures", {})
+    )
+    for capability, _targets in scopes:
+        if capability not in capabilities:
+            raise ValueError(
+                f"{name} capability_architectures requires declared capability "
+                f"{capability!r}"
+            )
+    return capabilities, scopes
+
+
 def _selections_from_rows(
     rows: object,
     *,
@@ -452,10 +478,7 @@ def _selections_from_rows(
         except ValueError as error:
             raise ValueError(f"{name} has an unsupported consumer") from error
         recurrence = _recurrence_from_row(spec, row, consumers)
-        capabilities = normalize_capabilities(
-            name,
-            row.get("capabilities"),
-        )
+        capabilities, capability_architectures = _capabilities_from_row(name, row)
         resident_force_recurrence = _resident_force_recurrence_from_row(
             name, row, consumers
         )
@@ -556,6 +579,7 @@ def _selections_from_rows(
                 fock_recurrence=fock_recurrence,
                 fock_route=cast("str", row.get("fock_route", "paged")),
                 capabilities=capabilities,
+                capability_architectures=capability_architectures,
                 runtime_seconds=_optional_nonnegative_number(
                     name, row, "runtime_seconds"
                 ),

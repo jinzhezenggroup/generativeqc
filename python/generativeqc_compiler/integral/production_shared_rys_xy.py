@@ -36,15 +36,13 @@ def shared_rys_xy_companions(
     *,
     weighted_z: bool = False,
 ) -> tuple[SharedRysXyCompanion, ...]:
-    """Keep the fixed mapping separate from runtime and weighted-Z admission.
+    """Resolve declared companions by mathematical and target-plan legality.
 
-    Unweighted x/y follows the manifest capability and validated target plan,
-    not an architecture whitelist. Native HF owns throughput-class defaults.
-    The independent weighted-Z qualification remains target-specific.
+    Both x/y and weighted-Z use the same fixed scalar-FP64 mapping across
+    targets. A compiled companion is not an endpoint qualification or a default
+    preference; native HF still owns resource, workload and explicit opt-in
+    admission. Missing manifest capabilities retain the incumbent.
     """
-    architecture = profile.target.architecture
-    if weighted_z and architecture != "sm_90":
-        return ()
     result = []
     capability = (
         CAPABILITY_SHARED_RYS_WEIGHTED_Z_FOCK

@@ -11,7 +11,11 @@ from generativeqc_compiler.integral.lowering.selection import (
     supports_component_lane_rys,
 )
 
-from .capabilities import CAPABILITY_STREAMING_FOCK, normalize_capabilities
+from .capabilities import (
+    CAPABILITY_STREAMING_FOCK,
+    normalize_capabilities,
+    normalize_capability_architectures,
+)
 from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import IntegralIR, KernelConsumer, build_integral_ir
@@ -110,6 +114,9 @@ class KernelSelection:
     # and persisted in the manifest.  An omitted list intentionally disables
     # optional wrappers for legacy/custom manifests.
     capabilities: frozenset[str] = frozenset()
+    # Target-scoped packaging can omit a declared algorithm without changing
+    # its legality or transferring another target's qualification.
+    capability_architectures: tuple[tuple[str, tuple[str, ...]], ...] = ()
     # Keep the mathematical request attached to a production selection.  The
     # manifest compatibility path leaves this unset and receives the
     # historical default IR, while compiler stages may supply a fully
@@ -122,10 +129,19 @@ class KernelSelection:
     source_bytes: int | None = None
     object_bytes: int | None = None
 
+    @property
+    def enabled_capabilities(self) -> frozenset[str]:
+        """Return declared code shapes after target-scoped packaging exclusions."""
+        return self.capabilities - {
+            capability
+            for capability, architectures in self.capability_architectures
+            if self.architecture not in architectures
+        }
+
     def has_capability(self, capability: str) -> bool:
         """Return whether this profile explicitly enables one optional path."""
 
-        return capability in self.capabilities
+        return capability in self.enabled_capabilities
 
     def __post_init__(self) -> None:
         if self.schedule.fock_shared_rys_xy or (
@@ -143,12 +159,23 @@ class KernelSelection:
             "capabilities",
             normalize_capabilities(self.spec.name, list(self.capabilities)),
         )
+        object.__setattr__(
+            self,
+            "capability_architectures",
+            normalize_capability_architectures(
+                self.spec.name,
+                {
+                    capability: list(architectures)
+                    for capability, architectures in self.capability_architectures
+                },
+            ),
+        )
         if self.fock_route not in ("paged", "streaming"):
             raise ValueError("production Fock route must be paged or streaming")
         if self.fock_route == "streaming":
             if KernelConsumer.FOCK not in self.consumers:
                 raise ValueError("streaming Fock route requires a Fock consumer")
-            if CAPABILITY_STREAMING_FOCK not in self.capabilities:
+            if not self.has_capability(CAPABILITY_STREAMING_FOCK):
                 raise ValueError(
                     "streaming Fock route requires generated streaming capability"
                 )
