@@ -96,3 +96,15 @@ input inventory as
 `d998ad3b1c469e251fe64b36a497f0eca57e92fddf94e315c8b2ac69b0da801a`,
 not either parent's identity. Preserve sealed default decisions and original
 compile/endpoint evidence, with no numerical promotion or re-labelled receipt.
+
+The rebuilt combined CPU core matches that inventory; its SHA-256 is
+`33294b88948027cc363f2a54b183956040f904569121d4b56e6f4e53d18a62ab`.
+All 56 selected public native Hessian/ECP contracts and four rebuilt native
+CTest groups pass. The compiler structure check covers 615 modules without
+dependency errors; the AOT audit retains defaults and historical failures.
+
+The upstream collector test also exposes a helper-import collision with an
+installed top-level `tests` package. Import the existing sibling helper directly,
+as other repository tests do, instead of depending on an unowned namespace.
+Its 20 collector controls pass after that change, including process-group
+cleanup. This does not replace or weaken the archived benchmark controls.
