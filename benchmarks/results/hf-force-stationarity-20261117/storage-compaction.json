@@ -1,0 +1,47 @@
+{
+  "schema": "generativeqc.json-whitespace-compaction/v1",
+  "source_revision": "50482bc351756772660c45b3e8430fb388e9cf99",
+  "scope": "Only JSON whitespace outside string tokens is removed. Exact numeric/string tokens, parsed values, paths, scientific failures and gates are preserved; original bytes remain recoverable with git show source_revision:path. No budget increase or external publication.",
+  "files": [
+    {
+      "path": "benchmarks/results/pbe0-k-work-20261008/classes-fill-cold-96.json",
+      "original_bytes": 41630,
+      "original_sha256": "4f62490a3a75f9a3c942f5cf53404b6ddbff231c10a73f02c67806d5efd1e41d",
+      "bytes": 18708,
+      "sha256": "b1f5c2fb3fca7e04fec03c4260c6f4c944d1418f4004c95ef77abf328d3d98d8",
+      "lexeme_sha256": "df3b3ce5a24b0fb6a4c7af33aa7c47e1a137374a351dd8515a5adea6d5232744"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water96.json",
+      "original_bytes": 37097,
+      "original_sha256": "1e8dd7079e814c7035ddcd3041d3f3cc768a06ca714b34fd4edd6ebc1e45d5a9",
+      "bytes": 18240,
+      "sha256": "dcd56e1468fa217708e831a48944ef51c31cdaa602237a19429205323f051696",
+      "lexeme_sha256": "510d30cde92209a11f0febcc709354727733c3f87527609b10ce5a9a9b86593a"
+    },
+    {
+      "path": "benchmarks/results/pbe0-scf-local-ao-20261004/summary.json",
+      "original_bytes": 36894,
+      "original_sha256": "c38c812a85d5d5d9da9d0962d07d8d0a4d191db5476fab698e8bac01b3f9a148",
+      "bytes": 19326,
+      "sha256": "4756be88cf97fb83320dc9069da12487475de48d981873d9aca034f53274281d",
+      "lexeme_sha256": "b0ed89120bd10521f612952661e5b3f423258216546a8843993ae40852242238"
+    },
+    {
+      "path": "benchmarks/results/shared-automatic-aot-20261027/manifest.json",
+      "original_bytes": 51077,
+      "original_sha256": "2f767f7db410ede20504b6a2d49240caceac5f34e7ff6519d688a4047ffc0e9c",
+      "bytes": 33501,
+      "sha256": "d8a4a42d762d5448d3b1234c27b2d0aade22ebe3ce0b73b8a1afb8400c18e7df",
+      "lexeme_sha256": "68bb7a1a8cdbb1a0cabc3baad9cc0d4fd61258dc94354c724a931a17a603c44d"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a5473bf-water-tetramer-def2-svp-spherical-b1.json",
+      "original_bytes": 39119,
+      "original_sha256": "2ff1781bf3a41b3e18eb4661c8bb9e89dcb73559e7c1d87b4cdea9b061e871f7",
+      "bytes": 21902,
+      "sha256": "a8fd081000d62033036ba037f63a69e54d149fdd65a260f9d7ac963df93db7da",
+      "lexeme_sha256": "bd7107e62aab19cbf13cd6d3f0b5b63ce34eb5c48e2e3d9e01ac6795554e997a"
+    }
+  ]
+}
