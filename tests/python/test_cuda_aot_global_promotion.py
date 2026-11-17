@@ -318,13 +318,14 @@ def test_default_off_compiled_extension_still_requires_qualification(
     tmp_path: Path,
 ) -> None:
     inventory = fixture_root(tmp_path)
-    retained = inventory["retained_baseline"]
-    snapshot = tmp_path / retained["effective_policies"]
-    baseline = json.loads(lzma.decompress(snapshot.read_bytes()))
-    assert baseline["sm_80"]["compiled_masks"]["shared_rys_weighted_z_fock"]
-    baseline["sm_80"]["compiled_masks"]["shared_rys_weighted_z_fock"] = 0
-    snapshot.write_bytes(lzma.compress(json.dumps(baseline).encode()))
-    retained["effective_policies_sha256"] = file_hash(snapshot)
+    manifest = tmp_path / MANIFEST
+    payload = json.loads(manifest.read_text())
+    for row in payload["architectures"]["portable_cuda"]["kernels"]:
+        if "shared_rys_weighted_z_fock" in row.get("capabilities", []):
+            row["capability_architectures"]["shared_rys_weighted_z_fock"].append(
+                "sm_80"
+            )
+    manifest.write_text(json.dumps(payload))
     with pytest.raises(ValueError, match="fresh global-default promotion"):
         check_defaults(tmp_path, inventory, source_identity=SOURCE)
 

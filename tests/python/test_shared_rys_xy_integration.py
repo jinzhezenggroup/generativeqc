@@ -43,6 +43,29 @@ def profile(architecture: str = "sm_90") -> ResolvedProductionProfile:
     return resolve_production_profile(MANIFEST, architecture)
 
 
+def _declare_weighted_capability(
+    selected: ResolvedProductionProfile,
+) -> ResolvedProductionProfile:
+    """Opt a synthetic dispatch fixture in without promoting stock packaging."""
+    return replace(
+        selected,
+        selections=tuple(
+            replace(
+                item,
+                capabilities=item.capabilities | {"shared_rys_weighted_z_fock"},
+                capability_architectures=tuple(
+                    (capability, architectures)
+                    for capability, architectures in item.capability_architectures
+                    if capability != "shared_rys_weighted_z_fock"
+                ),
+            )
+            if item.spec.name in ("dppp", "pppp")
+            else item
+            for item in selected.selections
+        ),
+    )
+
+
 @pytest.mark.parametrize("architecture", ("sm_80", "sm_90"))
 def test_companion_architecture_capability_and_qualified_mapping(
     architecture: str,
@@ -54,7 +77,9 @@ def test_companion_architecture_capability_and_qualified_mapping(
         "pppp": 96,
     }
     assert shared_rys_xy_companions(profile("sm_120")) == ()
-    assert len(shared_rys_xy_companions(selected, weighted_z=True)) == 2
+    assert len(shared_rys_xy_companions(selected, weighted_z=True)) == (
+        2 if architecture == "sm_90" else 0
+    )
     assert not shared_rys_xy_companions(
         replace(
             selected,
@@ -264,7 +289,9 @@ def _compile_registry(
     architecture: str = "sm_90",
 ) -> Path:
     selected = (
-        resolve_production_profile(MANIFEST, architecture, "portable")
+        _declare_weighted_capability(
+            resolve_production_profile(MANIFEST, architecture, "portable")
+        )
         if weighted
         else profile(architecture)
     )

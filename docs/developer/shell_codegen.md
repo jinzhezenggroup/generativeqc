@@ -333,10 +333,17 @@ The `shared_rys_xy_fock` and `shared_rys_weighted_z_fock` capabilities declare
 separate, restricted-FP64 DPPP/PPPP paged-Fock companions. Both use a shared
 implementation on any target whose validated plan supports their fixed
 96/192-thread mapping; weighted-Z is not an SM90-only instruction or algorithm.
-The stock portable profile declares both capabilities. Other profiles must
-declare them explicitly; selecting a tuned profile does not implicitly import
-portable companions. The target must also be present in the generated registry
-and have an executable CUDA image.
+The stock portable profile declares both capabilities and scopes weighted-Z
+packaging to `sm_90` through the per-row `capability_architectures` mapping.
+This preserves the qualified compiled inventory without an architecture check
+in the reusable algorithm. A manifest can explicitly scope a capability to other
+targets; omitting its scope makes the declared capability target-independent.
+Scopes are supported only for the three shared-Rys companion capabilities,
+whose compiled masks are independently inventoried by the promotion gate.
+They must refer to declared capabilities and contain non-empty architecture
+lists. Other profiles must declare capabilities explicitly; selecting a tuned
+profile does not implicitly import portable companions. The target must also be
+present in the generated registry and have an executable CUDA image.
 
 Compiled availability is separate from runtime selection and device evidence.
 Weighted-Z remains explicit opt-in with both

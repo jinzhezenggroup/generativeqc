@@ -1468,10 +1468,8 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
-      - name: Revalidate retained native Libxc endpoint evidence against live inputs
-        if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
-        run: |
-          PYTHONPATH=python:. .venv/bin/python tools/check_libxc_native_catalog.py
+      # Retained Libxc campaigns are historical evidence, not a per-PR
+      # requalification gate. Explicit acceptance remains an offline operation.
       - name: Audit CUDA AOT capabilities and global-default decisions
         if: matrix.shard == 'core-a' && (steps.prose_scope.outcome != 'success' || steps.prose_scope.outputs.scope != 'prose')
         run: |

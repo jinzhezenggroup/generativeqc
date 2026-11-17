@@ -15,7 +15,13 @@ from generativeqc_compiler.integral.production_profile import resolve_production
 from generativeqc_compiler.integral.production_shared_rys_xy import (
     shared_rys_xy_companions,
 )
-from test_shared_rys_xy_integration import MANIFEST, ROOT, _compile_registry, profile
+from test_shared_rys_xy_integration import (
+    MANIFEST,
+    ROOT,
+    _compile_registry,
+    _declare_weighted_capability,
+    profile,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,7 +48,9 @@ if TYPE_CHECKING:
 def test_weighted_companion_has_independent_capability_and_mapping(
     architecture: str,
 ) -> None:
-    selected = resolve_production_profile(MANIFEST, architecture, "portable")
+    selected = _declare_weighted_capability(
+        resolve_production_profile(MANIFEST, architecture, "portable")
+    )
     weighted = shared_rys_xy_companions(selected, weighted_z=True)
     assert {c.incumbent.spec.name: c.plan.block_threads for c in weighted} == {
         "dppp": 192,

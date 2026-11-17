@@ -1132,7 +1132,7 @@ def emit_production_shard(
                 selection.spec,
                 plan,
                 fock_schedule=selection.fock_schedule,
-                capabilities=selection.capabilities,
+                capabilities=selection.enabled_capabilities,
             )
         )
         if (
@@ -1265,7 +1265,7 @@ def emit_profile_shard(
             selection.spec,
             plan,
             fock_schedule=selection.fock_schedule,
-            capabilities=selection.capabilities,
+            capabilities=selection.enabled_capabilities,
         )
         force_symbol = (
             f"generativeqc_launch_{identifier}_generated_{selection.spec.name}"

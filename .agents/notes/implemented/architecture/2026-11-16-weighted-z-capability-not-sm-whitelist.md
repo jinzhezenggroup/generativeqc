@@ -80,6 +80,8 @@ They are not public release artifacts or global-default qualification receipts.
 
 ## References
 
+- The subsequent [explicit packaging-scope decision](2026-11-17-weighted-z-explicit-packaging-scope.md)
+  resolves the stock-mask extension without claiming new endpoint qualification.
 - Supersedes the architecture-bound admission of the
   [original compiler decision](../performance/2026-11-07-exact-weighted-rys-z-companion.md)
   and [endpoint opt-in decision](../performance/2026-11-07-weighted-z-endpoint-opt-in.md),

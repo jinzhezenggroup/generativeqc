@@ -171,8 +171,8 @@
       "path": "docs/maintainer/f_shell_validation.md"
     }
   ],
-  "manifest_sha256": "a5df01c89d396a8b9411654cd47d464cc8a4fee3fd04fc655a76bce86de9638b",
-  "native_source_identity": "f00fcdd2ae43a2517cd542d8ad5ab0dd3a980ae3f6402968a91eb205919911c5",
+  "manifest_sha256": "ab0c186b7b9ab7fb6bec61c99ea6ce3606535e9d47e0f24b8afb1c8b070c6d46",
+  "native_source_identity": "114c601bfe2cdfcb6e36755378ff65e139b63c372cfccd89b9da85acdb72918b",
   "qualification_boundary": "Static legality is not compile, numerical or endpoint qualification; historical evidence must retain its own source/device identity.",
   "route_features": [
     {
@@ -532,8 +532,8 @@
           "stock_mask": 0
         },
         "sm_80": {
-          "decision": "explicit-experimental",
-          "explicit_compile_only_mask": 4128,
+          "decision": "fallback-only",
+          "explicit_compile_only_mask": 0,
           "full_endpoint": {
             "cold": "not-run-for-this-audit",
             "moved": "not-run-for-this-audit",
@@ -541,14 +541,11 @@
             "warm": "not-run-for-this-audit"
           },
           "independent_device_numerics": "not-run-for-this-audit",
-          "ir_admission": "profile-capability-and-target-plan-only",
+          "ir_admission": "no-admitted-companion",
           "nvcc_compile_and_resources": "not-run-for-this-audit",
           "preserve_existing_runtime_guards": true,
-          "shell_classes": [
-            "pppp",
-            "dppp"
-          ],
-          "stock_mask": 4128
+          "shell_classes": [],
+          "stock_mask": 0
         },
         "sm_90": {
           "decision": "explicit-experimental",
@@ -727,7 +724,7 @@
           "mixed_fock": 0,
           "rys_task_fock": 36831,
           "rys_value_fock": 1048572,
-          "shared_rys_weighted_z_fock": 4128,
+          "shared_rys_weighted_z_fock": 0,
           "shared_rys_xy_fock": 4128,
           "shared_rys_xy_streaming_fock": 225312,
           "streaming_fock": 2097151
@@ -763,7 +760,7 @@
           "mixed_fock": 0,
           "rys_task_fock": 0,
           "rys_value_fock": 0,
-          "shared_rys_weighted_z_fock": 4128,
+          "shared_rys_weighted_z_fock": 0,
           "shared_rys_xy_fock": 4128,
           "shared_rys_xy_streaming_fock": 225312,
           "streaming_fock": 2097151

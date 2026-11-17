@@ -81,6 +81,44 @@ def normalize_capabilities(name: str, raw: object | None) -> frozenset[str]:
     return frozenset(values)
 
 
+def normalize_capability_architectures(
+    name: str, raw: object
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Validate immutable companion packaging scopes, not algorithm legality.
+
+    Only independently inventoried companions support scoping. Extending this
+    boundary requires a corresponding effective-policy inventory so a manifest
+    cannot hide a packaging change from the default-promotion gate.
+    """
+    from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
+
+    if not isinstance(raw, dict):
+        raise TypeError(f"{name} capability_architectures must be an object")
+    result = []
+    for capability, targets in raw.items():
+        if capability not in (
+            CAPABILITY_SHARED_RYS_XY_FOCK,
+            CAPABILITY_SHARED_RYS_WEIGHTED_Z_FOCK,
+            CAPABILITY_SHARED_RYS_XY_STREAMING_FOCK,
+        ):
+            raise ValueError(
+                f"{name} capability_architectures only supports companion capabilities"
+            )
+        if (
+            not isinstance(targets, list)
+            or not targets
+            or any(not isinstance(target, str) for target in targets)
+        ):
+            raise TypeError(
+                f"{name} {capability} architectures must be a non-empty list of strings"
+            )
+        architectures = tuple(
+            sorted({normalize_cuda_architecture(target) for target in targets})
+        )
+        result.append((capability, architectures))
+    return tuple(sorted(result))
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilityCheck:
     """One structural backend or recurrence capability result."""
