@@ -3252,8 +3252,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
   generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
   if (geometry_changed) {
     cuda_error = launch_generated_one_electron_values(
-        one_electron_view(device_batch), ao_pair_first, ao_pair_second, pair_count,
-        plan.one_electron_value_mapping, overlap, hcore, resources.stream_);
+        one_electron_view(device_batch,
+                          *std::max_element(host.shell_angular.begin(), host.shell_angular.end())),
+        ao_pair_first, ao_pair_second, pair_count, plan.one_electron_value_mapping, overlap, hcore,
+        resources.stream_);
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
       return outputs;
@@ -4870,7 +4872,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                         1.0,
                                         1.0};
     cuda_error = launch_generated_one_electron_gradient(
-        one_electron_view(device_batch), ao_pair_first, ao_pair_second, pair_count, weights, active,
+        one_electron_view(device_batch,
+                          *std::max_element(host.shell_angular.begin(), host.shell_angular.end())),
+        ao_pair_first, ao_pair_second, pair_count, weights, active,
         cuda_policy::one_electron_derivative_mapping_requested(), -1.0, forces, resources.stream_);
     if (cuda_error != cudaSuccess) {
       fill_global_failure(outputs, cuda_status(cuda_error));
