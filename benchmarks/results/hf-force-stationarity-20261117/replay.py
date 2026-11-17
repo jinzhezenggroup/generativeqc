@@ -10,9 +10,8 @@ from pathlib import Path
 import numpy as np
 
 
-def replay(path: Path) -> dict[str, object]:
+def replay_bundle(bundle: dict[str, object]) -> dict[str, object]:
     """Validate complete observations, independent DF derivatives and provenance."""
-    bundle = json.loads(lzma.decompress(path.read_bytes()))
     assert bundle["schema"] == "generativeqc.hf-force-stationarity-qualification/v1"
     assert bundle["gates"] == {"energy": 1e-9, "forces": 1e-7, "translation": 1e-7}
     recipe = bundle["recipe"]
@@ -172,6 +171,23 @@ def replay(path: Path) -> dict[str, object]:
         "baseline_force_error": baseline_error,
         "original_issue_samples": issue_observations,
         "original_issue_force_error": issue_force_error,
+    }
+
+
+def replay(path: Path) -> dict[str, object]:
+    """Keep historical evidence distinct from separately acquired integration."""
+    bundle = json.loads(lzma.decompress(path.read_bytes()))
+    historical = {"source": bundle["source"], **replay_bundle(bundle)}
+    if "integrated_qualification" not in bundle:
+        return historical
+    integrated = bundle["integrated_qualification"]
+    assert (
+        integrated["source"]["native_source_identity"]
+        != bundle["source"]["native_source_identity"]
+    )
+    return {
+        "pre_reconciliation": historical,
+        "integrated": {"source": integrated["source"], **replay_bundle(integrated)},
     }
 
 

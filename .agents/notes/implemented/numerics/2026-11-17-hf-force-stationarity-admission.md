@@ -74,6 +74,27 @@ regression still fails at `6.7581e-7`. Both cards are SM120; no cross-SM or
 performance qualification follows from these results. Replay recomputes the
 errors and DF finite differences rather than trusting stored pass flags.
 
+## Integrated evidence and performance acceptance
+
+Master reconciliation `e9f3031ae7f324111ad5c84cf1549ac4a75f4bb6` changes the
+native source identity to
+`1615b290a1e7d706a1e360036b410d490d73b1835d5ac77f1de1ef4d937d8d40`.
+The retained bundle therefore adds independently acquired observations rather
+than assigning the preceding measurements a new label. Fresh finite jobs
+17672 (n1) and 5325 (n2) pass another 576 endpoints / 480 force endpoints;
+maximum errors are `1.1220890883123502e-10` energy,
+`4.8487097220302824e-9` force and `2.3581137043038325e-13` translation.
+The complete 246-test host error/retry suite passes in job 17683.
+
+The user explicitly requires **no performance regression**. Scientific success
+does not discharge that acceptance condition. Strict force stopping can add
+iterations, so PR #3108 remains Draft pending complete-endpoint paired timing
+against source-matched master `8f4166f0c6a692045eaf568c814b868aa1057482`.
+Retain originally correct old endpoints in that comparison; exclude incorrect
+old force results from valid speed rankings without hiding their failures.
+Do not weaken stationarity, oracle gates or public tolerances to disguise work
+amplification. More iterations are a diagnostic, not a substitute for timing.
+
 ## Matching the DF oracle
 
 Do not compare different fitted operators under the direct-HF energy gate.

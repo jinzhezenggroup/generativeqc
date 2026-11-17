@@ -43,6 +43,43 @@ The aggregate evidence cap is unchanged. `storage-compaction.json` records
 five historical records, preserving every numeric/string token and parsed value.
 Original byte identities and their existing-Git recovery revision are retained;
 no scientific observation, failed case or gate was deleted or changed.
+Master reconciliation preserves its independent compressed-manifest migration
+for one of those records. Two additional water records lose only whitespace;
+another four records make room for the independent integrated and performance
+acquisitions. The ten currently minified paths save 153,031 bytes. The storage
+receipt retains the original five-entry history, documents the superseding
+transport, and preserves all original byte identities and numeric lexemes.
+
+## Integrated scientific qualification
+
+Master reconciliation `e9f3031ae7f324111ad5c84cf1549ac4a75f4bb6`, based on
+`8f4166f0c6a692045eaf568c814b868aa1057482`, has native source identity
+`1615b290a1e7d706a1e360036b410d490d73b1835d5ac77f1de1ef4d937d8d40`.
+The bundle retains this as a separate `integrated_qualification`; the earlier
+source-bound measurements above are unchanged, not relabeled.
+
+Fresh Release/no-fast build and acquisition jobs 17672 (n1) and 5325 (n2)
+successfully repeat the complete 96-case / 576-endpoint campaign, including
+480 force endpoints, with the same frozen test recipe. Both cards execute
+auto ELF SHA256 `c5b825c94b4a57ef157e05a0e019ba741e8e68596b76488467288d9d99df598b`
+or portable ELF SHA256
+`1a13249bb60e7f2cbd5934be5aef49b28f99c565780a49a24063b3ed6f0a2eed`.
+Maximum absolute energy, force-component and translation errors are
+`1.1220890883123502e-10`, `4.8487097220302824e-9`, and
+`2.3581137043038325e-13`, respectively. All 32 original initial-TZVP cold/warm
+observations pass, maximum force error `1.3859449820435854e-9`.
+Both compiled profile tests and all three compiled numerical tests pass;
+the complete host convergence/error/retry suite passes all 246 tests in
+finite n1 job 17683. Replay validates both complete bundles independently.
+
+**Performance nonregression is an additional blocking acceptance requirement.**
+These scientific observations do not contain endpoint wall-clock measurements
+and cannot establish it. In particular, the original cold solve increases
+from 9 to 12 iterations. The repair must remain Draft until source-matched,
+balanced fresh-process endpoint comparisons satisfy that requirement. Originally
+correct master endpoints cannot be excluded just because the repair is slower;
+incorrect master force results cannot enter a valid speed ranking. Neither
+scientific gates nor public tolerances may be relaxed to obtain a speed claim.
 
 ## Coverage and unchanged gates
 

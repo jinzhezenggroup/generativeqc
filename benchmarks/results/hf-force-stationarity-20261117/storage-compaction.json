@@ -42,6 +42,61 @@
       "bytes": 21902,
       "sha256": "a8fd081000d62033036ba037f63a69e54d149fdd65a260f9d7ac963df93db7da",
       "lexeme_sha256": "bd7107e62aab19cbf13cd6d3f0b5b63ce34eb5c48e2e3d9e01ac6795554e997a"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water12.json",
+      "original_bytes": 41597,
+      "original_sha256": "1a31fcd23e5e4590bb2592c5110015c0d553315e7989d6849eb5884268ac2097",
+      "bytes": 27710,
+      "sha256": "4dd247ae27373f16c4f5f9477c1c97fa00d8764265372a9843c898ce2a281cde",
+      "lexeme_sha256": "fbb9a80984abdfdd1b83d797afa1356f02826d0beb3f232221239d84d3da97f6"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water6.json",
+      "original_bytes": 38157,
+      "original_sha256": "040059d2812c11c5d96fc10726fc1d057d4427cb59b3fc8f240f38bb66a1f39a",
+      "bytes": 25962,
+      "sha256": "5d70743f13fdee8749aeb21b077fabb49fdc9631bec260412ade6828baeb94c4",
+      "lexeme_sha256": "78c0a1830dbf187cc91801f32ff9905857ce41f040bf9e6b98abbcca586197e2"
+    },
+    {
+      "path": "benchmarks/results/pbe0-k-work-20261008/classes-work-cold-96.json",
+      "original_bytes": 41618,
+      "original_sha256": "b3225677bbaf9f4fee6649772385ca261199d8d0ca65a57f899d42b315e0d023",
+      "bytes": 18696,
+      "sha256": "143fbfbb1da5cf1eb436ecb840a66765d88c5afb7c0b44ac79e2f2be3bb8d4af",
+      "lexeme_sha256": "a6a788c9da8340df0f027c8864d31358c4db28cbe2c99481088995a43ec41a60"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water3.json",
+      "original_bytes": 36465,
+      "original_sha256": "335b0446f4192e9ef5d77577674bd9f90fd4fd0863ee505e60f1c9cafa1e122a",
+      "bytes": 25116,
+      "sha256": "9f48193ccd14d665410f7655f4524a99157ef14a0acb57e1e7fcdd8f40eaf539",
+      "lexeme_sha256": "b79a0017f0f7a089de1ae62b173ff74b315be98bae570e29115226428d379289"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water48.json",
+      "original_bytes": 22330,
+      "original_sha256": "8fbe2de96b979a49135e12166fee892a5eb0dbe4e165fb1b30e6e365995e7115",
+      "bytes": 12113,
+      "sha256": "82a15fa8e4c4c6815e449235c344da41d1032c7afa91d1f7abe7b64ebcbd3440",
+      "lexeme_sha256": "5f902b426d645fab90fee6164af7da283e9a441734058beb55e66caa067e0b84"
+    },
+    {
+      "path": "benchmarks/results/pbe0-def2-svp-20261001/water24.json",
+      "original_bytes": 14922,
+      "original_sha256": "a29898cc49e27efc6704e41a9633f2b3c1e4900d0c04096c80cc767eaae52d89",
+      "bytes": 9025,
+      "sha256": "cf8a5871b24899c526fd9357a701a837bc4b8e92052a8bec77285f4e7ab283a7",
+      "lexeme_sha256": "a49692c87a94210d12869de4dc8a1f697b19d746d2130ce9f7d30f49291e56fe"
     }
-  ]
+  ],
+  "master_reconciliation": {
+    "revision": "e9f3031ae7f324111ad5c84cf1549ac4a75f4bb6",
+    "superseded_whitespace_entry": "benchmarks/results/shared-automatic-aot-20261027/manifest.json",
+    "reason": "Master independently transports this exact original payload through compressed-manifest.v1 and manifest.json.xz. Preserve that lossless migration rather than replacing its wrapper with a minified historical document.",
+    "current_whitespace_entries": 10,
+    "current_whitespace_saved_bytes": 153031
+  }
 }
