@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 93204480,
+  "benchmark_results_max_bytes": 95753574,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
@@ -727,6 +727,43 @@
       "owner": "gfn2-current-source-20261114",
       "reason": "Exact compact receipt of 11 rejected evidence mutations: source, model, geometry, numerics and solver controls fail closed.",
       "sha256": "bc2e2da902f12aee0673edb3620313885960e1e404485d65afde4f5847acab37"
+    },
+    "benchmarks/results/issue597-direct-jk-policy-20261114/baseline-oracle.log": {
+      "owner": "issue597-direct-jk-policy-20261114",
+      "reason": "Exact source-bound production-path baseline receipt for the scheduled Direct J/K qualification. Preserves independent numerical observations and execution identities rather than substituting a passing summary.",
+      "sha256": "70a2a3f286eb02a09cb42a383da4eae9329c92be5b34419ec1464b6ac56f4edb"
+    },
+    "benchmarks/results/issue597-direct-jk-policy-20261114/candidate-oracle-final.log": {
+      "owner": "issue597-direct-jk-policy-20261114",
+      "reason": "Exact scheduled candidate receipt covering actual profile selection, independent energy/force oracles and bounded capacity recovery, including source/library identities. Synthetic ordering inputs are not relabelled as measured profitable profiles.",
+      "sha256": "e3a43d9f7c288aadfae33a4e951d108fc7add0604160d1b9543d1ae7af810b3b"
+    },
+    "benchmarks/results/issue597-direct-jk-policy-20261114/capacity-memcheck.log": {
+      "owner": "issue597-direct-jk-policy-20261114",
+      "reason": "Small exact Compute Sanitizer zero-error receipt for real resident-allocation refusal, direct-CUDA recovery and cleanup under the finite Slurm qualification allocation.",
+      "sha256": "666c868396d7d1f5775ee8af221c241ab93cbfbf05682db6903d96abedfe16c3"
+    },
+    "benchmarks/results/issue597-direct-jk-policy-20261114/host-tests.log": {
+      "owner": "issue597-direct-jk-policy-20261114",
+      "reason": "Small exact 708-pass focused host-test receipt bound to the candidate source inventory; it is separate from real-device scientific and sanitizer qualification.",
+      "sha256": "3aa833b1cb6299c51f3adf6c49c938a615033dc0289dfae230681eaf6201ce94"
+    },
+    "benchmarks/results/issue597-direct-jk-policy-20261114/queue-memcheck.log": {
+      "owner": "issue597-direct-jk-policy-20261114",
+      "reason": "Small exact Compute Sanitizer zero-error receipt for bounded queue guards and optional-FP32 reset on the scheduled RTX 5090, not a host-only proxy.",
+      "sha256": "d32221d1eb07c3b6bf402baedb3fac6d9123d23e7f48f8f1e4bf9f6c10d63813"
+    },
+    "benchmarks/results/paper-hfdft-cold3-20261115/h100/timings.csv": {
+      "owner": "paper-hfdft-cold3-20261115",
+      "reason": "Exact human-readable original process timing table for the approved PR3093 figure. Complete original scientific records are separately retained without filtering. This paired publication needs both reviewable CSV tables and machine-verifiable raw records; this exception applies only to the incoming review-byte budget, never to the hard file cap, aggregate guard or scientific gates.",
+      "sha256": "ddfeb6f5159c8a531919debc1d9b9720cb2d46775c34e7dfb2eda2620abb905e",
+      "review_change": true
+    },
+    "benchmarks/results/paper-hfdft-cold3-20261115/rtx5090/timings.csv": {
+      "owner": "paper-hfdft-cold3-20261115",
+      "reason": "Exact human-readable original process timing table for the approved PR3093 figure. Complete original scientific records are separately retained without filtering. This paired publication needs both reviewable CSV tables and machine-verifiable raw records; this exception applies only to the incoming review-byte budget, never to the hard file cap, aggregate guard or scientific gates.",
+      "sha256": "4815e7d17bfe0472b97b15b6d61f8c232539b144f60746952f3d1ee7a942e0fe",
+      "review_change": true
     }
   },
   "legacy_large_review_path": "benchmarks/legacy-evidence-review.json",

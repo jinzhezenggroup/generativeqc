@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
@@ -65,6 +65,12 @@ class ResolvedProductionProfile:
     # Their code size therefore contributes to first-launch loading even when
     # the runtime uses only the primary generated kernels.
     optional_fock_variants: bool = True
+    # Compilation policy and measured default preference are independent of
+    # the display/profile-match flags. Missing explicit policy fails closed.
+    compile_derivative_shells: bool = False
+    prefer_rys_task_fock: bool = False
+    # Build intent is diagnostic, not part of the resolved scientific policy.
+    requested_profile: str = field(default="auto", compare=False)
 
     @property
     def portable(self) -> bool:
@@ -618,6 +624,12 @@ def resolve_production_profile(
     optional_fock_variants = profile_payload.get("optional_fock_variants", True)
     if not isinstance(optional_fock_variants, bool):
         raise TypeError("profile optional_fock_variants must be a boolean")
+    policies = {}
+    for name in ("compile_derivative_shells", "prefer_rys_task_fock"):
+        value = profile_payload.get(name, False)
+        if not isinstance(value, bool):
+            raise TypeError(f"profile {name} must be a boolean")
+        policies[name] = value
     return ResolvedProductionProfile(
         target=target,
         profile=profile_name,
@@ -626,6 +638,9 @@ def resolve_production_profile(
         selections=selections,
         cuda_toolkit=toolkit,
         optional_fock_variants=optional_fock_variants,
+        compile_derivative_shells=policies["compile_derivative_shells"],
+        prefer_rys_task_fock=policies["prefer_rys_task_fock"],
+        requested_profile=profile,
         preferred_rys_task_fock_shell_classes=_qualified_rys_task_classes(
             profile_payload, tuned=tuned
         ),

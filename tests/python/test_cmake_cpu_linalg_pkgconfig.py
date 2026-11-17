@@ -56,6 +56,8 @@ def _configure(
     else:
         (source / "provider.cpp").write_text(
             "#include <cblas.h>\n"
+            "#if GENERATIVEQC_OPENBLAS_HAS_LAPACKE\n"
+            '#include "tensor/openblas_lapacke.hpp"\n#endif\n'
             "#if GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
             'extern "C" int openblas_set_num_threads_local(int);\n#endif\n'
             'extern "C" int provider_value() {\n'
@@ -63,6 +65,15 @@ def _configure(
             "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX && !GENERATIVEQC_OPENBLAS_LOCAL_THREADS_UNPREFIXED\n"
             "scipy_openblas_set_num_threads_local(1);\n#else\n"
             "openblas_set_num_threads_local(1);\n#endif\n#endif\n"
+            "#if GENERATIVEQC_OPENBLAS_HAS_LAPACKE\n"
+            "double matrix[1]={1},eigenvalues[1];\n"
+            "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX\n"
+            "if (scipy_LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,matrix,1) ||\n"
+            "scipy_LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,matrix,1,eigenvalues)) return -1;\n"
+            "#else\n"
+            "if (LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,matrix,1) ||\n"
+            "LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,matrix,1,eigenvalues)) return -1;\n"
+            "#endif\n#endif\n"
             "#if GENERATIVEQC_OPENBLAS_SCIPY_PREFIX\n"
             "return scipy_openblas_get_num_threads();\n#else\n"
             "return openblas_get_num_threads();\n#endif\n}\n"
@@ -128,6 +139,7 @@ def _synthetic_provider(
     missing: str = "",
     extra_flags: str = "",
     unprefixed_local: bool = False,
+    unprefixed_lapack_header: bool = False,
 ) -> Path:
     root.mkdir(exist_ok=True)
     prefix = "scipy_" if scipy else ""
@@ -138,10 +150,11 @@ def _synthetic_provider(
         f"int {prefix}openblas_get_num_threads();\n"
         f"void {prefix}openblas_set_num_threads(int);\n}}\n"
     )
+    lapack_header_prefix = "" if unprefixed_lapack_header else prefix
     (root / "lapacke.h").write_text(
         '#define LAPACK_ROW_MAJOR 101\nextern "C" {\n'
-        f"int {prefix}LAPACKE_dpotrf(int,char,int,double*,int);\n"
-        f"int {prefix}LAPACKE_dsyevd(int,char,char,int,double*,int,double*);\n}}\n"
+        f"int {lapack_header_prefix}LAPACKE_dpotrf(int,char,int,double*,int);\n"
+        f"int {lapack_header_prefix}LAPACKE_dsyevd(int,char,char,int,double*,int,double*);\n}}\n"
     )
     dependent = spelling in {"absolute-named", "named-absolute", "reversed"}
     value = "dependency()" if dependent else "1"
@@ -225,6 +238,26 @@ def test_pkgconfig_missing_symbols_stay_unavailable(
     )
     build, _env = _configure(tmp_path, provider, native_cxx)
     assert _capabilities(build) == (missing != "local", True, missing != "lapack")
+
+
+@pytest.mark.parametrize("unprefixed_header", [False, True])
+@pytest.mark.parametrize("missing", ["", "lapack"])
+def test_scipy_lapacke_header_spelling_preserves_symbol_detection(
+    tmp_path: Path, native_cxx: object, unprefixed_header: bool, missing: str
+) -> None:
+    """Header spelling must not hide exports or invent a missing LAPACKE ABI."""
+    provider = _synthetic_provider(
+        tmp_path / "metadata",
+        native_cxx,
+        spelling="shared",
+        scipy=True,
+        missing=missing,
+        unprefixed_lapack_header=unprefixed_header,
+    )
+    build, env = _configure(tmp_path, provider, native_cxx)
+    assert _capabilities(build) == (True, True, missing != "lapack")
+    _run(["cmake", "--build", str(build), "--verbose"], env=env)
+    _run([str(build / "consumer")], env=env)
 
 
 def test_pkgconfig_preserves_wrong_archive_order(

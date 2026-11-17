@@ -25,6 +25,7 @@ from generativeqc_compiler.integral.production_bundle import (
     write_production_bundle,
     write_production_bundles,
 )
+from generativeqc_compiler.integral.production_policy import profile_overrides
 from generativeqc_compiler.integral.shell_class import (
     build_dppp_component_kernel,
     build_dppp_contraction_kernel,
@@ -133,6 +134,7 @@ def main() -> None:
         metavar="SM_XX=PROFILE",
         help="override profile resolution for one --target-architecture",
     )
+    parser.add_argument("--cuda-image", action="append", default=[])
     parser.add_argument(
         "--consumer",
         action="append",
@@ -163,16 +165,15 @@ def main() -> None:
             parser.error("--production-manifest requires --output-directory")
         if arguments.output is not None:
             parser.error("--output cannot be combined with --production-manifest")
+        if arguments.profile_map and not arguments.target_architecture:
+            parser.error("--profile-map requires --target-architecture")
         if arguments.target_architecture:
-            profile_by_architecture = {}
-            for item in arguments.profile_map:
-                architecture, separator, profile = item.partition("=")
-                if not separator or not architecture or not profile:
-                    parser.error("--profile-map must use SM_XX=PROFILE syntax")
-                profile_by_architecture[architecture] = profile
-            if arguments.profile != "auto":
-                for architecture in arguments.target_architecture:
-                    profile_by_architecture.setdefault(architecture, arguments.profile)
+            try:
+                profile_by_architecture = profile_overrides(
+                    arguments.target_architecture, arguments.profile_map
+                )
+            except ValueError as error:
+                parser.error(str(error))
             write_production_bundles(
                 arguments.production_manifest,
                 arguments.output_directory,
@@ -181,6 +182,8 @@ def main() -> None:
                 profile_by_architecture,
                 arguments.unit_mode,
                 arguments.all_class_units,
+                default_profile=arguments.profile,
+                cuda_images=arguments.cuda_image,
             )
         else:
             write_production_bundle(

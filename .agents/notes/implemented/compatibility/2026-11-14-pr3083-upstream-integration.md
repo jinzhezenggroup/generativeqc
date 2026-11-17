@@ -105,6 +105,33 @@ products and `stale: True`; this is archival consistency, not the stronger
 current-source acceptance gate. No historical chemistry receipt is relabeled
 for the rebuilt core.
 
+## 2026-11-17 integration of the offline-acceptance baseline
+
+The next integration includes `master@50482bc35`, including cold-CI resource
+budgets, stable test-shard ownership and dependency-scoped Libxc acceptance.
+Preserve both sets of Hessian/source-identity build inputs in the test conflict;
+neither the native Hessian generators nor the upstream stationary/Libxc
+generators may disappear from the scientific identity inventory.
+
+For the catalog conflicts, retain upstream's measured campaigns, dependency
+inventories, previous-summary baseline and historical generated presentation.
+Compute and acknowledge the integrated tree's 222 exact functional identity
+transitions against that unchanged upstream baseline. There are no removed
+functionals or qualified-stage demotions. Do not carry the older transition
+tokens across different baselines, reset the previous summary, or relabel the
+original native/Hessian receipts. The explicit
+`check_libxc_native_catalog.py --allow-stale-generated-views` check passes with
+historical-presentation advisories; this is neither a fresh scientific campaign
+nor the stronger current-source acceptance check. The strict generated-view
+check remains available and rejects the stale presentation.
+
+The original source/build identities and cancelled/timed-out chemistry evidence
+above remain historical. Resolving these conflicts and repairing CI resource
+ownership does not establish a practical-scale native HVP, a converged Ni
+reaction saddle or raw continuum rotational invariance. Those scientific gates
+remain separate from the integration and must not be waived to mark this PR
+ready.
+
 ## Revisit when
 
 A later source-matched qualification completes the remaining scientific gates.

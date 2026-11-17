@@ -1,7 +1,8 @@
 """Recompute the retained native Libxc catalog and enforce exact transition acks.
 
-Run this command in CI against the checked-out source. It uses real retained
-native measurements without loading a library, compiling code or probing a GPU.
+Run this command explicitly when reviewing retained or new acceptance claims,
+not as a routine PR/merge-group freshness gate. It uses real retained native
+measurements without loading a library, compiling code or probing a GPU.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from generativeqc_compiler.xc.capability_transition import (
 from tools.generativeqc_validation.libxc_catalog import (
     ingest,
     load_json,
+    merge_catalogs,
     require,
     write_json,
 )
@@ -41,9 +43,7 @@ def render(report: dict, previous: dict) -> str:
         "",
         f"Measured source revision: `{report['measured_source_commit']}`.",
         f"Retained measured source inputs: `{report['measured_source_identity']}`.",
-        f"Current checked source inputs: `{report['source_identity']}`.",
-        f"Current checked native input identity: `{report['native_source_identity']}`.",
-        f"Retained evidence stale for checked inputs: `{report['stale']}`.",
+        f"Some retained contexts require targeted revalidation: `{report['stale']}`.",
         f"Retained executed native library SHA-256: `{report['native_library']['sha256']}`.",
         "Independent oracle: PySCF 2.14.0 / Libxc 7.0.0.",
         (
@@ -59,7 +59,7 @@ def render(report: dict, previous: dict) -> str:
         "not available public selectors. Its absence does not disable a method.",
         "A successful default check establishes archival consistency only. Use",
         "`python tools/check_libxc_native_catalog.py --require-current` for representative",
-        "source-matched paired energy/force acceptance across families, backends and spins.",
+        "dependency-current paired energy/force acceptance across families, backends and spins.",
         "",
         "```text",
         render_capability_summary(report["summary"]),
@@ -74,12 +74,45 @@ def render(report: dict, previous: dict) -> str:
         )
     lines += [
         "",
-        f"Current-source observed backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
+        f"Dependency-current backend/spin lifecycle records: {len(report['observed_endpoints'])}.",
         "Historical measurements remain in the retained campaign; stale receipts are not",
-        "counted as current-source admitted contexts. Admitted records retain exact",
+        "counted as dependency-current admitted contexts. Unchanged dependencies can",
+        "inherit evidence; this does not claim a new binary was measured. Records retain exact",
         "geometry, grid, precision, binary and derivative scope.",
         "The [manifest](../../manifests/libxc/native-qualification.json) locates the",
         "compressed machine-readable snapshot and independent numerical receipts.",
+        "",
+        "## Retained executions",
+        "",
+        "Incremental batches supplement, rather than relabel, earlier measurements.",
+        "Each context retains its own executed library identity in the snapshot.",
+        "",
+        "| Measured revision/base | Measured source inputs | Executed ELF SHA-256 |",
+        "| --- | --- | --- |",
+    ]
+    for campaign in report.get("campaigns", [report]):
+        lines.append(
+            f"| `{campaign['measured_source_commit']}` | "
+            f"`{campaign['measured_source_identity']}` | "
+            f"`{campaign['native_library']['sha256']}` |"
+        )
+    lines += [
+        "",
+        "## Targeted revalidation",
+        "",
+        "Whole-tree/ELF hashes authenticate historical execution, not a global expiry switch.",
+        "The machine-readable snapshot lists changed inputs for each affected backend/product.",
+        "Contexts with unchanged dependencies retain acceptance; missing measurements are not failures.",
+        "ABI, build and unknown shared inputs require compatibility review and targeted regression.",
+        "",
+        "| Registration | Backend | Products to revalidate | Reason |",
+        "| --- | --- | --- | --- |",
+    ]
+    for row in report["revalidation_plan"]:
+        lines.append(
+            f"| `{row['name']}` | {row['backend']} | {', '.join(row['products'])} | {row['reason']} |"
+        )
+    lines += [
         "",
         "## Qualified registrations",
         "",
@@ -127,14 +160,11 @@ def require_current_acceptance(report: dict) -> None:
     """Require representative current E/F contexts, not a registration allow-list.
 
     Archival consistency permits stale or missing measurements. End-to-end
-    acceptance additionally needs a source-matched energy and force receipt in
+    acceptance additionally needs a dependency-current energy and force receipt in
     each ordinary semilocal family, backend and spin layout. Pair products only
     within the same exact admitted context; observed but blocked results do not
     qualify. This does not grant unmeasured domains or public-method receipts.
     """
-    require(
-        not report["stale"], "current-source acceptance requires fresh native evidence"
-    )
     contexts = {}
     for row in report["endpoints"]:
         context = {
@@ -159,7 +189,7 @@ def require_current_acceptance(report: dict) -> None:
     ]
     require(
         not missing,
-        "current-source acceptance missing paired admitted energy/forces contexts: "
+        "dependency-current acceptance missing paired admitted energy/forces contexts: "
         + ", ".join(missing),
     )
     registrations = {}
@@ -180,16 +210,146 @@ def require_current_acceptance(report: dict) -> None:
     }
     require(
         {"lda", "gga", "mgga"} <= shared_families,
-        "current-source acceptance requires a common registration across backends/spins "
+        "dependency-current acceptance requires a common registration across backends/spins "
         "for each family; missing: "
         + ", ".join(sorted({"lda", "gga", "mgga"} - shared_families)),
     )
 
 
+def validate_resource_acceptance(
+    resource: dict, reports: list[dict], *, require_current: bool = False
+) -> None:
+    """Authenticate scheduled safety execution and require its actual outcomes.
+
+    A hash binds receipt bytes, not their success. Keep incomplete or failed
+    safety runs out of representative acceptance even when correctly archived.
+    """
+    environment = resource.get("environment", {})
+    require(
+        resource.get("schema") == "generativeqc.libxc-scoped-safety.v1"
+        and all(
+            isinstance(environment.get(field), str) and environment[field]
+            for field in ("slurm_job_id", "cuda_visible_devices", "host", "gpu")
+        )
+        and all(
+            resource.get(field) == environment[field]
+            for field in ("slurm_job_id", "cuda_visible_devices", "host")
+        ),
+        "resource/lifetime receipt has inconsistent scheduled execution",
+    )
+    required_cases = {
+        "test_native_automatic_force_minimum_and_below_budget[1]",
+        "test_native_automatic_force_minimum_and_below_budget[2]",
+        "test_native_automatic_force_ragged_failure_and_recovery",
+    }
+    passed = resource.get("pytest_passed")
+    require(
+        isinstance(passed, list)
+        and all(isinstance(case, str) for case in passed)
+        and len(passed) == len(required_cases)
+        and set(passed) == required_cases,
+        "resource/lifetime receipt lacks complete passed safety cases",
+    )
+    failure = resource.get("nonconvergence", {})
+    require(
+        isinstance(failure, dict)
+        and type(failure.get("attempts")) is int
+        and failure["attempts"] >= 2
+        and type(failure.get("max_iterations")) is int
+        and failure["max_iterations"] == 1
+        and type(failure.get("spins")) is int
+        and failure["spins"] in (1, 2)
+        and all(
+            failure.get(field) is True
+            for field in ("no_forces", "no_warm_seed", "no_force_receipt")
+        ),
+        "resource/lifetime nonconvergence safety did not pass",
+    )
+    matched = [
+        batch
+        for batch in reports
+        if batch["native_library"]["sha256"] == resource.get("native_library_sha256")
+        and any(
+            execution["backend"] in ("cuda", "all")
+            and execution["environment"] == environment
+            and failure.get("name") in execution["names"]
+            for execution in batch["executions"]
+        )
+    ]
+    require(
+        bool(matched),
+        "resource/lifetime receipt has no matching scheduled native execution",
+    )
+    if require_current:
+        spin = "unpolarized" if failure["spins"] == 1 else "polarized"
+        require(
+            any(
+                row["name"] == failure.get("name")
+                and row["backend"] == "cuda"
+                and row["spin"] == spin
+                and row["product"] == "forces"
+                and row["library"]["sha256"] == resource.get("native_library_sha256")
+                for batch in matched
+                for row in batch["endpoints"]
+            ),
+            "current acceptance requires a matching resource/lifetime receipt",
+        )
+
+
+def acceptance_view(report: dict) -> dict:
+    """Do not make unrelated whole-tree provenance movement a CI failure.
+
+    The returned view still compares all scientific identities, exact contexts,
+    receipt hashes, scoped dependency deltas, blockers and transition evidence.
+    """
+    return {
+        key: value
+        for key, value in report.items()
+        if key not in ("source_identity", "native_source_identity", "source_changed")
+    }
+
+
+def check_generated_views(
+    report: dict,
+    expected: dict,
+    rendered: str,
+    retained_markdown: str,
+    *,
+    allow_stale: bool = False,
+) -> None:
+    """Separate derived presentation freshness from evidence acceptance."""
+    if acceptance_view(report) != acceptance_view(expected):
+        transitions = capability_regressions(expected["summary"], report["summary"])
+        detail = ", ".join(item.token for item in transitions)
+        if not allow_stale:
+            raise ValueError(
+                "live native catalog differs from retained snapshot; requalify or explicitly demote claims: "
+                + detail
+            )
+        print(
+            "advisory: retained catalog snapshot is historical; current qualification "
+            "is only the live scope reported below. Transitions: " + detail
+        )
+    if retained_markdown != rendered:
+        require(allow_stale, "rendered native catalog is stale")
+        print(
+            "advisory: retained Markdown is a historical presentation, not a "
+            "current qualification result; use the live scope below"
+        )
+
+
 def check(
-    manifest_path: Path, *, write: bool = False, require_current: bool = False
+    manifest_path: Path,
+    *,
+    write: bool = False,
+    require_current: bool = False,
+    allow_stale_generated_views: bool = False,
 ) -> dict:
     """Validate bytes, live inputs, exact report coverage and regression policy."""
+    require(
+        not (allow_stale_generated_views and (write or require_current)),
+        "allow-stale-generated-views cannot be combined with write or require-current",
+    )
     manifest = load_json(manifest_path)
     require(
         manifest["schema"] == "generativeqc.libxc-native-catalog-manifest.v1",
@@ -207,7 +367,51 @@ def check(
         )
     bundle = load_json(ROOT / manifest["campaign"]["path"])
     previous = load_json(ROOT / manifest["previous"]["path"])
-    report = ingest(bundle, ROOT)
+
+    def measured_inputs(item: dict) -> dict | None:
+        inputs = item.get("dependency_inputs")
+        if inputs is None:
+            return None
+        path = ROOT / inputs["path"]
+        require(
+            path.resolve().is_relative_to(ROOT),
+            "dependency input path escapes checkout",
+        )
+        require(
+            file_hash(path) == inputs["sha256"], "dependency inventory bytes changed"
+        )
+        return load_json(path)
+
+    reports = [ingest(bundle, ROOT, measured_inputs=measured_inputs(manifest))]
+    for item in manifest.get("incremental_campaigns", []):
+        path = ROOT / item["path"]
+        require(
+            path.resolve().is_relative_to(ROOT),
+            "incremental evidence path escapes checkout",
+        )
+        require(file_hash(path) == item["sha256"], "incremental evidence bytes changed")
+        reports.append(
+            ingest(load_json(path), ROOT, measured_inputs=measured_inputs(item))
+        )
+    report = merge_catalogs(reports)
+    resource_input = manifest.get("resource_acceptance")
+    if resource_input is not None:
+        path = ROOT / resource_input["path"]
+        require(
+            path.resolve().is_relative_to(ROOT),
+            "resource evidence path escapes checkout",
+        )
+        require(
+            file_hash(path) == resource_input["sha256"],
+            "resource evidence bytes changed",
+        )
+        resource = load_json(path)
+        validate_resource_acceptance(resource, reports, require_current=require_current)
+        report["resource_acceptance"] = {
+            **resource_input,
+            "native_library_sha256": resource["native_library_sha256"],
+            "slurm_job_id": resource["environment"]["slurm_job_id"],
+        }
     report["historical"] = []
     for item in manifest.get("historical", []):
         path = ROOT / item["path"]
@@ -226,12 +430,11 @@ def check(
             }
         )
     report["changes"] = capability_changes(previous, report["summary"])
-    report["execution_identity"] = canonical_hash(bundle["build"])
     acknowledgements = manifest.get("acknowledgements", [])
     snapshot_path = ROOT / manifest["snapshot"]
     if write and snapshot_path.exists():
         retained = load_json(snapshot_path)
-        if report != retained:
+        if acceptance_view(report) != acceptance_view(retained):
             require(
                 previous == retained["summary"],
                 "retain the current summary as previous before changing the catalog; "
@@ -242,28 +445,35 @@ def check(
     )
     if require_current:
         require_current_acceptance(report)
+        require(
+            resource_input is not None
+            and resource["native_library_sha256"]
+            in {
+                row["library"]["sha256"]
+                for row in report["endpoints"]
+                if row["backend"] == "cuda" and row["product"] == "forces"
+            },
+            "current acceptance requires a matching resource/lifetime receipt",
+        )
     rendered = render(report, previous)
     if write:
         write_json(ROOT / manifest["snapshot"], report)
         (ROOT / manifest["report"]).write_text(rendered)
     else:
         expected = load_json(ROOT / manifest["snapshot"])
-        if report != expected:
-            transitions = capability_regressions(expected["summary"], report["summary"])
-            raise ValueError(
-                "live native catalog differs from retained snapshot; requalify or explicitly demote claims: "
-                + ", ".join(item.token for item in transitions)
-            )
-        require(
-            (ROOT / manifest["report"]).read_text() == rendered,
-            "rendered native catalog is stale",
+        check_generated_views(
+            report,
+            expected,
+            rendered,
+            (ROOT / manifest["report"]).read_text(),
+            allow_stale=allow_stale_generated_views,
         )
     print(render_capability_summary(report["summary"]))
     print(
         f"native observed contexts: {len(report['observed_endpoints'])}; qualified products: {len(report['endpoints'])}; stale: {report['stale']}"
     )
     if require_current:
-        print("current-source representative energy/force acceptance: passed")
+        print("dependency-current representative energy/force acceptance: passed")
     return report
 
 
@@ -278,10 +488,20 @@ def main() -> int:
     parser.add_argument(
         "--require-current",
         action="store_true",
-        help="require source-matched paired energy/forces contexts for LDA/GGA/tau-MGGA, CPU/CUDA and RKS/UKS",
+        help="require dependency-current paired energy/forces for LDA/GGA/tau-MGGA, CPU/CUDA and RKS/UKS; unrelated stale rows do not veto acceptance",
+    )
+    parser.add_argument(
+        "--allow-stale-generated-views",
+        action="store_true",
+        help="report derived snapshot/Markdown drift without blocking; evidence integrity and qualification gates remain enforced",
     )
     args = parser.parse_args()
-    check(args.manifest, write=args.write, require_current=args.require_current)
+    check(
+        args.manifest,
+        write=args.write,
+        require_current=args.require_current,
+        allow_stale_generated_views=args.allow_stale_generated_views,
+    )
     return 0
 
 

@@ -86,3 +86,22 @@ def test_direct_device_link_preserves_architecture_request(
         assert "GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE" not in host
     else:
         assert f"GENERATIVEQC_CUDA_PROFILE_ARCHITECTURE={architecture}" in host
+    force_sources = ("direct_force_class_domains", "direct_bounded_fallback")
+    if linked:
+        force = command(
+            "CMakeFiles/generativeqc_direct_native.dir/"
+            "generated/direct_force_fallback_kernels.cu.o"
+        )
+        assert "-rdc=true" in force
+        targets = subprocess.check_output(
+            ["ninja", "-C", str(tmp_path), "-t", "targets", "all"], text=True
+        ).splitlines()
+        for source in force_sources:
+            assert not any(
+                target.startswith(f"CMakeFiles/{owner}.dir/src/scf/cuda/{source}.cu.o:")
+                for target in targets
+            )
+    else:
+        for source in force_sources:
+            force = command(f"CMakeFiles/{owner}.dir/src/scf/cuda/{source}.cu.o")
+            assert "-rdc=true" not in force

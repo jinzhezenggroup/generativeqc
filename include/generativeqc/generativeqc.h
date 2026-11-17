@@ -1584,6 +1584,28 @@ typedef struct generativeqc_cuda_tuning_device_descriptor {
   int32_t runtime_version, driver_version, toolkit_version;
   int32_t release_build, fast_compile;
   int32_t portable;
+  /** Selection diagnostics, not hardware identity or numerical qualification.
+   * registry_status is "matched", "no_matching_kernel_set", or "aot_disabled".
+   * Masks describe environment-enabled generated exact classes, not every
+   * runtime admission condition; uncovered work retains the native fallback.
+   */
+  char registry_status[32];
+  int32_t tuned, compatible;
+  uint64_t enabled_force_shell_class_mask;
+  uint64_t enabled_fock_shell_class_mask;
+  uint64_t enabled_mixed_fock_shell_class_mask;
+  /** Route inventories and preferences remain separate. Only the final field
+   * additionally applies the streaming companion's device-resource check.
+   * No field bypasses consumer-specific precision or workload admission.
+   */
+  uint64_t enabled_rys_value_fock_shell_class_mask;
+  uint64_t enabled_k_block_fock_shell_class_mask;
+  uint64_t enabled_rys_task_fock_shell_class_mask;
+  uint64_t enabled_shared_rys_xy_fock_shell_class_mask;
+  uint64_t enabled_shared_rys_weighted_z_fock_shell_class_mask;
+  uint64_t preferred_streaming_fock_shell_class_mask;
+  uint64_t preferred_rys_task_fock_shell_class_mask;
+  uint64_t available_shared_rys_xy_streaming_fock_shell_class_mask;
 } generativeqc_cuda_tuning_device_descriptor;
 
 /** Probe an allocated GPU; CPU builds return NOT_IMPLEMENTED without probing. */

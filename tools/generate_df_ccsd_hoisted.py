@@ -23,6 +23,7 @@ from generativeqc_compiler.tensor import Program
 from tools.generate_df_ccsd_core import INPUTS as CORE_INPUTS
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _packed_batched_matrix_gemm,
@@ -119,7 +120,7 @@ def auxiliary_accumulation() -> tuple[str, str]:
 
 
 def cpu_header() -> str:
-    """Queries and borrowed CPU actions for complete owner admission."""
+    """Expose owner admission to CUDA without its unused CPU replay bodies."""
     lines = [
         "// Generated DF auxiliary-reduction schedule; do not edit.",
         "#pragma once",
@@ -140,6 +141,7 @@ def cpu_header() -> str:
             f"inline constexpr std::size_t {name}_operation_count = {sum(n.op != 'input' for n in program.live_nodes)};",
             _required_function(program, f"{name}_arena_elements"),
             contraction_query(program, f"{name}_contraction_terms"),
+            "#ifndef __CUDACC__",
             _cpu_function(
                 program,
                 f"run_{name}_cpu",
@@ -147,6 +149,7 @@ def cpu_header() -> str:
                 input_overrides={key: f"inputs.{key}" for key in INPUTS},
                 output_fields=fields,
             ),
+            "#endif",
         ]
         packed = packed_programs()[name]
         dimensions = sorted(
@@ -290,6 +293,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_hoisted_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfhoist {",
     ]
+    kernel_pool = CudaKernelPool("df_hoist")
     for name, program in programs().items():
         kind, fields = OUTPUTS[name]
         if name == "iteration":
@@ -309,6 +313,7 @@ def cuda_source() -> str:
                     reset_error=False,
                     prepared_contractions=binding,
                     parallel_scalar_reductions=name == "iteration",
+                    kernel_pool=kernel_pool,
                 )
             )
         if name == "auxiliary":
@@ -323,6 +328,7 @@ def cuda_source() -> str:
                     reset_error=False,
                     prepared_contractions="s.auxiliary_batched_contractions",
                     batch_dim=True,
+                    kernel_pool=kernel_pool,
                 )
             )
             lines.append(
@@ -344,6 +350,7 @@ def cuda_source() -> str:
             reset_error=False,
             prepared_contractions="s.contractions",
             batch_dim=True,
+            kernel_pool=kernel_pool,
         ),
         "MixedAuxiliaryOutputs run_mixed_auxiliary_cuda(MixedAuxiliaryCudaState& s){ return run_mixed_auxiliary(s); }",
         "void prepare_mixed_contractions(MixedAuxiliaryCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",

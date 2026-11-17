@@ -1,0 +1,109 @@
+{
+  "date": "2026-11-14",
+  "issue": 597,
+  "baseline_commit": "5e34e2769915ead77ffd1a93f9b9bf82c1c7aba8",
+  "candidate": "source-bound uncommitted working tree; no measured new schedule promoted",
+  "source_patch_xz_sha256": "6764b3d495d9f297f76f1a2dfcfbfed2e3fd74099d6572f55922ee9f18fe0758",
+  "source_files": {
+    "benchmarks/direct_jk_policy.cpp": "114361be1647d2803dd68a483f9438beb16a4d0318f95ec1dbc53b4123d7bada",
+    "cmake/GenerativeQCTests.cmake": "48cf7466871c6fbf1161571a30d45d33255898c26a8a3f07efcaf275b3463b71",
+    "docs/maintainer/performance_engineering.md": "cdd011a7cc4548aef23762b7173344a8ba1eafc9cf445b145032f13bcadba7f6",
+    "manifests/maintenance/direct_jk_tuning_inventory.json": "e0a05184b074362c002b51b1b576fad073daee330ea32be561885f1613ce4c28",
+    "src/scf/cuda/direct_angular_fock.cu": "ab5983ce5fc95c09485aa71fda61a88e49d53bf77fe85fc1b929ebfcb9f286f5",
+    "src/scf/cuda/direct_angular_force.cu": "92562889bbcb649741e93170897d3ddfb3d7f235a60606e210c0f933842f6671",
+    "src/scf/cuda/hf_matrix_profile.cpp": "931ecf4a3167f14994140a5acbae9ef95f9431d0cbaf964ca855384466a8f650",
+    "src/scf/cuda/hf_matrix_profile.hpp": "605d7d85e5b76f422f6daa9d3ebe0b40c0fa0402512c16bf36933d7081d89235",
+    "src/scf/cuda/packed_basis.hpp": "1c7f93597f976f0b7773d72a8906d7065573e0284344fc99c21d6471eb835898",
+    "src/scf/cuda/rhf_bucket.cpp": "75cb600d5c8f83e4d1dbe97b7522977e51e36505a3fb60dd09797d8986519a97",
+    "src/scf/cuda/rhf_bucket_internal.hpp": "231bf6aa39e728a5a8fac8c73575c52e8f3b4fb612150fb1218551a306ecb39d",
+    "src/scf/cuda/rhf_policy.cpp": "c8aaf196604a795a2c31ff23becff3313012657ffe6f1e9a5a647ade8ff37ac3",
+    "src/scf/cuda/topology.cpp": "a110e81022b6213f2d5ae54f5a53a7a3d5b11562f8b97f9c6d662e0ff97d2cc6",
+    "src/scf/cuda/topology.hpp": "72013d446f722a05b61287774ad75e30c0bde32b411c695afac5bb446dc0480d",
+    "src/scf/cuda_rhf.cpp": "44dec53825b8d4860ccb4cec810ead33817c5cdd0b1bdc0221a764add2ebd75b",
+    "tests/native/fixtures/hf_matrix_profile.cpp": "966c05e23c63c9d6c224edce4b5cebb9d2a0e4a2de4d3c62f0467f6a24b59bff",
+    "tests/native/test_hf_matrix_profile_cuda.cpp": "b4efbb476d4f111b209ef545c62b0085ccf412398b0fc3610313ce02a649ad94",
+    "tests/python/test_direct_jk_topology_policy.py": "1d8b9ddac388ef8e613ef13155cea22f430c297e0829987b4b720b9def1a492f",
+    "tests/python/test_hf_matrix_profile.py": "191d64819b93845e793f2188727e51abb6b2046d1acf7dfd0f59ab89782888f8"
+  },
+  "native_execution_contexts": {
+    "baseline": {
+      "synthetic_ordering_fixture": "true",
+      "source": "eadbbfa8070a69036d22eda37c09b5fc597c3f17e8e446022d689dfe8dcaac23",
+      "native_build_id": "6914e7471c993d6e2bb723e1fec338a04acfff28",
+      "runtime_build_id": "dee4b68d7f29b160323eff1e31338d5ebf73d190",
+      "driver_build_id": "1c9f312e555cee35f65529ee24f70742ca341e92",
+      "cublas_build_id": "dd888944e00e1d730980e6a3c8bbf67d4c7c0ef0"
+    },
+    "candidate": {
+      "synthetic_ordering_fixture": "true",
+      "source": "261d5d0e5a40cb5f4088a44fedfaad206ba556ae43095d258b66dcaeaf7fe433",
+      "native_build_id": "8b41e2cbac73fe1f7cd828211e3dce145b33e515",
+      "runtime_build_id": "dee4b68d7f29b160323eff1e31338d5ebf73d190",
+      "driver_build_id": "1c9f312e555cee35f65529ee24f70742ca341e92",
+      "cublas_build_id": "dd888944e00e1d730980e6a3c8bbf67d4c7c0ef0"
+    }
+  },
+  "build": {
+    "type": "Release",
+    "cxx": "GCC 11.4.0",
+    "cuda": "12.9.86",
+    "architecture": "sm_120",
+    "cuda_fast_compile": true,
+    "compiler_cache": "ccache 4.5.1",
+    "cache_statistics": "shared observations, not exclusive deltas"
+  },
+  "device": {
+    "ssh_host": "n5",
+    "slurm_node": "node5",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "driver": "570.86.16",
+    "job": 2040,
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:20:00",
+    "visibility": "Slurm-assigned CUDA_VISIBLE_DEVICES=0, never overridden"
+  },
+  "controls": {
+    "precision": "FP64",
+    "max_iterations": 100,
+    "screening_tolerance": 1e-12,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "numerical_threads": 1,
+    "timing_profile": "absent",
+    "native_route_profiles": "explicitly synthetic ordering fixtures, not measured calibration"
+  },
+  "population": {
+    "groups": 48,
+    "samples_per_binary_group": 6,
+    "fresh_process_pairs": 2,
+    "owner_repetitions_per_process": 3,
+    "order": [
+      "baseline/candidate",
+      "candidate/baseline"
+    ],
+    "discarded_samples": 0
+  },
+  "timed_process_stderr_bytes": {
+    "baseline-0": 0,
+    "baseline-1": 0,
+    "candidate-0": 0,
+    "candidate-1": 0
+  },
+  "results": {
+    "passed": true,
+    "maximum_median_regression_percent": 1.416341991759884,
+    "maximum_energy_error_hartree": 4.618527782440651e-14,
+    "maximum_force_error_hartree_per_bohr": 1.0522743787433342e-10,
+    "work_changed_groups": 0,
+    "numeric_peak_growth_groups": 0,
+    "baseline_sampled_process_peak_mib": 8026,
+    "candidate_sampled_process_peak_mib": 8038,
+    "process_peak_scope": "NVML sampled, includes non-ledger allocations; 12 MiB overhead not attributed to a specific mechanism"
+  },
+  "limitations": [
+    "No automatic resident-versus-screened-work profitability model or measured new profile is shipped.",
+    "Qualification covers the stated workloads, stack and fast-compile build, not all molecules or devices.",
+    "Numeric high-water marks are not total process memory peaks."
+  ]
+}

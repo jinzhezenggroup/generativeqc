@@ -72,6 +72,17 @@ atom ownership is applied only during accumulation. Nuclear charges multiply
 the generated signed unit-charge attraction. First derivatives require Boys
 orders through seven for f/f. The public angular-momentum limit is unchanged.
 
+The explicitly requested through-g artifact shares x-derivative cases under
+joint y/z permutations and Gaussian-center reversal. Reversal transposes the
+Cartesian component pair: S/T first-center roots change sign by translational
+invariance, while attraction exchanges its A/B derivative fields. Geometry
+transforms preserve precomputed radial/Boys values. These are mathematical
+identities, not bitwise floating-point guarantees; independent numerical and
+complete weighted-gradient gates remain required. The default through-f
+lowering and all execution schedules remain unchanged. The
+[center-exchange decision](../../.agents/notes/implemented/performance/2026-11-16-g-gradient-center-exchange.md)
+records the resource tradeoff and qualification boundary.
+
 The generic output is the energy gradient
 
 ```

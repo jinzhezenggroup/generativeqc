@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import re
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -535,16 +538,33 @@ def _source_url(repository: str, revision: str, upstream_path: str) -> str:
 
 
 def _fetch(url: str, *, label: str) -> bytes:
+    """Retry incomplete/transient HTTPS transfers without accepting partial bytes.
+
+    Each attempt opens a fresh response, with at most three attempts and short
+    backoff. Permanent HTTP errors fail immediately; callers still verify the
+    complete pinned digest before writing any downloaded source.
+    """
     if not url.startswith("https://"):
         raise SourceRegistryError(f"{label} requires an HTTPS URL")
     request = urllib.request.Request(  # noqa: S310
         url, headers={"User-Agent": "generativeqc-source-sync/1"}
     )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            return response.read()
-    except (OSError, TimeoutError) as error:
-        raise SourceRegistryError(f"failed to fetch {label}: {error}") from error
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+                return response.read()
+        except (OSError, http.client.IncompleteRead) as error:
+            permanent = False
+            if isinstance(error, urllib.error.HTTPError):
+                error.close()
+                permanent = error.code not in (408, 429) and not 500 <= error.code < 600
+            if permanent or attempt == 3:
+                raise SourceRegistryError(
+                    f"failed to fetch {label}: {error}"
+                ) from error
+            time.sleep(attempt)
 
 
 def _checked_revision(revision: Any) -> str:

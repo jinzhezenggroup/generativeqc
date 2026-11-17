@@ -96,3 +96,11 @@ force/Fock endpoint evidence and retained bounded fallback.
 - [Earlier target-resource policy](2026-09-21-direct-jk-target-resource-policy.md).
 - [Current policy contract](../../../../docs/maintainer/performance_engineering.md#direct-jk-policy-ownership).
 - `manifests/maintenance/direct_jk_tuning_inventory.json`.
+
+## Runtime activation follow-up
+
+[Runtime topology profiles](2026-11-14-direct-jk-runtime-topology-profiles.md)
+supersede the compiler-input-only queue-domain limitation and connect explicit
+resident crossovers to exact-stack v2 profile admission. That note retains the
+source-matched endpoint and allocator-refusal evidence; no GEMM-derived
+resident-ERI profitability model or new schedule winner is inferred.

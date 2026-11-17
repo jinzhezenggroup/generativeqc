@@ -21,6 +21,7 @@ from generativeqc_compiler.tensor import Program, optimize, reassociate_einsums
 from tools.generate_rccsd_native import (
     INPUT_NAMES,
     REPRESENTATIVE,
+    CudaKernelPool,
     _cpu_function,
     _cuda_program,
     _required_function,
@@ -72,7 +73,7 @@ def programs() -> dict[str, Program]:
 
 
 def cpu_header() -> str:
-    """Runtime-shape core actions; outputs borrow the supplied arena."""
+    """Share core admission metadata, retaining borrowed replay only for C++."""
     from tools.generate_rccsd_native import (
         canonical_denominators_cpp,
         restricted_pairs_cpp,
@@ -98,12 +99,14 @@ def cpu_header() -> str:
             f'inline constexpr const char* {name}_equation_hash = "{program.logical_hash}";',
             f"inline constexpr std::size_t {name}_operation_count = {sum(n.op != 'input' for n in program.live_nodes)};",
             _required_function(program, f"{name}_arena_elements"),
+            "#ifndef __CUDACC__",
             _cpu_function(
                 program,
                 f"run_{name}_cpu",
                 "IterationOutputs" if name == "iteration" else "ReplayOutputs",
                 input_overrides={key: f"inputs.{key}" for key in INPUTS},
             ),
+            "#endif",
         ]
     return "\n".join(
         [*lines, "}  // namespace generativeqc::cc::generated::dfcore", ""]
@@ -134,6 +137,7 @@ def cuda_source() -> str:
         '#include "generated_df_ccsd_core_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfcore {",
     ]
+    kernel_pool = CudaKernelPool("df_core")
     for name, program in programs().items():
         output = (
             "DeviceIterationOutputs" if name == "iteration" else "DeviceReplayOutputs"
@@ -146,6 +150,7 @@ def cuda_source() -> str:
                 input_overrides={key: f"s.{key}" for key in INPUTS},
                 reset_error=False,
                 parallel_scalar_reductions=name == "iteration",
+                kernel_pool=kernel_pool,
             ),
             f"{output} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]
