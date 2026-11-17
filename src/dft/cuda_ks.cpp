@@ -2753,7 +2753,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
                         std::any_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                                     [](const auto& atom) { return atom.atomic_number > 18; });
-    nonlocal_seed_stage = nonlocal_initialization && (!outer_requested || native_cold_seed);
+    // Qualified Standard owners anchor VV10 on a native cold guess directly, as
+    // for transported densities. GENERATIVEQC_VV10_COLD_SEED_STAGE=1 restores the
+    // semilocal/RSH-only provisional seed solve; other owners always keep it.
+    const auto* cold_seed_stage_selection = std::getenv("GENERATIVEQC_VV10_COLD_SEED_STAGE");
+    const bool cold_seed_stage =
+        (cold_seed_stage_selection && std::string_view(cold_seed_stage_selection) == "1") ||
+        !skip_nonlocal_cold_seed_stage(standard_nonlocal_model, standard_convergence_active());
+    nonlocal_seed_stage =
+        nonlocal_initialization && (!outer_requested || (native_cold_seed && cold_seed_stage));
     nonlocal_inner_residual_tolerance = standard_nonlocal_model && standard_convergence_active()
                                             ? physical_stationarity_tolerance()
                                             : 1e-9;

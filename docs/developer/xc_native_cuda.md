@@ -823,6 +823,16 @@ other unqualified owners retain AO-maximum proposal control. Set
 `GENERATIVEQC_VV10_RMS_HANDOFF=0` to restore that control explicitly; `1` cannot
 bypass owner qualification. No GPU model or molecule-size branch is involved.
 
+Qualified strict Standard WB97M-V owners, Direct and fitted, also skip the
+semilocal/RSH-only initializer for a native cold guess: the first target
+evaluation anchors VV10 on the guess density, exactly as transported densities
+already do, and frozen-VV10 inner solves follow. The initializer's DIIS history
+would otherwise be discarded when VV10 enters. On H100 water-96 Direct this
+replaces 16 molecular Focks (11 provisional) by 13 (8 provisional) with the same
+four SCF pair sweeps. Mixed, budget, strict and other unqualified owners keep
+the initializer. Set `GENERATIVEQC_VV10_COLD_SEED_STAGE=1` to restore it
+explicitly.
+
 Resident warm replays and unsupported spin, precision, incremental-J/K or
 budget cases retain their existing solve. A caller-selected device chunk also
 keeps its existing solver. Set `GENERATIVEQC_VV10_FROZEN_POTENTIAL_SEED=0` to
@@ -1227,6 +1237,12 @@ fallback. `GENERATIVEQC_VV10_PAIR_SCHEDULE=parallel-packet` explicitly selects t
 packet route, including small qualification fixtures; `parallel` restores the
 previous four-row bilateral schedule and `ordered` forces the ordered fallback.
 Unset and empty selectors both use automatic selection.
+The persistent grid-stride pair kernels statically interleave a fixed tile-pair
+inventory, so their grid is one resident wave: the executing device's
+multiprocessor count times the compiled kernel's occupancy. A larger grid would
+leave a partial second wave running alone. `GENERATIVEQC_VV10_PAIR_GRID=fixed`
+restores the historical 680-block grid (one wave of four blocks on a 170-SM
+RTX 5090); `resident` selects the default explicitly.
 Within that admitted packet route, strict FP64 SCF feature sweeps specialize
 away mixed-pair admission and unused per-pair arithmetic counters. A requested
 arithmetic census selects a counted specialization instead. The compiler-owned

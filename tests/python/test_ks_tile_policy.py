@@ -181,3 +181,55 @@ int main() {
         timeout=15,
     )
     assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
+
+
+def test_nonlocal_scf_tiles_distinguish_fitted_and_direct_owners(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Full-rate FP64 nonlocal owners: fitted panels keep 512, strict Direct uses 1024."""
+    unit = tmp_path / "nonlocal_tiles.cpp"
+    unit.write_text(
+        r"""
+#include <iostream>
+#include "dft/ks_tile_policy.hpp"
+int main() {
+  std::size_t requested, nao, points;
+  bool qualified, unconstrained, fitted;
+  int major, ratio;
+  while (std::cin >> requested >> qualified >> unconstrained >> nao >> points >> major >> ratio
+                 >> fitted)
+    std::cout << generativeqc::dft::automatic_ks_scf_tile(
+        requested, qualified, unconstrained, nao, points, true, major, ratio, fitted) << '\n';
+}
+"""
+    )
+    executable = required_native_cxx.build_executable(
+        [unit],
+        tmp_path / "nonlocal_tiles",
+        compile_args=(
+            "-std=c++20",
+            "-I" + str(Path(__file__).resolve().parents[2] / "src"),
+        ),
+    )
+    eligible = (0, 1, 1, 768, 1 << 20, 9, 2)
+    cases = [
+        ((*eligible, 1), 512),
+        ((*eligible, 0), 1024),
+        # Explicit requests, unqualified owners and low-rate FP64 devices are unchanged.
+        ((256, 1, 1, 768, 1 << 20, 9, 2, 0), 256),
+        ((0, 0, 1, 768, 1 << 20, 9, 2, 0), 256),
+        ((0, 1, 0, 768, 1 << 20, 9, 2, 0), 256),
+        ((0, 1, 1, 511, 1 << 20, 9, 2, 0), 256),
+        ((0, 1, 1, 768, (1 << 19) - 1, 9, 2, 0), 256),
+        ((0, 1, 1, 768, 1 << 20, 12, 64, 0), 256),
+        ((0, 1, 1, 768, 1 << 20, 7, 2, 0), 256),
+    ]
+    result = subprocess.run(
+        [str(executable)],
+        input="".join(" ".join(map(str, row)) + "\n" for row, _ in cases),
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=15,
+    )
+    assert list(map(int, result.stdout.split())) == [expected for _, expected in cases]
