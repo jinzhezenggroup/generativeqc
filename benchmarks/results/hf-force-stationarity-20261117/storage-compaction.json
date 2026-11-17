@@ -90,13 +90,93 @@
       "bytes": 9025,
       "sha256": "cf8a5871b24899c526fd9357a701a837bc4b8e92052a8bec77285f4e7ab283a7",
       "lexeme_sha256": "a49692c87a94210d12869de4dc8a1f697b19d746d2130ce9f7d30f49291e56fe"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-0e33f48-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24637,
+      "original_sha256": "2d862a1d9776505069cddc8cb0230706715f02ea3bf9c178bb7dcdd2deda1bf8",
+      "bytes": 14094,
+      "sha256": "f99250a7f1443d32c89f39c0b88189d13b6973ec11e04fe8416635481fba770c",
+      "lexeme_sha256": "bb54433993e49acf0172fe373233c27686b7d80b60a84d8b8345fc89852c21d6"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-10d2b6f-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24564,
+      "original_sha256": "bd312e74e373afbb3059bf7bb316962db7383b431249355ab2d5b62464f7609d",
+      "bytes": 14033,
+      "sha256": "57658b31a7a106f487389adf40759b1a606320d696232fc04441870b74e6d2b9",
+      "lexeme_sha256": "48961ef075ee10e729b9a7c81b352ca232dc227fb4e02466558371c1a55b3be5"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-299cf69-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24633,
+      "original_sha256": "053e372c1a9426f88bf59e4feb984de3f170e2286ee31a826463a5c72fac822d",
+      "bytes": 14090,
+      "sha256": "b5b85277aef12da4a689c7545f7f52210b550fbc6a022872cf4160dbfc92a18e",
+      "lexeme_sha256": "10864de1520ab52551fc6781bd21b0b92314ff1f29ec31ef436de685336bb0fa"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-2c0ee1a-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24625,
+      "original_sha256": "f0b623e4841b7d9d19f90cd04da2fc06a64e85ec2bd9cade6732d30fa9d87029",
+      "bytes": 14082,
+      "sha256": "5d5c9d2a375b208fa7cf4c01578289eb903a62987692ca920f711c436443cb5e",
+      "lexeme_sha256": "2639d0335a8160eda8a7deb6c505b94a8c30bc05119c9578921b4e225874de23"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-35af36c-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24612,
+      "original_sha256": "07c13205f87c8ab23429d9249d8e64603e7cc2c46870feea1f3298535345eb05",
+      "bytes": 14069,
+      "sha256": "58a3a5d3ecb6d9f976ba12abf17edd479f06fb47036c427b24e6f2e34012e11a",
+      "lexeme_sha256": "9a6de2fe55141f255ad917d292997c626ad5337017c152d29c12a6764d47d68f"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-38a988e-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24607,
+      "original_sha256": "3076e6063a9539512df3be7aa1a5b6a5e2c940ec367aacaed68e6a3bfddf44dc",
+      "bytes": 14064,
+      "sha256": "bcfae5ceafd3d8ad0986f1c6ca6ad9f7c6942b7f6e40dfe30838ba541edf9b3c",
+      "lexeme_sha256": "2fbd07b40d283e26ecee4107760a73d62911fad78e5c6fd6032f97977c0f774a"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-5c398b4-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24640,
+      "original_sha256": "452a19c32a9396fde00b3d9ae5590dbfb23567e8fc11626c98749130e251831f",
+      "bytes": 14097,
+      "sha256": "a1467ae838378f9aee9e64d02e5583ca0a3bf9de92b38625b9442d0f20047263",
+      "lexeme_sha256": "587cb7400708ed770cb973585343b1e98e7a52f72b9c597673a55d4aaa8a1438"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-7ca4c51-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24614,
+      "original_sha256": "c0529c861e88a830784addef626a143bcd86bda3c32042499cb003c0caf6855e",
+      "bytes": 14071,
+      "sha256": "a7256f5c67e64b6200b768c9000cf83e7e3c9aea85798a1cfa6599a396b313bc",
+      "lexeme_sha256": "28c02a76d2e76939b71b2b944c66e2d08863ebed550f4534faecae90773c9316"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-a4db5f3-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24623,
+      "original_sha256": "54bccc5e44538821b0e2c739b806f74db1677949226f2862795fc0d82218a58e",
+      "bytes": 14080,
+      "sha256": "bf98b2b44c338460672a6b961db2c8f6174dbb86fed5d3ae3111124d8e1efc7c",
+      "lexeme_sha256": "e08973ed5585a42e2c2ad8f7f8d28483117ae375e8c614574844f39713a1024c"
+    },
+    {
+      "path": "benchmarks/results/rtx5090-ae6406f-water-tetramer-def2-svp-spherical-b4.json",
+      "original_bytes": 24599,
+      "original_sha256": "2b4f7229b0ee2dad99de3ab18d28bd066c41fafa9d42f43b5dbccac55fc21857",
+      "bytes": 14056,
+      "sha256": "67e350bb6cf15cb9a103f9d45c8e5f7d6f3c6f3b8a377b5535b35018b0f6aabe",
+      "lexeme_sha256": "428755188dd3838f96d0910e4b15d007dbb3c444dee5629188e2227e8ccf37eb"
     }
   ],
   "master_reconciliation": {
     "revision": "e9f3031ae7f324111ad5c84cf1549ac4a75f4bb6",
     "superseded_whitespace_entry": "benchmarks/results/shared-automatic-aot-20261027/manifest.json",
     "reason": "Master independently transports this exact original payload through compressed-manifest.v1 and manifest.json.xz. Preserve that lossless migration rather than replacing its wrapper with a minified historical document.",
-    "current_whitespace_entries": 10,
-    "current_whitespace_saved_bytes": 153031
+    "current_whitespace_entries": 20,
+    "current_whitespace_saved_bytes": 258449
   }
 }

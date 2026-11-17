@@ -46,7 +46,7 @@ no scientific observation, failed case or gate was deleted or changed.
 Master reconciliation preserves its independent compressed-manifest migration
 for one of those records. Two additional water records lose only whitespace;
 another four records make room for the independent integrated and performance
-acquisitions. The ten currently minified paths save 153,031 bytes. The storage
+acquisitions. The twenty currently minified paths save 258,449 bytes. The storage
 receipt retains the original five-entry history, documents the superseding
 transport, and preserves all original byte identities and numeric lexemes.
 
@@ -80,6 +80,85 @@ balanced fresh-process endpoint comparisons satisfy that requirement. Originally
 correct master endpoints cannot be excluded just because the repair is slower;
 incorrect master force results cannot enter a valid speed ranking. Neither
 scientific gates nor public tolerances may be relaxed to obtain a speed claim.
+
+## Performance acceptance: failed, do not merge
+
+The retained `performance.json.xz` is a **negative result**, not an
+accepted default promotion. Finite Slurm jobs 17686 (RTX 5090) and 5329
+(RTX PRO 6000 Blackwell) each complete 96 fresh processes / 576 endpoints.
+For every card/profile/case, ordering is ABBA then BAAB (A=master, B=repair),
+giving four distinct fresh pairs. There are 1,152 endpoint observations in
+total; all 576 repair endpoints pass the unchanged scientific gates.
+
+The baseline is actual master `8f4166f0c6a692045eaf568c814b868aa1057482`, native
+identity `1832792c9425c24a67a436fa117928011d1291fc43124e7e2c2edc25d2811101`.
+Verified-cache Release/no-fast build job 17685 creates auto ELF SHA256
+`a34600ce6f12a5308682974fc3a02e516fae25be954dae0b73fcd5bf1ad59a1f`
+and portable ELF SHA256
+`162c53b6834aa3800bd9193bee395c32701c546cd0587434b825be482a5f68aa`.
+Both cards use those same baseline bytes and the same integrated repair bytes
+identified above. Native probes must match independently hashed Python/source
+trees; labels alone cannot establish a baseline.
+
+Complete synchronous prepared execution includes native work and host result
+export. Cold also includes preparation; first-use additionally includes public
+package import and Calculator construction. Cleanup is recorded separately.
+Reference inputs/checks, probes, ELF hashing and serialization are outside timing.
+Actual iterations/Fock builds, optional native precision/quartet diagnostics,
+warm-state flags, all energies and every force component are retained. Unexposed
+force-evaluation counts remain unknown rather than fabricated. No kernel-only,
+peak-memory, release-distribution startup or cross-card GPU-speed claim follows.
+
+Representative **scientifically valid** moved-geometry endpoints, means in ms:
+
+| Card | Profile | Endpoint | Master | Repair | Slowdown |
+| --- | --- | --- | ---: | ---: | ---: |
+| RTX 5090 | auto | Direct RHF / SVP | 351.660 | 433.150 | 23.17% |
+| RTX 5090 | portable | Direct RHF / SVP | 205.435 | 258.903 | 26.03% |
+| RTX PRO 6000 | auto | Direct RHF / SVP | 347.345 | 435.566 | 25.40% |
+| RTX PRO 6000 | portable | Direct RHF / SVP | 205.871 | 257.130 | 24.90% |
+| RTX PRO 6000 | auto | Direct RHF / TZVP | 1300.553 | 1580.575 | 21.53% |
+| RTX PRO 6000 | auto | Matched DF RHF / SVP | 36.352 | 40.482 | 11.36% |
+
+For example, the PRO 6000 auto/SVP moved ratio is `1.25399`, paired-bootstrap
+95% interval `[1.25147, 1.25751]` (20,000 resamples, seed 3092). Direct moved
+work grows from 8 iterations / 10 Fock builds to 12 / 13; matched DF moved
+work grows from 8 / 9 to 12 / 13. This is a real work-amplification regression,
+not the invalid original TZVP cold result being ranked. Every other raw process
+also enters replay; the table is not a selected acceptance population.
+
+Of 84 profile/case/phase-plus-first-use groups per card, replay identifies
+23/21 positive-lower-bound regressions, 46/36 inconclusive groups, 9/21
+nonregression groups, and 6/6 scientifically invalid old groups on n1/n2,
+respectively. Invalid old results remain failures, not speed wins. A confidence
+interval crossing one is inconclusive, not a nonregression pass. No slowdown
+allowance is introduced. **Both cards fail performance acceptance.**
+
+The first baseline build attempt exposed a backdated-archive/Ninja timestamp
+trap: unchanged inventory membership and older mtimes left candidate objects
+and identity in place. This was detected from actual source/ELF probes before
+interpreting timings. Allocation 5328 was stopped; its partial wrong-baseline
+records remain under `rejected_setup`, outside the valid cohort. Refreshing the
+four content-different native input mtimes and rebuilding through job 17685
+produces the correct distinct identity. The compiler cache was not cleared,
+disabled or given an invented key. This setup failure is not a production pass.
+
+PR #3108 remains Draft: scientific repair works, but the strict-only prototype
+does **not** satisfy the user's no-regression condition. Do not merge it or
+close #3092 as fully resolved based only on the preceding scientific results.
+Future optimization must retain the same public controls and scientific gates;
+re-enabling energy-only force publication is not an acceptable speed fix.
+
+Replay every retained endpoint and timing group without a GPU:
+
+```bash
+python benchmarks/results/hf-force-stationarity-20261117/performance_replay.py
+```
+
+`performance_acquire.py` preserves the actual acquisition recipe; the bundle
+also retains the balanced driver, raw reference-input bytes, verified build
+receipts and the rejected setup. This historical recipe is not a production
+source-body fingerprint requirement on future refactors.
 
 ## Coverage and unchanged gates
 

@@ -95,6 +95,41 @@ old force results from valid speed rankings without hiding their failures.
 Do not weaken stationarity, oracle gates or public tolerances to disguise work
 amplification. More iterations are a diagnostic, not a substitute for timing.
 
+## Negative performance result: strict-only repair is not accepted
+
+Finite complete-endpoint jobs 17686 (RTX 5090) and 5329 (RTX PRO 6000 Blackwell)
+compare source-matched master `8f4166f0c6a692045eaf568c814b868aa1057482` to the
+integrated repair, auto and portable, ABBA/BAAB fresh-process ordering. All
+1,152 observations are retained and independently replayed. Every one of the
+576 repair observations passes science, but performance acceptance fails on
+both cards, including endpoints whose old results were already correct.
+
+Direct RHF moved/SVP is 23.17%/26.03% slower on 5090 auto/portable and
+25.40%/24.90% slower on PRO 6000 auto/portable. PRO 6000 auto moved/TZVP is
+21.53% slower; matched DF moved/SVP is 11.36% slower. Direct moved work grows
+from 8 iterations / 10 Fock builds to 12 / 13; DF grows from 8 / 9 to 12 / 13.
+The PRO 6000 auto/SVP moved 95% paired-bootstrap ratio interval is
+`[1.25147, 1.25751]`. The original invalid TZVP cold/warm samples are separately
+unrankable; their failure does not excuse these valid-endpoint regressions.
+
+Consequently PR #3108 remains Draft and this implementation is a scientifically
+validated **prototype**, not an accepted complete fix. Do not relax force gates,
+raise a stationarity ceiling by fitting these six fixtures, drop slower valid
+cases, or restore energy-only force publication to meet a speed target. A
+follow-up must reduce strict-stationarity work or its endpoint cost while
+preserving complete force qualification and explicit bounded fallbacks. Neither
+a microbenchmark nor an opt-in tuning winner satisfies that stock-path gate.
+
+The campaign also caught a build-provenance trap: replacing newer sources with
+an older git archive at the same build path can leave Ninja objects and the
+generated identity newer than all inputs. The first supposed master binary
+still had the candidate identity and bytes; allocation 5328 was stopped and
+its partial records retained as rejected setup. Refreshing the four genuinely
+content-different native inputs (without changing bytes or compiler-cache keys),
+then rebuilding and asserting independently computed source identity in job
+17685, produces the real baseline. Future reused-build comparisons must verify
+actual ELF/source identity, not infer it from a successful configure/build exit.
+
 ## Matching the DF oracle
 
 Do not compare different fitted operators under the direct-HF energy gate.
