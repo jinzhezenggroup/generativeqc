@@ -21,6 +21,10 @@ from generativeqc_compiler.common.evidence import canonical_hash, file_hash
 from generativeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.ir import KernelConsumer, build_integral_ir
+from generativeqc_compiler.integral.production_contracts import (
+    AotPackaging,
+    ForceExecutionPolicy,
+)
 from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.production_policy import resolved_profile_inventory
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
@@ -115,6 +119,7 @@ def default_policies(manifest: Path) -> dict[str, dict]:
             "compiled_masks": inventory["compiled_masks"],
             "default_preferences": inventory["default_preferences"],
             "packaging": inventory["packaging"],
+            "force_execution": inventory["force_execution"],
             "selections": [
                 {
                     "shell_class": item.spec.name,
@@ -252,9 +257,8 @@ def capability_audit(manifest: Path) -> dict:
         stock = resolve_production_profile(manifest, architecture)
         explicit = replace(
             stock,
-            optional_fock_variants=True,
+            packaging=AotPackaging(derivative_shells=True),
             prefer_rys_task_fock=False,
-            compile_derivative_shells=True,
         )
         routes[architecture] = {
             "stock": resolved_profile_inventory(stock),
@@ -303,7 +307,7 @@ def capability_audit(manifest: Path) -> dict:
         )
     return {
         "schema": "generativeqc.cuda-aot-capability-audit",
-        "schema_version": 1,
+        "schema_version": 2,
         "manifest_sha256": file_hash(manifest),
         "qualification_boundary": "Static legality is not compile, numerical or endpoint qualification; historical evidence must retain its own source/device identity.",
         "rows": sorted(rows, key=lambda row: row["feature"]),
@@ -688,6 +692,51 @@ def promotion_gate(
     }
 
 
+def _decode_retained_policy_format(policies: dict, manifest: dict) -> None:
+    """Decode the sealed historical format without re-running today's compiler.
+
+    The archived all-or-none packaging flag has an exact family-set meaning.
+    Historical force queue selection followed the archived profile kind. Its
+    strict coverage check required both exact-tuned and compatible-match flags,
+    which were mutually exclusive, so it never rejected an uncovered class.
+    Preserve that observed behavior rather than silently promoting a new guard.
+    Neither the frozen snapshot bytes nor any measured qualification is changed.
+    """
+    architectures = manifest["architectures"]
+    for architecture, policy in policies.items():
+        packaging = policy["packaging"]
+        if "optional_fock_variants" in packaging:
+            _require(
+                set(packaging)
+                == {"optional_fock_variants", "compile_derivative_shells"}
+                and all(isinstance(value, bool) for value in packaging.values()),
+                "invalid retained packaging format",
+            )
+            families = (
+                AotPackaging().fock_variants
+                if packaging["optional_fock_variants"]
+                else frozenset()
+            )
+            policy["packaging"] = AotPackaging(
+                fock_variants=families,
+                derivative_shells=packaging["compile_derivative_shells"],
+            ).to_payload()
+        if "force_execution" not in policy:
+            _require(
+                not any(
+                    profile.get("compatible_architectures")
+                    or profile.get("compatible_compute_capabilities")
+                    for profile in architectures.values()
+                ),
+                "legacy force-policy decoder requires the sealed exact/portable baseline",
+            )
+            selected = architectures.get(architecture, architectures["portable_cuda"])
+            policy["force_execution"] = ForceExecutionPolicy(
+                small_work_angular_queue=selected["kind"] == "portable",
+                require_bounded_spd_coverage=False,
+            ).to_payload()
+
+
 def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict:
     """Retain an identified baseline, or require source-matched promotions.
 
@@ -720,6 +769,9 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
     # Re-resolving the old manifest with today's compiler would apply today's
     # implicit choices to both sides, hiding an implementation-driven promotion.
     before = json.loads(lzma.decompress(snapshot.read_bytes()))
+    _decode_retained_policy_format(
+        before, json.loads(lzma.decompress(reference.read_bytes()))
+    )
     after = default_policies(root / MANIFEST)
     for target in set(after) - set(before):
         before[target] = {
@@ -728,10 +780,8 @@ def check_defaults(root: Path, inventory: dict, *, source_identity: str) -> dict
             "default_preferences": dict.fromkeys(
                 after[target]["default_preferences"], 0
             ),
-            "packaging": {
-                "optional_fock_variants": False,
-                "compile_derivative_shells": False,
-            },
+            "packaging": AotPackaging(fock_variants=frozenset()).to_payload(),
+            "force_execution": ForceExecutionPolicy().to_payload(),
             "selections": [],
         }
     _require(

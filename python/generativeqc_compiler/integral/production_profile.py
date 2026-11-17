@@ -33,6 +33,11 @@ from .cuda_schedule import (
 )
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer, build_integral_ir
+from .production_contracts import (
+    RYS_TASK_FOCK_CLASS_SETS,
+    AotPackaging,
+    ForceExecutionPolicy,
+)
 from .production_selection import _SUPPORTED_RECURRENCES, KernelSelection
 from .shell_spec import FUSED_SHELL_SPEC_BY_NAME, ShellClassSpec
 from .specialize import specialize_fock_integral, specialize_integral_ir
@@ -61,13 +66,8 @@ class ResolvedProductionProfile:
     selections: tuple[KernelSelection, ...]
     cuda_toolkit: str
     preferred_rys_task_fock_shell_classes: tuple[str, ...] | None = None
-    # Alternative experimental Fock families share the primary CUDA modules.
-    # Their code size therefore contributes to first-launch loading even when
-    # the runtime uses only the primary generated kernels.
-    optional_fock_variants: bool = True
-    # Compilation policy and measured default preference are independent of
-    # the display/profile-match flags. Missing explicit policy fails closed.
-    compile_derivative_shells: bool = False
+    packaging: AotPackaging = field(default_factory=AotPackaging)
+    force_policy: ForceExecutionPolicy = field(default_factory=ForceExecutionPolicy)
     prefer_rys_task_fock: bool = False
     # Build intent is diagnostic, not part of the resolved scientific policy.
     requested_profile: str = field(default="auto", compare=False)
@@ -89,19 +89,40 @@ def _profile_kind(name: str, profile: dict[str, object]) -> str:
 
 
 def _qualified_rys_task_classes(
-    profile: dict[str, object], *, tuned: bool
+    profile: dict[str, object], *, architecture: str
 ) -> tuple[str, ...] | None:
-    """Read exact-tuned overrides without transferring them across targets.
+    """Read explicit class preferences and their declared evidence scope.
 
-    The compiler uses the same admission mechanism for every CUDA architecture.
-    Capability is determined by the generated candidate inventory, while the
-    override comes only from the selected exact, tuned profile's evidence.
-    None means use the shared default; an explicit empty tuple disables it.
+    A literal list is an explicit all-target experiment. A named class set or
+    scoped list can bind evidence to particular targets without consulting the
+    portable/tuned label. None retains the bounded shared candidate preference.
     """
 
     if "preferred_rys_task_fock_shell_classes" not in profile:
         return None
     raw = profile["preferred_rys_task_fock_shell_classes"]
+    targets = None
+    if isinstance(raw, dict):
+        if set(raw) - {"class_set", "classes", "architectures"}:
+            raise ValueError("unknown Rys-task preference field")
+        if ("class_set" in raw) == ("classes" in raw):
+            raise ValueError("Rys-task preference requires classes or class_set")
+        targets = raw.get("architectures")
+        if "architectures" in raw:
+            if not isinstance(targets, list) or any(
+                not isinstance(name, str) for name in targets
+            ):
+                raise TypeError("Rys-task preference architectures must be a list")
+            targets = [normalize_cuda_architecture(name) for name in targets]
+            if len(targets) != len(set(targets)):
+                raise ValueError("duplicate Rys-task preference architecture")
+        if "class_set" in raw:
+            name = raw["class_set"]
+            if not isinstance(name, str) or name not in RYS_TASK_FOCK_CLASS_SETS:
+                raise ValueError("unknown Rys-task Fock class set")
+            raw = list(RYS_TASK_FOCK_CLASS_SETS[name])
+        else:
+            raw = raw["classes"]
     if not isinstance(raw, list) or any(
         not isinstance(name, str) or not name for name in raw
     ):
@@ -110,7 +131,39 @@ def _qualified_rys_task_classes(
         )
     if len(raw) != len(set(raw)):
         raise ValueError("preferred Rys-task Fock classes contain duplicates")
-    return tuple(raw) if tuned else None
+    return tuple(raw) if targets is None or architecture in targets else None
+
+
+def _packaging_policy(profile: dict[str, object]) -> AotPackaging:
+    """Validate family-level build intent without inferring it from tuning."""
+    if {"optional_fock_variants", "compile_derivative_shells"} & profile.keys():
+        raise ValueError("use explicit packaging.fock_variants/derivative_shells")
+    raw = profile.get("packaging", {})
+    if not isinstance(raw, dict):
+        raise TypeError("packaging must be an object")
+    if set(raw) - {"fock_variants", "derivative_shells"}:
+        raise ValueError("unknown packaging policy")
+    variants = raw.get("fock_variants", sorted(AotPackaging().fock_variants))
+    if not isinstance(variants, list) or any(
+        not isinstance(name, str) for name in variants
+    ):
+        raise TypeError("packaging.fock_variants must be a list of names")
+    if len(variants) != len(set(variants)):
+        raise ValueError("duplicate optional Fock family")
+    return AotPackaging(
+        fock_variants=frozenset(variants),
+        derivative_shells=raw.get("derivative_shells", False),
+    )
+
+
+def _force_execution_policy(profile: dict[str, object]) -> ForceExecutionPolicy:
+    """Deserialize only an explicit native execution contract."""
+    raw = profile.get("force_policy", {})
+    if not isinstance(raw, dict):
+        raise TypeError("force_policy must be an object")
+    if set(raw) - {"small_work_angular_queue", "require_bounded_spd_coverage"}:
+        raise ValueError("unknown force execution policy")
+    return ForceExecutionPolicy(**raw)
 
 
 def _profile_compatible(
@@ -621,15 +674,9 @@ def resolve_production_profile(
     toolkit = profile_payload.get("cuda_toolkit", "")
     if not isinstance(toolkit, str):
         raise TypeError("profile cuda_toolkit must be a string")
-    optional_fock_variants = profile_payload.get("optional_fock_variants", True)
-    if not isinstance(optional_fock_variants, bool):
-        raise TypeError("profile optional_fock_variants must be a boolean")
-    policies = {}
-    for name in ("compile_derivative_shells", "prefer_rys_task_fock"):
-        value = profile_payload.get(name, False)
-        if not isinstance(value, bool):
-            raise TypeError(f"profile {name} must be a boolean")
-        policies[name] = value
+    preference = profile_payload.get("prefer_rys_task_fock", False)
+    if not isinstance(preference, bool):
+        raise TypeError("profile prefer_rys_task_fock must be a boolean")
     return ResolvedProductionProfile(
         target=target,
         profile=profile_name,
@@ -637,12 +684,12 @@ def resolve_production_profile(
         tuned=tuned,
         selections=selections,
         cuda_toolkit=toolkit,
-        optional_fock_variants=optional_fock_variants,
-        compile_derivative_shells=policies["compile_derivative_shells"],
-        prefer_rys_task_fock=policies["prefer_rys_task_fock"],
+        packaging=_packaging_policy(profile_payload),
+        force_policy=_force_execution_policy(profile_payload),
+        prefer_rys_task_fock=preference,
         requested_profile=profile,
         preferred_rys_task_fock_shell_classes=_qualified_rys_task_classes(
-            profile_payload, tuned=tuned
+            profile_payload, architecture=selected_architecture
         ),
     )
 

@@ -279,7 +279,10 @@ def test_compatible_profile_drops_override_but_retains_shared_default(
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
     target = payload["architectures"]["sm_120"]
     target["compatible_architectures"] = ["sm_90"]
-    target["preferred_rys_task_fock_shell_classes"] = override
+    target["preferred_rys_task_fock_shell_classes"] = {
+        "classes": override,
+        "architectures": ["sm_120"],
+    }
     path = tmp_path / "profile.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     resolved = resolve_production_profile(path, "sm_90", requested_profile)
@@ -291,17 +294,17 @@ def test_compatible_profile_drops_override_but_retains_shared_default(
     }
 
 
-@pytest.mark.parametrize("override", ((), ("psps",), ("dddd",)))
-def test_non_tuned_profile_ignores_inapplicable_override(
+@pytest.mark.parametrize("override", ((), ("psps",), ("ssss",)))
+def test_explicit_preference_is_independent_of_tuned_metadata(
     override: tuple[str, ...],
 ) -> None:
-    """Even a replaced profile cannot apply foreign override metadata."""
+    """Display metadata cannot discard a resolved explicit class preference."""
     profile = replace(
         PROFILE, tuned=False, preferred_rys_task_fock_shell_classes=override
     )
-    assert {item.spec.name for item in preferred_rys_task_candidates(profile)} == {
-        item.spec.name for item in preferred_rys_task_candidates(PROFILE)
-    }
+    assert {item.spec.name for item in preferred_rys_task_candidates(profile)} == set(
+        override
+    )
 
 
 def test_preference_policy_is_independent_of_portable_label(tmp_path: Path) -> None:
@@ -312,8 +315,18 @@ def test_preference_policy_is_independent_of_portable_label(tmp_path: Path) -> N
     path = tmp_path / "profile.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     portable = resolve_production_profile(path, "sm_120", "portable_cuda")
-    assert portable.preferred_rys_task_fock_shell_classes is None
+    assert portable.preferred_rys_task_fock_shell_classes == ("psps",)
     assert preferred_rys_task_candidates(portable) == ()
+    enabled = replace(
+        portable,
+        packaging=replace(portable.packaging, fock_variants=frozenset({"rys_task"})),
+        prefer_rys_task_fock=True,
+    )
+    assert {item.spec.name for item in preferred_rys_task_candidates(enabled)} == {
+        "psps"
+    }
+    with pytest.raises(ValueError, match="lack generated capability: psps"):
+        preferred_rys_task_candidates(replace(portable, prefer_rys_task_fock=True))
     relabeled = replace(PROFILE, match=ProfileMatch.PORTABLE)
     assert preferred_rys_task_candidates(relabeled) == preferred_rys_task_candidates(
         PROFILE

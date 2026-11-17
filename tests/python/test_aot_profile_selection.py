@@ -11,10 +11,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc import profiles
+from generativeqc_compiler.integral.production_contracts import ForceExecutionPolicy
 from generativeqc_compiler.integral.production_cost import shell_class_index
 from generativeqc_compiler.integral.production_emission import emit_profile_shard
 from generativeqc_compiler.integral.production_policy import resolved_profile_inventory
-from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_profile import (
+    ProfileMatch,
+    resolve_production_profile,
+)
 from generativeqc_compiler.integral.production_registry import (
     emit_multi_registry_header,
     emit_multi_registry_source,
@@ -33,21 +37,32 @@ def _registry_sources(
     targets: tuple[tuple[str, str], ...],
     *,
     optional_routes: bool = False,
+    force_policy: ForceExecutionPolicy | None = None,
+    relabel_metadata: bool = False,
 ) -> list[Path]:
     """Keep actual profile resolution and dispatch, replacing only GPU bodies."""
     profiles = []
     wrappers = []
     for architecture, intent in targets:
         resolved = resolve_production_profile(MANIFEST, architecture, profile=intent)
+        if force_policy is not None:
+            resolved = replace(resolved, force_policy=force_policy)
+        if relabel_metadata:
+            resolved = replace(
+                resolved, tuned=not resolved.tuned, match=ProfileMatch.PORTABLE
+            )
         names = {"ssss", "psps", "dppp", "pppp"} if optional_routes else {"ssss"}
         resolved = replace(
             resolved,
             selections=tuple(
                 item for item in resolved.selections if item.spec.name in names
             ),
-            optional_fock_variants=resolved.optional_fock_variants
-            if optional_routes
-            else False,
+            packaging=replace(
+                resolved.packaging,
+                fock_variants=resolved.packaging.fock_variants
+                if optional_routes
+                else frozenset(),
+            ),
             preferred_rys_task_fock_shell_classes=("psps",) if optional_routes else (),
         )
         profiles.append(resolved)
@@ -82,7 +97,7 @@ def _registry_sources(
     return [registry, wrapper]
 
 
-def _cuda_stub(directory: Path, architecture: str) -> None:
+def _cuda_stub(directory: Path, architecture: str, *, device_count: int = 2) -> None:
     capability = int(architecture.removeprefix("sm_"))
     (directory / "cuda_runtime_api.h").write_text(f"""
 #pragma once
@@ -98,11 +113,11 @@ inline cudaError_t cudaGetDevice(int* device) {{
   *device = test_current_device; return cudaSuccess;
 }}
 inline cudaError_t cudaSetDevice(int device) {{
-  if (device < 0 || device > 1) return cudaErrorInvalidValue;
+  if (device < 0 || device >= {device_count}) return cudaErrorInvalidValue;
   test_current_device = device; return cudaSuccess;
 }}
 inline cudaError_t cudaGetDeviceProperties(cudaDeviceProp* value, int device) {{
-  if (device < 0 || device > 1) return cudaErrorInvalidValue;
+  if (device < 0 || device >= {device_count}) return cudaErrorInvalidValue;
   value->major = {capability // 10}; value->minor = {capability % 10};
   if (device == 1) {{ value->major = 8; value->minor = 9; }}
   return cudaSuccess;
@@ -147,6 +162,7 @@ SELECTION_CASES = (
 @pytest.mark.parametrize(
     "architecture,targets,expected_profile,expected_status", SELECTION_CASES
 )
+@pytest.mark.parametrize("mock_devices", (False, True))
 def test_native_profile_contract_accepts_compiled_profile(
     tmp_path: Path,
     native_cxx: NativeCxx,
@@ -154,9 +170,10 @@ def test_native_profile_contract_accepts_compiled_profile(
     targets: tuple[tuple[str, str], ...] | None,
     expected_profile: str,
     expected_status: str,
+    mock_devices: bool,
 ) -> None:
     """A physical SM120 does not override an explicitly portable build."""
-    _cuda_stub(tmp_path, architecture)
+    _cuda_stub(tmp_path, architecture, device_count=2 if mock_devices else 1)
     sources = (
         _registry_sources(tmp_path, targets)
         if targets is not None
@@ -173,6 +190,7 @@ def test_native_profile_contract_accepts_compiled_profile(
         compile_args=(
             "-std=c++17",
             f"-DGENERATIVEQC_TEST_AOT_SHELLS={int(targets is not None)}",
+            *(["-DGENERATIVEQC_TEST_MOCK_DEVICES=1"] if mock_devices else []),
             f"-I{tmp_path}",
             f"-I{ROOT / 'src'}",
         ),
@@ -183,6 +201,52 @@ def test_native_profile_contract_accepts_compiled_profile(
     )
     assert f" {expected_profile} " in result.stdout
     assert f"registry={expected_status}" in result.stdout
+    expected_angular = expected_profile != "sm_120"
+    assert f"angular_queue={int(expected_angular)} strict_coverage=0" in result.stdout
+
+
+@pytest.mark.parametrize("relabel_metadata", (False, True))
+@pytest.mark.parametrize(
+    "angular,strict", ((False, False), (False, True), (True, False), (True, True))
+)
+def test_native_force_policy_is_independent_of_profile_metadata(
+    tmp_path: Path,
+    native_cxx: NativeCxx,
+    relabel_metadata: bool,
+    angular: bool,
+    strict: bool,
+) -> None:
+    """Execute actual registry dispatch for every explicit queue/coverage policy."""
+    _cuda_stub(tmp_path, "sm_120")
+    sources = _registry_sources(
+        tmp_path,
+        (("sm_120", "auto"),),
+        force_policy=ForceExecutionPolicy(angular, strict),
+        relabel_metadata=relabel_metadata,
+    )
+    executable = tmp_path / "force-policy-test"
+    native_cxx.build_executable(
+        [
+            ROOT / "tests/native/test_aot_profile.cpp",
+            *sources,
+            tmp_path / "runtime.cpp",
+        ],
+        executable,
+        compile_args=(
+            "-std=c++17",
+            "-DGENERATIVEQC_TEST_AOT_SHELLS=1",
+            "-DGENERATIVEQC_TEST_MOCK_DEVICES=1",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+        ),
+        compile_timeout=60,
+    )
+    result = subprocess.run(
+        [str(executable)], check=True, capture_output=True, text=True, timeout=10
+    )
+    assert (
+        f"angular_queue={int(angular)} strict_coverage={int(strict)}" in result.stdout
+    )
 
 
 @pytest.mark.parametrize(
@@ -295,9 +359,12 @@ extern "C" int dispatch_fock() {
             selections=tuple(
                 item for item in selected.selections if item.spec.name in names
             ),
-            optional_fock_variants=selected.optional_fock_variants
-            if optional_routes
-            else False,
+            packaging=replace(
+                selected.packaging,
+                fock_variants=selected.packaging.fock_variants
+                if optional_routes
+                else frozenset(),
+            ),
             preferred_rys_task_fock_shell_classes=("psps",) if optional_routes else (),
         )
         expected = resolved_profile_inventory(selected)

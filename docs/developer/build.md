@@ -184,20 +184,22 @@ the same normalized override contract. Image suffixes such as `120-real` and
 The generated `production_shell_kernels/generativeqc_aot_build_policy.json`
 records each target's requested/resolved profile and request origin, supplied
 CUDA images, compiled consumer/route masks, default preference masks, and
-packaging policy. No recorded image means the caller did not supply image
+packaging and native force execution policies (sidecar schema version 2).
+No recorded image means the caller did not supply image
 provenance; the generator does not infer an executable image from a profile.
 Compiled masks precede environment, actual-device resource, precision and
 workload admission. A profile name is neither mathematical capability nor a
 scientific/performance qualification receipt.
 
-Custom schema-v2 manifests must explicitly set `compile_derivative_shells`
-and `prefer_rys_task_fock` when requesting those compiled consumers or default
-preferences. Both default to `false`; neither is inferred from `kind`, `tuned`
-or `portable`. The repository manifest explicitly retains the existing tuned
-and portable choices. `optional_fock_variants` remains the independent
-code-size/first-use packaging control. These advanced controls do not qualify
-a new target or promote a global default. Force-portable affects these shell
-bundles, not every architecture-specialized CUDA subsystem.
+Custom schema-v2 manifests independently declare `packaging.fock_variants`,
+`packaging.derivative_shells`, `prefer_rys_task_fock`, scoped class preferences
+and `force_policy`; see the [production policy contract](shell_codegen.md).
+No policy is inferred from `kind`, `tuned` or `portable`. The repository manifest
+explicitly retains the existing target choices. A family may be compiled without
+being preferred, and a portable profile may explicitly opt into a family and its
+preference for a qualified experiment. These controls do not qualify a new target
+or promote a global default. Force-portable affects these shell bundles, not
+every architecture-specialized CUDA subsystem.
 
 The shared native direct-integral archive disables ptxas optimizer constants to
 keep its device-linked recurrence graph within the compiler constant-bank limit.

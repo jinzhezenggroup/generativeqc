@@ -21,6 +21,12 @@ struct ProfileInfo {
   bool compatible;
 };
 
+/** Native execution choices, independent of AOT display/tuning metadata. */
+struct ForceExecutionPolicy {
+  bool small_work_angular_queue;
+  bool require_bounded_spd_coverage;
+};
+
 /** Launch and bucketing metadata scoped to the selected runtime profile. */
 struct ShellKernelMetadata {
   const char* name;
@@ -39,6 +45,9 @@ void select_profile_for_device(int device_id, int compute_capability_major,
 
 /** Return the profile selected for the current CUDA device. */
 const ProfileInfo& selected_profile() noexcept;
+
+/** Return the selected queue/coverage contract, or bounded generic fallback. */
+const ForceExecutionPolicy& selected_force_policy() noexcept;
 
 /** Registry match, independent of profile tuning and environment-enabled masks.
  * Returns "matched", "no_matching_kernel_set", or "aot_disabled". A portable

@@ -75,7 +75,10 @@ def main() -> None:
         # The global build switch is authoritative even for a custom portable
         # profile that explicitly opts into derivative compilation.
         profiles = tuple(
-            replace(profile, compile_derivative_shells=False) for profile in profiles
+            replace(
+                profile, packaging=replace(profile.packaging, derivative_shells=False)
+            )
+            for profile in profiles
         )
     source = emit_cuda_derivative_shell_aot_bundle(profiles, radials)
     args.output.parent.mkdir(parents=True, exist_ok=True)

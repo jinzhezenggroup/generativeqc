@@ -41,7 +41,7 @@ def test_resolved_profile_is_owned_by_profile_module() -> None:
 
 
 @pytest.mark.parametrize("invalid", (0, 1, "false", None))
-def test_optional_fock_variants_requires_an_explicit_boolean(
+def test_fock_packaging_requires_an_explicit_list(
     tmp_path: Path, invalid: object
 ) -> None:
     """Reject ambiguous build policy instead of silently omitting kernels."""
@@ -54,14 +54,94 @@ def test_optional_fock_variants_requires_an_explicit_boolean(
                     "portable_cuda": {
                         "kind": "portable",
                         "kernels": [],
-                        "optional_fock_variants": invalid,
+                        "packaging": {"fock_variants": invalid},
                     }
                 },
             }
         )
     )
-    with pytest.raises(TypeError, match="optional_fock_variants must be a boolean"):
+    with pytest.raises(TypeError, match="fock_variants must be a list"):
         production_profile.resolve_production_profile(manifest, "sm_80")
+
+
+@pytest.mark.parametrize(
+    "obsolete", ("optional_fock_variants", "compile_derivative_shells")
+)
+def test_obsolete_live_packaging_is_not_a_compatibility_alias(
+    tmp_path: Path, obsolete: str
+) -> None:
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "architectures": {
+                    "portable_cuda": {"kind": "portable", "kernels": [], obsolete: True}
+                },
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="use explicit packaging"):
+        production_profile.resolve_production_profile(manifest, "sm_80")
+
+
+@pytest.mark.parametrize(
+    "preference, error, message",
+    (
+        ({"class_set": "missing"}, ValueError, "unknown Rys-task Fock class set"),
+        (
+            {"class_set": "bounded_spd", "classes": []},
+            ValueError,
+            "requires classes or class_set",
+        ),
+        (
+            {"classes": [], "architectures": None},
+            TypeError,
+            "architectures must be a list",
+        ),
+        (
+            {"classes": [], "architectures": "sm_90"},
+            TypeError,
+            "architectures must be a list",
+        ),
+        (
+            {"classes": [], "architectures": [90]},
+            TypeError,
+            "architectures must be a list",
+        ),
+        (
+            {"classes": [], "architectures": ["sm_90", "90-real"]},
+            ValueError,
+            "duplicate Rys-task preference architecture",
+        ),
+        (
+            {"classes": [], "unexpected": True},
+            ValueError,
+            "unknown Rys-task preference field",
+        ),
+        ({"classes": ["psps", "psps"]}, ValueError, "contain duplicates"),
+    ),
+)
+def test_scoped_rys_preferences_reject_ambiguous_evidence(
+    tmp_path: Path, preference: object, error: type[Exception], message: str
+) -> None:
+    manifest = tmp_path / "profile.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "architectures": {
+                    "portable_cuda": {
+                        "kind": "portable",
+                        "kernels": [],
+                        "preferred_rys_task_fock_shell_classes": preference,
+                    }
+                },
+            }
+        )
+    )
+    with pytest.raises(error, match=message):
+        production_profile.resolve_production_profile(manifest, "sm_90")
 
 
 @pytest.mark.parametrize("architecture", (None, "sm_80", "sm_120"))

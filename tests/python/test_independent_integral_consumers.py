@@ -69,7 +69,7 @@ def _manifest(path: Path) -> Path:
                 "architectures": {
                     "portable_cuda": {
                         "kind": "portable",
-                        "optional_fock_variants": False,
+                        "packaging": {"fock_variants": []},
                         "kernels": rows,
                     }
                 },

@@ -593,10 +593,6 @@ def test_production_manifest_drives_generated_registry_and_shards(
     # psss force reuses the exact bounded scheduler; every other canonical
     # s/p/d class has a production-selected generated force consumer.
     assert (generated_force | {"psss"}) & canonical_spd == canonical_spd
-    direct_source = _direct_cuda_source()
-    assert "unexpected_tuned_spd_fallback_mask" in direct_source
-    assert "kCanonicalSpdShellClassMask" in direct_source
-    assert "aot_shell_class_selection_override_requested()" in direct_source
     shards = _partition_production_selections(selections, shard_count=8)
     shard_by_name = {
         selection.spec.name: shard_index
@@ -934,7 +930,7 @@ def test_bounded_force_keeps_fock_only_classes_out_of_force_dispatch(
     begin = source.index(
         "const std::uint64_t explicit_generated_force_shell_class_mask"
     )
-    end = source.index("// A tuned compatible profile", begin)
+    end = source.index("// Only an explicit bounded-force ownership contract", begin)
     masks = source[begin:end]
     probe = tmp_path / "bounded-force-inventory.cpp"
     probe.write_text(
@@ -967,7 +963,7 @@ int main() {
     const std::uint64_t available_generated_force_mask =
         generated::enabled_shell_class_mask() & host_present_shell_class_mask &
         ~ssss_shell_class_mask;
-    const bool portable_angular_force = false;
+    const bool small_work_angular_force = false;
 """
         + masks
         + r"""
@@ -1480,6 +1476,7 @@ def test_production_codegen_cmake_tracks_transitive_generator_inputs(
         "python/generativeqc_compiler/integral/ir.py",
         "python/generativeqc_compiler/integral/ir_serialization.py",
         "python/generativeqc_compiler/integral/production_profile.py",
+        "python/generativeqc_compiler/integral/production_contracts.py",
         "python/generativeqc_compiler/integral/rys.py",
         "python/generativeqc_compiler/integral/rys3_data.py",
         "python/generativeqc_compiler/integral/rys5_data.py",

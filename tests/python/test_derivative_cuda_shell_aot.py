@@ -114,7 +114,7 @@ def test_compiled_fatbinary_selector_keeps_portable_targets_bounded(
                     "architectures": {
                         accepted_target: {
                             "kind": "tuned",
-                            "compile_derivative_shells": True,
+                            "packaging": {"derivative_shells": True},
                             "kernels": [kernel],
                         }
                     },
@@ -216,7 +216,7 @@ def test_generator_global_disable_overrides_custom_packaging_policy(
 ) -> None:
     """An explicit global OFF must win over a valid portable packaging opt-in."""
     payload = json.loads(PRODUCTION.read_text())
-    payload["architectures"]["portable_cuda"]["compile_derivative_shells"] = True
+    payload["architectures"]["portable_cuda"]["packaging"]["derivative_shells"] = True
     manifest = tmp_path / "custom.json"
     manifest.write_text(json.dumps(payload))
     output = tmp_path / "registry.cuh"
@@ -242,7 +242,10 @@ def test_generator_global_disable_overrides_custom_packaging_policy(
     assert all(cuda_derivative_shell_packages(profile, radials) for profile in profiles)
     if disabled:
         profiles = tuple(
-            replace(profile, compile_derivative_shells=False) for profile in profiles
+            replace(
+                profile, packaging=replace(profile.packaging, derivative_shells=False)
+            )
+            for profile in profiles
         )
         assert all(
             not cuda_derivative_shell_packages(profile, radials) for profile in profiles
