@@ -349,7 +349,7 @@ class NamedKsDescriptor(ctypes.Structure):
 
 
 class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
-    """Private size-tagged extension; requires the matching native feature query."""
+    """Mirror the public size-tagged generativeqc_ks_precision_options."""
 
     _fields_ = [
         ("application_energy_budget", ctypes.c_double),
@@ -359,7 +359,7 @@ class ApplicationPrecisionKsOptionsDescriptor(KsOptionsDescriptor):
 
 
 class NonlocalGridKsOptionsDescriptor(ApplicationPrecisionKsOptionsDescriptor):
-    """Private exact-layout extension, discovered before passing borrowed pointers."""
+    """Mirror generativeqc_ks_nonlocal_grid_options; discover support before use."""
 
     _fields_ = [
         ("nonlocal_grid_version", ctypes.c_uint32),

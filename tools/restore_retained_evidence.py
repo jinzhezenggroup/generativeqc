@@ -34,14 +34,15 @@ def _safe_path(path: str) -> None:
         raise ValueError("unsafe historical evidence path")
 
 
-def _manifest(path: Path) -> dict:
+def read_stored_json_bytes(path: Path) -> bytes:
     """Read a manifest, including an authenticated lossless XZ storage record.
 
     Storage records keep existing recovery links stable while retaining the
     original manifest bytes. Only a bounded, adjacent payload is admitted;
     decoded content still passes the ordinary inventory validation below.
     """
-    audit = json.loads(path.read_text())
+    raw = path.read_bytes()
+    audit = json.loads(raw)
     if (
         isinstance(audit, dict)
         and audit.get("schema") == "generativeqc.compressed-manifest.v1"
@@ -56,7 +57,12 @@ def _manifest(path: Path) -> dict:
         size = audit.get("decoded_bytes")
         if type(size) is not int or not 0 < size <= 64 << 20:
             raise ValueError("invalid compressed manifest size")
-        payload = (path.parent / name).read_bytes()
+        payload_path = path.parent / name
+        if payload_path.is_symlink() or not payload_path.is_file():
+            raise ValueError("compressed manifest payload must be a regular file")
+        if payload_path.stat().st_size > 64 << 20:
+            raise ValueError("compressed manifest payload exceeds storage bound")
+        payload = payload_path.read_bytes()
         if hashlib.sha256(payload).hexdigest() != audit.get("payload_sha256"):
             raise ValueError("compressed manifest checksum mismatch")
         decoder = lzma.LZMADecompressor(memlimit=96 << 20)
@@ -65,7 +71,12 @@ def _manifest(path: Path) -> dict:
             raise ValueError("compressed manifest size mismatch")
         if hashlib.sha256(raw).hexdigest() != audit.get("decoded_sha256"):
             raise ValueError("decoded manifest checksum mismatch")
-        audit = json.loads(raw)
+    return raw
+
+
+def _manifest(path: Path) -> dict:
+    """Decode exact storage bytes before applying historical inventory rules."""
+    audit = json.loads(read_stored_json_bytes(path))
     if not isinstance(audit, dict):
         raise TypeError("unsupported evidence migration manifest")
     return audit

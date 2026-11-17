@@ -19,10 +19,12 @@
       "sha256": "7b801edb44f75e949dfafe500cd028d9527db7839196d9026d947523f1fb94a4"
     },
     {
-      "bytes": 61496,
-      "path": "summary.json",
+      "bytes": 11984,
+      "path": "summary.json.xz",
       "role": "summary",
-      "sha256": "08a7ea3b27b18d3cda86054abef266a8bdb490e405f6406fc7b0c6c8063295c1"
+      "sha256": "f0a6b789d14ef41ac5feeee93c57c1b20cf5ed2e0c6b5195ee6ed60cdcd403e2",
+      "decoded_bytes": 61496,
+      "decoded_sha256": "08a7ea3b27b18d3cda86054abef266a8bdb490e405f6406fc7b0c6c8063295c1"
     },
     {
       "bytes": 4991,

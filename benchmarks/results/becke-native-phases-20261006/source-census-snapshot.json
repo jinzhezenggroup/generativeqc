@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "17f9317a2495c142941d7390d465fcf79887d643",
+  "file_count": 1,
+  "total_bytes": 67754,
+  "purpose": "Only frozen build metadata and source-checksum streams. Independent scientific inputs, full observables, failed populations and numerical gates remain in the checkout. No Release or external backup. Exact original bytes are recovered from an already published ancestor without a network fetch.",
+  "files": [
+    {
+      "path": "benchmarks/results/becke-native-phases-20261006/source-files.sha256",
+      "bytes": 67754,
+      "sha256": "a783ca9724f32326bbc14e4a42011939d3dfa52f10eada8f8074b6c9676e3fa2",
+      "git_blob_sha1": "d229f78aa447e1ca29374c201fa51735a7027af1",
+      "git_mode": "100644"
+    }
+  ]
+}

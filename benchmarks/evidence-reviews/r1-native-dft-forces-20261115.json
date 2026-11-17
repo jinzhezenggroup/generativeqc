@@ -1,0 +1,57 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "r1-native-dft-forces-20261115",
+  "owner": "R1 native SDK/CLI/Python force qualification (#2227)",
+  "reason": "All seven complete/rejected/incomplete qualification populations remain exact and independently replayable. Only CPU and the separate resource-bound clean CUDA cohort pass. Science, work, capacity, cleanup and unchanged 1.05 endpoint gates remain independent of storage. Historical code/build-only provenance uses authenticated published Git snapshots; scientific observations never fall back to history or the network.",
+  "review_document": "benchmarks/results/r1-native-dft-forces-20261115/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/catalog-campaign.json.xz",
+      "bytes": 206924,
+      "sha256": "3588f7252effd18b01cf1df310ded190d20a017447174829748aa0b578a62133",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source/ELF/Slurm-bound independent qualification or executable validation receipt, with explicit failed setup and historical limitations. Publication does not qualify another source, backend or property."
+    },
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/diagnosis.json.xz",
+      "bytes": 203064,
+      "sha256": "0a26988b82a7dbc98dfb125128ea0e5490125466d8571394a22ff7dc4a7cabbc",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Every scalar timing row from all 16 instrumented streams, including all 7512 observations and pauses. Explicitly not acceptance; original stream hashes remain, redundant diagnostic vectors and raw profiler/syscall dumps are excluded."
+    },
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/accepted-abba/fp64.xz",
+      "bytes": 269052,
+      "sha256": "fb15601e12c20d95a260a5ab6fa3b469be34c8dd95201c0961e5dc7ea918efc6",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All original accepted CPU/CUDA endpoint observations, full E/F vectors, times and semantic work. Entire original JSONL streams reconstruct byte for byte; no samples or phases are discarded."
+    },
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/accepted-baab/fp64.xz",
+      "bytes": 267916,
+      "sha256": "2f7ea88b9eb0c0286525d40f1b85529a7844ad4c1e3a9462c9218b163174f7bc",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All original accepted CPU/CUDA endpoint observations, full E/F vectors, times and semantic work. Entire original JSONL streams reconstruct byte for byte; no samples or phases are discarded."
+    },
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-abba/fp64.xz",
+      "bytes": 853364,
+      "sha256": "6d4565c414632c2c876db6a31f906f371e9ac47f0b11306fda0c003f4f9628ad",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Full exact-FP64 rejected/incomplete observations, original numerical vectors, timings and work counts. These populations remain FAIL/INCOMPLETE; storage classification is not scientific acceptance."
+    },
+    {
+      "path": "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-baab/fp64.xz",
+      "bytes": 661004,
+      "sha256": "f817e032b4bfec68050f3a58ded875703030b7b3f2e6967a6029a60a94d61838",
+      "family": "r1-native-dft-forces-20261115",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Full exact-FP64 rejected/incomplete observations, original numerical vectors, timings and work counts. These populations remain FAIL/INCOMPLETE; storage classification is not scientific acceptance."
+    }
+  ]
+}

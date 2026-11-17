@@ -137,6 +137,32 @@ python tools/check_cuda_aot_policy.py
 python tools/check_libxc_native_catalog.py
 ```
 
+## November 17 integration and device evidence
+
+Head `00ddef8e9` passes full CI `43990624632`. Its authenticated native CLI
+artifact `14287313860` has the same Git tree as that head. Slurm job 17647
+on allowed node1 preserves its assigned device visibility, verifies the
+installed binary's exact source identity and passes all 32 existing CUDA
+CLI E+F cases: 16 RKS/UKS methods with direct and CUDA density fitting. The
+subprocess PATH excludes Python/compiler execution. These are small H2 FP64
+SM120 controls, not cross-SM, large-chemistry or performance promotion.
+
+The executed native source identity is
+`a67ea8dccf1deedc4a29af606e265cc1b4956e8643f456974af5c24fe0881c49`;
+the CLI SHA-256 is
+`fa708dd0882ed80be82c322ac75aee1bc321e64ae6f07c3f4da4661794aa3695`.
+Raw receipts are under `/data/jzzeng/pr3106-ready-20261117/cli-job-17647/`.
+Separate supplemental native-test-target builds exhaust bounded 60-minute
+and 20-minute allocations (jobs 17615/17616, exit 143). They produce no
+completed native GPU CTest or sanitizer qualification and are not passed.
+
+The subsequent integration of `master@8f4166f0c` preserves its SDK/CLI/Python
+force products. Only the derived CUDA audit conflicts. Preserve the upstream
+Libxc manifest, measured campaigns, previous-summary and its 20 existing
+stage demotions unchanged. There are no additional catalog transitions. The
+earlier passing CI and 32 device endpoints remain bound to `00ddef8e9`, not
+relabeled for the new master integration. Fresh head checks remain separate.
+
 ## Revisit when
 
 Source-identified endpoint evidence supports changing a stock family set,

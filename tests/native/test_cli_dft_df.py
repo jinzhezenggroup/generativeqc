@@ -103,6 +103,40 @@ class NativeDftDfCliTests(unittest.TestCase):
                 self.assertNotEqual(refused.returncode, 0)
                 self.assertEqual(refused.stdout, "")
 
+    def test_independent_nonlocal_grid_rejections(self) -> None:
+        for method, level in (
+            ("wb97m-v-rks", "-1"),
+            ("wb97m-v-rks", "10"),
+            ("pbe-rks", "0"),
+            ("rhf", "0"),
+        ):
+            with self.subTest(method=method, level=level):
+                result = self.call_named(method, "--nonlocal-grid-level", level)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+        for command in ("resources", "optimize", "hessian"):
+            with self.subTest(command=command):
+                result = subprocess.run(
+                    [
+                        str(CLI),
+                        command,
+                        str(MOLECULE),
+                        "--method",
+                        "wb97m-v-rks",
+                        "--nonlocal-grid-level",
+                        "0",
+                        "--json",
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    env={**os.environ, "PATH": "/no-python-runtime"},
+                    timeout=60,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("--nonlocal-grid-level", result.stderr)
+
     def test_bound_r2scan3c_native_basis_and_complete_energy(self) -> None:
         # Independent PySCF/Libxc + dftd4 4.3 + audited gCP reference;
         # exact spherical def2-mTZVPP H2, product grid 8 x 4 x 8.
@@ -205,6 +239,62 @@ class NativeDftDfCliTests(unittest.TestCase):
     def call(self, *flags: str) -> subprocess.CompletedProcess[str]:
         return self.call_named("pbe-rks", *flags)
 
+    def test_registered_dft_names_preserve_explicit_grid_controls(self) -> None:
+        """A registered carrier must not hide its complete compiled composition."""
+        for method in ("pbe-rks", "pbe-uks", "r2scan-rks", "r2scan-uks"):
+            controls = (
+                "--charge",
+                "1" if method.endswith("-uks") else "0",
+                "--multiplicity",
+                "2" if method.endswith("-uks") else "1",
+                "--energy-tolerance",
+                "1e-12",
+                "--density-tolerance",
+                "1e-10",
+            )
+            with self.subTest(method=method):
+                default = self.call_named(method, *controls)
+                explicit = self.call_named(method, *controls, "--grid-level", "3")
+                coarse = self.call_named(
+                    method,
+                    *controls,
+                    "--grid-level",
+                    "0",
+                    *(("--forces",) if DIRECT_AOT_ENABLED else ()),
+                )
+                tensor_grid = self.call_named(method, *controls, *self.SMALL_GRID)
+                for result in (default, explicit, coarse, tensor_grid):
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                default_data, explicit_data, coarse_data = (
+                    json.loads(result.stdout) for result in (default, explicit, coarse)
+                )
+                self.assertEqual(explicit_data["method"], method)
+                self.assertIn("method_ir_identity", explicit_data)
+                self.assertAlmostEqual(
+                    explicit_data["energy_hartree"],
+                    default_data["energy_hartree"],
+                    delta=1e-9,
+                )
+                self.assertGreater(
+                    abs(
+                        coarse_data["energy_hartree"] - explicit_data["energy_hartree"]
+                    ),
+                    1e-9,
+                )
+                if DIRECT_AOT_ENABLED:
+                    forces = coarse_data["forces_hartree_per_bohr"]
+                    self.assertEqual(len(forces), 2)
+                    self.assertTrue(
+                        all(math.isfinite(value) for atom in forces for value in atom)
+                    )
+                    for coordinate in range(3):
+                        self.assertAlmostEqual(
+                            sum(atom[coordinate] for atom in forces), 0, delta=3e-10
+                        )
+        rejected = self.call_named("rhf", "--grid-level", "0")
+        self.assertEqual(rejected.returncode, 2)
+        self.assertEqual(rejected.stdout, "")
+
     def test_generated_method_catalog_backend_and_correction_bounds(self) -> None:
         listing = subprocess.run(
             [str(CLI), "methods", "--compositions", "--json"],
@@ -296,7 +386,7 @@ class NativeDftDfCliTests(unittest.TestCase):
 
     def test_generated_methods_reject_unsupported_graphs_and_forces(self) -> None:
         for method, flags, reason in (
-            ("pbe-rks", ("--grid-radial-points", "64"), "require a generated"),
+            ("rhf", ("--grid-radial-points", "64"), "require a generated"),
             ("b3lyp-rks", ("--grid-polar-points", "0"), "must be positive"),
             ("m06-2x-rks", (), "no qualified native lowerer"),
             ("invented-ks-rks", (), "unknown native or compiler"),
