@@ -40,6 +40,13 @@ cudaError_t launch_generated_one_electron_gradient(
     const std::uint8_t* active, unsigned schedule, double output_sign, double* gradient,
     cudaStream_t stream);
 
+/** Private host bridge; g scalar code is absent from its CUDA module. */
+cudaError_t launch_through_f_one_electron_gradient(
+    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+    const std::int32_t* pair_second, std::size_t pair_count, const OneElectronWeightView& weights,
+    const std::uint8_t* active, unsigned schedule, double output_sign, double* gradient,
+    cudaStream_t stream);
+
 }  // namespace generativeqc::scf
 
 #endif

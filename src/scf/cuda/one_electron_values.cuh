@@ -33,6 +33,9 @@ struct OneElectronDeviceView {
   const double* primitive_coefficients;
   /** Compact response owners use six terms for spherical g; Direct-HF stays at three. */
   std::size_t ao_expansion_terms = 3;
+  /** Validated physical shell bound. Unknown callers retain the complete family;
+   * Cartesian g has one expansion term, so stride cannot establish this bound. */
+  unsigned maximum_angular_momentum = 4;
 };
 
 /** Launch normalized S/Hcore, optionally retaining separate T/V diagnostics.
@@ -49,6 +52,12 @@ cudaError_t launch_generated_one_electron_values(
     const OneElectronDeviceView& batch, const std::int32_t* pair_first,
     const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
     double* hcore, cudaStream_t stream, double* kinetic = nullptr, double* attraction = nullptr);
+
+/** Private host bridge to a distinct low-angular CUDA module. */
+cudaError_t launch_through_f_one_electron_values(
+    const OneElectronDeviceView& batch, const std::int32_t* pair_first,
+    const std::int32_t* pair_second, std::size_t pair_count, unsigned schedule, double* overlap,
+    double* hcore, cudaStream_t stream, double* kinetic, double* attraction);
 
 }  // namespace generativeqc::scf
 

@@ -37,6 +37,7 @@ struct DeviceGuard {
 
 /** Compact topology only: no Direct-HF quartet queues or integral tensors. */
 struct HostView {
+  unsigned maximum_angular_momentum{};
   std::vector<std::int64_t> atom_offsets, ao_offsets, primitive_offsets;
   std::vector<std::int32_t> atomic_numbers, shell_atoms, ao_shells, shell_first, shell_second,
       pair_first, pair_second;
@@ -54,6 +55,7 @@ HostView pack(const core::System& system, unsigned schedule) {
   host.ao_offsets.push_back(0);
   host.primitive_offsets.push_back(0);
   for (const auto& shell : system.shells) {
+    host.maximum_angular_momentum = std::max(host.maximum_angular_momentum, shell.angular_momentum);
     const auto si = static_cast<std::int32_t>(host.shell_atoms.size());
     if (shell.angular_momentum > 4 || shell.atom_index >= system.atoms.size())
       throw std::invalid_argument(
@@ -218,7 +220,8 @@ generativeqc_status execute_cuda_one_electron_gradient(
                                arena.upload(host.term_coefficients),
                                arena.upload(host.exponents),
                                arena.upload(host.coefficients),
-                               molecule::kMaximumAuxiliaryAoExpansionTerms};
+                               molecule::kMaximumAuxiliaryAoExpansionTerms,
+                               host.maximum_angular_momentum};
     const auto* first = arena.upload(host.pair_first);
     const auto* second = arena.upload(host.pair_second);
     OneElectronWeightView weights{arena.upload(ws), arena.upload(wt), nullptr};
@@ -361,7 +364,8 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
                                arena.upload(host.term_coefficients),
                                arena.upload(host.exponents),
                                arena.upload(host.coefficients),
-                               molecule::kMaximumAuxiliaryAoExpansionTerms};
+                               molecule::kMaximumAuxiliaryAoExpansionTerms,
+                               host.maximum_angular_momentum};
     const auto* first = arena.upload(host.pair_first);
     const auto* second = arena.upload(host.pair_second);
     const auto* d_device = resident_weights ? resident_density : arena.upload(density);
@@ -475,7 +479,9 @@ generativeqc_status consume_prepared_cuda_stationary_one_electron_pair(
   const bool generated_owner =
       exchange && exchange->force_capability && exchange->shared && exchange->force;
   const auto view =
-      cuda_execution::one_electron_view(generated_owner ? exchange->shared->batch : source->batch);
+      // Direct J/K preparation validates every physical shell at l <= 3.
+      cuda_execution::one_electron_view(generated_owner ? exchange->shared->batch : source->batch,
+                                        3);
   auto* output = generated_owner ? exchange->force : source->derivative;
   if (!output) {
     detail = "prepared Direct owner has no retained shell-force scratch";

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/one_electron_gradient_launch.cuh",
+  "reason": "Native scientific composition remains here: normalized AO/primitive weighting, coincident-center responses, nuclear accumulation and weighted-gradient scheduling around compiler-owned scalar S/T/V derivatives. Separating angular modules does not retire this contraction mathematics.",
+  "regions": [],
+  "role": "scientific",
+  "subsystem": "one_electron_derivatives"
+}

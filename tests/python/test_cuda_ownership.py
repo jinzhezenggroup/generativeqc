@@ -58,6 +58,31 @@ def test_weighted_dispatch_declarations_have_explicit_runtime_ownership() -> Non
         ownership_report(root, ledger)
 
 
+@pytest.mark.parametrize(
+    ("filename", "role", "subsystem"),
+    [
+        ("one_electron_derivatives.cu", "runtime", "one_electron_derivatives"),
+        ("one_electron_derivatives_f.cu", "runtime", "one_electron_derivatives"),
+        ("one_electron_gradient_launch.cuh", "scientific", "one_electron_derivatives"),
+        ("one_electron_value_launch.cuh", "runtime", "one_electron_values"),
+        ("one_electron_values_f.cu", "runtime", "one_electron_values"),
+    ],
+)
+def test_angular_module_launches_retain_explicit_semantic_ownership(
+    filename: str, role: str, subsystem: str
+) -> None:
+    """Keep native contraction science visible while inventoring host bridges."""
+    root = Path(__file__).resolve().parents[2]
+    ledger = load_ledger(root / "docs/cuda_ownership")
+    path = "src/scf/cuda/" + filename
+    record = next(row for row in ledger["files"] if row["path"] == path)
+    assert record["role"] == role
+    assert record["subsystem"] == subsystem
+    ledger["files"].remove(record)
+    with pytest.raises(ValueError, match="unclassified"):
+        ownership_report(root, ledger)
+
+
 def ledger_for(tmp_path: typing.Any) -> typing.Any:
     (tmp_path / "src").mkdir()
     (tmp_path / "src/sample.cu").write_text(

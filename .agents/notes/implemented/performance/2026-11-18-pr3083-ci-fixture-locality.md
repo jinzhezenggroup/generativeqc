@@ -72,3 +72,27 @@ the three transferred modules, unchanged ordinary core ownership, all five
 events, absent/untracked/tracked/missing inputs, complete inventory and retained
 coverage/deselection arguments. Shell syntax, Ruff and whitespace checks pass.
 These configuration tests are not a full manylinux build or GPU execution.
+
+The separate pre-integration three-module native run passes 51 cases and
+explicitly skips two in 1,171.57 seconds. Its production inputs are the
+unchanged CPU inputs from `b320e86e4`; it starts before the CI-only commit
+`16b1f26e5` and is not relabelled as a later upstream qualification. The
+actual CMake compiler commands invoke verified ccache, with before/after
+statistics retained alongside the log.
+
+## Concurrent upstream integration
+
+After pushing the CI fix, GitHub reports the PR unmergeable and does not start
+the required PR workflows. The advertised PR base snapshot still names
+`f73be1630`, but the actual remote master ref has advanced to
+`2791504cc238fe83d328fc1718080642b288222a` (#3109 and #3110).
+Check the actual branch ref and freshly fetched commit rather than inferring
+current mergeability from that snapshot alone.
+
+Integrate both upstream commits, preserving the native Hessian CMake additions
+and upstream one-electron CUDA port/collector changes. The only content
+conflict is the derived AOT audit native identity. Compute it from the combined
+input inventory as
+`d998ad3b1c469e251fe64b36a497f0eca57e92fddf94e315c8b2ac69b0da801a`,
+not either parent's identity. Preserve sealed default decisions and original
+compile/endpoint evidence, with no numerical promotion or re-labelled receipt.

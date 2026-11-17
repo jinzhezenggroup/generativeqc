@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/one_electron_derivatives.cu",
-  "reason": "Production contraction/scheduling glue around compiler-generated S/T/V derivative primitives; primitive derivative mathematics is compiler-owned.",
+  "reason": "Host dispatch to the validated through-f or complete-g program; native weighted contraction and scheduling kernels are inventoried separately in one_electron_gradient_launch.cuh.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "one_electron_derivatives"
 }

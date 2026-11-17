@@ -1,0 +1,9 @@
+{
+  "name": "one_electron_angular_families",
+  "outputs": [
+    "generated/generated_one_electron_value_family.cuh",
+    "generated/generated_one_electron_derivative_family.cuh",
+    "generated/generated_one_electron_family_metadata.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/integral/one_electron_families_cuda.py"
+}
