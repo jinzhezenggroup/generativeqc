@@ -109,19 +109,37 @@ extern "C" void evaluate_g(const double* inputs, double* outputs, unsigned count
     return library
 
 
-@pytest.mark.parametrize("angular", list(product(range(4), repeat=2)))
+@pytest.mark.parametrize(
+    ("angular", "primitive_exponents"),
+    [
+        (angular, exponents)
+        for angular in product(range(4), repeat=2)
+        for exponents in ((0.8, 0.35), (0.03, 14.0), (18.0, 0.05))
+        if max(angular) >= 3 or exponents == (0.8, 0.35)
+    ],
+)
 @pytest.mark.parametrize("variant", ["asymmetric", "near", "boys_below", "distant"])
 def test_through_f_value_policy_against_libcint(
-    angular_families: typing.Any, angular: tuple[int, int], variant: str
+    angular_families: typing.Any,
+    angular: tuple[int, int],
+    primitive_exponents: tuple[float, float],
+    variant: str,
 ) -> None:
-    _check_values(angular_families.evaluate_f, angular, variant)
+    _check_values(angular_families.evaluate_f, angular, primitive_exponents, variant)
 
 
 @pytest.mark.parametrize("angular", [(4, 0), (1, 4), (4, 4)])
+@pytest.mark.parametrize(
+    "primitive_exponents", [(0.8, 0.35), (0.03, 14.0), (18.0, 0.05)]
+)
 def test_g_fallback_coexists_with_through_f(
-    angular_families: typing.Any, angular: tuple[int, int]
+    angular_families: typing.Any,
+    angular: tuple[int, int],
+    primitive_exponents: tuple[float, float],
 ) -> None:
-    _check_values(angular_families.evaluate_g, angular, "asymmetric")
+    _check_values(
+        angular_families.evaluate_g, angular, primitive_exponents, "asymmetric"
+    )
 
 
 def test_typed_derivative_bindings_against_independent_blocks(
