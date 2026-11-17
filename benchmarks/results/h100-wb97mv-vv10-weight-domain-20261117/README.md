@@ -50,3 +50,22 @@ The saving is concentrated in the SCF pair sweeps; warm calls are unchanged.
 Remote raw records: `.../h100-cold/20261117-wb97mv/wb-v4` and `wb-v5`. Two queue
 attempts that failed before any scientific process ran (a missing delta archive and
 a missing arm list) are retained under `attempt-06-missing-delta/`.
+
+## Rejected follow-ups (`rejected-arms.json.xz`)
+
+On the policy-v3 image, water-96 Direct (cold / warm median, s):
+
+| Arm | Cold | Warm | Focks (targets) |
+| --- | ---: | ---: | --- |
+| automatic SCF/force tiles 1024/1024 (four processes) | 36.50–36.57 | 7.43–7.50 | 13 (5) |
+| explicit SCF 512 (forces inherit 512) | 37.555 | 8.111 | 13 (5) |
+| explicit SCF 2048 (forces inherit 2048) | 38.890 | 9.995 | 13 (5) |
+| explicit force 2048 | 40.987 | 10.174 | 13 (5) |
+| explicit SCF and force 2048 | 38.949 | 9.958 | 13 (5) |
+| frozen inner solve to 0.03/0.1/0.3 × last target residual | 45.18–45.25 | 7.44–7.46 | 15 (9) |
+
+Larger tiles slow the force batches; looser frozen inner solves save two
+provisional Focks but need four more full targets and pair sweeps (water-48 Direct
+16.86 vs 14.03 s). The inner-factor selector was a diagnostic image only. One DF
+water-96 sample with factor 0.1 was 20.90 vs 21.73 s; a single sample against a
+large Direct regression does not justify an owner-specific policy.
