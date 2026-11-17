@@ -1,0 +1,37 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "17f9317a2495c142941d7390d465fcf79887d643",
+  "file_count": 4,
+  "total_bytes": 507403,
+  "purpose": "Only frozen build metadata and source-checksum streams. Dirty measured-source patches, independent scientific inputs, full observations, failures and numerical gates remain in the checkout. Exact provenance bytes recover from an already published ancestor without a network fetch.",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz",
+      "bytes": 307828,
+      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2",
+      "git_blob_sha1": "8dd4cee4ac3cc619d33c0915a2faa31889667392",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/becke-native-phases-20261006/source-files.sha256",
+      "bytes": 67754,
+      "sha256": "a783ca9724f32326bbc14e4a42011939d3dfa52f10eada8f8074b6c9676e3fa2",
+      "git_blob_sha1": "d229f78aa447e1ca29374c201fa51735a7027af1",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/becke-physical-forces-20261006/source-files.sha256.gz",
+      "bytes": 65978,
+      "sha256": "3ea66e50fec796a0f1caebf852727eb4871df256b7314b482c6291bff6c541d1",
+      "git_blob_sha1": "fd6bd7d2e696bd42ac99b1f27cb0003c33848407",
+      "git_mode": "100644"
+    },
+    {
+      "path": "benchmarks/results/becke-physical-endpoints-20261006/source-files.sha256.gz",
+      "bytes": 65843,
+      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7",
+      "git_blob_sha1": "f9dab9c85d62f60700c2840880a7b989ae558aa1",
+      "git_mode": "100644"
+    }
+  ]
+}

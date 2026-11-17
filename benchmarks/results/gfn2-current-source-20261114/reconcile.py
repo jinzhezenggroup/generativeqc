@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import lzma
@@ -19,10 +20,34 @@ def load(path: Path) -> dict:
     return json.loads(lzma.decompress(path.read_bytes()))
 
 
-def reconcile() -> dict:
+def reconcile(*, source_censuses: Path | None = None) -> dict:
+    """Replay every numerical gate; optionally audit the restored hash censuses.
+
+    Ordinary replay authenticates the retained report/source identities without
+    pretending to load the archived whole-checkout hash streams. The explicit
+    audit additionally verifies both original compressed and decoded bytes.
+    """
     provenance = json.loads((ROOT / "provenance.json").read_text())
+    snapshot_bytes = (ROOT / "source-censuses-snapshot.json").read_bytes()
+    if (
+        hashlib.sha256(snapshot_bytes).hexdigest()
+        != provenance["source_census_snapshot_sha256"]
+    ):
+        raise ValueError("source census snapshot identity mismatch")
+    snapshot = json.loads(snapshot_bytes)
+    archived = {Path(row["path"]).name: row for row in snapshot["files"]}
+    if set(archived) != {"cpu-source.sha256.xz", "cuda-source.sha256.xz"}:
+        raise ValueError("source census snapshot inventory mismatch")
     for name, identity in provenance["archive_sha256"].items():
-        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != identity:
+        if name in archived:
+            if archived[name]["sha256"] != identity:
+                raise ValueError("archived source census identity mismatch: " + name)
+            if source_censuses is None:
+                continue
+            stored = (source_censuses / name).read_bytes()
+        else:
+            stored = (ROOT / name).read_bytes()
+        if hashlib.sha256(stored).hexdigest() != identity:
             raise ValueError("archive identity mismatch: " + name)
     oracle = load(HISTORICAL / "matched-oracle.json.xz")
     oracle_identity = hashlib.sha256(
@@ -80,11 +105,21 @@ def reconcile() -> dict:
                 report["settings"].get(key) != value for key, value in controls.items()
             ):
                 raise ValueError("scientific control mismatch: " + name)
-            manifest_identity = hashlib.sha256(
-                lzma.decompress((ROOT / bound["source_manifest_archive"]).read_bytes())
-            ).hexdigest()
+            census = archived[bound["source_manifest_archive"]]
+            manifest_identity = census["decoded_sha256"]
+            if source_censuses is not None:
+                decoded = lzma.decompress(
+                    (source_censuses / bound["source_manifest_archive"]).read_bytes()
+                )
+                if (
+                    len(decoded) != census["decoded_bytes"]
+                    or hashlib.sha256(decoded).hexdigest() != manifest_identity
+                    or len(decoded.splitlines()) != census["source_lines"]
+                ):
+                    raise ValueError("decoded source census identity mismatch: " + name)
             if (
                 manifest_identity != report["source_manifest_sha256"]
+                or manifest_identity != bound["source_manifest_sha256"]
                 or report["oracle_sha256"] != oracle_identity
                 or report["driver_sha256"]
                 != hashlib.sha256((ROOT / "replay.py").read_bytes()).hexdigest()
@@ -181,6 +216,7 @@ def reconcile() -> dict:
         all_errors.extend(errors)
     summary.update(
         status="PASS",
+        whole_source_census_audited=source_censuses is not None,
         observations=sum(
             report["observations"] for report in summary["reports"].values()
         ),
@@ -191,4 +227,13 @@ def reconcile() -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(reconcile(), indent=2, allow_nan=False))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-censuses", type=Path)
+    arguments = parser.parse_args()
+    print(
+        json.dumps(
+            reconcile(source_censuses=arguments.source_censuses),
+            indent=2,
+            allow_nan=False,
+        )
+    )

@@ -1,0 +1,10 @@
+{
+  "schema": "generativeqc.native-dft-force-evidence-set.v1",
+  "bundles": {
+    "accepted-abba": "d3942ce4fea6e5de6840ba06bc21da51653b5966f25366e05596c6d8ee4c8337",
+    "accepted-baab": "c4ea17839874f7122e3993f8746db0e03951a42b1a0a22fbb8720e6269e423a5",
+    "support": "be0b4238470229e3f86104fa2e4ac3776995ac1a83669797127381523dc4f0d6",
+    "rejected-abba": "8a50fa138fa39cc041d5e83a438ce3bb5cd7f9ff38732b77f35638a70081dfa7",
+    "rejected-baab": "505c501170ad41c59e6aa509c46610b9442313232a723334595fd452fd54cfb9"
+  }
+}

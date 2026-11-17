@@ -183,7 +183,8 @@ def test_cuda_r2scan3c_public_force_is_electronic_plus_d4_plus_gcp(
     )
 
     assert corrected.dispersion is not None
-    assert corrected.dispersion.backend == "cuda+cpu"
+    assert corrected.dispersion.backend == "cuda"
+    assert corrected.dispersion.gcp.backend == "cuda"
     assert corrected.energy == pytest.approx(plain.energy + correction.energy, abs=2e-9)
     np.testing.assert_allclose(
         corrected.forces,
@@ -262,11 +263,17 @@ def test_cuda_r2scan3c_water_total_force_matches_reconverged_directional_fd() ->
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
     reason="explicit real-device CUDA gate",
 )
-def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
+def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native integral ownership elides AO pages, not the real byte budget."""
     allocation = _real_cuda_allocation()
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc._stationary_cuda import complete_rks_cuda_gradient_diagnostic
     from generativeqc_compiler.dft import NativeAO
+    from test_r1_native_forces import forbid_python_force
+
+    forbid_python_force(monkeypatch)
 
     calculator = Calculator(
         method="r2scan-3c-rks",
@@ -283,7 +290,21 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
         ) as basis:
             state = StationaryKsState.from_native(batch, basis)
             try:
-                with pytest.raises(ValueError, match="primitive page work budget"):
+                bounded = complete_rks_cuda_gradient_diagnostic(
+                    state,
+                    basis,
+                    compiler=batch._stationary_cuda_compiler(),
+                    target=batch._stationary_cuda_target(),
+                    cache=Path(
+                        os.environ.get(
+                            "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
+                        )
+                    ),
+                    aot_directory=None,
+                    native_grid_library=Path(str(batch._library._name)).resolve(),
+                    max_primitive_records=1,
+                )
+                with pytest.raises(ValueError, match="budget|capacity|bytes"):
                     complete_rks_cuda_gradient_diagnostic(
                         state,
                         basis,
@@ -297,27 +318,27 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work() -> None:
                         ),
                         aot_directory=None,
                         native_grid_library=Path(str(batch._library._name)).resolve(),
-                        max_primitive_records=1,
+                        max_device_bytes=1,
                     )
             finally:
                 state._source.close()
-        force, work = batch._public_dft_cuda_force(0, WATER)
+        assert batch._native_dft_force_eligible(0)
+        force = (
+            batch.execute(strict=True, properties=("energy", "forces")).items[0].forces
+        )
+        work = bounded.work
 
     assert force.shape == (3, 3)
-    assert work["primitive_records"] == 17_408
-    assert work["full_range_derivative_route"] == "prepared-direct-shell"
+    assert work["full_range_derivative_route"] == "prepared-native-stationary"
     assert work["full_range_ao_task_domain_elided"] is True
-    assert work["primitive_record_page_budget"] == 16_000_000
-    assert (
-        0 < work["primitive_page_peak_records"] <= work["primitive_record_page_budget"]
-    )
-    assert work["primitive_pages"] > 0
-    assert work["task_descriptors"] > 0
-    assert work["task_batches"] > 0
+    assert work["primitive_record_page_budget"] == 1
+    assert work["primitive_page_peak_records"] == 0
+    assert work["primitive_pages"] == 0
+    assert work["stationary_native_integral_sources"]
     assert work["additional_device_peak_bound"] <= work["additional_device_budget"]
     _cuda_evidence(
         "water-spd-resource-work",
-        {**work, "allocation": allocation, "rejected_page_budget": 1},
+        {**work, "allocation": allocation, "rejected_device_budget_bytes": 1},
     )
 
 

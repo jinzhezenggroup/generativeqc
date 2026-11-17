@@ -17,3 +17,10 @@ The wrapper reconstructs isolated Git source views at the original relative path
 The stored actual integration audit completed all nine private integration gates; its backend model/effort is unknown and assurance is same-family/provisional. This bounded public stage supplies seven independently replayable safety proofs, with its original failures. Profile/source7013 continuity evidence and final three-pair majority results have separate delivery scopes. It does not claim every373 audit input is published here, final majority acceptance, or performance of continuously advancing master. The later main default update#2949 does not change the frozen measurement source; the measured policy explicitly selected1024-point tiles.
 
 Original scientific gates, storage limits and all unfavorable observations remain intact. Issue#2889/#2893 retain the full final-performance objective. A100 ownership and RTX5090 device boundaries remain separate.
+
+The build-only `production-build-v1-metadata.tar.xz` is restored byte for byte
+from published ancestor `17f9317a2495c142941d7390d465fcf79887d643`, authenticated by
+`../evidence-storage-20261115/source-snapshot.json`. This contains compiler/build
+provenance, not independent scientific observations. The wrapper permits offline
+Git recovery only for that missing archive; present invalid metadata and missing
+numerical packets fail closed. All numerical/sanitizer packets remain local.

@@ -3072,9 +3072,9 @@ auto checked_precision_mode(const generativeqc_method_descriptor& d) { return d.
         + r"""
 int main() {
  static_assert(sizeof(generativeqc_ks_options)==168);
- static_assert(sizeof(dft::ApplicationPrecisionKsOptions)==192);
- static_assert(sizeof(dft::NonlocalGridKsOptions)==208);
- static_assert(offsetof(dft::NonlocalGridKsOptions,grid)==200);
+ static_assert(sizeof(generativeqc_ks_precision_options)==192);
+ static_assert(sizeof(generativeqc_ks_nonlocal_grid_options)==208);
+ static_assert(offsetof(generativeqc_ks_nonlocal_grid_options,grid)==200);
  generativeqc_ks_options primary{};
  primary.struct_size=sizeof(primary); primary.abi_version=GENERATIVEQC_ABI_VERSION;
  primary.scf_domain="current-domain"; primary.tile_points=37;
@@ -3118,13 +3118,13 @@ int main() {
    assert((read(&explicit_legacy).first.element_radii==std::array<double,119>{}));
  }
  assert(legacy.second.xc_execution_schedule==scf::ScfOptions::XcExecutionSchedule::HostUnfused);
- dft::ApplicationPrecisionKsOptions precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=sizeof(precision);
+ generativeqc_ks_precision_options precision{primary,1e-6,1e-5,3e-6};precision.base.struct_size=sizeof(precision);
  const auto old_precision=read(&precision.base);
  assert(old_precision.first==legacy.first);
  assert((old_precision.second.application_precision_budget==std::array<double,3>{1e-6,1e-5,3e-6}));
  auto secondary=primary;secondary.radial_points=4;secondary.angular_polar=8;secondary.partition_iterations=2;
  std::array<double,119> radii;radii.fill(1.0);radii[1]=1.3;secondary.element_radii=radii.data();secondary.element_radius_count=119;
- dft::NonlocalGridKsOptions independent{};independent.base.base=primary;independent.base.base.struct_size=sizeof(independent);independent.grid=&secondary;
+ generativeqc_ks_nonlocal_grid_options independent{};independent.version=1;independent.base.base=primary;independent.base.base.struct_size=sizeof(independent);independent.grid=&secondary;
  const auto split=read(&independent.base.base);
  assert(split.first==legacy.first && split.second.nonlocal_grid_spec);
  assert(split.second.nonlocal_grid_spec->radial_points==4 && split.second.nonlocal_grid_spec->angular_polar==8);
@@ -3149,7 +3149,7 @@ int main() {
   if(mode==1)bad.version=2;
   if(mode==2)bad.reserved=1;
   if(mode==3)bad.grid=nullptr;
-  if(mode==4)inner.struct_size=sizeof(dft::ApplicationPrecisionKsOptions);
+  if(mode==4)inner.struct_size=sizeof(generativeqc_ks_precision_options);
   if(mode==5)inner.abi_version=GENERATIVEQC_ABI_VERSION+1;
   if(mode==6)inner.scf_domain="wrong";
   if(mode==7)inner.radial_points=0;

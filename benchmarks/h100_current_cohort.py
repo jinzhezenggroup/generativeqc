@@ -15,6 +15,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from tools.restore_retained_evidence import read_stored_json_bytes
+
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / "benchmarks/results/h100-sm90-cd2b-20261102"
 SOURCE = "cd2b4514be0a38c4920934481b1f02d157a694b4"
@@ -63,7 +65,11 @@ def artifact_bytes(directory: Path, name: str) -> bytes:
     if path.is_symlink():
         raise ValueError(f"Missing or linked publication member: {name}")
     if path.is_file():
-        return path.read_bytes()
+        return (
+            read_stored_json_bytes(path)
+            if path.suffix == ".json"
+            else path.read_bytes()
+        )
     if path.exists() or name not in HISTORICAL_FILES:
         raise ValueError(f"Missing or linked publication member: {name}")
     spec = importlib.util.spec_from_file_location(

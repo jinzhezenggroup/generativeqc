@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -11,9 +12,13 @@ from tools.check_native_runtime_ownership import (
     DELIVERY,
     MANIFEST,
     ROOT,
+    _anchor,
     validate,
     validate_delivery,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -175,7 +180,7 @@ def test_delivery_cannot_retire_a_remaining_scientific_controller(
 ) -> None:
     row = next(row for row in delivery["rows"] if row["state"] == "partial-cutover")
     row["state"] = "native-dispatch"
-    with pytest.raises(ValueError, match="Python science is not retired"):
+    with pytest.raises(ValueError, match="native dispatch can only retain wrappers"):
         validate_delivery(delivery, inventory)
 
 
@@ -205,3 +210,177 @@ def test_compiler_and_independent_oracle_work_are_not_retired(
     row["retired_python_runtime"] = ["delete this intentional Python owner"]
     with pytest.raises(ValueError, match="retain independent compiler/oracle"):
         validate_delivery(delivery, inventory)
+
+
+def test_delivery_requires_the_current_call_path_schema(
+    delivery: dict, inventory: dict
+) -> None:
+    delivery["schema"] = "generativeqc.python-native-runtime-delivery.v1"
+    with pytest.raises(ValueError, match="unsupported runtime delivery schema"):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize(
+    "axis",
+    [
+        "method_selectors",
+        "backends",
+        "representations",
+        "properties",
+        "spins",
+        "approximations",
+    ],
+)
+@pytest.mark.parametrize("values", [None, [], "cpu", ["cpu", "cpu"], [None]])
+def test_delivery_retains_all_six_current_audit_axes(
+    delivery: dict, inventory: dict, axis: str, values: object
+) -> None:
+    delivery["rows"][0]["audit_axes"][axis] = values
+    with pytest.raises(ValueError, match=f"audit_axes {axis}"):
+        validate_delivery(delivery, inventory)
+
+
+def test_delivery_cannot_substitute_the_historical_matrix(
+    delivery: dict, inventory: dict
+) -> None:
+    delivery["rows"][0].pop("audit_axes")
+    with pytest.raises(ValueError, match="missing audit_axes"):
+        validate_delivery(delivery, inventory)
+
+
+def test_current_audit_domains_need_not_freeze_the_original_baseline(
+    delivery: dict, inventory: dict
+) -> None:
+    delivery["rows"][0]["audit_axes"]["approximations"].append(
+        "additional-reviewed-domain"
+    )
+    validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize(
+    "selector", ["missing-method", "catalog-family:missing", "method-ir:"]
+)
+def test_delivery_uses_catalog_selectors_not_a_second_method_registry(
+    delivery: dict, inventory: dict, selector: str
+) -> None:
+    delivery["rows"][0]["audit_axes"]["method_selectors"] = [selector]
+    with pytest.raises(ValueError, match="unknown audit_axes method"):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize("paths", [None, [], {}, [None]])
+def test_delivery_requires_structured_call_paths(
+    delivery: dict, inventory: dict, paths: object
+) -> None:
+    delivery["rows"][0]["call_paths"] = paths
+    with pytest.raises(ValueError, match="call.path"):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize("field", ["caller", "callee", "scope", "python_role"])
+def test_call_paths_require_context_and_classification(
+    delivery: dict, inventory: dict, field: str
+) -> None:
+    delivery["rows"][0]["call_paths"][0].pop(field)
+    with pytest.raises(ValueError, match=field):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize("field", ["caller", "callee"])
+@pytest.mark.parametrize("anchor", ["../AGENTS.md", "/etc/passwd", "missing.py"])
+def test_call_paths_require_local_source_files(
+    delivery: dict, inventory: dict, field: str, anchor: str
+) -> None:
+    delivery["rows"][0]["call_paths"][0][field] = anchor
+    with pytest.raises(ValueError, match="source anchor"):
+        validate_delivery(delivery, inventory)
+
+
+def test_call_path_endpoints_are_part_of_the_row_evidence(
+    delivery: dict, inventory: dict
+) -> None:
+    row = delivery["rows"][0]
+    row["source_anchors"].remove(row["call_paths"][0]["caller"])
+    with pytest.raises(ValueError, match="missing source_anchors"):
+        validate_delivery(delivery, inventory)
+
+
+def test_python_edges_cannot_be_marked_entirely_native(
+    delivery: dict, inventory: dict
+) -> None:
+    delivery["rows"][0]["call_paths"][0]["python_role"] = None
+    with pytest.raises(ValueError, match="Python call path needs classification"):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize("role", ["native", "", [], "compatibility"])
+def test_call_path_roles_must_agree_with_the_row(
+    delivery: dict, inventory: dict, role: object
+) -> None:
+    delivery["rows"][0]["call_paths"][0]["python_role"] = role
+    with pytest.raises(ValueError, match="call path.*[Pp]ython role|call path roles"):
+        validate_delivery(delivery, inventory)
+
+
+def test_entirely_native_edges_do_not_invent_python_wrappers(
+    delivery: dict, inventory: dict
+) -> None:
+    row = next(row for row in delivery["rows"] if not row["python_roles"])
+    validate_delivery(delivery, inventory)
+    row["call_paths"][0]["python_role"] = "wrapper"
+    with pytest.raises(ValueError, match="invalid call path Python role"):
+        validate_delivery(delivery, inventory)
+
+
+def test_non_code_evidence_cannot_impersonate_a_native_edge(
+    delivery: dict, inventory: dict
+) -> None:
+    row = next(row for row in delivery["rows"] if not row["python_roles"])
+    row["source_anchors"].append(MANIFEST)
+    row["call_paths"][0]["caller"] = MANIFEST
+    with pytest.raises(ValueError, match="unclassified edge must be native code"):
+        validate_delivery(delivery, inventory)
+
+
+def test_only_native_dispatch_can_omit_python_roles(
+    delivery: dict, inventory: dict
+) -> None:
+    row = next(row for row in delivery["rows"] if row["state"] == "partial-cutover")
+    row["python_roles"] = []
+    with pytest.raises(ValueError, match="only native dispatch"):
+        validate_delivery(delivery, inventory)
+
+
+@pytest.mark.parametrize("role", ["compiler-ad", "reference-oracle"])
+def test_intentional_python_is_not_native_runtime_delivery(
+    delivery: dict, inventory: dict, role: str
+) -> None:
+    row = next(row for row in delivery["rows"] if row["python_roles"] == [role])
+    row["state"] = "native-dispatch"
+    with pytest.raises(ValueError, match="native dispatch can only retain wrappers"):
+        validate_delivery(delivery, inventory)
+
+
+def test_compatibility_cannot_be_reclassified_as_a_wrapper(
+    delivery: dict, inventory: dict
+) -> None:
+    row = next(row for row in delivery["rows"] if row["state"] == "compatibility")
+    row["python_roles"] = ["wrapper"]
+    with pytest.raises(ValueError, match="compatibility needs its own Python role"):
+        validate_delivery(delivery, inventory)
+
+
+def test_source_anchor_symlinks_cannot_escape_the_checkout(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    outside = tmp_path / "outside.cpp"
+    outside.write_text("", encoding="utf-8")
+    (checkout / "source.cpp").symlink_to(outside)
+    with pytest.raises(ValueError, match="nonlocal source anchor"):
+        _anchor(checkout, "source.cpp")
+
+
+def test_source_anchor_symlinks_within_the_checkout_are_local(tmp_path: Path) -> None:
+    (tmp_path / "target.cpp").write_text("", encoding="utf-8")
+    (tmp_path / "source.cpp").symlink_to("target.cpp")
+    assert _anchor(tmp_path, "source.cpp") == tmp_path / "source.cpp"

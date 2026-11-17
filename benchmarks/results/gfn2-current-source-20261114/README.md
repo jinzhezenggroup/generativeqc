@@ -3,10 +3,37 @@
 This campaign separates current-source CPU/CUDA qualification from the
 [historical cutoff reconciliation](../gfn2-sharp-cutoff-20261113/README.md).
 The production source is commit `95c3e547f96848e2fc3392d85fdfa1a68dff688b`.
-The retained tracked-source manifests and patches identify the exact snapshots;
+The authenticated source-census identities and patches identify the exact snapshots;
 the patches change qualification, tests and documentation, not production science.
 Actual shared-library hashes, build/resource identities, commands, exits and
 archive hashes belong to `provenance.json`, not an inferred identity from HEAD.
+
+The two whole-checkout source-hash streams are now retained in published
+ancestor `17f9317a2495c142941d7390d465fcf79887d643`, authenticated by
+`source-censuses-snapshot.json`. Their exact original compressed/decoded
+identities and line counts remain available, along with both dirty source
+patches. All independent inputs, numerical observations, failures and ordinary
+scientific replay remain offline in the checkout. Ordinary reconciliation
+checks the report/source identity bindings and explicitly reports
+`whole_source_census_audited=false`; it does not pretend to load the archived
+streams. An explicit full-census audit additionally verifies their original
+compressed and decoded bytes. This retention change frees 1,259,176 payload
+bytes without raising the evidence budget or changing numerical acceptance.
+
+Restore the exact historical streams with the existing offline Git recovery
+tool, then request the additional audit:
+
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/gfn2-current-source-20261114/source-censuses-snapshot.json \
+  --output .artifacts/gfn2-source-censuses
+python benchmarks/results/gfn2-current-source-20261114/reconcile.py \
+  --source-censuses .artifacts/gfn2-source-censuses/benchmarks/results/gfn2-current-source-20261114
+```
+
+Restoration never fetches implicitly. A shallow clone may need an explicit
+user-controlled fetch of the published revision; ordinary numerical replay
+does not depend on Git, a compiler, a GPU or an external artifact service.
 
 ## Results
 

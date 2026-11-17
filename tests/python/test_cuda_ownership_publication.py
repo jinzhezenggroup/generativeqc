@@ -74,7 +74,7 @@ def test_retained_workers_round_trip_and_recompute_all_gates(
     assert compact == original
     assert len(rows) == cases
     assert len(errors) == cases * 10 * error_blocks
-    summary = json.loads((bundle / "summary.json").read_text())
+    summary = load_publication_record(bundle, role="summary", name="summary.json")
     assert rows == summary["endpoints"]
     assert all(e["passed"] for e in errors.values())
 

@@ -388,7 +388,21 @@ KS defaults to level-3 Treutler/Lebedev + NWChem quadrature; see
 Compiler-generated compositions accept `--grid-level 0..9`. Their existing
 `--grid-radial-points`, `--grid-polar-points` and `--grid-azimuth-points`
 select an explicit legacy version-1 tensor grid and cannot be combined with
-`--grid-level`. Native-manifest methods use the common native default.
+`--grid-level`. Without explicit grid controls, native-manifest methods retain
+the common native default. When a registered name also selects a generated
+complete composition (for example, `pbe-rks` or `r2scan-uks`), explicit grid
+controls select that composition and its prepared force capability rather than
+being rejected by the registry shortcut. For an explicit LDA composition, use
+`lda_xc_pw-rks` or `lda_xc_pw-uks` from the generated catalog.
+
+For `run`, `--nonlocal-grid-level 0..9` independently selects the nonlocal
+quadrature while leaving the XC grid unchanged. Omission shares the XC grid.
+The native prepared owner validates this control: models without a nonlocal
+term reject it rather than silently ignoring it. The installed C++ SDK exposes
+the same control as the final optional `nonlocal_grid` argument of
+`generativeqc::prepare_named_ks`; C callers use
+`generativeqc_ks_nonlocal_grid_options`. Preparation copies the descriptor and
+its grid/radii, so they need not survive the returned calculation.
 
 Canonical `wb97m-v-rks` and `wb97m-v-uks` execute their complete semilocal,
 short-/long-range exchange and self-consistent VV10 energy. Native D3(BJ),
