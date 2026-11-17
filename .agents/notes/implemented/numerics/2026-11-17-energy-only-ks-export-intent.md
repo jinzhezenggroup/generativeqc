@@ -42,8 +42,8 @@ The bounded reproduction and source-specific closing tests are retained under
 `/data/jzzeng/pr3083-fix-20261117/`. The older source's 149 native and 45 focused
 passes remain attached to that older source, not relabeled as this change.
 
-The final source-matched CPU library passes 285 selected Python cases and 17
-subtests (121.03 seconds), including all 18 independent LDA/PBE SCF controls,
+Repair commit `0ac84aca7`'s source-matched CPU library passes 285 selected Python
+cases and 17 subtests (121.03 seconds), including all 18 independent LDA/PBE SCF controls,
 the public native Hessian diagnostics and opt-out rejection controls, both
 previously failing independent export/force cases, compiled grid contraction
 oracles and the affected build/CI/batch contracts. The CPU-only selection
@@ -58,3 +58,22 @@ run is acceptance, and neither is relabeled after the final identity relink.
 Normal required CI remains authoritative for the broader suite. Practical-scale
 and reaction campaigns remain separate product follow-ups, not a reason to
 force additional chemistry runs for these interface and CI repairs.
+
+## Upstream integration follow-up
+
+The repair was subsequently integrated with `master@f73be1630`, retaining the
+wheel snapshot retention update and the separate CUDA AOT packaging/execution
+policy from #3094 and #3106. The only merge conflict was the derived AOT audit's
+manifest/source digests. Recompute them from the combined tree rather than
+choosing either branch's stale identity. No CPU numerical implementation changed
+in this merge; the native build relinks its updated source identity.
+
+The source-sealed default decisions and measured evidence receipt inventory
+remain byte-for-byte equal to upstream. The offline policy audit retains every
+default, four historical failed endpoint groups and historical source statuses;
+it makes no new device or endpoint claim. All 329 selected AOT/profile/default
+policy tests pass. The post-integration CPU qualification uses separate
+`upstream-*` receipts, not a relabeling of the repair commit's earlier results.
+The merged source-matched CPU build repeats all 285 selected Python passes and
+17 subtests (121.00 seconds; 32 deselected), and all four native groups pass again
+(21.10 seconds). No larger chemistry campaign is added to this closing scope.

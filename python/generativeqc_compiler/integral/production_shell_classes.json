@@ -3,22 +3,22 @@
   "default_architecture": "sm_120",
   "architectures": {
     "sm_120": {
-      "compile_derivative_shells": true,
+      "packaging": {
+        "fock_variants": ["rys_value", "k_block", "rys_task"],
+        "derivative_shells": true
+      },
+      "force_policy": {
+        "small_work_angular_queue": false,
+        "require_bounded_spd_coverage": false
+      },
       "prefer_rys_task_fock": true,
       "kind": "tuned",
       "cuda_toolkit": "12.9.1",
       "generator_abi": 1,
-      "preferred_rys_task_fock_shell_classes": [
-        "psps",
-        "ppps",
-        "dsss",
-        "dpss",
-        "dsps",
-        "ddss",
-        "dsds",
-        "dpps",
-        "dspp"
-      ],
+      "preferred_rys_task_fock_shell_classes": {
+        "class_set": "bounded_spd",
+        "architectures": ["sm_120"]
+      },
       "target": {
         "compute_capability": "12.0",
         "warp_size": 32,
@@ -1159,10 +1159,16 @@
       }
     },
     "portable_cuda": {
-      "compile_derivative_shells": false,
+      "packaging": {
+        "fock_variants": [],
+        "derivative_shells": false
+      },
+      "force_policy": {
+        "small_work_angular_queue": true,
+        "require_bounded_spd_coverage": false
+      },
       "prefer_rys_task_fock": false,
       "kind": "portable",
-      "optional_fock_variants": false,
       "cuda_toolkit": "12.9.1",
       "generator_abi": 1,
       "kernels": [

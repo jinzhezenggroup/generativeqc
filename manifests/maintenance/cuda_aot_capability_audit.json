@@ -171,8 +171,8 @@
       "path": "docs/maintainer/f_shell_validation.md"
     }
   ],
-  "manifest_sha256": "a5df01c89d396a8b9411654cd47d464cc8a4fee3fd04fc655a76bce86de9638b",
-  "native_source_identity": "06220ddd3d59f4594cce196a36b093b98a07525a739c2e9bc1399acfb813c77d",
+  "manifest_sha256": "f1a7971dceaad2e90fc5ed81d91931c570edc494fa98d527bb404092d964151c",
+  "native_source_identity": "5fded9d9c1a3dfca6ac494b0f8b50808880028d1a572e79316b1b62eec39b76a",
   "qualification_boundary": "Static legality is not compile, numerical or endpoint qualification; historical evidence must retain its own source/device identity.",
   "route_features": [
     {
@@ -660,9 +660,17 @@
           "rys_task_fock": 0,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": false
+        },
         "packaging": {
-          "compile_derivative_shells": true,
-          "optional_fock_variants": true
+          "derivative_shells": true,
+          "fock_variants": [
+            "k_block",
+            "rys_task",
+            "rys_value"
+          ]
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -696,9 +704,17 @@
           "rys_task_fock": 36820,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": false
+        },
         "packaging": {
-          "compile_derivative_shells": true,
-          "optional_fock_variants": true
+          "derivative_shells": true,
+          "fock_variants": [
+            "k_block",
+            "rys_task",
+            "rys_value"
+          ]
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -734,9 +750,17 @@
           "rys_task_fock": 0,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": true
+        },
         "packaging": {
-          "compile_derivative_shells": true,
-          "optional_fock_variants": true
+          "derivative_shells": true,
+          "fock_variants": [
+            "k_block",
+            "rys_task",
+            "rys_value"
+          ]
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -770,9 +794,13 @@
           "rys_task_fock": 0,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": true
+        },
         "packaging": {
-          "compile_derivative_shells": false,
-          "optional_fock_variants": false
+          "derivative_shells": false,
+          "fock_variants": []
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -808,9 +836,17 @@
           "rys_task_fock": 0,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": true
+        },
         "packaging": {
-          "compile_derivative_shells": true,
-          "optional_fock_variants": true
+          "derivative_shells": true,
+          "fock_variants": [
+            "k_block",
+            "rys_task",
+            "rys_value"
+          ]
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -844,9 +880,13 @@
           "rys_task_fock": 0,
           "streaming_fock": 0
         },
+        "force_execution": {
+          "require_bounded_spd_coverage": false,
+          "small_work_angular_queue": true
+        },
         "packaging": {
-          "compile_derivative_shells": false,
-          "optional_fock_variants": false
+          "derivative_shells": false,
+          "fock_variants": []
         },
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
         "runtime_admission": "environment, resource, precision and workload checks still required",
@@ -5328,7 +5368,7 @@
     }
   },
   "schema": "generativeqc.cuda-aot-capability-audit",
-  "schema_version": 1,
+  "schema_version": 2,
   "shared_primary_force_contract": {
     "dddd": {
       "decision": "generic-mathematical-capability",

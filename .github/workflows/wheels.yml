@@ -295,7 +295,7 @@ jobs:
           path: ${{ steps.wheel_snapshot.outputs.path }}
           if-no-files-found: error
           compression-level: 0
-          retention-days: 1
+          retention-days: 7
 
   pass:
     name: Pass building wheels

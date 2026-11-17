@@ -1199,7 +1199,10 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
 """
         )
         kernel_sets.append(
-            f"""    {{kCompiledProfiles[{index}], UINT64_C({force_mask}),
+            f"""    {{kCompiledProfiles[{index}],
+      {{{str(profile.force_policy.small_work_angular_queue).lower()},
+        {str(profile.force_policy.require_bounded_spd_coverage).lower()}}},
+      UINT64_C({force_mask}),
       UINT64_C({fock_mask}), UINT64_C({mixed_fock_mask}),
       UINT64_C({preferred_streaming_fock_mask}),
       UINT64_C({rys_fock_mask}), UINT64_C({k_block_fock_mask}),
@@ -1243,6 +1246,7 @@ using ResidentLaunchFunction = cudaError_t (*)({_resident_launch_parameter_decla
 
 struct KernelSet {{
   ProfileInfo info;
+  ForceExecutionPolicy force_policy;
   std::uint64_t force_mask;
   std::uint64_t fock_mask;
   std::uint64_t mixed_fock_mask;
@@ -1284,6 +1288,7 @@ constexpr std::array<KernelSet, {len(items)}> kKernelSets{{{{
 
 constexpr ProfileInfo kGenericProfile{{
     "generic_cuda", "portable_cuda", 0, 0, false, true, false}};
+constexpr ForceExecutionPolicy kGenericForcePolicy{{true, false}};
 
 constexpr std::size_t kMaximumCachedDevices = 128;
 std::array<const KernelSet*, kMaximumCachedDevices> selected_by_device{{}};
@@ -1358,6 +1363,11 @@ void select_profile_for_device(int device_id, int major, int minor) noexcept {{
 const ProfileInfo& selected_profile() noexcept {{
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? kGenericProfile : kernels->info;
+}}
+
+const ForceExecutionPolicy& selected_force_policy() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? kGenericForcePolicy : kernels->force_policy;
 }}
 
 const char* selected_registry_status() noexcept {{

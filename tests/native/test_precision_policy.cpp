@@ -154,21 +154,32 @@ void verify_cold_hf_screening_domain() {
 }
 
 void verify_portable_force_work_policy() {
-  using generativeqc::scf::cuda_policy::portable_force_prefers_angular_queue;
-  require(portable_force_prefers_angular_queue(200U, 3U, 100U),
+  using generativeqc::scf::cuda_policy::force_prefers_angular_queue;
+  require(force_prefers_angular_queue(200U, 3U, 100U),
           "small complete topologies reuse the angular force queue");
-  require(!portable_force_prefers_angular_queue(201U, 3U, 100U),
+  require(!force_prefers_angular_queue(201U, 3U, 100U),
           "work beyond one worker round keeps generated force consumers");
-  require(portable_force_prefers_angular_queue(201U, 3U, 101U),
+  require(force_prefers_angular_queue(201U, 3U, 101U),
           "force crossover follows the actual device worker capacity");
-  require(!portable_force_prefers_angular_queue(1U, 0U, 100U) &&
-              !portable_force_prefers_angular_queue(1U, 3U, 0U) &&
-              !portable_force_prefers_angular_queue(0U, 3U, 100U),
+  require(!force_prefers_angular_queue(1U, 0U, 100U) && !force_prefers_angular_queue(1U, 3U, 0U) &&
+              !force_prefers_angular_queue(0U, 3U, 100U),
           "missing work metadata cannot authorize the angular preference");
-  require(!portable_force_prefers_angular_queue(std::numeric_limits<std::uint64_t>::max(),
-                                                std::numeric_limits<std::uint64_t>::max(),
-                                                std::numeric_limits<unsigned>::max()),
+  require(!force_prefers_angular_queue(std::numeric_limits<std::uint64_t>::max(),
+                                       std::numeric_limits<std::uint64_t>::max(),
+                                       std::numeric_limits<unsigned>::max()),
           "large topologies cannot wrap the portable worker bound");
+  using generativeqc::scf::cuda_policy::bounded_force_coverage_rejected;
+  for (bool required : {false, true}) {
+    for (bool bounded : {false, true}) {
+      for (bool diagnostic : {false, true}) {
+        for (std::uint64_t uncovered : {std::uint64_t{0}, std::uint64_t{1}}) {
+          require(bounded_force_coverage_rejected(true, required, bounded, diagnostic, uncovered) ==
+                      (required && bounded && !diagnostic && uncovered != 0U),
+                  "bounded force ownership follows explicit policy, not a profile label");
+        }
+      }
+    }
+  }
 }
 
 void verify_direct_jk_target_policy() {

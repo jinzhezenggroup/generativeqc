@@ -131,7 +131,7 @@ def resolved_profile_inventory(
                 item.incumbent for item in shared_rys_xy_streaming_companions(profile)
             ),
             "exact_derivative_shells": _mask(force)
-            if profile.compile_derivative_shells
+            if profile.packaging.derivative_shells
             else 0,
         },
         "default_preferences": {
@@ -140,10 +140,8 @@ def resolved_profile_inventory(
             ),
             "rys_task_fock": _mask(preferred_rys_task_candidates(profile)),
         },
-        "packaging": {
-            "optional_fock_variants": profile.optional_fock_variants,
-            "compile_derivative_shells": profile.compile_derivative_shells,
-        },
+        "packaging": profile.packaging.to_payload(),
+        "force_execution": profile.force_policy.to_payload(),
         "runtime_admission": "environment, resource, precision and workload checks still required",
         "qualification": "compiled coverage and profile identity are not scientific or endpoint evidence",
     }
@@ -162,7 +160,7 @@ def production_policy_inventory(
     )
     return {
         "schema": "generativeqc.cuda-aot-build-policy",
-        "schema_version": 1,
+        "schema_version": 2,
         "targets": [
             resolved_profile_inventory(
                 item,

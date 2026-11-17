@@ -516,7 +516,12 @@ def test_rys_task_manifest_preferences_require_renewed_qualification(
     )
     manifest = json.loads(source.read_text())
     profiles = manifest["architectures"]
-    classes = profiles["sm_120"]["preferred_rys_task_fock_shell_classes"]
+    from generativeqc_compiler.integral.production_contracts import (
+        RYS_TASK_FOCK_CLASS_SETS,
+    )
+
+    classes = list(RYS_TASK_FOCK_CLASS_SETS["bounded_spd"])
+    profiles["sm_120"]["preferred_rys_task_fock_shell_classes"] = classes
     if mutation == "class":
         classes.append("ssss")
     elif mutation == "target":

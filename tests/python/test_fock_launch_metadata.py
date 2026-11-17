@@ -100,10 +100,10 @@ def test_profiled_fock_materialization_reaches_generated_registry(
         "std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept {"
         in multi_source
     )
+    # Force execution policy precedes these masks but is independent of the
+    # measured Fock route. Check the selected masks, not that policy spelling.
     assert (
-        "{kCompiledProfiles[0], UINT64_C(0),\n"
-        "      UINT64_C(2), UINT64_C(0),\n"
-        "      UINT64_C(2),"
+        "      UINT64_C(0),\n      UINT64_C(2), UINT64_C(0),\n      UINT64_C(2),"
     ) in multi_source
     assert (
         "return kernels == nullptr ? 0 : kernels->preferred_streaming_fock_mask;"
