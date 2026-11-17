@@ -196,7 +196,8 @@ void trace_counter(const char*, std::uint64_t) {}
 template<class F> void trace_call(const char*, void*, F work) { work(); }
 }
 namespace scf { struct ScfOptions { enum class XcExecutionSchedule { DeviceFused }; }; }
-namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-10; }
+namespace generated { constexpr double kMolecularVv10DensityThreshold = 1e-10;
+                      constexpr double kMolecularVv10WeightThreshold = 1e-14; }
 int domains = 0;
 namespace nlc {
 template<class... T> void enqueue_vv10_molecular_domain_cuda(T...) { ++domains; }

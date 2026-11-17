@@ -129,7 +129,8 @@ Vv10Integral integrate_vv10_rks(const AoBasis& basis, const MolecularGrid& grid,
           !std::isfinite(gradient[3 * p + 1]) || !std::isfinite(gradient[3 * p + 2]) ||
           !std::isfinite(screened_weights[p]))
         throw std::domain_error("invalid molecular VV10 density/gradient/weight");
-      if (rho[p] < generated::kMolecularVv10DensityThreshold) {
+      if (rho[p] < generated::kMolecularVv10DensityThreshold ||
+          std::abs(screened_weights[p]) <= generated::kMolecularVv10WeightThreshold) {
         screened_weights[p] = 0.0;
         rho[p] = 1.0;
         gradient[3 * p] = gradient[3 * p + 1] = gradient[3 * p + 2] = 0.0;
@@ -249,7 +250,8 @@ std::vector<double> stationary_vv10_derivative(const AoBasis& basis, const Molec
             [](double x) { return std::isfinite(x); }))
       throw std::domain_error("invalid stationary VV10 density/gradient");
     if (domain == Vv10DensityDomain::MolecularV1 &&
-        rho[p] < generated::kMolecularVv10DensityThreshold) {
+        (rho[p] < generated::kMolecularVv10DensityThreshold ||
+         std::abs(effective[p]) <= generated::kMolecularVv10WeightThreshold)) {
       active[p] = 0;
       effective[p] = 0;
       rho[p] = 1;

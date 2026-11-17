@@ -414,9 +414,10 @@ generativeqc_status CudaStationaryController::gradient(
       auto* effective = pair.effective.get();
       auto* seeds = pair.seeds.get();
       nlc::enqueue_vv10_molecular_domain_cuda(
-          stream, points, generated::kMolecularVv10DensityThreshold, quadrature.weights,
-          nonlocal->density, nonlocal->gradient, effective, effective + points,
-          effective + 2 * points, pair.errors.get() + 1);
+          stream, points, generated::kMolecularVv10DensityThreshold,
+          generated::kMolecularVv10WeightThreshold, quadrature.weights, nonlocal->density,
+          nonlocal->gradient, effective, effective + points, effective + 2 * points,
+          pair.errors.get() + 1);
       const auto& model = binding_->model;
       const nlc::Vv10Parameters parameters{nlc::Vv10Variant::vv10, model.nonlocal_b,
                                            model.nonlocal_c, model.nonlocal_coefficient};

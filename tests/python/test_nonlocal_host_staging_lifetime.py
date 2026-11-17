@@ -66,6 +66,7 @@ def test_molecular_domain_padding_is_resident_and_fail_closed() -> None:
     assert "cudaMemsetAsync" in body
     kernel = cpp_function_definition(source, "molecular_domain_kernel")
     assert "rho < threshold" in kernel
+    assert "fabs(weight) <= weight_threshold" in kernel
     assert (
         "effective_weights[i] = inactive ? -0.0 : (weight == 0.0 ? 0.0 : weight)"
         in kernel

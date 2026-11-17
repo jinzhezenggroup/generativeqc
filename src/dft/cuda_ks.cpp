@@ -3055,9 +3055,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
             stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
-            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
-            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
-            nonlocal_domain_error);
+            generated::kMolecularVv10WeightThreshold, quadrature.weights, nonlocal_raw_density,
+            nonlocal_raw_gradient, nonlocal_effective_weights, nonlocal_effective_density,
+            nonlocal_effective_gradient, nonlocal_domain_error);
       });
       enqueue_nonlocal_pairs(quadrature.points);
       nonlocal_source.enqueue_replay_nonlocal_potential(nonlocal_effective_weights,
@@ -3702,9 +3702,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
             stream, nonlocal_grid.point_count(), generated::kMolecularVv10DensityThreshold,
-            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
-            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
-            nonlocal_domain_error);
+            generated::kMolecularVv10WeightThreshold, quadrature.weights, nonlocal_raw_density,
+            nonlocal_raw_gradient, nonlocal_effective_weights, nonlocal_effective_density,
+            nonlocal_effective_gradient, nonlocal_domain_error);
       });
       domain_trace.finish();
       runtime::cuda_trace::TraceRegion pair_trace("nonlocal_pair_features", stream);

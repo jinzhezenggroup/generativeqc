@@ -11,7 +11,10 @@ if __package__ in (None, ""):
 
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.feature_policy import emit_feature_policy
-from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
+)
 from generativeqc_compiler.integral.expr import AlgebraForm
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from generativeqc_compiler.method.spec import (
@@ -215,6 +218,7 @@ def emit_wb97mv_polarized() -> str:
         declarations=(
             f'inline constexpr const char* kWb97mvMethodIdentity = "{method.identity}";',
             f"inline constexpr double kMolecularVv10DensityThreshold = {float(MOLECULAR_VV10_DENSITY_THRESHOLD).hex()};",
+            f"inline constexpr double kMolecularVv10WeightThreshold = {float(MOLECULAR_VV10_WEIGHT_THRESHOLD).hex()};",
             f"inline constexpr double kWb97mvOmega = {float(short.omega).hex()};",
             f"inline constexpr double kWb97mvShortExchange = {float(short.coefficient).hex()};",
             f"inline constexpr double kWb97mvLongExchange = {float(long.coefficient).hex()};",
