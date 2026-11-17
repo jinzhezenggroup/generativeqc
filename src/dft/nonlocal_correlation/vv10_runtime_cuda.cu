@@ -138,6 +138,32 @@ unsigned launch_blocks(std::size_t count, unsigned threads) {
   return static_cast<unsigned>(blocks);
 }
 
+/** Grid size for the persistent grid-stride pair kernels.
+ * Their warps statically interleave a fixed tile-pair inventory, so a grid
+ * larger than one resident wave leaves its last blocks running alone after the
+ * first wave drains. Size it from the executing device's multiprocessor count
+ * and the compiled kernel's actual occupancy instead of one device's capacity.
+ * GENERATIVEQC_VV10_PAIR_GRID=fixed restores the historical 680-block grid. */
+template <class Kernel>
+unsigned resident_pair_blocks(Kernel kernel, unsigned threads) {
+  constexpr unsigned historical_blocks = 680;
+  const auto* selector = std::getenv("GENERATIVEQC_VV10_PAIR_GRID");
+  if (selector && *selector) {
+    if (std::string_view(selector) == "fixed") return historical_blocks;
+    if (std::string_view(selector) != "resident")
+      throw std::invalid_argument("GENERATIVEQC_VV10_PAIR_GRID must be resident or fixed");
+  }
+  int device = 0, multiprocessors = 0, per_multiprocessor = 0;
+  runtime::cuda_resource_check(cudaGetDevice(&device));
+  runtime::cuda_resource_check(
+      cudaDeviceGetAttribute(&multiprocessors, cudaDevAttrMultiProcessorCount, device));
+  runtime::cuda_resource_check(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+      &per_multiprocessor, kernel, static_cast<int>(threads), 0));
+  if (multiprocessors <= 0 || per_multiprocessor <= 0)
+    throw std::runtime_error("nonlocal CUDA pair kernel has no resident capacity");
+  return static_cast<unsigned>(multiprocessors) * static_cast<unsigned>(per_multiprocessor);
+}
+
 template <Vv10Variant Variant, bool Features>
 __global__ void local_scales_kernel(std::size_t npoint, double b, double c, const double* weights,
                                     const double* density, const double* gradient, double* omega,
@@ -450,31 +476,40 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
               // Host-known strict arithmetic removes mixed admission and unused
               // per-pair census from the hot loop. A requested census still
               // counts every evaluated physical pair, including diagonal legs.
-              if (arithmetic_work)
-                generated::parallel_pair_packet_kernel<false, false, true, true>
-                    <<<680, threads, 0, stream>>>(input, output);
-              else
-                generated::parallel_pair_packet_kernel<false, false, true, false>
-                    <<<680, threads, 0, stream>>>(input, output);
-            } else if (mixed_pair_arithmetic)
-              generated::parallel_pair_packet_kernel<Geometry, true>
-                  <<<680, threads, 0, stream>>>(input, output);
-            else
-              generated::parallel_pair_packet_kernel<Geometry>
-                  <<<680, threads, 0, stream>>>(input, output);
+              if (arithmetic_work) {
+                const auto kernel =
+                    generated::parallel_pair_packet_kernel<false, false, true, true>;
+                kernel<<<resident_pair_blocks(kernel, threads), threads, 0, stream>>>(input,
+                                                                                      output);
+              } else {
+                const auto kernel =
+                    generated::parallel_pair_packet_kernel<false, false, true, false>;
+                kernel<<<resident_pair_blocks(kernel, threads), threads, 0, stream>>>(input,
+                                                                                      output);
+              }
+            } else if (mixed_pair_arithmetic) {
+              const auto kernel = generated::parallel_pair_packet_kernel<Geometry, true>;
+              kernel<<<resident_pair_blocks(kernel, threads), threads, 0, stream>>>(input, output);
+            } else {
+              const auto kernel = generated::parallel_pair_packet_kernel<Geometry>;
+              kernel<<<resident_pair_blocks(kernel, threads), threads, 0, stream>>>(input, output);
+            }
           } else if (selector && std::string_view(selector) == "parallel-wide") {
             // Both kernels use the same admitted device count. Exactly one
             // executes, preserving small-domain occupancy without a host read.
-            generated::parallel_pair_kernel<Geometry, 4, false, true>
-                <<<680, threads, 0, stream>>>(input, output);
+            const auto narrow = generated::parallel_pair_kernel<Geometry, 4, false, true>;
+            narrow<<<resident_pair_blocks(narrow, threads), threads, 0, stream>>>(input, output);
             runtime::cuda_resource_check(cudaGetLastError());
-            generated::parallel_pair_kernel<Geometry, 8, true, true>
-                <<<680, threads, 0, stream>>>(input, output);
+            const auto wide = generated::parallel_pair_kernel<Geometry, 8, true, true>;
+            wide<<<resident_pair_blocks(wide, threads), threads, 0, stream>>>(input, output);
           } else {
-            generated::parallel_pair_kernel<Geometry><<<680, threads, 0, stream>>>(input, output);
+            const auto kernel = generated::parallel_pair_kernel<Geometry>;
+            kernel<<<resident_pair_blocks(kernel, threads), threads, 0, stream>>>(input, output);
           }
           runtime::cuda_resource_check(cudaGetLastError());
-          generated::parallel_pair_zero_rows<<<680, threads, 0, stream>>>(input, output);
+          generated::parallel_pair_zero_rows<<<resident_pair_blocks(
+                                                   generated::parallel_pair_zero_rows, threads),
+                                               threads, 0, stream>>>(input, output);
           runtime::cuda_resource_check(cudaGetLastError());
           generated::parallel_pair_finalize<Geometry>
               <<<blocks, threads, 0, stream>>>(input, output);
