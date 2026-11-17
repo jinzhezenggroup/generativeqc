@@ -451,8 +451,13 @@ def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
     return typing.cast("SemilocalXCPrimitive", method_ir.primitives[0]).functional
 
 
-def _d4_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
-    """Strip one standalone D4 correction while preserving electronic semantics."""
+def _dispersion_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
+    """Separate one D3/D4 receipt without changing the electronic graph.
+
+    This projection selects the electronic carrier only. The full MethodIR
+    remains authoritative for correction admission and native composition.
+    Additional post-SCF operators remain in the graph and retain their gates.
+    """
     if not isinstance(method_ir, MethodIR):
         return None
     corrections = tuple(
@@ -460,7 +465,9 @@ def _d4_electronic_projection(method_ir: typing.Any) -> MethodIR | None:
         for primitive in method_ir.primitives
         if isinstance(primitive, DispersionCorrectionPrimitive)
     )
-    if len(corrections) != 1 or not isinstance(corrections[0].specification, D4Spec):
+    if len(corrections) != 1 or not isinstance(
+        corrections[0].specification, (D3Spec, D4Spec)
+    ):
         return None
     return replace(
         method_ir,
@@ -744,8 +751,8 @@ def cpu_stationary_all_electron_force_eligible(
 
 
 def electronic_method_ir(method_ir: MethodIR) -> MethodIR:
-    """Project a standalone D4 correction away without inspecting its method name."""
-    return _d4_electronic_projection(method_ir) or method_ir
+    """Project one D3/D4 correction away without inspecting its method name."""
+    return _dispersion_electronic_projection(method_ir) or method_ir
 
 
 def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
@@ -1005,10 +1012,10 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
     if _is_pbe_d4_composition(method_ir):
         return method_ir, functional("PBE", spin=spin)
 
-    d4_electronic = _d4_electronic_projection(method_ir)
-    if d4_electronic is not None:
-        semilocal = _native_semilocal(d4_electronic)
-        ks_coefficients(d4_electronic)
+    electronic_projection = _dispersion_electronic_projection(method_ir)
+    if electronic_projection is not None:
+        semilocal = _native_semilocal(electronic_projection)
+        ks_coefficients(electronic_projection)
         return method_ir, semilocal
 
     semilocal = _native_semilocal(method_ir)
@@ -1060,17 +1067,17 @@ def native_dft_carrier(method: typing.Any) -> str:
     method_ir, _ = resolve_ks_method(method)
     if _is_pbe_d4_composition(method_ir):
         return "pbe-d4-rks"
-    d4_electronic = _d4_electronic_projection(method_ir)
-    if d4_electronic is not None:
-        return native_dft_carrier_for_ir(d4_electronic)
+    electronic_projection = _dispersion_electronic_projection(method_ir)
+    if electronic_projection is not None:
+        return native_dft_carrier_for_ir(electronic_projection)
     return "pbe-uks" if method_ir.spin == "polarized" else "pbe-rks"
 
 
 def _scf_domain_for_ir(method_ir: typing.Any) -> str:
     """Select the native work domain from the resolved, possibly renamed IR."""
-    d4_electronic = _d4_electronic_projection(method_ir)
-    if d4_electronic is not None:
-        method_ir = d4_electronic
+    electronic_projection = _dispersion_electronic_projection(method_ir)
+    if electronic_projection is not None:
+        method_ir = electronic_projection
     automatic_name = _automatic_semilocal_name(method_ir)
     if automatic_name is not None:
         return automatic_scf_domain(automatic_name)
@@ -1092,9 +1099,9 @@ def scf_domain_for_method(method: typing.Any) -> str:
 def native_xc_functional_code(method: typing.Any) -> int:
     """Return the lowerer code selected from one public or automatic KS selector."""
     method_ir, _ = resolve_ks_method(method)
-    d4_electronic = _d4_electronic_projection(method_ir)
-    if d4_electronic is not None:
-        method_ir = d4_electronic
+    electronic_projection = _dispersion_electronic_projection(method_ir)
+    if electronic_projection is not None:
+        method_ir = electronic_projection
     return _native_semilocal_code(method_ir)
 
 
@@ -1107,9 +1114,9 @@ def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing
 
     native_named_ir = named_ir
     if not _is_pbe_d4_composition(named_ir):
-        d4_electronic = _d4_electronic_projection(named_ir)
-        if d4_electronic is not None:
-            native_named_ir = d4_electronic
+        electronic_projection = _dispersion_electronic_projection(named_ir)
+        if electronic_projection is not None:
+            native_named_ir = electronic_projection
     method_ir = native_named_ir
     # Calculator passes its resolved options to resource planning. Keep that
     # graph authoritative: rebinding the descriptive selector loses custom K.

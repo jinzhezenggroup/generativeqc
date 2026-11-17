@@ -1030,7 +1030,7 @@
     "generativeqc::prepare_named_ks": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/ks.hpp",
-      "signature_sha256": "da29ae7e4f734673b59268ef1e5beb5c05d5a61ef5952fdab1e24d10ee439638",
+      "signature_sha256": "a770d5ee2de90adaa2ef3291fd9885d055edd1fb153cf558effb170e84d1dc2c",
       "required_facets": [
         "behavior",
         "errors",
@@ -2386,6 +2386,18 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "4e862f2dfaff1da030dd6d88c9fe48f9d208b09a25c4e8174a09ee30acd38d11",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_ks_nonlocal_grid_version_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "4ad616215bf665e57abb2a23f1472cf496d601a40bf2cec503e78f29116cf07c",
       "required_facets": [
         "behavior",
         "execution",

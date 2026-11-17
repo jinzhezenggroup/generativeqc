@@ -156,6 +156,34 @@ counted as passed. The curated-state repair is documented in
 `../numerics/2026-11-17-curated-cpu-ks-final-projector.md`; bounded focused
 qualification does not turn unfinished broader coverage into acceptance.
 
+## Subsequent November 17 force-product integration
+
+Upstream `8f4166f0c` subsequently integrates PR #3090. Combine its public
+SDK/CLI/Python force-product changes with this branch rather than replacing
+either implementation. The only textual conflicts are the two derived
+manifests. Preserve upstream's new measured campaigns, resource receipt,
+previous-summary bytes and all archived manifests/snapshots; recompute only
+exact transition acknowledgements and the unmeasured CUDA capability audit.
+
+Unlike the earlier `50482bc35` baseline, this newer baseline contains measured
+qualified stages. The integrated scientific dependency identities change for
+222 functionals and invalidate 20 qualified stages: compiled CPU, compiled
+CUDA, GPU runtime, molecular SCF and forces for `GGA_X_APBE`, `LDA_C_VWN_4`,
+`MGGA_X_GVT4` and `MGGA_X_LTA`. Each transition has an exact revision-bound
+acknowledgement. No functional is removed, no old receipt is rewritten and no
+new measurement is claimed. The current catalog has zero qualified endpoints;
+the historical presentation remains advisory and the current-source scientific
+acceptance gate remains unfulfilled. Resetting the previous summary or copying
+the upstream qualification labels would hide these genuine evidence losses.
+
+The source-matched `845c4cfd4` build previously passed ten native CTest groups,
+267 scientific Python tests (six explicit heavy opt-in skips), four CMake
+configuration controls and the mixed RSH/DF force regression. These results
+remain attached to that source identity, not automatically to this subsequent
+integration. Fresh build and regression records are retained separately under
+`/data/jzzeng/pr3083-ready-20261117/`. The practical-scale and Ni saddle gates
+remain open; this integration does not resume stopped long chemistry jobs.
+
 ## Revisit when
 
 A later source-matched qualification completes the remaining scientific gates.

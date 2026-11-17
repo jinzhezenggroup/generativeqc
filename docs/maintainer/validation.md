@@ -122,6 +122,117 @@ claims are owned by the force and device pages, not by an energy fixture.
 Every existing native and Python test is retained, including its tolerances.
 The new small-fixture tolerances do not supersede stricter existing tests.
 
+### Installed KS force product parity
+
+`tests/python/test_dft_force_installed_sdk.py` compares the installed C++ SDK,
+installed native CLI and Python prepared batch against an independently
+reconverged PySCF energy and moving-grid analytic force. It compiles its probe
+against installed public headers, checks that Python loads the installed DSO,
+and removes Python and compilers from the SDK/CLI subprocess search path.
+The cases cover both representations, Direct/DF, RKS/UKS (including empty beta),
+and cold/warm/energy-only SDK and Python executions in the curated electronic
+inventory. The CLI is a fresh complete process for each case. Scientific
+admission remains owned by the [prepared native context](../user/native_cpp.md).
+
+After installing the build under `SDK_PREFIX`, make its native provider
+dependencies available to the platform loader and run:
+
+```bash
+GENERATIVEQC_NATIVE_SDK_PREFIX="$SDK_PREFIX" \
+GENERATIVEQC_LIBRARY="$SDK_PREFIX/lib/libgenerativeqc.so" \
+PYTHONPATH=python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+python -m pytest -q tests/python/test_dft_force_installed_sdk.py -k cpu
+```
+
+For CUDA, keep the same installed SDK/library variables, select the site's
+partition and GPU resource, and preserve the scheduler's device visibility:
+
+```bash
+srun --partition="$GPU_PARTITION" --gres="$GPU_GRES" \
+  --nodes=1 --ntasks=1 --time=00:30:00 \
+  env GENERATIVEQC_NATIVE_SDK_PREFIX="$SDK_PREFIX" \
+  GENERATIVEQC_LIBRARY="$SDK_PREFIX/lib/libgenerativeqc.so" \
+  GENERATIVEQC_DFT_CUDA_TEST=1 PYTHONPATH=python \
+  OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  python -m pytest -q tests/python/test_dft_force_installed_sdk.py -k cuda
+```
+
+The matrix includes both equal XC/VV10 grids and an independently prescribed
+VV10 level, so same-grid agreement cannot hide a dropped nonlocal control.
+The opt-in automatic CUDA matrix additionally sets
+`GENERATIVEQC_AUTOMATIC_CUDA_FORCE_TEST=1`. Its installed library must package
+the static point providers for the eleven representatives parametrized by
+`test_installed_automatic_cuda_products_preserve_complete_forces`; use
+`GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` at configuration time. This adds
+44 independent SDK/CLI/Python cases (both representations and nonempty spins),
+not a claim about every structural energy registration. Composed recipes need
+their own generated registration names in that build selection, not merely the
+names of their atomic ingredients. The separate
+`test_unified_libxc_endpoints.py` checks composed Direct/DF execution.
+
+`test_d3_calculator_composition.py` checks D3 string selectors against the
+already-supported MethodIR interface on both backends, spins and Direct/DF
+contexts, including cold/warm/moved and energy-only publication. This is an
+entry-point/ownership regression, not an independent correction oracle; retain
+`test_d3_production.py` and the complete scientific force gates as well.
+
+An absent SCF provider is an explicit skip, not force qualification. These
+small-system product/oracle checks do not establish arbitrary custom graphs,
+resource-promise admission, moved-geometry lifecycle, HVPs, or a paired endpoint
+performance result. Retain the corresponding dedicated numerical, lifetime,
+capacity and performance gates before making a broader delivery claim.
+
+For source-bound non-regression measurements, run
+`benchmarks/native_dft_force_endpoint.py` with `--backend cpu` or, for CUDA,
+only within a finite Slurm allocation,
+with separate baseline/candidate frontends and installed libraries. Record the
+effective CPU affinity as well as the Slurm allocation: requesting CPUs does
+not establish that task affinity is actually restricted. Bind both variants
+to the same deterministic assigned CPU before preflight, profiling and timing;
+never select a CPU by observing which one gives a passing ratio. Keep the
+actual CUDA UUID/PCI identity and preserve scheduler-assigned GPU visibility.
+An instrumented diagnosis is not timing acceptance, and earlier failed cohorts
+remain failed after improving resource isolation. Record the
+base revision, dirty source census, frontend census, loaded binary and runner
+SHA-256 identities using its `R1_*` environment inputs. Retain eleven measured
+samples after three warmups in each of four ABBA and four BAAB blocks. The
+68-case CUDA inventory includes named methods, D3/D4/gCP compositions, larger DF
+clusters and the eleven automatic representatives, each with cold/warm/moved
+endpoints. D3 uses MethodIR in **both** variants because the parent string
+selector is broken; resolution remains inside cold timing. Never present that
+comparison as parent support for the repaired string interface.
+The CPU inventory contains 40 curated method/spin/Direct-DF cases, including
+PBE50 rather than CUDA-only M06-2X/MN15 programs. Keep backend-specific inventory
+and executed-backend checks; a CPU result cannot satisfy a CUDA claim.
+
+`python -m benchmarks.native_dft_force_audit DIRECTORY --output AUDIT.json`
+requires all 408 comparisons, unchanged numerical gates and at most a 1.05
+candidate/baseline median ratio per case/phase/order. Work counts must match at
+the same sample age and input history; matching geometry alone does not imply
+matching warm history. Observable comparisons still span every matching
+geometry. The offline adversarial audit tests reject real work skew, stale
+identities, missing samples, changed forces and regressions. Preserve failed or
+incomplete campaigns, and do not overlap paired timing with other qualification
+or profiling work. Timing receipts do not replace device transfer/launch/peak
+memory profiling or scientific qualification.
+Pass `--backend cpu` to require the 240 CPU comparisons instead. The auditor
+also accepts a retained `generativeqc.native-dft-force-observations.v1` XZ JSON
+file in place of the raw directory. It reconstructs and authenticates every
+original measured JSONL block before applying the same gates, retaining all
+full-precision samples and observables without committing transient logs.
+The same records can share the existing exact-FP64 v3 storage reader. Pass its
+directory and `--backend cpu` or `--backend cuda`; use `--cohort NAME` to inspect
+a retained rejected/incomplete cohort. Every original block checksum and all
+numerical, work, completeness and timing gates still apply after reconstruction.
+
+`python -m benchmarks.native_dft_force_science_audit DIRECTORY --output AUDIT.json`
+separately replays the installed force-test observations in the same exact-FP64
+bundle. It authenticates the original JSON bytes and applies the independent
+oracle, finite-difference, translation, native-owner and resource gates. Keep
+full-vector one-phase tests distinct from directional lifecycle tests: neither
+is automatically a full-vector three-phase catalog promotion, and scientific
+replay does not establish a paired performance result.
+
 | Existing tests | Oracle and independence | What a pass establishes |
 | --- | --- | --- |
 | `tests/native/test_cartesian_integrals.cpp`, `test_density_fitting.cpp`, `test_spherical.cpp` | Handwritten CPU integral/derivative implementation in `src/integrals/s_integrals.cpp`, separate from generated CUDA; spherical transforms share production normalization code | CPU integrals, symmetries, derivative/DF contracts, and selected pinned libcint comparisons; shared transforms are not an independent transform oracle |

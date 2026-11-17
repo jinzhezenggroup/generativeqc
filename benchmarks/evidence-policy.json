@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 95753574,
+  "benchmark_results_max_bytes": 95845458,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {
@@ -413,11 +413,6 @@
       "reason": "Exact source-bound integration receipt preserving build settings and every test outcome, including existing skips. Retained compressed bytes are authenticated by final-manifest.json; no performance promotion or later-source admission is inferred.",
       "sha256": "f01d46eae43399c45c32e34e3e14c7cec1e455fe1b961a56b18d09cdc74b2941"
     },
-    "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-metadata.tar.xz": {
-      "owner": "H100 frozen DB36 safety delivery",
-      "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
-      "sha256": "03f63b636e01219168f0826849a6cf1e341335a13df1cc2ceeb8752f3764b8d2"
-    },
     "benchmarks/results/h100-sm90-db36-safety-20261103/production-build-v1-download-manifest.json.xz": {
       "owner": "H100 frozen DB36 safety delivery",
       "reason": "Exact source-bound original safety observations or lossless manifest/review metadata. Full original failed race packet and separately accepted unfiltered continuation remain independently CPU replayable; no final timing votes or later-source qualification.",
@@ -763,6 +758,18 @@
       "owner": "paper-hfdft-cold3-20261115",
       "reason": "Exact human-readable original process timing table for the approved PR3093 figure. Complete original scientific records are separately retained without filtering. This paired publication needs both reviewable CSV tables and machine-verifiable raw records; this exception applies only to the incoming review-byte budget, never to the hard file cap, aggregate guard or scientific gates.",
       "sha256": "4815e7d17bfe0472b97b15b6d61f8c232539b144f60746952f3d1ee7a942e0fe",
+      "review_change": true
+    },
+    "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-abba/fp64.xz": {
+      "owner": "R1 native DFT force endpoint qualification (#2227)",
+      "reason": "Complete original failed and incomplete ABBA populations, preserved as exact FP64 v3 words with every scientific observable and elapsed-time value. This exact rejected-only stream cannot be replaced by medians or selected passing attempts. Review-budget exception only under the existing policy; accepted streams remain charged, and hard per-file/aggregate limits and scientific/work/performance gates are unchanged.",
+      "sha256": "6d4565c414632c2c876db6a31f906f371e9ac47f0b11306fda0c003f4f9628ad",
+      "review_change": true
+    },
+    "benchmarks/results/r1-native-dft-forces-20261115/endpoint-observations/rejected-baab/fp64.xz": {
+      "owner": "R1 native DFT force endpoint qualification (#2227)",
+      "reason": "Complete original failed and incomplete BAAB populations, preserved as exact FP64 v3 words with every scientific observable and elapsed-time value. Retaining both timing orders prevents a passing-order selection from erasing real rejected endpoints. Review-budget exception only under the existing policy; accepted streams remain charged, and hard per-file/aggregate limits and scientific/work/performance gates are unchanged.",
+      "sha256": "f817e032b4bfec68050f3a58ded875703030b7b3f2e6967a6029a60a94d61838",
       "review_change": true
     }
   },

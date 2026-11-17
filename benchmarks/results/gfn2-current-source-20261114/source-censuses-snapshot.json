@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "17f9317a2495c142941d7390d465fcf79887d643",
+  "file_count": 2,
+  "total_bytes": 1259176,
+  "purpose": "Whole-checkout hash censuses only. All current independent inputs, numerical observations, failures, source patches, report identities and scientific replay remain offline in the checkout. Full historical source-census verification is explicit and opt-in.",
+  "files": [
+    {
+      "path": "benchmarks/results/gfn2-current-source-20261114/cpu-source.sha256.xz",
+      "bytes": 629600,
+      "sha256": "6d0b56c5c10879ad489cdbd934ce226c27cdafdab0df6c50ecdda16f6bc02eeb",
+      "decoded_bytes": 1922365,
+      "decoded_sha256": "934b8f33ffcca597ce8987cf96b97f6e42d6ce474737bf49dac4399ec0efdb25",
+      "source_lines": 15414
+    },
+    {
+      "path": "benchmarks/results/gfn2-current-source-20261114/cuda-source.sha256.xz",
+      "bytes": 629576,
+      "sha256": "75e8e1b24b675b3332585cb4869e730bcad163e277e2a319d7e1da81cf165ade",
+      "decoded_bytes": 1922365,
+      "decoded_sha256": "9d5d2c09ad6be007955d380b15731588b9a791090735573553df7d9cbe97654a",
+      "source_lines": 15414
+    }
+  ]
+}

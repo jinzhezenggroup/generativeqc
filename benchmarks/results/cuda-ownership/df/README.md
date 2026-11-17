@@ -67,7 +67,7 @@ offset a regression. The shared significance/noise decisions are retained;
 structural non-regression is not a significant-speedup claim.
 
 `samples.json` losslessly retains inputs, timings, energies, forces, residuals,
-iteration counts, resource plans and observations. `summary.json` reports every
+iteration counts, resource plans and observations. `summary.json.xz` reports every
 decision. `publication.json` binds the endpoint evidence by checksum and records
 source fetch refs and reproduction arguments. `resources.json` contains records
 for the original optimized `cuda_rhf.cu.o` and `df_derivatives.cu.o` resource dumps from

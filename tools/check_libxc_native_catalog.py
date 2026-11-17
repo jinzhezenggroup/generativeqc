@@ -8,6 +8,7 @@ measurements without loading a library, compiling code or probing a GPU.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from tools.generativeqc_validation.libxc_catalog import (
     require,
     write_json,
 )
+from tools.restore_retained_evidence import read_stored_json_bytes
 
 MANIFEST = ROOT / "manifests/libxc/native-qualification.json"
 
@@ -415,8 +417,14 @@ def check(
     report["historical"] = []
     for item in manifest.get("historical", []):
         path = ROOT / item["path"]
+        original = (
+            read_stored_json_bytes(path)
+            if path.suffix == ".json"
+            else path.read_bytes()
+        )
         require(
-            file_hash(path) == item["sha256"], "retained historical manifest changed"
+            hashlib.sha256(original).hexdigest() == item["sha256"],
+            "retained historical manifest changed",
         )
         retained = load_json(path)
         report["historical"].append(

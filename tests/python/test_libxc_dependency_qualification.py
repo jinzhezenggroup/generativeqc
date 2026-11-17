@@ -107,6 +107,7 @@ def test_cuda_force_change_retains_cuda_energy(
         "src/integrals/direct_jk.hpp",
         "include/generativeqc/generativeqc.h",
         "cmake/new_flags.cmake",
+        "cmake/GenerativeQCTests.cmake",
         "src/unknown/new.hpp",
         "src/unknown/new.cu",
         "python/generativeqc_compiler/common/cuda_environment.py",

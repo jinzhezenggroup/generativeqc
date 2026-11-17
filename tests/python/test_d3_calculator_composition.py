@@ -111,6 +111,77 @@ def test_existing_native_selector_can_bind_full_d3_composition() -> None:
     )
 
 
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+@pytest.mark.parametrize("fitted", (False, True))
+@pytest.mark.parametrize("spin", (0, 1))
+@pytest.mark.parametrize(
+    "selector,identifier",
+    (
+        ("pbe-d3(0)", "PBE-D3(0)"),
+        ("pbe-d3(bj)", "PBE-D3(BJ)"),
+        ("pbe-d3(bj)-atm", "PBE-D3(BJ)-ATM"),
+        ("pbe0-d3(0)", "PBE0-D3(0)"),
+        ("pbe0-d3(bj)", "PBE0-D3(BJ)"),
+    ),
+)
+def test_d3_string_selects_the_same_prepared_native_owner(
+    device: str,
+    fitted: bool,
+    spin: int,
+    selector: str,
+    identifier: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Named discovery preserves the already-qualified complete D3 graph.
+
+    Scalar/gradient oracle coverage remains in the D3 reference/production
+    suites. This gate checks public selection, native ownership and replay,
+    rather than treating two Python composition paths as independent science.
+    """
+    from test_r1_native_forces import forbid_python_force, require_backend
+
+    require_backend(device)
+    forbid_python_force(monkeypatch)
+    graph = resolve_method(identifier, spin="polarized" if spin else "unpolarized")
+    controls = {
+        "device": device,
+        "density_fitting": device if fitted else "none",
+        "ks_options": KsOptions(grid=GRID),
+        "max_iterations": 200,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+    }
+    calculator = Calculator(method=f"{selector}-{'uks' if spin else 'rks'}", **controls)
+    reference = Calculator(method=graph, **controls)
+    assert calculator.method_ir == graph
+    assert calculator.ks_options.method_ir == _electronic(graph)
+    moved = np.asarray([position for _, position in WATER])
+    moved[1, 2] += 0.02
+    with (
+        calculator.prepare_batch(
+            [WATER], charges=[spin], multiplicities=[spin + 1]
+        ) as batch,
+        reference.prepare_batch(
+            [WATER], charges=[spin], multiplicities=[spin + 1]
+        ) as expected,
+    ):
+        assert batch._native_dft_force_eligible(0)
+        assert batch._native_dispersion is not None
+        for coordinates in (None, None, [moved]):
+            actual = batch.execute(
+                coordinates, strict=True, properties=("energy", "forces")
+            ).items[0]
+            wanted = expected.execute(
+                coordinates, strict=True, properties=("energy", "forces")
+            ).items[0]
+            assert actual.energy == pytest.approx(wanted.energy, abs=2e-9)
+            np.testing.assert_allclose(actual.forces, wanted.forces, atol=2e-7, rtol=0)
+            assert actual.dispersion is not None
+            assert actual.dispersion.backend == device
+        energy_only = batch.execute(strict=True, properties=("energy",)).items[0]
+        assert energy_only.forces is None
+
+
 def test_composed_ragged_replay_preserves_per_item_failure_boundary() -> None:
     graph = resolve_method("PBE-D3(BJ)", spin="unpolarized")
     corrected = Calculator(

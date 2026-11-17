@@ -383,7 +383,7 @@ class Calculator:
                     if (
                         carrier != "pbe-d4-rks"
                         and len(corrections) == 1
-                        and isinstance(corrections[0].specification, D4Spec)
+                        and isinstance(corrections[0].specification, (D3Spec, D4Spec))
                         and not gcp_nodes
                     ):
                         execution_ir = replace(

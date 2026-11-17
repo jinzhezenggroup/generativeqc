@@ -10,18 +10,29 @@ counts and outstanding context-specific revalidation requests.
 
 ## Authentication follow-up
 
-The measured results below remain unchanged, but they are not currently reusable
-endpoint qualification. Review found that the retained native census omitted
+The measured results below remain unchanged. Review found that their retained
+native census omitted
 transitive source-generator inputs; the build identity now tracks those inputs.
 Neither retained working-tree campaign includes their authenticated measured
 hashes. Current checkout bytes cannot supply that missing historical proof.
-The catalog therefore conservatively reports **zero current endpoint contexts
-and products**, while retaining the independently valid production-domain proofs.
-This is pending source authentication, not a new numerical failure. The exact
+At `df42f93bbace0f16fb5b3dec77552384c9da9101`, the catalog therefore conservatively
+reported **zero current endpoint contexts and products**, while retaining the
+independently valid production-domain proofs. This was missing source
+authentication, not a new numerical failure. The exact
 previously published 12-context/24-product summary is preserved separately in
 `manifests/libxc/native-qualification-previous-7d7dc89b5c.json.xz`, and exact
 stage-demotion acknowledgements record the transition. No campaign, executed
 ELF identity, independent result or resource receipt has been rewritten.
+
+The subsequent [R1 campaign](../r1-native-dft-forces-20261115/README.md) rebuilds
+with the complete generator inventory and measures new endpoint/safety evidence;
+it does not supply missing hashes to these historical campaigns. The exact
+zero-current summary is retained in
+`manifests/libxc/native-qualification-previous-df42f93bba.json.xz`, and
+`r1-native-dft-forces-20261115/catalog-transition.json.xz` preserves the original
+manifest and all fifteen demotion acknowledgements. Consult the generated report
+for current reusable contexts rather than treating this family's old table as a
+new-source measurement.
 
 ## Source and executed binary
 

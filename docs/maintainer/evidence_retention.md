@@ -280,13 +280,15 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-95,753,574 bytes. This includes an exact 2,171,627-byte addition for
+95,845,458 bytes. This includes an exact 2,171,627-byte addition for
 the [two approved HF/DFT figure datasets](../../benchmarks/results/paper-hfdft-cold3-20261115/README.md),
 including their original measurements, readable tables and source reconstruction.
 A separately approved 377,467-byte increase retains the complete 377,913-byte
 [Direct J/K runtime-policy qualification](../../benchmarks/results/issue597-direct-jk-policy-20261114/README.md)
-in PR #3095, using the prior 446 bytes of remaining capacity. This exact indexed
-total adds no unallocated headroom and preserves the original raw evidence,
+in PR #3095, using the prior 446 bytes of remaining capacity. A separately
+approved 91,884-byte increase retains the complete R1 force evidence and its
+lossless historical storage reconciliation in PR #3090. This exact combined
+indexed total adds no unallocated headroom and preserves the original raw evidence,
 per-file limit, incoming-review budget and scientific checks.
 Many individually sub-limit files cannot
 bypass this aggregate guard;
@@ -509,3 +511,10 @@ with an adjacent XZ payload. `tools/restore_retained_evidence.py` verifies both
 checksums and the bounded decoded size before validating the original manifest.
 This representation preserves the original manifest bytes and existing recovery
 paths; it does not change the retained Git objects or numerical evidence.
+
+The common record reader and native Libxc metadata reader accept this same
+authenticated local transport. Historical manifest pins still compare the
+original decoded JSON bytes; the adjacent payload has its own checked SHA-256.
+An unchanged receiver that requires raw original bytes must receive those bytes,
+not the storage descriptor. This does not authorize implicit Git or network
+recovery of missing scientific observations.

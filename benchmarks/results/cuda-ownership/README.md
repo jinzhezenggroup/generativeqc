@@ -49,7 +49,7 @@ that case. Every scope note, resource plan and observation is retained.
 
 `samples.json.gz` losslessly interns repeated input, build and resource records by
 canonical hash. Its runs retain all individual timings, energies, forces,
-residuals and iteration counts. `summary.json` retains the shared timing/noise
+residuals and iteration counts. `summary.json.xz` retains the shared timing/noise
 assessments for every case and phase. `evidence.json.gz` contains every numerical
 error block and provenance. `resources.json` reports native kernel resources:
 generated thread/shell-warp schedules use 180/200 registers and 176-byte stacks,

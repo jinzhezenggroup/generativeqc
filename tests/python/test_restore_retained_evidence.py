@@ -446,6 +446,7 @@ def test_compressed_manifest_preserves_original_inventory(snapshot: typing.Any) 
         "decoded_sha256": hashlib.sha256(raw).hexdigest(),
     }
     manifest.write_text(json.dumps(descriptor))
+    assert module.read_stored_json_bytes(manifest) == raw
     assert module._records(manifest) == original
     for field, value in (
         ("payload", "../escape.xz"),

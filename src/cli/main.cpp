@@ -257,6 +257,7 @@ void print_usage(std::ostream& out) {
          "  --screening-tolerance X  Positive finite Gaussian integral screening threshold\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
          "  --grid-level N          Treutler/Lebedev + NWChem level 0..9 (default 3)\n"
+         "  --nonlocal-grid-level N Independent nonlocal quadrature level 0..9\n"
          "  --grid-radial-points N  Radial count for explicit MethodIR reference grid\n"
          "  --grid-polar-points N   Polar count for explicit MethodIR reference grid\n"
          "  --grid-azimuth-points N Azimuth count for explicit MethodIR reference grid\n"
@@ -696,6 +697,12 @@ RunOptions parse_run(int argc, char** argv) {
       options.grid = generativeqc::KsGrid{};
       options.grid.radial_points = level;
       options.grid_explicit = true;
+    } else if (option == "--nonlocal-grid-level") {
+      const auto text = value();
+      const auto level = text == "0" ? 0u : parse_positive_u32(text, "nonlocal grid level");
+      if (level > 9) throw UsageError("nonlocal grid level must be in 0..9");
+      options.nonlocal_grid = generativeqc::KsGrid{};
+      options.nonlocal_grid->radial_points = level;
     } else if (option == "--grid-radial-points") {
       if (options.grid_explicit && options.grid.version == 4)
         throw UsageError("legacy tensor-grid counts cannot be combined with --grid-level");
@@ -766,8 +773,20 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
-  if (options.grid_explicit && !options.composition)
+  if ((options.grid_explicit || options.nonlocal_grid) && !options.composition && is_dft(options)) {
+    // A registered carrier may share its public name with a complete compiled
+    // composition. Explicit grids must reach that same native scientific owner,
+    // while requests without grid controls retain their native defaults.
+    if (const auto* compiled =
+            generativeqc::cli::method_generated::find_method(options.method_name)) {
+      options.composition = compiled;
+      options.method = compiled->carrier;
+    }
+  }
+  if ((options.grid_explicit || options.nonlocal_grid) && !options.composition)
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
+  if (options.nonlocal_grid && std::string_view(argv[1]) != "run")
+    throw UsageError("--nonlocal-grid-level currently requires the run command");
   if (is_dft(options) && !options.composition) {
     // Registered methods leave ks_options null, so native preparation owns
     // their grid defaults. Keep the metadata-only inventory on that same grid.
@@ -921,7 +940,8 @@ int run(RunOptions options) {
       throw UsageError("named KS native preparation does not support --owned-device-bytes");
     return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
                                           options.grid, options.nonlocal_memory_bytes,
-                                          options.dispersion_memory_bytes, row->identity.data());
+                                          options.dispersion_memory_bytes, row->identity.data(),
+                                          options.nonlocal_grid);
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.

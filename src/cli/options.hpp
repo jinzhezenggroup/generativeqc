@@ -46,6 +46,7 @@ struct RunOptions {
   const method_generated::Method* basis_program{nullptr};
   bool grid_explicit{false};
   generativeqc::KsGrid grid{};
+  std::optional<generativeqc::KsGrid> nonlocal_grid;
   bool forces{false};
   bool json{false};
   std::uint32_t diis_history{8};

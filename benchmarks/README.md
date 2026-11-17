@@ -11,6 +11,7 @@ Write each run to a new directory under `.artifacts/benchmarks/`; output into
 | CPU endpoint and linear algebra sweeps | `cpu_hf_high_l.py`, `cpu_linalg_sweep.py`, `native_cpu_ks_force_endpoint.py` |
 | Correlated/CBS endpoints | `ccsdt_cbs_endpoint.py`, `df_cbs_qm7_endpoint.py`, `ccsdt_prepared_endpoint.py` |
 | Prepared execution and cache behavior | `prepared_lifecycle.py`, `runtime_cache_state.py` |
+| Native DFT force endpoints | `native_dft_force_endpoint.py`, `native_dft_force_audit.py`, `native_dft_force_science_audit.py` |
 | Qualification and publication | `readme_defaults_qualification.py`, `../tools/evidence.py` |
 
 The [combined #3064/#3065 RTX 5090 cohort](results/readme-rtx5090-composed-20261111/README.md)

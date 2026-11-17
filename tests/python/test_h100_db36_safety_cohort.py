@@ -36,3 +36,41 @@ def test_rejects_changed_coverage_or_raw_data(
         path.write_bytes(data)
     with pytest.raises(ValueError):
         reader.checked_publication()
+
+
+def test_missing_observations_never_use_provenance_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader, "DIRECTORY", tmp_path)
+
+    def forbidden(*arguments: object, **keywords: object) -> bytes:
+        pytest.fail("Numerical observations must remain local")
+
+    monkeypatch.setattr(reader, "read_evidence_bytes", forbidden)
+    with pytest.raises(ValueError, match="Missing original safety observations"):
+        reader.artifact_bytes("public-direct-v1-completed.tar.xz")
+
+
+@pytest.mark.parametrize("mutation", ("corrupt", "symlink", "directory"))
+def test_present_invalid_build_metadata_never_uses_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    target = tmp_path / "observations"
+    shutil.copytree(reader.DIRECTORY, target)
+    monkeypatch.setattr(reader, "DIRECTORY", target)
+    path = target / "production-build-v1-metadata.tar.xz"
+    if mutation == "directory":
+        path.mkdir()
+    elif mutation == "symlink":
+        backing = tmp_path / "backing"
+        backing.write_bytes(b"invalid metadata")
+        path.symlink_to(backing)
+    else:
+        path.write_bytes(b"invalid metadata")
+
+    def forbidden(*arguments: object, **keywords: object) -> bytes:
+        pytest.fail("Present invalid metadata must not fall back to history")
+
+    monkeypatch.setattr(reader, "read_evidence_bytes", forbidden)
+    with pytest.raises(ValueError):
+        reader.checked_publication()

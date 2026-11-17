@@ -485,9 +485,19 @@ def independent_uks_gradient(
     )
     mf = dft.UKS(mol)
     mf.xc = "PBE" if method == "pbe-uks" else "LDA_X,LDA_C_PW"
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for atomic_number, radius in spec.element_radii:
+            radii[atomic_number] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -520,6 +530,8 @@ def independent_semilocal_total_gradient(
 
     The optional native initial density selects a stationary basin for a
     difficult radical; PySCF still solves and evaluates its own operators.
+    Configure the partition before installing quadrature arrays: PySCF resets
+    both arrays when its radius policy changes, including assignment to None.
     """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
@@ -547,9 +559,19 @@ def independent_semilocal_total_gradient(
     )
     mf = dft.RKS(mol) if method.endswith("-rks") else dft.UKS(mol)
     mf.xc = "R2SCAN"
+    spec = state._source.grid_spec
+    if spec.version == 4:
+        from pyscf.dft import radi
+
+        radii = np.array(radi.BRAGG_RADII, copy=True)
+        for atomic_number, radius in spec.element_radii:
+            radii[atomic_number] = radius
+        mf.grids.atomic_radii = radii
+        mf.grids.radii_adjust = radi.treutler_atomic_radii_adjust
+    else:
+        mf.grids.radii_adjust = None
     mf.grids.coords = np.array(state.grid.points)
     mf.grids.weights = np.array(state.grid.weights)
-    mf.grids.radii_adjust = None
     owners = np.asarray(state.grid.owners)
     tab = {
         mol.atom_symbol(a): (
@@ -572,24 +594,31 @@ def independent_semilocal_total_gradient(
     else:
         raise ValueError("unrecognized independent PySCF initial guess")
     assert mf.converged
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
     grad = mf.nuc_grad_method()
     grad.grid_response = True
-    return mf.e_tot, grad.kernel()
+    derivative = grad.kernel()
+    np.testing.assert_array_equal(mf.grids.coords, state.grid.points)
+    np.testing.assert_array_equal(mf.grids.weights, state.grid.weights)
+    return mf.e_tot, derivative
 
 
 @pytest.mark.parametrize(
     "method,charge,multiplicity",
     [("r2scan-rks", 0, 1), ("r2scan-uks", 1, 2)],
 )
+@pytest.mark.parametrize("grid_spec", (GRID, GridSpec.treutler(0)))
 def test_complete_r2scan_cpu_gradient_independent_analytic(
     method: typing.Any,
     charge: typing.Any,
     multiplicity: typing.Any,
+    grid_spec: GridSpec,
     record_property: typing.Any,
 ) -> None:
     """Independent PySCF/libxc analytic gate when that validation stack is installed."""
     pytest.importorskip("pyscf", reason="independent analytic reference requires PySCF")
-    calc = calculator(method, max_iterations=200)
+    calc = calculator(method, max_iterations=200, ks_options=KsOptions(grid=grid_spec))
     with (
         calc.prepare_batch(
             [ATOMS], charges=[charge], multiplicities=[multiplicity]

@@ -19,12 +19,6 @@
       "sha256": "624eb7ec95fecad88bb6553ae689ef53722603f1d0c4248f06ca56002c4460c3"
     },
     {
-      "bytes": 65978,
-      "path": "source-files.sha256.gz",
-      "role": "input",
-      "sha256": "3ea66e50fec796a0f1caebf852727eb4871df256b7314b482c6291bff6c541d1"
-    },
-    {
       "bytes": 2128,
       "path": "source.patch.xz",
       "role": "source-patch",
@@ -45,8 +39,14 @@
     {
       "path": "README.md",
       "role": "summary",
-      "bytes": 396,
-      "sha256": "3bfad046db8fe5f4559a6d3a6a55b8a72d0e45c56f647e0953db161c1aed219c"
+      "bytes": 1229,
+      "sha256": "7a5b4e48aae4c9509ee74cb82f49a7882b96983c06e226822fb6b2d8a1f6c2de"
+    },
+    {
+      "path": "source-census-snapshot.json",
+      "role": "input",
+      "bytes": 785,
+      "sha256": "1218338a6901ebd88a19ae3dcebe63f4c7a86f324c958cae4396f6f5c16b6d30"
     }
   ],
   "reproduction": {
@@ -55,7 +55,7 @@
       "benchmarks/results/becke-physical-forces-20261006/reproduce.sh"
     ],
     "prerequisites": "CUDA 12.9 sm_120, ccache/CMake/Ninja/C++ compiler, finite main/gpu:5090:1 Slurm, Python compiler dependencies, NumPy/pytest/CuPy/GPU4PySCF, PySCF 2.14/Libxc 7.0. Set CUDA_ROOT and PYTHON to installations; preserve scheduler visibility.",
-    "source_restore": "Keep this bundle outside checkout; restore source.revision and apply source.patch. Validate the decompressed source manifest. Scientific/build inputs are identical to the original frozen core build."
+    "source_restore": "Keep this bundle outside checkout; restore source.revision and apply source.patch. Validate the decompressed source manifest. Scientific/build inputs are identical to the original frozen core build. Restore the exact source census from source-census-snapshot.json into the external reproduction bundle first; independent observations remain offline."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
