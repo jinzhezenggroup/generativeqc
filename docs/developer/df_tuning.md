@@ -77,7 +77,10 @@ authorize fitted LR; the method owner freezes that scientific admission.
 The portable derivative manifest chooses cooperative Rys/compact for its 18
 s/p/d entries and auxiliary-f `003/103/113/203/213` on every probed CUDA target.
 Exact target/class tuning takes precedence; the existing sm_120 mapping is
-unchanged. These five auxiliary-f classes require only the qualified three/four-root
+unchanged. The sm_90 exact-target profile keeps those 23 rows and adds the
+four-root auxiliary-g classes `004/104/114/204` as Rys/compact (H100 evidence in
+[h100-df-aux-g-rys-20261118](../../benchmarks/results/h100-df-aux-g-rys-20261118/README.md));
+five-root `214/224/223` and other targets keep polynomial auxiliary-g execution. These five auxiliary-f classes require only the qualified three/four-root
 DF quadrature. The five-root `223` class, other missing classes, an unprobed
 target and explicit `legacy` retain polynomial execution. A portable mapping
 passes the same independent scientific and endpoint evidence gates as a tuned

@@ -1,0 +1,766 @@
+{
+ "schema": "generativeqc.h100-df-aux-g-rys-endpoint.v1",
+ "orbital_aos": 384,
+ "device": "NVIDIA H100 80GB HBM3, GPU-ee0365df-d4aa-39d4-2fb1-1e1b8495755a, 9.0, 595.58.03, 700.00 W, 1980 MHz",
+ "policy_control": "GENERATIVEQC_DF_SHELL_POLICY (auto = qualified portable baseline, candidate = sm_90 aux-g Rys)",
+ "same_phase_candidate_vs_auto_force_max_abs_hartree_per_bohr": {
+  "b3lyp": {
+   "cold": 1.9184653865522705e-13,
+   "warm": 3.1441516057384433e-13
+  },
+  "hf": {
+   "cold": 2.859934511434403e-13,
+   "warm": 4.0678571622265736e-13
+  }
+ },
+ "arms": [
+  {
+   "arm": "06-prewarm-b3lyp-df48",
+   "policy": "auto",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "d2b22a010996c44a3ea666e93dd4645887ead1a20a84cf0617da85546a92766a",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.5076524729374796,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.508870264980942,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946278341908e-05,
+      "force_rms_hartree_per_bohr": 1.1494285698013709e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946240039213e-05,
+      "force_rms_hartree_per_bohr": 1.1494285699921888e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "07-prewarm-b3lyp-df48-cand",
+   "policy": "candidate",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "649412e3f3b3cd4df744aa4382ff887f0f5c217e9d9cb627f67e308671b74268",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.4878930220147595,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.46667500503826886,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946266684566e-05,
+      "force_rms_hartree_per_bohr": 1.149428569604162e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946270126257e-05,
+      "force_rms_hartree_per_bohr": 1.1494285696973717e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "08-b3lyp-df48-auto-A0",
+   "policy": "auto",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "32b1cab64c536845a917bbd9e921f5b005ca5e2fbaa20bac98797055f1aeec90",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.579766641021706,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4933443000772968,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4902228759601712,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.49786526907701045,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946264797187e-05,
+      "force_rms_hartree_per_bohr": 1.1494285700394027e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.708894627989622e-05,
+      "force_rms_hartree_per_bohr": 1.1494285699826702e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.708894628611347e-05,
+      "force_rms_hartree_per_bohr": 1.149428570012401e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.708894626923808e-05,
+      "force_rms_hartree_per_bohr": 1.1494285697248779e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "09-b3lyp-df48-cand-B1",
+   "policy": "candidate",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "58da34b961c0b4248688c85a55ac8aba9df61336ec853ceefbbe084a31fe1147",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.4986051809974015,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4687737039057538,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.46817488595843315,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.470355330966413,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946275455328e-05,
+      "force_rms_hartree_per_bohr": 1.1494285699831664e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.70889462817836e-05,
+      "force_rms_hartree_per_bohr": 1.1494285697229753e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946274678172e-05,
+      "force_rms_hartree_per_bohr": 1.1494285700477414e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946263131852e-05,
+      "force_rms_hartree_per_bohr": 1.1494285695916574e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "10-b3lyp-df48-cand-B2",
+   "policy": "candidate",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "df437e2bb4889657ce72e681b276bf570347a03e783395b10805cc2b390ae311",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.4819468579953536,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4659921060083434,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4668118669651449,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.46602279506623745,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946272790793e-05,
+      "force_rms_hartree_per_bohr": 1.1494285702186927e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946288889026e-05,
+      "force_rms_hartree_per_bohr": 1.149428570136068e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946288889026e-05,
+      "force_rms_hartree_per_bohr": 1.1494285700532673e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.708894626213265e-05,
+      "force_rms_hartree_per_bohr": 1.1494285701505479e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "11-b3lyp-df48-auto-A3",
+   "policy": "auto",
+   "method": "b3lyp",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "ba4069fffa7528df51aaf7f090ebc1341f2f1907bb26fd8053dbfa0d550567d3",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 2.526952902902849,
+     "energy": -1222.1103159385343,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4904516650130972,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.4916863109683618,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.49035118299070746,
+     "energy": -1222.1103159385343,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946244369083e-05,
+      "force_rms_hartree_per_bohr": 1.1494285699208464e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946277231685e-05,
+      "force_rms_hartree_per_bohr": 1.149428569776908e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.708894626402003e-05,
+      "force_rms_hartree_per_bohr": 1.149428569973134e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.3565195189357837e-06,
+      "force_max_abs_hartree_per_bohr": 2.7088946267461722e-05,
+      "force_rms_hartree_per_bohr": 1.1494285698944134e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "00-prewarm-hf-df48",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "de462ac6a27df040749681cb5838006a86dadd324a75dc2df86d9fbe0087a3b0",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.221539310994558,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18441314401570708,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.9740930838452186e-05,
+      "force_rms_hartree_per_bohr": 8.195903373491276e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264210827053e-05,
+      "force_rms_hartree_per_bohr": 8.186918226187184e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "01-prewarm-hf-df48-cand",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "06a4f1587aa9bb52344cd4100c6247ecd5f6da5737435737aff1844614e12fcc",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.1998421779135242,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.16270010208245367,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.9740930882861107e-05,
+      "force_rms_hartree_per_bohr": 8.195903376934876e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264216156124e-05,
+      "force_rms_hartree_per_bohr": 8.186918222166346e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "02-hf-df48-auto-A0",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "4a81b87ebc3b49586e61e89082072394b6fb1292649f5a64505f0da39682f703",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.1449601299827918,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18332973797805607,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.1816391320899129,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18680100899655372,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.9740930923717315e-05,
+      "force_rms_hartree_per_bohr": 8.19590337851742e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264225037908e-05,
+      "force_rms_hartree_per_bohr": 8.186918217189072e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.97082641966162e-05,
+      "force_rms_hartree_per_bohr": 8.186918226567084e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264233919692e-05,
+      "force_rms_hartree_per_bohr": 8.186918229765953e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "03-hf-df48-cand-B1",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "ed0349171cdd70f8532f99d1ba5a086684de81082bb282dc9a34671cf3bdf6b4",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.1209322209469974,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.15939809591509402,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.15754117001779377,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.19164282199926674,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.9740930923717315e-05,
+      "force_rms_hartree_per_bohr": 8.195903378160753e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.970826419572802e-05,
+      "force_rms_hartree_per_bohr": 8.186918225067886e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.97082641966162e-05,
+      "force_rms_hartree_per_bohr": 8.186918228008102e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264177076273e-05,
+      "force_rms_hartree_per_bohr": 8.18691822348388e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "04-hf-df48-cand-B2",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "366657484a433d74d57b06674cd56dbf1b8d092ae9bc7916ad7b3d8eb824ca91",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.1393301950301975,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.162240904988721,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.1571574480039999,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.16005365503951907,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.974093087042661e-05,
+      "force_rms_hartree_per_bohr": 8.195903375675616e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264219708838e-05,
+      "force_rms_hartree_per_bohr": 8.186918219317688e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264221485194e-05,
+      "force_rms_hartree_per_bohr": 8.18691822098582e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264187734414e-05,
+      "force_rms_hartree_per_bohr": 8.186918223311548e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "05-hf-df48-auto-A3",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "1d6372356b3aab6a5c0bc10633e828809acde09508d191cb815ee1e749639aa7",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 1.1414721169276163,
+     "energy": -1215.6168397861122,
+     "iterations": 10,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18411281798034906,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18135999399237335,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.18126241595018655,
+     "energy": -1215.6168397861136,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044958812466e-05,
+      "force_max_abs_hartree_per_bohr": 1.9740930884637464e-05,
+      "force_rms_hartree_per_bohr": 8.195903377829404e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.97082641966162e-05,
+      "force_rms_hartree_per_bohr": 8.186918219794549e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264182405344e-05,
+      "force_rms_hartree_per_bohr": 8.186918225053908e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.106044955970295e-05,
+      "force_max_abs_hartree_per_bohr": 1.9708264188622593e-05,
+      "force_rms_hartree_per_bohr": 8.186918219525355e-06,
+      "passed": false
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -207,15 +207,53 @@ def test_qualified_policy_and_portable_target_selection(
         else [code, 0, 0]
         for code in codes
     ]
+    exact = {
+        int(target[3:]): profile
+        for target, profile in manifest["architectures"].items()
+        if target != "sm_120"
+    }
+
+    def calls_for(rows: typing.Any) -> list[list[int]]:
+        # Exact rows win per class; absent classes fall through to portable.
+        selected = dict(portable_choices)
+        selected.update(
+            {
+                20 * int(row["class"][0])
+                + 5 * int(row["class"][1])
+                + int(row["class"][2]): row
+                for row in rows
+            }
+        )
+        return [
+            [
+                code,
+                SCHEDULES.index(selected[code]["schedule"]),
+                int(selected[code]["lowering"] == "rys"),
+            ]
+            if code in selected
+            else [code, 0, 0]
+            for code in codes
+        ]
+
     for architecture in (60, 75, 80, 89, 90, 100, 150):
         # Portable candidates are executable on any built target, independently
-        # of whether evidence has promoted them for automatic use yet.
-        assert (
-            dispatcher(kind, architecture=architecture, policy="candidate")["calls"]
-            == portable_expected
+        # of whether evidence has promoted them for automatic use yet. A target
+        # campaign's candidate wins only under the explicit candidate policy.
+        target = exact.get(architecture)
+        assert dispatcher(kind, architecture=architecture, policy="candidate")[
+            "calls"
+        ] == (calls_for(target["kernels"]) if target else portable_expected)
+        automatic = (
+            target
+            if target and target["qualified"]
+            else target.get("baseline")
+            if target
+            else None
         )
         assert dispatcher(kind, architecture=architecture)["calls"] == (
-            portable_expected
+            calls_for(automatic["kernels"])
+            if automatic and automatic["qualified"]
+            else portable_expected
             if portable["qualified"]
             else [[code, 0, 0] for code in codes]
         )

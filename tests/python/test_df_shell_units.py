@@ -14,6 +14,7 @@ from generativeqc_compiler.integral.df_rys_shell import (
     emit_df_rys_shell_cuda,
 )
 from generativeqc_compiler.integral.df_shell_derivatives import (
+    AUXILIARY_G_SHELL_CLASSES,
     SHELL_CLASSES,
     SUPPORTED_SHELL_CLASSES,
     emit_df_shell_derivatives_cuda,
@@ -117,7 +118,7 @@ def test_selected_class_math_and_schedules_are_byte_identical(
             ) == specialization(rys, declaration)
         policy = units[f"df_shell_policy_{name}.hpp"]
         mask = (
-            1 << (16 * angular[0] + 4 * angular[1] + angular[2])
+            1 << (15 * angular[0] + 5 * angular[1] + angular[2])
             if angular in RYS_SHELL_CLASSES
             else 0
         )
@@ -125,6 +126,21 @@ def test_selected_class_math_and_schedules_are_byte_identical(
         assert (
             "inline constexpr" not in policy
         )  # Per-TU capabilities have internal linkage.
+    # Auxiliary-g units carry their own Rys capability bit and specialization.
+    for angular in AUXILIARY_G_SHELL_CLASSES:
+        name = "".join(map(str, angular))
+        policy = units[f"df_shell_policy_{name}.hpp"]
+        available = angular in RYS_SHELL_CLASSES
+        mask = 1 << (15 * angular[0] + 5 * angular[1] + angular[2]) if available else 0
+        assert f"rys_available_mask={mask}ULL" in policy
+        parameters = ",".join(map(str, angular))
+        declaration = f"template<> struct RysShell<{parameters}>"
+        math = units[f"df_shell_math_{name}.cuh"]
+        assert (declaration in math) == available
+        if available:
+            assert specialization(math, declaration) == specialization(
+                emit_df_rys_shell_cuda(classes=(angular,)), declaration
+            )
 
 
 def test_class_local_math_change_does_not_invalidate_neighbors(

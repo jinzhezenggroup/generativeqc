@@ -38,24 +38,38 @@ AUXILIARY_F_RYS_SHELL_CLASSES = (
     (2, 1, 3),
 )
 
+# Auxiliary-g partners of s/p/d bra pairs whose first derivative still needs
+# at most four roots: the same independently qualified quadrature as above.
+# Classes needing five roots (21g, 22g, 22f) keep their polynomial fallback.
+AUXILIARY_G_RYS_SHELL_CLASSES = (
+    (0, 0, 4),
+    (1, 0, 4),
+    (1, 1, 4),
+    (2, 0, 4),
+)
+
 # The measured low-angular winners retain their delivered component lowering.
 # Controls 101/110 and all remaining canonical s/p/d classes use shared axes;
 # mathematical availability never changes the qualified production manifest.
 COOPERATIVE_RYS_SHELL_CLASSES = (
-    (1, 0, 1),
-    (1, 0, 2),
-    (1, 1, 0),
-    (1, 1, 1),
-    (1, 1, 2),
-    (2, 0, 1),
-    (2, 0, 2),
-    (2, 1, 0),
-    (2, 1, 1),
-    (2, 1, 2),
-    (2, 2, 0),
-    (2, 2, 1),
-    (2, 2, 2),
-) + AUXILIARY_F_RYS_SHELL_CLASSES
+    (
+        (1, 0, 1),
+        (1, 0, 2),
+        (1, 1, 0),
+        (1, 1, 1),
+        (1, 1, 2),
+        (2, 0, 1),
+        (2, 0, 2),
+        (2, 1, 0),
+        (2, 1, 1),
+        (2, 1, 2),
+        (2, 2, 0),
+        (2, 2, 1),
+        (2, 2, 2),
+    )
+    + AUXILIARY_F_RYS_SHELL_CLASSES
+    + AUXILIARY_G_RYS_SHELL_CLASSES
+)
 RYS_SHELL_CLASSES = tuple(
     sorted(set(COMPONENT_RYS_SHELL_CLASSES + COOPERATIVE_RYS_SHELL_CLASSES))
 )
@@ -190,8 +204,11 @@ def emit_df_rys_policy_cpp(*, classes: typing.Any = None) -> typing.Any:
     """Expose generated availability without importing CUDA into host policy."""
     selected = select_shell_classes(classes)
     storage = "inline" if classes is None else "static"
+    # Bra s/p/d and auxiliary s..g give 15*A + 5*B + C < 45 distinct bits.
+    if any(a > 2 or b > 2 or c > 4 for a, b, c in RYS_SHELL_CLASSES):
+        raise ValueError("Rys class outside the encoded s/p/d x s..g domain")
     mask = sum(
-        1 << (16 * a + 4 * b + c)
+        1 << (15 * a + 5 * b + c)
         for a, b, c in RYS_SHELL_CLASSES
         if (a, b, c) in selected
     )
@@ -202,7 +219,7 @@ namespace generativeqc::scf::generated_df_shell {{
 {storage} constexpr std::uint64_t rys_available_mask={mask}ULL;
 {storage} constexpr std::uint64_t rys_qualified_mask=0;
 template<unsigned A,unsigned B,unsigned C>
-{storage} constexpr bool rys_available=C<4 && (rys_available_mask & (1ULL<<((16*A+4*B+C)%64)))!=0;
+{storage} constexpr bool rys_available=A<3 && B<3 && C<5 && (rys_available_mask & (1ULL<<((15*A+5*B+C)%64)))!=0;
 }} // namespace generativeqc::scf::generated_df_shell
 """
 
@@ -388,12 +405,17 @@ def build_df_rys_shared_axis_ir(angular: typing.Any) -> typing.Any:
         "variance_y": iq * (1 - sy * root),
     }
     states, outputs = set(), []
+    # The same moment recursion; auxiliary g only selects the validated
+    # raised-bra/auxiliary-g derivative domain instead of the s/p/d/f one.
+    domain = (
+        {"auxiliary_g_derivative": True}
+        if angular[2] == 4
+        else {"internal_derivative": True}
+    )
     for powers in product(
         range(angular[0] + 2), range(angular[1] + 1), range(angular[2] + 1)
     ):
-        source, value = build_df_axis_moment(
-            *powers, internal_derivative=True, states=states
-        )
+        source, value = build_df_axis_moment(*powers, states=states, **domain)
         cloned = {}
         for identifier in source.topological_order((value,)):
             node = source.nodes[identifier]
