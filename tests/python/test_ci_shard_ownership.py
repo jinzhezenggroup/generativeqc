@@ -70,6 +70,9 @@ def _selection(
         ("tests/python/test_d3_public_second_order.py", "runtime-heavy"),
         ("tests/python/test_df_cc_mixed_precision.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
+        ("tests/python/test_host_ks_nuclear_response.py", "runtime-heavy"),
+        ("tests/python/test_host_ks_nuclear_hessian.py", "posthf"),
+        ("tests/python/test_host_hessian_aot_cmake.py", "compiler-heavy"),
     ),
 )
 def test_measured_transfer_snapshot(
@@ -81,7 +84,7 @@ def test_measured_transfer_snapshot(
     addition = f"  {module}\n"
     assert addition in content
     old_selector = tmp_path / "original-selector.sh"
-    previous = content.replace(addition, "")
+    previous = content.replace(f"      {module} \\\n", "").replace(addition, "")
     if owner == "compiler-heavy":
         previous = previous.replace(f" \\\n      {module}; do", "; do", 1)
     old_selector.write_text(previous, encoding="utf-8")
@@ -399,6 +402,9 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
+        ("tests/python/test_host_ks_nuclear_response.py", "runtime-heavy"),
+        ("tests/python/test_host_ks_nuclear_hessian.py", "posthf"),
+        ("tests/python/test_host_hessian_aot_cmake.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
@@ -452,6 +458,9 @@ def test_measured_module_keeps_one_loadfile_owner_and_original_core_slots(
         ("tests/python/test_correlation_convergence.py", "runtime-heavy"),
         ("tests/python/test_native_stationary_phased_budget.py", "runtime-heavy"),
         ("tests/python/test_direct_lr_weighted_host.py", "compiler-heavy"),
+        ("tests/python/test_host_ks_nuclear_response.py", "runtime-heavy"),
+        ("tests/python/test_host_ks_nuclear_hessian.py", "posthf"),
+        ("tests/python/test_host_hessian_aot_cmake.py", "compiler-heavy"),
     ),
 )
 def test_measured_module_executes_once_with_one_shared_fixture_owner(
@@ -902,7 +911,13 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
     ):
         for shard in SHARDS:
             full = event in {"schedule", "workflow_dispatch"}
-            extended = shard in {"core-b", "posthf", "compiler-heavy", "runtime-heavy"}
+            extended = shard in {
+                "core-b",
+                "core-c",
+                "posthf",
+                "compiler-heavy",
+                "runtime-heavy",
+            }
             context = {"matrix.shard": shard, "github.event_name": event}
             assert expression(job_limit[1], context) == (100 if full else 60)
             assert expression(test_limit[1], context) == (
@@ -984,7 +999,11 @@ def test_timed_diagnostics_contract_accepts_equivalent_timeout_expressions() -> 
     full = (
         "(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')"
     )
-    extended = "(matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy' || matrix.shard == 'posthf')"
+    extended = (
+        "(matrix.shard == 'runtime-heavy' || "
+        "matrix.shard == 'compiler-heavy' || "
+        "matrix.shard == 'posthf' || matrix.shard == 'core-c')"
+    )
     alternatives = {
         4: "${{ github.event_name == 'pull_request' && 60 || github.event_name == 'push' && 60 || github.event_name == 'merge_group' && 60 || 100 }}",
         8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || 30 }}}}",
@@ -1689,7 +1708,8 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
                 "tests/python/test_ecp_stuttgart_dft.py",
             ]
         elif shard == "runtime-heavy":
-            assert selected[:5] == [
+            assert selected[:6] == [
+                "tests/python/test_host_ks_nuclear_response.py",
                 "tests/python/test_d3_public_second_order.py",
                 "tests/python/test_uccsd_triples_response.py",
                 "tests/python/test_native_stationary_phased_budget.py",
@@ -1697,7 +1717,8 @@ def test_measured_file_priority_only_changes_routine_file_scheduling(
                 "tests/python/test_bulk_aot_clangxx_closure.py",
             ]
         else:
-            assert selected[:5] == [
+            assert selected[:6] == [
+                "tests/python/test_host_ks_nuclear_hessian.py",
                 "tests/python/test_treutler_endpoints.py",
                 "tests/python/test_uccsd_lambda.py",
                 "tests/python/test_uccsd_t_owner.py",

@@ -15,6 +15,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -129,6 +130,7 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
                         const Matrix& alpha, const Matrix& beta, SpinXcEvaluator evaluate_xc,
                         const ScfOptions& options, dft::nlc::Vv10Plan* nonlocal_correlation,
                         dft::nlc::Vv10DensityDomain nonlocal_domain) {
+  runtime::df_progress::Scope trace("uks_physical_evaluation");
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(alpha, beta);
   SpinEvaluation out;
@@ -205,6 +207,9 @@ ScfResult run_uks_impl(
     dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
   using namespace reference;
+  runtime::df_progress::Scope trace("uks_scf");
+  runtime::df_progress::number("basis_dimension", basis.nao);
+  runtime::df_progress::number("grid_points", grid.point_count());
   const auto& strategy = plan.strategy();
   validate_resolved_fock_build(strategy);
   if (options.compute_forces)
@@ -307,6 +312,7 @@ ScfResult run_uks_impl(
     double alpha_electrons{};
     double beta_electrons{};
     bool stabilized{};
+    bool canonical_density_converged = true;
   };
 
   unsigned used_iterations = 0;
@@ -341,6 +347,45 @@ ScfResult run_uks_impl(
           Matrix next_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
           const double change_a = density_rms(next_a, state.alpha);
           const double change_b = density_rms(next_b, state.beta);
+          bool canonical_density_converged = true;
+          if (ordinary_primary && (evaluate_xc.program || options.certify_ks_export) &&
+              std::max(change_a, change_b) < options.density_tolerance &&
+              std::max(residual_a, residual_b) < residual_gate) {
+            // Certify the current DIIS state before leaving its stable iteration.
+            // A tiny physical residual need not make undamped F[D] iteration
+            // contractive, especially for kinetic-energy-density functionals.
+            const auto canonical_a = generalized_eigen(physical.fock.alpha, x, n);
+            const auto canonical_b = generalized_eigen(physical.fock.beta, x, n);
+            const Matrix projected_a = density_from_orbitals(canonical_a.vectors, n, na, 1.0);
+            const Matrix projected_b = density_from_orbitals(canonical_b.vectors, n, nb, 1.0);
+            runtime::sample_cpu_capacity(runtime::add_capacity(
+                runtime::add_capacity(
+                    runtime::add_capacity(plan.cpu_observation_capacity(),
+                                          long_range_correction
+                                              ? long_range_correction->cpu_observation_capacity()
+                                              : 0),
+                    diis.numeric_capacity()),
+                runtime::vector_capacities(
+                    basis.packed, grid.points(), grid.weights(), grid.owners(), x, state.alpha,
+                    state.beta, ca.values, ca.vectors, cb.values, cb.vectors, physical.fock.alpha,
+                    physical.fock.beta, ra, rb, effective.first, effective.second, next_a, next_b,
+                    canonical_a.values, canonical_a.vectors, canonical_b.values,
+                    canonical_b.vectors, projected_a, projected_b, diagnostic.history)));
+            double maximum_change = 0.0;
+            for (std::size_t index = 0; index < state.alpha.size(); ++index) {
+              maximum_change =
+                  std::max(maximum_change, std::abs(projected_a[index] - state.alpha[index]));
+              maximum_change =
+                  std::max(maximum_change, std::abs(projected_b[index] - state.beta[index]));
+            }
+            const double canonical_tolerance = options.certify_ks_export
+                                                   ? residual_gate
+                                                   : std::min(1.0e-8, options.density_tolerance);
+            canonical_density_converged =
+                std::max(density_rms(projected_a, state.alpha),
+                         density_rms(projected_b, state.beta)) < canonical_tolerance &&
+                maximum_change <= canonical_tolerance;
+          }
           return UksLoopEvaluation{std::move(physical.fock),
                                    std::move(ra),
                                    std::move(rb),
@@ -356,7 +401,8 @@ ScfResult run_uks_impl(
                                    std::hypot(residual_a, residual_b) / std::sqrt(2.0),
                                    dot(state.alpha, ints.overlap),
                                    dot(state.beta, ints.overlap),
-                                   stabilized};
+                                   stabilized,
+                                   canonical_density_converged};
         },
         [&](UksState& state, UksLoopEvaluation evaluation,
             const ::generativeqc::solver::SelfConsistentProgress& progress) {
@@ -411,15 +457,18 @@ ScfResult run_uks_impl(
                                         history_energy_change, progress.state_rms,
                                         progress.residual_rms, diagnostic.electrons,
                                         evaluation.stabilized});
+          runtime::df_progress::number("completed_iteration", result.iterations);
+          runtime::df_progress::number("completed_fock_builds", result.fock_builds);
         },
         [&](const ::generativeqc::solver::SelfConsistentProgress&,
             const UksLoopEvaluation& evaluation) {
           // Keep DIIS active until the CURRENT physical state also meets the
           // maximum-entry gate required by the bounded final closure.
-          return strategy.backend != FockBackend::Cpu ||
-                 std::max(residual_max_abs(evaluation.alpha_residual),
-                          residual_max_abs(evaluation.beta_residual)) <=
-                     std::min(1.0e-8, options.density_tolerance);
+          return evaluation.canonical_density_converged &&
+                 (strategy.backend != FockBackend::Cpu ||
+                  std::max(residual_max_abs(evaluation.alpha_residual),
+                           residual_max_abs(evaluation.beta_residual)) <=
+                      std::min(1.0e-8, options.density_tolerance));
         });
     alpha = std::move(outcome.state.alpha);
     beta = std::move(outcome.state.beta);
@@ -428,6 +477,9 @@ ScfResult run_uks_impl(
 
     if (!result.converged) {
       result.density = concatenate(alpha, beta);
+      runtime::df_progress::number("terminal_iterations", result.iterations);
+      runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+      runtime::df_progress::number("terminal_converged", result.converged);
       return result;
     }
 
@@ -457,15 +509,34 @@ ScfResult run_uks_impl(
       const double change_b = density_rms(projected_b, beta);
       const double density_change = std::max(change_a, change_b);
       result.density_rms = std::hypot(change_a, change_b) / std::sqrt(2.0);
-      alpha = std::move(projected_a);
-      beta = std::move(projected_b);
-
-      auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
-                           options, nonlocal_correlation, nonlocal_domain);
+      auto next = evaluate(plan, long_range_correction, basis, grid, projected_a, projected_b,
+                           evaluate_xc, options, nonlocal_correlation, nonlocal_domain);
       ++result.fock_builds;
       diagnostic.coulomb_exchange_work.add(next.coulomb_exchange_work);
-      const Matrix ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
-      const Matrix rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
+      Matrix ra = commutator_residual(next.fock.alpha, projected_a, ints.overlap, n);
+      Matrix rb = commutator_residual(next.fock.beta, projected_b, ints.overlap, n);
+      runtime::sample_cpu_capacity(runtime::add_capacity(
+          runtime::add_capacity(
+              runtime::add_capacity(
+                  plan.cpu_observation_capacity(),
+                  long_range_correction ? long_range_correction->cpu_observation_capacity() : 0),
+              diis.numeric_capacity()),
+          runtime::vector_capacities(
+              basis.packed, grid.points(), grid.weights(), grid.owners(), x, alpha, beta, ca.values,
+              ca.vectors, cb.values, cb.vectors, final.fock.alpha, final.fock.beta, next.fock.alpha,
+              next.fock.beta, projected_a, projected_b, ra, rb, diagnostic.history)));
+      // Keep beneficial physical polishing (including nonlocal force states),
+      // but do not replace a certified DIIS state with a less stationary trial.
+      // Rejected trial work still belongs in the endpoint's semantic counters.
+      if (ordinary_primary && (evaluate_xc.program || options.certify_ks_export) &&
+          std::max(residual_rms(ra), residual_rms(rb)) > diagnostic.physical_residual) {
+        next = std::move(final);
+        ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
+        rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
+      } else {
+        alpha = std::move(projected_a);
+        beta = std::move(projected_b);
+      }
       const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
       diagnostic.physical_residual = std::max(residual_a, residual_b);
       result.physical_residual_rms = std::hypot(residual_a, residual_b) / std::sqrt(2.0);
@@ -482,7 +553,10 @@ ScfResult run_uks_impl(
            std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
                std::min(1.0e-8, options.density_tolerance))) {
         result.converged = true;
-        if (evaluate_xc.program) {
+        // Keeping F[D] alone must not change the stabilized-occupation root.
+        // Export owners explicitly request this stronger unshifted certificate,
+        // even when the ordinary SCF proposal used occupation stabilization.
+        if (evaluate_xc.program || options.certify_ks_export) {
           // The physical export reconstructs occupations from the final F[D].
           // A small commutator alone does not certify that last projector.
           ca = generalized_eigen(final.fock.alpha, x, n);
@@ -491,6 +565,9 @@ ScfResult run_uks_impl(
           projected_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
           const double canonical_a = density_rms(projected_a, alpha);
           const double canonical_b = density_rms(projected_b, beta);
+          const double canonical_tolerance = options.certify_ks_export
+                                                 ? residual_gate
+                                                 : std::min(1.0e-8, options.density_tolerance);
           double maximum_change = 0.0;
           for (std::size_t index = 0; index < alpha.size(); ++index) {
             maximum_change = std::max(maximum_change, std::abs(projected_a[index] - alpha[index]));
@@ -499,9 +576,8 @@ ScfResult run_uks_impl(
           diagnostic.density_change = std::max(density_change, std::max(canonical_a, canonical_b));
           result.density_rms =
               std::max(result.density_rms, std::hypot(canonical_a, canonical_b) / std::sqrt(2.0));
-          result.converged =
-              std::max(canonical_a, canonical_b) < std::min(1.0e-8, options.density_tolerance) &&
-              maximum_change <= 1.0e-8;
+          result.converged = std::max(canonical_a, canonical_b) < canonical_tolerance &&
+                             maximum_change <= canonical_tolerance;
           runtime::sample_cpu_capacity(runtime::add_capacity(
               runtime::add_capacity(plan.cpu_observation_capacity(), diis.numeric_capacity()),
               runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners(),
@@ -523,6 +599,9 @@ ScfResult run_uks_impl(
     diis.clear();
   }
   result.density = concatenate(alpha, beta);
+  runtime::df_progress::number("terminal_iterations", result.iterations);
+  runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+  runtime::df_progress::number("terminal_converged", result.converged);
   return result;
 }
 // The registered CPU slice and the extended CPU/CUDA adapter share one UKS

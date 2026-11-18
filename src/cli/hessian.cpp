@@ -5,13 +5,17 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <set>
 #include <string_view>
+
+#include "api/ks_host_hessian.hpp"
+#include "cli/molecular_system.hpp"
+#include "cli/native_basis.hpp"
 
 #if GENERATIVEQC_CLI_NATIVE_HESSIAN
 #include <cuda_runtime_api.h>
 
-#include "cli/native_basis.hpp"
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_wb97mv_hessian.hpp"
 #include "molecule/basis.hpp"
@@ -56,6 +60,161 @@ std::vector<double> read_direction(const std::string& path, std::size_t atoms) {
     }
   }
   return result;
+}
+
+/** The same synchronous bridge serves Python and the Python-free CPU CLI. */
+Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
+                 const HessianInvocation& invocation, const std::vector<double>& motion) {
+  const auto* program = options.composition ? options.composition
+                                            : methods::named_ks::find_method(options.method_name);
+  if (generativeqc_ks_hessian_cpu_version_v1() != 1 || !program ||
+      !generativeqc_ks_hessian_cpu_method_v1(program->identity.data()))
+    throw UsageError(
+        "native CPU Hessian has no exact linked total MethodIR; no Python/JIT fallback");
+  if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE ||
+      options.auxiliary_basis_explicit || options.precision != GENERATIVEQC_PRECISION_FP64)
+    throw UsageError("native CPU Hessian requires direct FP64 without an auxiliary basis");
+  if (invocation.cuda_controls_explicit)
+    throw UsageError("CPU Hessian does not use CUDA device/nonlocal budgets");
+  const auto started = std::chrono::steady_clock::now();
+  const generativeqc_context_descriptor context_options{
+      sizeof(context_options), GENERATIVEQC_ABI_VERSION, -1, GENERATIVEQC_BACKEND_CPU_REFERENCE};
+  Context context(context_options);
+  const auto basis = expand_basis_input(
+      options.basis_name, atoms,
+      options.representation_explicit ? std::optional(options.representation) : std::nullopt);
+  const generativeqc_system_descriptor geometry{sizeof(geometry),
+                                                GENERATIVEQC_ABI_VERSION,
+                                                atoms.data(),
+                                                static_cast<std::uint32_t>(atoms.size()),
+                                                basis.shells.data(),
+                                                static_cast<std::uint32_t>(basis.shells.size()),
+                                                basis.primitives.data(),
+                                                static_cast<std::uint32_t>(basis.primitives.size()),
+                                                options.charge,
+                                                options.multiplicity,
+                                                basis.representation};
+  System system = make_molecular_system(context, geometry, basis);
+  generativeqc_ks_options grid{};
+  grid.struct_size = sizeof(grid);
+  grid.abi_version = GENERATIVEQC_ABI_VERSION;
+  grid.grid_version = options.grid.version;
+  grid.radial_points = options.grid.radial_points;
+  grid.angular_polar = options.grid.angular_polar;
+  grid.angular_azimuth = options.grid.angular_azimuth;
+  grid.partition_iterations = options.grid.partition_iterations;
+  grid.coincident_tolerance = options.grid.coincident_tolerance;
+  grid.tile_points = options.grid.tile_points;
+  methods::named_ks::electronic_options(*program, grid);
+  generativeqc_method_descriptor method{};
+  method.struct_size = sizeof(method);
+  method.abi_version = GENERATIVEQC_ABI_VERSION;
+  method.method = program->carrier;
+  method.max_iterations = options.max_iterations.value_or(250);
+  method.diis_history = options.diis_history;
+  method.energy_tolerance = options.energy_tolerance.value_or(1e-12);
+  method.density_tolerance = options.density_tolerance.value_or(1e-10);
+  method.screening_tolerance = options.screening_tolerance.value_or(1e-14);
+  method.ks_options = &grid;
+  const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
+                                               program->name.data(), program->identity.data(),
+                                               invocation.dispersion_bytes};
+  const auto check_status = [&](generativeqc_status status) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context.get()));
+  };
+  const generativeqc_system* systems[]{system.get()};
+  generativeqc_batch* prepared{};
+  check_status(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
+                                                      &prepared));
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
+      prepared, generativeqc_batch_destroy);
+  generativeqc_batch_item_result_descriptor primal{};
+  primal.struct_size = sizeof(primal);
+  primal.abi_version = GENERATIVEQC_ABI_VERSION;
+  check_status(generativeqc_batch_execute(batch.get(), nullptr, 0, &primal, 1));
+  check_status(primal.status);
+  std::uint64_t scf_fock_builds{};
+  check_status(generativeqc_batch_get_last_fock_builds(batch.get(), 0, &scf_fock_builds));
+  if (!primal.converged)
+    throw std::runtime_error("native CPU SCF did not converge; no Hessian published");
+  const auto coordinates = 3 * atoms.size();
+  std::vector<double> output(motion.empty() ? coordinates * coordinates : coordinates);
+  generativeqc_ks_host_hessian_options_v1 controls;
+  controls.expected_atoms = atoms.data();
+  controls.expected_atom_count = atoms.size();
+  controls.expected_charge = options.charge;
+  controls.expected_multiplicity = options.multiplicity;
+  controls.numeric_bytes = invocation.numeric_bytes;
+  controls.integral_bytes = invocation.integral_bytes;
+  controls.grid_bytes = invocation.grid_bytes;
+  controls.response_bytes = invocation.response_bytes;
+  controls.gmres_bytes = invocation.response_bytes;
+  controls.ecp_bytes = invocation.ecp_bytes;
+  controls.dispersion_bytes = invocation.dispersion_bytes;
+  controls.output_bytes = invocation.output_bytes;
+  controls.max_eri_primitives = invocation.max_eri_primitives;
+  controls.max_d3_pairs = invocation.max_d3_pairs;
+  controls.relative_tolerance = invocation.response_rtol;
+  controls.absolute_tolerance =
+      invocation.response_atol_explicit ? invocation.response_atol : 1e-12;
+  controls.restart = invocation.response_restart;
+  controls.max_iterations = invocation.response_iterations;
+  generativeqc_ks_host_hessian_receipt_v1 receipt;
+  check_status(generativeqc_ks_hessian_cpu_v1(
+      batch.get(), 0, &controls, motion.empty() ? nullptr : motion.data(), motion.size(),
+      output.data(), output.size(), &receipt));
+  Json panel = Json::array();
+  const auto row_size = motion.empty() ? coordinates : 3;
+  for (std::size_t begin = 0; begin < output.size(); begin += row_size)
+    panel.push_back(std::vector<double>(output.begin() + begin, output.begin() + begin + row_size));
+  Json diagnostics{
+      {"numerical_runtime", "native-cpp-cpu"},
+      {"runtime_compilation", false},
+      {"displaced_scf_evaluations", 0},
+      {"posthoc_symmetrization", false},
+      {"completed_directions", receipt.completed_directions},
+      {"response_iterations", receipt.response_iterations},
+      {"response_residual_norm", receipt.response_residual_norm},
+      {"response_absolute_tolerance", controls.absolute_tolerance},
+      {"response_relative_tolerance", controls.relative_tolerance},
+      {"induced_fock_actions", receipt.induced_fock_actions},
+      {"first_eri_primitives", receipt.first_eri_primitives},
+      {"curvature_eri_primitives", receipt.curvature_eri_primitives},
+      {"first_one_electron_primitives", receipt.first_one_electron_primitives},
+      {"curvature_one_electron_primitives", receipt.curvature_one_electron_primitives},
+      {"source_xc_point_visits", receipt.source_xc_point_visits},
+      {"curvature_xc_point_visits", receipt.curvature_xc_point_visits},
+      {"response_xc_point_visits", receipt.response_xc_point_visits},
+      {"ecp_kernel_blocks", receipt.ecp_kernel_blocks},
+      {"ecp_radial_layers", receipt.ecp_radial_layers},
+      {"ecp_ao_primitive_points", receipt.ecp_ao_primitive_points},
+      {"ecp_contraction_terms", receipt.ecp_contraction_terms},
+      {"d3_pair_visits", receipt.d3_pair_visits},
+      {"d3_reference_terms", receipt.d3_reference_terms},
+      {"d3_energy", receipt.d3_energy},
+      {"raw_symmetry_error", receipt.raw_symmetry_error},
+      {"numeric_reservation_bytes", receipt.numeric_reservation_bytes},
+      {"max_eri_primitives", controls.max_eri_primitives},
+      {"max_d3_pairs", controls.max_d3_pairs},
+      {"reservation_scope", "derivative-owned; excludes primal/export-scratch/BLAS/RSS"},
+      {"scf_iterations", primal.iterations},
+      {"scf_fock_builds", scf_fock_builds},
+      {"native_execution_seconds", receipt.execution_seconds},
+      {"endpoint_seconds",
+       std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count()}};
+  return {{"schema", "generativeqc.native-hessian-result/v1"},
+          {"operation", invocation.operation},
+          {"units", "hartree/bohr^2"},
+          {"backend", "cpu"},
+          {"method", options.method_name},
+          {"method_ir_identity", program->identity},
+          {"native_source_identity", generativeqc_get_source_identity()},
+          {"charge", options.charge},
+          {"multiplicity", options.multiplicity},
+          {"energy_hartree", receipt.total_energy},
+          {"diagnostics", std::move(diagnostics)},
+          {motion.empty() ? "matrix" : "value", std::move(panel)}};
 }
 #if GENERATIVEQC_CLI_NATIVE_HESSIAN
 void check(cudaError_t error) {
@@ -338,9 +497,25 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
       invocation.run_arguments.emplace_back(value);
     } else if (option == "--direction")
       invocation.direction_file = value;
-    else if (option == "--device-budget-bytes")
+    else if (option == "--device-budget-bytes") {
       invocation.device_bytes = positive_integer(value, option);
-    else if (option == "--integral-budget-bytes")
+      invocation.cuda_controls_explicit = true;
+    } else if (option == "--numeric-budget-bytes" || option == "--ecp-budget-bytes" ||
+               option == "--dispersion-budget-bytes" || option == "--max-eri-primitives" ||
+               option == "--max-d3-pairs") {
+      invocation.cpu_controls_explicit = true;
+      const auto parsed = positive_integer(value, option);
+      if (option == "--numeric-budget-bytes")
+        invocation.numeric_bytes = parsed;
+      else if (option == "--ecp-budget-bytes")
+        invocation.ecp_bytes = parsed;
+      else if (option == "--dispersion-budget-bytes")
+        invocation.dispersion_bytes = parsed;
+      else if (option == "--max-eri-primitives")
+        invocation.max_eri_primitives = parsed;
+      else
+        invocation.max_d3_pairs = parsed;
+    } else if (option == "--integral-budget-bytes")
       invocation.integral_bytes = positive_integer(value, option);
     else if (option == "--grid-budget-bytes")
       invocation.grid_bytes = positive_integer(value, option);
@@ -348,11 +523,13 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
       invocation.output_bytes = positive_integer(value, option);
     else if (option == "--response-budget-bytes")
       invocation.response_bytes = positive_integer(value, option);
-    else if (option == "--max-nonlocal-pairs")
+    else if (option == "--max-nonlocal-pairs") {
       invocation.max_nonlocal_pairs = positive_integer(value, option);
-    else if (option == "--response-atol")
+      invocation.cuda_controls_explicit = true;
+    } else if (option == "--response-atol") {
       invocation.response_atol = nonnegative_number(value, option);
-    else if (option == "--response-rtol") {
+      invocation.response_atol_explicit = true;
+    } else if (option == "--response-rtol") {
       invocation.response_rtol = nonnegative_number(value, option);
       if (invocation.response_rtol >= 1) throw UsageError("--response-rtol must be less than 1");
     } else if (option == "--response-restart")
@@ -368,10 +545,14 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
 }
 int hessian_command(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
                     const HessianInvocation& invocation) {
-  if (options.method_name != "wb97m-v" && options.method_name != "wb97m-v-rks" &&
+  const auto* program = options.composition ? options.composition
+                                            : methods::named_ks::find_method(options.method_name);
+  const bool cpu = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE && program &&
+                   generativeqc_ks_hessian_cpu_method_v1(program->identity.data());
+  if (!cpu && options.method_name != "wb97m-v" && options.method_name != "wb97m-v-rks" &&
       options.method_name != "wb97m-v-uks")
-    throw UsageError("native hessian/hvp currently admits only WB97M-V RKS/UKS");
-  if (options.backend != GENERATIVEQC_BACKEND_CUDA ||
+    throw UsageError("native hessian/hvp requires a linked CPU MethodIR or CUDA WB97M-V RKS/UKS");
+  if ((!cpu && options.backend != GENERATIVEQC_BACKEND_CUDA) ||
       options.precision != GENERATIVEQC_PRECISION_FP64)
     throw UsageError(
         "native hessian/hvp requires --backend cuda --precision fp64; no Python/CPU fallback");
@@ -386,6 +567,20 @@ int hessian_command(const RunOptions& options, const std::vector<generativeqc_at
   const auto motion = invocation.operation == "hvp"
                           ? read_direction(invocation.direction_file, atoms.size())
                           : std::vector<double>{};
+  if (cpu) {
+    const auto result = execute_cpu(options, atoms, invocation, motion);
+    if (options.json)
+      std::cout << result.dump() << '\n';
+    else {
+      std::cout << options.method_name << ' ' << invocation.operation
+                << " (hartree/bohr^2; native compiler AD, CPU)\n";
+      for (const auto& row : result.at(invocation.operation == "hvp" ? "value" : "matrix"))
+        std::cout << row.dump() << '\n';
+    }
+    return 0;
+  }
+  if (invocation.cpu_controls_explicit)
+    throw UsageError("CUDA Hessian does not use CPU numeric/ECP/D3 work budgets");
 #if GENERATIVEQC_CLI_NATIVE_HESSIAN
   const auto result = execute_native(options, atoms, invocation, motion);
   if (options.json)

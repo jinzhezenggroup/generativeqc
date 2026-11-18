@@ -82,6 +82,9 @@ class OneElectronComponentKernel:
     root, so a backend can evaluate the shared geometry once, fill the required
     moments, then evaluate ``value``. The scalar graph includes Gaussian decay,
     the radial prefactor and (for attraction) the physical nuclear-charge sign.
+    ``hermite_roots`` and ``coulomb_roots`` expose exact factor boundaries for
+    bounded derivative schedules; ``coulomb_geometry`` supplies their shared
+    product-center geometry without introducing a separate recurrence.
     """
 
     integral: IntegralIR
@@ -92,6 +95,9 @@ class OneElectronComponentKernel:
     boys_count: int
     hermite_states: tuple[tuple[int, int, int, int], ...]
     pair_geometry: tuple[tuple[str, Expr], ...]
+    hermite_roots: tuple[tuple[tuple[int, int, int, int], Expr], ...]
+    coulomb_roots: tuple[tuple[tuple[int, int, int], Expr], ...]
+    coulomb_geometry: tuple[tuple[str, Expr], ...]
 
 
 def build_one_electron_component_kernel(
@@ -153,6 +159,9 @@ def build_one_electron_component_kernel(
     zero = graph.constant(0)
     powers = tuple(tuple(c.count(axis) for axis in AXES) for c in components)
     states = set()
+    hermite_roots = {}
+    coulomb_roots = {}
+    coulomb_geometry = ()
 
     @cache
     def hermite(
@@ -162,18 +171,21 @@ def build_one_electron_component_kernel(
             return zero
         states.add((axis, i, j, t))
         if i == j == 0:
-            return graph.constant(1)
-        if i:
-            return (
+            result = graph.constant(1)
+        elif i:
+            result = (
                 0.5 * inverse_p * hermite(axis, i - 1, j, t - 1)
                 + pa[axis] * hermite(axis, i - 1, j, t)
                 + (t + 1) * hermite(axis, i - 1, j, t + 1)
             )
-        return (
-            0.5 * inverse_p * hermite(axis, i, j - 1, t - 1)
-            + pb[axis] * hermite(axis, i, j - 1, t)
-            + (t + 1) * hermite(axis, i, j - 1, t + 1)
-        )
+        else:
+            result = (
+                0.5 * inverse_p * hermite(axis, i, j - 1, t - 1)
+                + pb[axis] * hermite(axis, i, j - 1, t)
+                + (t + 1) * hermite(axis, i, j - 1, t + 1)
+            )
+        hermite_roots[axis, i, j, t] = result
+        return result
 
     prefactor = decay * graph.power(math.pi * inverse_p, 1.5)
 
@@ -209,6 +221,11 @@ def build_one_electron_component_kernel(
         # shift, retaining precision when the molecule has a large common origin.
         difference = {axis: a[k] - c[k] + pa[k] for k, axis in enumerate(AXES)}
         boys_argument = p * graph.sum(x * x for x in difference.values())
+        coulomb_geometry = (
+            ("rho", p),
+            *((f"difference_{axis}", difference[axis]) for axis in AXES),
+            ("argument", boys_argument),
+        )
         boys_count = sum(first) + sum(second) + 1
         boys = tuple(graph.variable(f"boys_{n}") for n in range(boys_count))
         terms = []
@@ -219,9 +236,9 @@ def build_one_electron_component_kernel(
                 hermite(k, first[k], second[k], t) for k, t in enumerate(orders)
             )
             order3 = (orders[0], orders[1], orders[2])
-            terms.append(
-                coefficient * _coulomb_derivative(graph, order3, p, difference, boys)
-            )
+            root = _coulomb_derivative(graph, order3, p, difference, boys)
+            coulomb_roots[order3] = root
+            terms.append(coefficient * root)
         charge = integral.operator.external_centers[0].charge
         value = -charge * 2 * math.pi * inverse_p * decay * graph.sum(terms)
     return OneElectronComponentKernel(
@@ -242,6 +259,9 @@ def build_one_electron_component_kernel(
             + [(f"pa_{axis}", pa[k]) for k, axis in enumerate(AXES)]
             + [(f"pb_{axis}", pb[k]) for k, axis in enumerate(AXES)]
         ),
+        tuple(sorted(hermite_roots.items())),
+        tuple(sorted(coulomb_roots.items())),
+        coulomb_geometry,
     )
 
 

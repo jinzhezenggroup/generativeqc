@@ -11,10 +11,18 @@ from __future__ import annotations
 from fractions import Fraction
 from functools import cache
 from math import factorial
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.dft.ao import jet_indices
 from generativeqc_compiler.integral.expr import Expr, Graph
+from generativeqc_compiler.integral.graph_composition import import_roots
+from generativeqc_compiler.xc.coefficients import coefficient_program
 from generativeqc_compiler.xc.grid_response_ir import grid_mixed_response_program
+from generativeqc_compiler.xc.program import output_set
+from generativeqc_compiler.xc.semilocal_codegen import build_roots
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.xc.spec import FunctionalSpec
 
 
 def _mixed(graph: Graph, root: Expr, names: tuple[str, ...]) -> tuple[Expr, ...]:
@@ -116,3 +124,154 @@ def ao_motion_program() -> tuple[Graph, tuple[Expr, ...]]:
         )
         roots.extend((first, second, mixed))
     return graph, tuple(roots)
+
+
+@cache
+def ao_first_motion_program() -> tuple[Graph, tuple[Expr, ...]]:
+    """Specialize canonical Taylor-AD first motion at its exact expansion origin.
+
+    Native readers validate finite spatial jets before this polynomial-only
+    specialization. It removes zero higher-order terms and therefore needs
+    ordinary spatial jets through order two, without changing mixed AO roots.
+    """
+    graph, roots = ao_motion_program()
+    selected = graph.replace_subexpressions(
+        roots[::3], {graph.variable(f"x{axis}"): graph.constant(0) for axis in range(3)}
+    )
+    return graph.canonicalize_associative(selected)
+
+
+@cache
+def gga_energy_mixed_program(
+    functional: FunctionalSpec,
+) -> tuple[Graph, tuple[Expr, ...]]:
+    """Weighted frozen-density energy and independent geometry mixed partials.
+
+    Production energy/ingredient gradients/Hessians remain the scalar authority.
+    Only the Cartesian ingredient and quadrature product chain rules are added;
+    density relaxation is a separate stationary-Hessian assembly contribution.
+    """
+    if functional.ingredients != ("rho", "sigma"):
+        raise ValueError("mixed GGA energy requires exactly rho/sigma ingredients")
+    graph, roots, _ = build_roots(
+        functional, output_set(functional, 2), production=True
+    )
+    spins = 2 if functional.spin == "polarized" else 1
+    names = tuple(f"f{index}" for index in range(4 * spins))
+    fields = [graph.variable(name) for name in names]
+    pairs = ((0, 0), (0, 1), (1, 1)) if spins == 2 else ((0, 0),)
+    ingredients = [fields[4 * spin] for spin in range(spins)]
+    ingredients.extend(
+        graph.sum(
+            fields[4 * first + axis + 1] * fields[4 * second + axis + 1]
+            for axis in range(3)
+        )
+        for first, second in pairs
+    )
+    ingredients.extend(graph.constant(0) for _ in range(spins))
+    physical = graph.replace_subexpressions(
+        roots,
+        {
+            graph.variable(name): value
+            for name, value in zip(functional.features, ingredients, strict=True)
+        },
+    )
+    derivatives = dict(zip(output_set(functional, 2), physical, strict=True))
+    moving = [_mixed(graph, ingredient, names) for ingredient in ingredients]
+    first = graph.sum(
+        derivatives[(index,)] * values[1] for index, values in enumerate(moving)
+    )
+    second = graph.sum(
+        derivatives[(index,)] * values[2] for index, values in enumerate(moving)
+    )
+    mixed = graph.sum(
+        derivatives[(index,)] * values[3] for index, values in enumerate(moving)
+    ) + graph.sum(
+        derivatives[tuple(sorted((left, right)))] * moving[left][1] * moving[right][2]
+        for left in range(len(ingredients))
+        for right in range(len(ingredients))
+    )
+    product, product_roots, _ = local_program("multiply")
+    weighted = import_roots(
+        graph,
+        product,
+        product_roots,
+        {
+            "a": derivatives[()],
+            "la": first,
+            "ra": second,
+            "lra": mixed,
+            "b": graph.variable("weight"),
+            "lb": graph.variable("lweight"),
+            "rb": graph.variable("rweight"),
+            "lrb": graph.variable("lrweight"),
+        },
+    )
+    return graph, weighted
+
+
+@cache
+def gga_field_response_program(
+    functional: FunctionalSpec,
+) -> tuple[Graph, tuple[Expr, ...]]:
+    """Compose production XC partials and canonical Cartesian coefficient JVP.
+
+    Roots are weighted primal and directional rho/gradient cotangents. Physical
+    XC gradients/Hessians come unchanged from build_roots, including lazy vacuum
+    and endpoint policies; no second functional or independent XC AD is built.
+    """
+    if functional.ingredients != ("rho", "sigma"):
+        raise ValueError("moving GGA fields require exactly rho/sigma ingredients")
+    graph, roots, _ = build_roots(
+        functional, output_set(functional, 2), production=True
+    )
+    spins = 2 if functional.spin == "polarized" else 1
+    fields = [graph.variable(f"f{index}") for index in range(4 * spins)]
+    moving = {f"f{index}": graph.variable(f"d{index}") for index in range(4 * spins)}
+    pairs = ((0, 0), (0, 1), (1, 1)) if spins == 2 else ((0, 0),)
+    ingredients = [fields[4 * spin] for spin in range(spins)]
+    ingredients.extend(
+        graph.sum(
+            fields[4 * first + axis + 1] * fields[4 * second + axis + 1]
+            for axis in range(3)
+        )
+        for first, second in pairs
+    )
+    ingredients.extend(graph.constant(0) for _ in range(spins))
+    replacements = {
+        graph.variable(name): value
+        for name, value in zip(functional.features, ingredients, strict=True)
+    }
+    physical = graph.replace_subexpressions(roots, replacements)
+    derivatives = dict(zip(output_set(functional, 2), physical, strict=True))
+    ingredient_motion = [
+        graph.differentiate(value, graph.variable("direction"), moving)
+        for value in ingredients
+    ]
+    potential = [derivatives[(index,)] for index in range(len(ingredients))]
+    potential_motion = [
+        graph.sum(
+            derivatives[tuple(sorted((index, other)))] * value
+            for other, value in enumerate(ingredient_motion)
+        )
+        for index in range(len(ingredients))
+    ]
+    bindings = {f"v{index}": value for index, value in enumerate(potential)}
+    bindings.update(
+        {f"dv{index}": value for index, value in enumerate(potential_motion)}
+    )
+    for spin in range(spins):
+        for axis in range(3):
+            bindings[f"g{spin}_{axis}"] = fields[4 * spin + axis + 1]
+            bindings[f"dg{spin}_{axis}"] = moving[f"f{4 * spin + axis + 1}"]
+    primal = coefficient_program(functional.spin, "gga", kinetic=False)
+    tangent = coefficient_program(functional.spin, "gga", kinetic=False, response=True)
+    coefficients = import_roots(graph, primal.graph, tuple(primal.roots), bindings)
+    coefficient_motion = import_roots(
+        graph, tangent.graph, tuple(tangent.roots), bindings
+    )
+    weight, delta_weight = graph.variable("weight"), graph.variable("dweight")
+    return graph, tuple(weight * value for value in coefficients) + tuple(
+        weight * delta + delta_weight * value
+        for value, delta in zip(coefficients, coefficient_motion, strict=True)
+    )

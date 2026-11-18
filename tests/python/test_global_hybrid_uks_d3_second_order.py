@@ -212,7 +212,11 @@ def test_public_uks_d3_matches_independently_qualified_total(
         assert result.diagnostics["public_calculator_endpoint"]
         assert result.diagnostics["spin"] == "polarized"
         assert result.diagnostics["scf_fock_builds"] > 0
-        for key in ("scf_density_sha256", "scf_basis_identity", "scf_grid_sha256"):
+        for key in (
+            "geometry_identity",
+            "electronic_method_identity",
+            "total_method_identity",
+        ):
             assert result.diagnostics[key] == total_matrix.diagnostics[key], key
         assert result.diagnostics["dispersion"]["electronic_response_solves"] == 0
     finally:

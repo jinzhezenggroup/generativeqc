@@ -20,6 +20,7 @@
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_build.hpp"
 #include "scf/fock_prepared.hpp"
@@ -520,6 +521,7 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
                            dft::nlc::Vv10DensityDomain nonlocal_domain,
                            const dft::RksAoCache* ao_cache,
                            std::optional<dft::XcIntegral> xc_override = std::nullopt) {
+  runtime::df_progress::Scope trace("rks_physical_evaluation");
   const auto& strategy = plan.strategy();
   const auto& ints = plan.one_electron();
   const auto jk = plan.build(density);
@@ -667,6 +669,11 @@ ScfResult run_rks(
       throw std::invalid_argument("preliminary SCF is not qualified for this Fock provider");
     }
   }
+  // This opt-in journal survives an interrupted synchronous SCF call; it is
+  // separate from the completed-state work ledger and never implies convergence.
+  runtime::df_progress::Scope trace("rks_scf");
+  runtime::df_progress::number("basis_dimension", basis.nao);
+  runtime::df_progress::number("grid_points", grid.point_count());
   const Matrix orthogonalizer = symmetric_orthogonalizer(ints.overlap, n);
   std::optional<EigenResult> initial_orbitals;
   Matrix density = prepare_initial_density(system, ints, orthogonalizer, occupied, initial_density,
@@ -918,6 +925,8 @@ ScfResult run_rks(
                                 progress.state_rms,
                                 progress.residual_rms,
                                 {evaluation.spin_electrons, evaluation.spin_electrons}});
+          runtime::df_progress::number("completed_iteration", reported_iteration);
+          runtime::df_progress::number("completed_fock_builds", result.fock_builds);
           if (incremental_state && !strict_full)
             incremental_state->observe_progress(progress.residual_rms);
         });
@@ -985,6 +994,9 @@ ScfResult run_rks(
     diagnostic.physical_residual = ks.physical_residual;
     retain_factor();
     result.density = std::move(density);
+    runtime::df_progress::number("terminal_iterations", result.iterations);
+    runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+    runtime::df_progress::number("terminal_converged", result.converged);
     return result;
   }
 
@@ -1025,20 +1037,23 @@ ScfResult run_rks(
                          ks.physical_residual < residual_tolerance &&
                          (!ordinary_primary || residual_max_abs(final_residual) <=
                                                    std::min(1.0e-8, options.density_tolerance));
-      if (result.converged && evaluate_xc.program) {
+      if (result.converged && (evaluate_xc.program || options.certify_ks_export)) {
         // Export diagonalizes this last F[D], not the pre-rebuild operator.
         // Certify its projector now so a rejected closure can spend the
         // unused SCF budget instead of publishing an unexportable state.
         orbitals = generalized_eigen(final.fock, orthogonalizer, n);
         projected = density_from_orbitals(orbitals.vectors, n, occupied, 2.0);
         const double canonical_change = density_rms(projected, density);
+        const double canonical_tolerance = options.certify_ks_export
+                                               ? residual_tolerance
+                                               : std::min(1.0e-8, options.density_tolerance);
         double maximum_change = 0.0;
         for (std::size_t index = 0; index < density.size(); ++index)
           maximum_change = std::max(maximum_change, std::abs(projected[index] - density[index]));
         result.density_rms = std::max(result.density_rms, canonical_change);
         ks.density_change = result.density_rms;
-        result.converged = canonical_change < std::min(1.0e-8, options.density_tolerance) &&
-                           maximum_change <= 1.0e-8;
+        result.converged =
+            canonical_change < canonical_tolerance && maximum_change <= canonical_tolerance;
       }
       runtime::sample_cpu_capacity(
           runtime::add_capacity(retained_capacity(density),
@@ -1055,6 +1070,9 @@ ScfResult run_rks(
   diagnostic.physical_residual = ks.physical_residual;
   retain_factor();
   result.density = std::move(density);
+  runtime::df_progress::number("terminal_iterations", result.iterations);
+  runtime::df_progress::number("terminal_fock_builds", result.fock_builds);
+  runtime::df_progress::number("terminal_converged", result.converged);
   return result;
 }
 

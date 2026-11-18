@@ -1592,9 +1592,10 @@ jobs:
         # 100% at its old limit (40504114981); core-b and compiler-heavy both
         # reached 99% before the 30-minute cancellation in 40833182012. The
         # runtime-heavy shard likewise reached 99% in 41152461345, then timed
-        # out with no reported test failures. Keep
+        # out with no reported test failures. core-c reached 97% before its
+        # cancellation in 44009609078, losing the failure summary. Keep
         # all tests and diagnostics, with ten further minutes for job cleanup.
-        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30) }}
+        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30) }}
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
@@ -1807,23 +1808,6 @@ jobs:
       - name: Reset CPU benchmark ccache statistics
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
-      - name: Build CPU benchmark library
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: |
-          sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
-          cmake -S . -B build-benchmark -G Ninja \
-            -DGENERATIVEQC_ENABLE_CUDA=OFF \
-            -DGENERATIVEQC_BUILD_TESTS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DGENERATIVEQC_COMPILER_CACHE=ccache
-          cmake --build build-benchmark --target generativeqc --parallel
-      - name: Show CPU benchmark ccache statistics
-        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: ccache --show-stats
-      - name: Summarize compiler cache
-        if: always() && env.GENERATIVEQC_CODSPEED_RUN != '0'
-        run: python3 tools/report_ci_ccache.py --label "CPU CodSpeed"
       - name: Prepare Python 3.11 environment
         if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         env:
@@ -1834,6 +1818,24 @@ jobs:
         run: |
           uv pip install --python .venv/bin/python \
             numpy pytest pytest-codspeed==5.0.3
+      - name: Build CPU benchmark library
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --yes nlohmann-json3-dev libssl-dev libarchive-dev
+          cmake -S . -B build-benchmark -G Ninja \
+            -DGENERATIVEQC_ENABLE_CUDA=OFF \
+            -DGENERATIVEQC_BUILD_TESTS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE="${GITHUB_WORKSPACE}/.venv/bin/python" \
+            -DGENERATIVEQC_COMPILER_CACHE=ccache
+          cmake --build build-benchmark --target generativeqc --parallel
+      - name: Show CPU benchmark ccache statistics
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: ccache --show-stats
+      - name: Summarize compiler cache
+        if: always() && env.GENERATIVEQC_CODSPEED_RUN != '0'
+        run: python3 tools/report_ci_ccache.py --label "CPU CodSpeed"
       - name: Qualify PR CodSpeed comparison
         id: baseline
         if: github.event_name == 'pull_request' && env.GENERATIVEQC_CODSPEED_RUN != '0'

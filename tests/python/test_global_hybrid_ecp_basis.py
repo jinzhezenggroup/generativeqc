@@ -139,3 +139,81 @@ def test_def2_ecp_spherical_ao_jets_and_valence_counts_match_independent_inputs(
             atol=5e-11,
             rtol=2e-11,
         )
+
+
+@pytest.mark.parametrize(
+    "case", ("cs-rks", "cs-uks", "i-rks", "i-uks", "ni-i-stationary-rks")
+)
+def test_def2_ecp_active_cube_rotation_preserves_ao_metric_and_default_grid(
+    case: str, canonical_records: tuple
+) -> None:
+    """Qualify the rotation input contract, not continuum Hessian invariance.
+
+    A proper axis cycle preserves the finite angular rule. The independent AO
+    transform takes passive axes, so its argument is the transpose of the active
+    coordinate rotation. Both pointwise AOs and the overlap certify this choice.
+    """
+    gto = pytest.importorskip("pyscf.gto")
+    spatial = pytest.importorskip("scipy.spatial")
+    from generativeqc import GridSpec
+    from generativeqc_compiler.dft.grid import MolecularGrid
+
+    from tools.generate_external_basis_references import pyscf_basis
+
+    specification = json.loads((DATA / "native_curvature_manifest.json").read_text())[
+        "cases"
+    ][case]
+    atoms = specification["atoms_bohr"]
+    rotation = np.array(((0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)))
+    assert np.linalg.det(rotation) == 1
+    rotated_atoms = [
+        (symbol, tuple(rotation @ np.asarray(center))) for symbol, center in atoms
+    ]
+    _, raw, record = canonical_records
+    reference = gto.M(
+        atom=atoms,
+        basis=pyscf_basis(raw),
+        ecp=_independent_ecp(raw),
+        unit="Bohr",
+        cart=False,
+        charge=specification["charge"],
+        spin=specification["multiplicity"] - 1,
+        verbose=0,
+    )
+    transform = gto.mole.ao_rotation_matrix(reference, rotation.T)
+    rotated = reference.copy()
+    rotated.set_geom_(rotated_atoms, unit="Bohr")
+    np.testing.assert_allclose(
+        rotated.intor_symmetric("int1e_ovlp"),
+        transform @ reference.intor_symmetric("int1e_ovlp") @ transform.T,
+        atol=1e-12,
+        rtol=0,
+    )
+    probes = np.array(((0.21, -0.37, 0.68), (1.41, 0.23, -0.91), (-0.57, 1.81, 0.33)))
+    with NativeAO(
+        rotated_atoms,
+        basis=record,
+        representation="spherical",
+        charge=specification["charge"],
+        multiplicity=specification["multiplicity"],
+    ) as native:
+        np.testing.assert_allclose(
+            native.evaluate(probes @ rotation.T, 0)[0],
+            reference.eval_gto("GTOval_sph", probes) @ transform.T,
+            atol=5e-11,
+            rtol=2e-11,
+        )
+    grid = MolecularGrid(tuple(atoms), GridSpec.treutler(3), 2, 3).explicit(
+        max_points=200_000
+    )
+    rotated_grid = MolecularGrid(
+        tuple(rotated_atoms), GridSpec.treutler(3), 2, 3
+    ).explicit(max_points=200_000)
+    distances, indices = spatial.cKDTree(rotated_grid.points).query(
+        grid.points @ rotation.T
+    )
+    assert len(np.unique(indices)) == len(indices) == len(rotated_grid.points)
+    assert distances.max() < 1e-10
+    np.testing.assert_allclose(
+        grid.weights, rotated_grid.weights[indices], atol=1e-11, rtol=1e-12
+    )

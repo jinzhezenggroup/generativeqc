@@ -293,6 +293,15 @@ reach six for differentiated f functions without exposing a new public basis
 angular momentum. Exact exponential underflow contributes zero. No AO
 magnitude cutoff is applied, and nonfinite outputs fail explicitly.
 
+The host `AoBasis` evaluator groups adjacent selected records sharing an atom
+and primitive range, in chunks of at most ten components. Each group reuses
+displacement, radial exponentials and requested axis polynomials while retaining
+each jet's primitive/expansion-term accumulation and axis multiplication order.
+Scratch is bounded by the through-f/order-three domain, independent of grid and
+molecule size; no full-grid cache is required. Indexed selections are applied
+before grouping, so omitted AOs are not evaluated to fill a shell. The same
+evaluator serves RKS, UKS and spatial derivative consumers.
+
 Conservative pre-AO region envelopes use the same Gaussian primal's sparse AD
 coefficient operator. Absolute contributions are propagated before cancellation;
 they are not replaced by absolute coefficients of a simplified final jet.
@@ -610,6 +619,39 @@ It contracts all nuclear coordinates with two pair passes per point instead of
 repeating the directional interpreter for each coordinate. Native execution,
 component budgets and output failure gates are distinct from full public
 DFT-force or CUDA qualification.
+
+### Native weight-direction tiles
+
+`dft::MolecularGrid::weight_direction` exports the analytic nuclear motion of
+the exact retained partition weights for a consecutive point tile. Grid points
+translate with their owning atoms; element/radial/angular measures and topology
+stay fixed. The nuclear direction is atom/Cartesian-major. The implementation
+shares its generated norm, ratio, Treutler-adjustment, Becke and normalized-log
+derivatives with `contract_weight_derivative`, including coincident-center and
+clipping conventions. It neither rebuilds displaced grids nor selects a
+reference-engine fallback.
+
+The caller supplies the numeric workspace returned by
+`weight_direction_workspace_bytes(count)`. It contains atom-sized partition
+derivatives and staged point outputs, rather than a full point/nuclear-coordinate
+Jacobian. Retained grid/provider storage, metadata and allocator overhead remain
+outside this query. `weight_direction_work(count)` exposes point and atom-pair
+visits before execution; every requested point traverses every atom pair.
+Bounded scratch therefore does not imply bounded complete-source work. A
+complete nuclear owner must compose this census with all other source work.
+
+Outputs publish only after the tile succeeds. Shape/capacity/nonfinite failures
+leave them unchanged. Workspace must not overlap inputs, outputs or retained
+grid storage; output may overlap the direction but not retained grid storage.
+Independent calls may execute concurrently with disjoint work/output buffers
+while the borrowed grid remains immutable. This source exports **weight motion
+only**, not moving AO jets, frozen XC Fock directions, integral/ECP derivatives
+or a complete molecular Hessian/TS endpoint.
+
+The optional native response target composes these tiles with normalized AO
+motion and a fixed-density GGA Fock direction; see
+[native CPU moving-grid XC source](dft_hessian.md#native-cpu-moving-grid-xc-source)
+for its identity, capacity, ownership and qualification boundaries.
 
 ## Density-fitted KS energies
 

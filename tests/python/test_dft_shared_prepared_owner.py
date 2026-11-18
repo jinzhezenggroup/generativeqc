@@ -59,6 +59,7 @@ def test_singlepoint_dft_uses_one_prepared_route(
 
     calculator = Calculator.__new__(Calculator)
     calculator._method_name = method
+    calculator._device_name = "cuda"
     calculator._capabilities = SimpleNamespace(
         family="density_functional", supported_properties={"energy", "forces"}
     )

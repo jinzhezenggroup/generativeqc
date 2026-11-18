@@ -135,7 +135,7 @@ def test_analytic_ecp_uks_raw_matrix_and_fresh_hvps_match_independent_gradients(
     calculator = make_calculator(
         record, 2, grid=GridSpec(radial_points=16, angular_polar=8, angular_azimuth=16)
     )
-    assert not calculator.capabilities.supported_second_order
+    assert calculator.capabilities.supported_second_order == {"hessian", "hvp"}
     started = perf_counter()
     with (
         calculator.prepare_batch(

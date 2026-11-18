@@ -1,13 +1,11 @@
-"""Fixed-model RKS derivative adapter for the native saddle corrector."""
+"""Fixed-model RKS/UKS derivative adapter for the native saddle corrector."""
 
 from __future__ import annotations
 
 import math
 import typing
 from contextlib import ExitStack
-from dataclasses import replace
 from numbers import Real
-from pathlib import Path
 from time import perf_counter
 from types import MappingProxyType
 
@@ -21,6 +19,85 @@ from .saddle import MolecularSaddleResult, SaddleOptions, _real_array, correct_s
 if typing.TYPE_CHECKING:
     from .calculator import Calculator
     from .saddle import SaddleProgress
+
+
+def _occupied_blocks(reference: typing.Any, spin: str) -> tuple[np.ndarray, ...]:
+    """Own each integer-occupied spin subspace without identifying alpha/beta."""
+    spins, occupation = (1, 2.0) if spin == "unpolarized" else (2, 1.0)
+    coefficients = np.asarray(reference.coefficients)
+    occupations = np.asarray(reference.occupations)
+    if (
+        spin not in ("unpolarized", "polarized")
+        or reference.identity.spin != spin
+        or coefficients.ndim != 3
+        or coefficients.shape[0] != spins
+        or occupations.shape != (spins, coefficients.shape[-1])
+        or not np.isfinite(coefficients).all()
+        or not np.isin(occupations, (0.0, occupation)).all()
+    ):
+        raise ValueError("molecular saddle requires matching integer spin occupations")
+    blocks = tuple(
+        np.array(coefficients[index][:, populations == occupation], copy=True)
+        for index, populations in enumerate(occupations)
+    )
+    if not any(block.shape[1] for block in blocks):
+        raise ValueError("molecular saddle requires occupied orbitals")
+    return blocks
+
+
+def _occupied_overlaps(
+    current: tuple[np.ndarray, ...],
+    previous: tuple[np.ndarray, ...],
+    metric: np.ndarray,
+    minimum: float,
+) -> tuple[float, ...]:
+    """Track every nonempty spin space against the last accepted geometry.
+
+    Empty channels contribute unit continuity only if they remain empty. A spin
+    population change is not a rectangular-overlap success, and one good spin
+    must never mask a root change in the other.
+    """
+    if len(current) != len(previous) or any(
+        left.shape[1] != right.shape[1]
+        for left, right in zip(current, previous, strict=True)
+    ):
+        raise ValueError("molecular saddle occupied spin populations changed")
+    overlaps = tuple(
+        float(np.min(np.linalg.svd(left.T @ metric @ right, compute_uv=False)))
+        if left.shape[1]
+        else 1.0
+        for left, right in zip(current, previous, strict=True)
+    )
+    if not all(math.isfinite(value) and value >= minimum for value in overlaps):
+        raise ValueError(
+            f"occupied root continuity lost: minimum overlap {min(overlaps):.17g}"
+        )
+    return overlaps
+
+
+def _registered_root_atoms(
+    current: tuple[Atom, ...], previous: tuple[Atom, ...], masses: np.ndarray
+) -> tuple[tuple[Atom, ...], np.ndarray]:
+    """Remove only the relative centre-of-mass translation for root comparison.
+
+    AO coefficients are unchanged by a common translation of their centres.
+    Comparing compact core orbitals in different laboratory frames would reject
+    an unchanged electronic state merely because its nuclei moved together.
+    Rotation is deliberately not registered: the finite angular DFT grid fixes
+    its orientation. Production geometries and derivative callbacks stay intact.
+    """
+    displacement = np.asarray([atom.position for atom in current]) - np.asarray(
+        [atom.position for atom in previous]
+    )
+    weights = masses / np.max(masses)
+    translation = np.average(displacement, axis=0, weights=weights)
+    registered = tuple(
+        Atom.from_value(
+            (atom.atomic_number, tuple(np.asarray(atom.position) - translation))
+        )
+        for atom in current
+    )
+    return registered, translation
 
 
 def run(
@@ -56,6 +133,8 @@ def run(
     charge, multiplicity = request["charge"], request["multiplicity"]
     if type(charge) is not int or type(multiplicity) is not int:
         raise TypeError("charge and multiplicity must be integers")
+    if multiplicity < 1:
+        raise ValueError("multiplicity must be positive")
     basis = calculator._basis
     has_ecp = isinstance(basis, BasisSet) and any(
         element.ecp_core_electrons for element in basis.elements
@@ -63,9 +142,9 @@ def run(
     if (
         calculator._device_name != "cpu"
         or calculator.ks_options is None
-        or multiplicity != 1
-        or calculator.ks_options.method_ir.spin != "unpolarized"
+        or (multiplicity != 1 and calculator.ks_options.method_ir.spin == "unpolarized")
         or not calculator._composite_rks_second_order
+        or not calculator._native_cpu_second_order
         or {primitive.kind for primitive in calculator.ks_options.method_ir.primitives}
         != {"semilocal_xc", "exact_exchange"}
         or has_ecp
@@ -73,7 +152,7 @@ def run(
         or "forces" not in calculator.capabilities.supported_properties
     ):
         raise NotImplementedError(
-            "molecular saddle requires qualified direct all-electron CPU full-range hybrid RKS"
+            "molecular saddle requires qualified direct all-electron CPU full-range hybrid RKS/UKS"
         )
     calculator._checked_rks_second_order_atoms(
         atoms, multiplicity=multiplicity, endpoint="hessian"
@@ -100,29 +179,42 @@ def run(
     ):
         if type(request[name]) is not int or not 0 < request[name] < 1 << 63:
             raise ValueError(f"{name} must be a positive int64 byte count")
-    needed_output = (
-        (3 if calculator._d3_second_order_spec is not None else 2)
-        * (3 * len(atoms)) ** 2
-        * 8
-    )
+    dimension = 3 * len(atoms)
+    if request["max_eri_primitives"] is not None:
+        from ._native_hessian import _capacity
+
+        _capacity(request["max_eri_primitives"], "max_eri_primitives")
+    needed_output = 8 * (2 * dimension**2 + 3 * dimension + 2)
     if needed_output > request["output_budget_bytes"]:
         raise MemoryError("molecular Hessian exceeds output_budget_bytes")
     for name in ("progress", "evaluation_progress", "cancelled"):
         if request[name] is not None and not callable(request[name]):
             raise TypeError(f"{name} must be callable")
 
-    # Imports remain after admission: rejected method domains do no SCF/JIT work.
-    from generativeqc_compiler.dft import NativeAO
-
-    from .composite_rks_hessian import CompositeRKSResponse, composite_rks_hessian
+    from ._native_cpu_hessian import execute_batch, orbital_frame, preflight
     from .overlap import cross_overlap
     from .vibrations import analyze_harmonic_modes
+
+    preflight(calculator)
+    if not hasattr(calculator._library, "generativeqc_ks_orbitals_cpu_v1"):
+        raise NotImplementedError(
+            "molecular saddle requires native CPU occupied-root export"
+        )
 
     signature = calculator._model_signature()
     method = calculator.method_ir
     electronic_method = calculator.ks_options.method_ir
     records: list[typing.Mapping[str, typing.Any]] = []
-    work = {"scf_iterations": 0, "scf_fock_builds": 0, "nuclear_response_solves": 0}
+    work = {
+        "scf_iterations": 0,
+        "scf_fock_builds": 0,
+        "nuclear_response_solves": 0,
+        "response_iterations": 0,
+        "induced_fock_actions": 0,
+        "first_eri_primitives": 0,
+        "curvature_eri_primitives": 0,
+        "d3_pair_visits": 0,
+    }
     state: dict[str, typing.Any] = {}
     accepted: dict[str, typing.Any] = {}
 
@@ -166,7 +258,7 @@ def run(
             if owners is not None:
                 owners.close()
         finally:
-            state.pop("operator", None)
+            state.pop("batch", None)
 
     def energy_gradient(positions: np.ndarray) -> tuple[float, np.ndarray]:
         fixed_model()
@@ -187,6 +279,10 @@ def run(
                     warm_start=False,
                 )
             )
+            if not batch._native_dft_force_eligible(0):
+                raise NotImplementedError(
+                    "molecular saddle requires a prepared native CPU force owner; no Python fallback"
+                )
             primal = batch.execute(strict=True, properties=("energy", "forces")).items[
                 0
             ]
@@ -194,58 +290,34 @@ def run(
                 raise RuntimeError("molecular saddle SCF/forces did not converge")
             work["scf_iterations"] += primal.iterations
             work["scf_fock_builds"] += primal.fock_builds
-            ao = owners.enter_context(
-                NativeAO(
-                    current_atoms,
-                    basis=calculator._basis,
-                    representation=calculator._representation_name,
-                    charge=charge,
-                    multiplicity=multiplicity,
-                )
+            reference = orbital_frame(
+                calculator,
+                batch,
+                current_atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                maximum_bytes=request["root_overlap_budget_bytes"],
             )
-            operator = owners.enter_context(
-                CompositeRKSResponse.from_native(
-                    batch,
-                    ao,
-                    grid_budget_bytes=request["grid_budget_bytes"],
-                )
-            )
-            reference = operator.state
-            if (
-                reference.identity.spin != "unpolarized"
-                or reference.coefficients.shape[0] != 1
-            ):
-                raise ValueError("molecular saddle state is not restricted")
-            occupations = np.asarray(reference.occupations[0])
-            if not np.isin(occupations, (0.0, 2.0)).all() or not np.any(
-                occupations == 2
-            ):
-                raise ValueError(
-                    "molecular saddle requires integer occupied RKS orbitals"
-                )
-            occupied = np.array(
-                reference.coefficients[0][:, occupations == 2], copy=True
-            )
-            overlap = 1.0
+            occupied = _occupied_blocks(reference, electronic_method.spin)
+            overlaps = (1.0,) * len(occupied)
+            registration = np.zeros(3)
             if accepted:
+                registered_atoms, registration = _registered_root_atoms(
+                    current_atoms, accepted["atoms"], masses
+                )
                 metric = cross_overlap(
                     calculator,
                     calculator,
-                    current_atoms,
+                    registered_atoms,
                     source_atoms=accepted["atoms"],
                     charge=charge,
                     multiplicity=multiplicity,
                     maximum_bytes=request["root_overlap_budget_bytes"],
                 )
-                overlaps = np.linalg.svd(
-                    occupied.T @ metric @ accepted["occupied"], compute_uv=False
+                overlaps = _occupied_overlaps(
+                    occupied, accepted["occupied"], metric, minimum_overlap
                 )
-                overlap = float(np.min(overlaps))
-                if not math.isfinite(overlap) or overlap < minimum_overlap:
-                    raise ValueError(
-                        f"occupied root continuity lost: minimum overlap {overlap:.17g}"
-                    )
-            state.update(operator=operator, occupied=occupied)
+            state.update(batch=batch, occupied=occupied)
             record(
                 "energy_gradient",
                 "complete",
@@ -254,8 +326,13 @@ def run(
                 scf_iterations=primal.iterations,
                 scf_fock_builds=primal.fock_builds,
                 scf_physical_residual=primal.physical_residual_rms,
-                minimum_occupied_overlap=overlap,
-                grid_identity=reference.grid.identity,
+                occupied_counts=tuple(block.shape[1] for block in occupied),
+                minimum_occupied_overlap=min(overlaps),
+                minimum_occupied_overlaps_by_spin=overlaps,
+                occupied_overlap_coordinate_frame="mass-centroid-translation-registered",
+                root_registration_translation_bohr=tuple(map(float, registration)),
+                root_numeric_reservation_bytes=reference.numeric_reservation_bytes,
+                numerical_runtime="native-cpp-cpu",
             )
             return primal.energy, -np.asarray(primal.forces)
         except Exception as error:
@@ -271,57 +348,39 @@ def run(
 
     def hessian(positions: np.ndarray) -> np.ndarray:
         fixed_model()
-        if "operator" not in state or not np.array_equal(positions, state["positions"]):
+        if "batch" not in state or not np.array_equal(positions, state["positions"]):
             raise ValueError(
                 "Hessian geometry lacks its prepared energy/gradient state"
             )
         record("hessian", "start", positions)
         try:
-            operator = state["operator"]
-            result = composite_rks_hessian(
-                operator,
-                cache=request["cache"],
+            result = execute_batch(
+                calculator,
+                state["batch"],
+                state["atoms"],
+                charge=charge,
+                multiplicity=multiplicity,
                 integral_budget_bytes=request["integral_budget_bytes"],
+                grid_budget_bytes=request["grid_budget_bytes"],
                 output_budget_bytes=request["output_budget_bytes"],
                 solver_options=request["solver_options"],
+                max_eri_primitives=request["max_eri_primitives"],
             )
-            result = replace(
-                result,
-                _diagnostics=MappingProxyType(
-                    {
-                        **result.diagnostics,
-                        "geometry_identity": operator.state.identity.geometry_identity,
-                        "electronic_method_identity": electronic_method.identity,
-                        "total_method_identity": method.identity,
-                        "total_method_manifest_identity": method.manifest_identity,
-                    }
-                ),
-            )
-            work["nuclear_response_solves"] += int(
-                result.diagnostics["nuclear_response_solves"]
-            )
-            residuals = tuple(map(float, result.diagnostics["response_residual_norms"]))
-            # Geometry-only publication cannot retain live electronic resources.
+            for name in work.keys() - {"scf_iterations", "scf_fock_builds"}:
+                work[name] += int(result.diagnostics[name])
             close()
-            del operator
-            if calculator._d3_second_order_spec is not None:
-                from .d3_hessian import compose_second_order
-
-                result = compose_second_order(
-                    result,
-                    method,
-                    state["atoms"],
-                    cache=Path(request["cache"]),
-                    max_workspace_bytes=calculator._dispersion_memory_budget_bytes,
-                    output_budget_bytes=request["output_budget_bytes"],
-                )
             record(
                 "hessian",
                 "complete",
                 positions,
                 nuclear_response_solves=result.diagnostics["nuclear_response_solves"],
-                response_residual_norms=residuals,
+                maximum_response_residual_norm=result.diagnostics[
+                    "response_residual_norm"
+                ],
                 raw_symmetry=result.diagnostics["raw_symmetry_error"],
+                numerical_runtime="native-cpp-cpu",
+                total_method_identity=result.diagnostics["total_method_identity"],
+                d3_pair_visits=result.diagnostics["d3_pair_visits"],
             )
             return result.matrix
         except Exception as error:
@@ -340,7 +399,10 @@ def run(
         if state.get("occupied") is not None and np.array_equal(
             observation.coordinates, state["positions"]
         ):
-            accepted.update(atoms=state["atoms"], occupied=state["occupied"].copy())
+            accepted.update(
+                atoms=state["atoms"],
+                occupied=tuple(block.copy() for block in state["occupied"]),
+            )
         stop = request["progress"] is not None and bool(
             request["progress"](observation)
         )
@@ -399,7 +461,8 @@ def run(
                 "model_signature": signature,
                 "charge": charge,
                 "multiplicity": multiplicity,
-                "root_policy": "occupied-principal-overlap-to-last-accepted",
+                "spin": electronic_method.spin,
+                "root_policy": "occupied-spin-principal-overlap-to-last-accepted",
                 "minimum_occupied_overlap": minimum_overlap,
                 "evaluations": tuple(records),
                 **work,
@@ -412,6 +475,8 @@ def run(
                 and not any(record["status"] == "failed" for record in records),
                 "work_counters_scope": "completed derivative receipts; partially failed work is not inferred",
                 "displaced_scf_evaluations": 0,
+                "numerical_runtime": "native-cpp-cpu",
+                "runtime_compilation": False,
                 "external_optimizer": False,
             }
         ),

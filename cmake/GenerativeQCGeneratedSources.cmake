@@ -1482,6 +1482,7 @@ macro(generativeqc_register_cuda_generated_sources target)
   set(GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_split_hybrid_registry.cuh")
   generativeqc_register_generated_sources(
+    NAME generativeqc_split_hybrid_registry_codegen
     TARGET ${target}
     ADD_TO_TARGET
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_split_hybrid_registry.py"

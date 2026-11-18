@@ -229,6 +229,7 @@ class PreparedBatch:
         warm_start: bool = True,
         shell_class_profiling: bool = False,
         inactive_eigensolver_profiling: bool = False,
+        ks_export: bool = True,
         resource_plan: typing.Any = None,
     ) -> None:
         """Prepare native systems and method resources for repeated batch evaluation.
@@ -239,6 +240,14 @@ class PreparedBatch:
         """
         if not systems:
             raise ValueError("a batch requires at least one system")
+        if not isinstance(ks_export, bool):
+            raise TypeError("ks_export must be a boolean")
+        if not ks_export and not (
+            calculator._device_name == "cpu"
+            and calculator._capabilities.family == "density_functional"
+        ):
+            raise ValueError("ks_export=False requires a CPU DFT calculator")
+        self._ks_export = ks_export
         self._last_statuses = None
         self._dispersion_batch: typing.Any = None
         self._native_dispersion: typing.Any = None
@@ -458,6 +467,8 @@ class PreparedBatch:
                 systems=self._systems,
             )
             flags = _native.BATCH_ENABLE_WARM_STARTS if warm_start else 0
+            if not ks_export:
+                flags |= _native.BATCH_DISABLE_KS_EXPORT
             if shell_class_profiling:
                 flags |= _native.BATCH_ENABLE_SHELL_CLASS_PROFILING
             if inactive_eigensolver_profiling:
@@ -1349,6 +1360,8 @@ class PreparedBatch:
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
         compute_forces = "forces" in requested
+        if compute_forces and not self._ks_export:
+            raise ValueError("forces require ks_export=True")
         public_dft_forces = (
             compute_forces
             and self._calculator._capabilities.family == "density_functional"

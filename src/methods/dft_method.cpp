@@ -628,7 +628,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
       options_.nonlocal_grid = nonlocal_grid_.get();
     }
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
-    options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
+    options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA && options_.certify_ks_export;
+    options_.certify_ks_export = options_.retain_ks_state;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
@@ -832,6 +833,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept {
     // Method metadata cannot re-enable a force excluded by this prepared owner.
+    if (backend_ == GENERATIVEQC_BACKEND_CPU_REFERENCE && !options_.retain_ks_state)
+      return GENERATIVEQC_PROPERTY_ENERGY;
     if (has_energy_only_df_capacity_promise())
       return capabilities_.supported_properties & ~GENERATIVEQC_PROPERTY_FORCES;
     return capabilities_.supported_properties |
@@ -1007,6 +1010,10 @@ class KsPreparedState final : public KsSingleOwnerPort {
                                          true, std::move(spins)};
     scf::solver::FinalStateLimits limits{options_.density_tolerance, options_.energy_tolerance, 0,
                                          true};
+    // Export the gate actually verified by the owner, not an unqualified label.
+    // Explicit stationarity also tightens canonical density reconstruction to
+    // the requested tolerance before stationary second-order reuse is allowed.
+    limits.stationarity_tolerance = std::min(1e-9, options_.density_tolerance);
     if (!dft::validate_ks_final_state(current.identity, ints.overlap, ints.hcore, *cpu_physical_,
                                       candidate, limits, compute_weighted_density, state, detail)) {
       invalidate_final_state();
@@ -1209,6 +1216,26 @@ class KsPreparedState final : public KsSingleOwnerPort {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status borrow_host_derivative_sources(const dft::CudaKsFinalStateToken& expected,
+                                                     KsHostDerivativeSources& output,
+                                                     std::string& detail) {
+    output = {};
+    if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE) {
+      detail = "native CPU derivative sources require a CPU KS owner";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "native CPU derivative sources have a stale final-state token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    output = {&system_, &fock_, &basis_, &grid_, &execution_plan_.dispersion};
+    detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -3721,6 +3748,17 @@ class KsPreparedBatch final : public PreparedBatch,
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status borrow_host_derivative_sources(std::size_t index,
+                                                     const dft::CudaKsFinalStateToken& expected,
+                                                     KsHostDerivativeSources& output,
+                                                     std::string& detail) override {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->borrow_host_derivative_sources(expected, output, detail);
+    output = {};
+    detail = "KS batch item has no prepared native CPU source owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status borrow_integral_system(std::size_t index,
                                              const dft::CudaKsFinalStateToken& expected,
                                              const core::System*& output,
@@ -4001,7 +4039,9 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     generativeqc_batch_flags flags, const core::System* auxiliary_basis,
     const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0) {
-  if ((flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
+  constexpr generativeqc_batch_flags supported_flags =
+      GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | GENERATIVEQC_BATCH_DISABLE_KS_EXPORT;
+  if ((flags & ~supported_flags) != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "KS batches support warm starts but not HF-specific profiling flags");
 #if !GENERATIVEQC_HAS_CUDA
@@ -4010,6 +4050,11 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
+  const bool disable_export = (flags & GENERATIVEQC_BATCH_DISABLE_KS_EXPORT) != 0;
+  if (disable_export && context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "disabling KS export requires a CPU KS owner");
+  options.certify_ks_export = !disable_export;
   if (dispersion) {
     if (!dispersion_bytes || execution_plan.d4_correction || dispersion->kind < 1 ||
         dispersion->kind > 3)

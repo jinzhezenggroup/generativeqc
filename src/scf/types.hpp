@@ -211,9 +211,13 @@ struct ScfOptions {
    * common FockBuildSpec. Unit defaults preserve legacy LDA/PBE callers. */
   double semilocal_exchange_scale{1.0};
   double semilocal_correlation_scale{1.0};
-  /** Retain the already evaluated CPU RKS F[D] for an explicit snapshot read.
-   * No extra Fock build, canonicalization or W is performed by energy-only SCF. */
+  /** Retain the already evaluated CPU KS F[D] for an explicit snapshot read.
+   * Retention alone requests no extra Fock build, canonicalization or W. */
   bool retain_ks_state{};
+  /** Certify the unshifted final-Fock projector for physical KS state export.
+   * This is stronger than retaining F[D], which must preserve the ordinary
+   * stabilized-occupation SCF contract without promising an export proof. */
+  bool certify_ks_export{};
   /** Explicit bounded cold-start preparation; absent preserves the core guess. */
   std::optional<initial_guess::PreliminaryOptions> preliminary_guess;
 };

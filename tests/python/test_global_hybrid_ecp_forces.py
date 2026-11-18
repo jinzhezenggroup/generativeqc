@@ -22,6 +22,14 @@ FORCE_GATE = 1e-5
 ecp_records = _canonical_records
 
 
+class IndependentSCFConvergenceError(AssertionError):
+    """Keep a failed oracle's actual state available for qualification receipts."""
+
+    def __init__(self, solver: object) -> None:
+        self.solver = solver
+        super().__init__("independent SCF did not meet its declared convergence policy")
+
+
 def make_calculator(
     record: object,
     multiplicity: int = 1,
@@ -55,7 +63,16 @@ def molecule_atoms(symbol: str) -> list:
 
 
 def independent_solver(
-    raw: dict, atoms: list, charge: int, multiplicity: int, state: object = None
+    raw: dict,
+    atoms: list,
+    charge: int,
+    multiplicity: int,
+    state: object = None,
+    *,
+    max_iterations: int = 240,
+    orbital_gradient_tolerance: float = 1e-10,
+    final_diagonalization: bool = True,
+    diis_factory: object = None,
 ) -> object:
     """Use independent ECP integrals/SCF with the identical moving quadrature.
 
@@ -64,6 +81,14 @@ def independent_solver(
     by the retained canonical records, never reconstructed from the native state.
     Without a native state this is an independent displaced-energy oracle, not
     an analytic-gradient owner or a production continuation/fallback.
+    Resource and convergence controls are explicit. Qualification may tighten
+    the orbital-gradient threshold without changing physical gates or seeding
+    a displaced state. A no-extra-diagonalization policy keeps the converged
+    density rather than taking an additional nonlinear step, and independently
+    rechecks its actual physical orbital gradient at the declared strict
+    threshold. It never changes a failed solver's convergence flag. An explicit
+    reference-only DIIS factory may replace extrapolation; physical Focks and
+    the actual convergence certification remain owned by the independent SCF.
     """
     from generativeqc_compiler.dft.grid import MolecularGrid
     from pyscf import dft, gto, lib
@@ -81,7 +106,7 @@ def independent_solver(
         spin=multiplicity - 1,
         verbose=0,
     )
-    solver = dft.UKS(molecule) if multiplicity == 2 else dft.RKS(molecule)
+    solver = dft.UKS(molecule) if multiplicity != 1 else dft.RKS(molecule)
     solver.xc = "0.81*GGA_C_LYP+0.72*GGA_X_B88+0.19*LDA_C_VWN_RPA+0.08*LDA_X+0.2*HF"
     solver.grids.radii_adjust = None
     if state is not None and state._source.grid_spec.version == 4:
@@ -122,9 +147,26 @@ def independent_solver(
         }
         solver.grids.gen_atomic_grids = lambda *args, **kwargs: atomic
     solver.small_rho_cutoff = 0
-    solver.conv_tol, solver.conv_tol_grad, solver.max_cycle = 1e-13, 1e-10, 240
+    solver.conv_tol, solver.conv_tol_grad, solver.max_cycle = (
+        1e-13,
+        orbital_gradient_tolerance,
+        max_iterations,
+    )
+    solver.conv_check = final_diagonalization
+    if diis_factory is not None:
+        solver.diis = diis_factory(solver)
     solver.kernel()
-    assert solver.converged
+    if not solver.converged:
+        raise IndependentSCFConvergenceError(solver)
+    if not final_diagonalization:
+        physical_gradient = np.linalg.norm(
+            solver.get_grad(solver.mo_coeff, solver.mo_occ)
+        )
+        if (
+            not np.isfinite(physical_gradient)
+            or physical_gradient >= orbital_gradient_tolerance
+        ):
+            raise IndependentSCFConvergenceError(solver)
     np.testing.assert_array_equal(solver.grids.coords, grid.points)
     np.testing.assert_array_equal(solver.grids.weights, grid.weights)
     return solver
