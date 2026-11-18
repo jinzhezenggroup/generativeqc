@@ -41,6 +41,8 @@ benchmarks/results/h100-direct-wb97mv-20261024/historical-host-*.json text eol=l
 # Original figure publications authenticate these text members byte-for-byte.
 benchmarks/results/paper-hfdft-cold3-20261115/**/*.json text eol=lf
 benchmarks/results/paper-hfdft-cold3-20261115/**/*.csv text eol=lf
+benchmarks/results/paper-hfdft-cold3-20261118/**/*.json text eol=lf
+benchmarks/results/paper-hfdft-cold3-20261118/**/*.csv text eol=lf
 
 # Scientific source-of-truth lives in upstream/manifest.json; these are derived
 # compatibility views or deterministic numerical products.
