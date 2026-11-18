@@ -22,6 +22,10 @@ from test_semilocal_fp32_codegen import _compile_probe
 
 from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixture
 
+# Auxiliary-g Rys classes need their own raised-domain unit per class, exactly
+# as the polynomial SHELL_CLASSES header already excludes auxiliary g.
+HEADER_RYS_SHELL_CLASSES = tuple(c for c in RYS_SHELL_CLASSES if c[2] < 4)
+
 
 @pytest.fixture(scope="module", params=("host", "cuda"))
 def shell_backend(request: pytest.FixtureRequest) -> str:
@@ -47,7 +51,7 @@ def shell_probe(
     Gaussian preparation and final translation channels deliberately stay double.
     """
     algorithm = request.param
-    classes = RYS_SHELL_CLASSES if algorithm == "rys" else SHELL_CLASSES
+    classes = HEADER_RYS_SHELL_CLASSES if algorithm == "rys" else SHELL_CLASSES
     if shell_backend == "cuda":
         classes = _cuda_classes(algorithm)
     directory = tmp_path_factory.mktemp("df-shell-fp32")
@@ -167,7 +171,7 @@ def test_typed_shells_match_independent_contracted_blocks(
     """All host classes and representative CUDA schedules pass the same gates."""
     pytest.importorskip("pyscf")
     algorithm, probe = shell_probe
-    classes = RYS_SHELL_CLASSES if algorithm == "rys" else SHELL_CLASSES
+    classes = HEADER_RYS_SHELL_CLASSES if algorithm == "rys" else SHELL_CLASSES
     if shell_backend == "cuda":
         classes = _cuda_classes(algorithm)
     for angular in classes:

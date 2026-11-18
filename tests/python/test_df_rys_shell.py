@@ -7,9 +7,11 @@ import typing
 import numpy as np
 import pytest
 from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
+from generativeqc_compiler.integral.df_policy import emit_df_policy_cuda
 from generativeqc_compiler.integral.df_rys import emit_df_rys_cuda
 from generativeqc_compiler.integral.df_rys_shell import (
     AUXILIARY_F_RYS_SHELL_CLASSES,
+    AUXILIARY_G_RYS_SHELL_CLASSES,
     COMPONENT_RYS_SHELL_CLASSES,
     RYS_SHELL_CLASSES,
     emit_df_rys_policy_cpp,
@@ -22,27 +24,30 @@ from generativeqc_compiler.integral.df_shell_derivatives import (
 
 from tools.generativeqc_validation.df_derivatives import make_df_derivative_fixture
 
+# The combined header carries every class with s..f auxiliary moments.
+# Auxiliary-g classes need the raised scalar geometry domain, which production
+# compiles as one unit per class; the probe mirrors that split.
+HEADER_RYS_SHELL_CLASSES = tuple(c for c in RYS_SHELL_CLASSES if c[2] < 4)
+assert set(RYS_SHELL_CLASSES) - set(HEADER_RYS_SHELL_CLASSES) == set(
+    AUXILIARY_G_RYS_SHELL_CLASSES
+)
 
-@pytest.fixture(scope="module")
-def shell_evaluator(tmp_path_factory: typing.Any, native_cxx: typing.Any) -> typing.Any:
-    """Compile the emitted primitive arithmetic; no native runtime or GPU probe."""
-    directory = tmp_path_factory.mktemp("df_rys_shell")
-    (directory / "cuda_runtime.h").write_text("")
-    for name, emit in (
-        ("generated_df_derivatives.cuh", emit_df_derivatives_cuda),
-        ("generated_df_shell_derivatives.cuh", emit_df_shell_derivatives_cuda),
-        ("generated_df_rys.cuh", emit_df_rys_cuda),
-        ("generated_df_rys_shell.cuh", emit_df_rys_shell_cuda),
-        ("generated_df_rys_policy.hpp", emit_df_rys_policy_cpp),
-    ):
-        (directory / name).write_text(emit())
+
+def _compile_probe(
+    directory: typing.Any, native_cxx: typing.Any, include: str, classes: typing.Any
+) -> typing.Any:
     source = directory / "probe.cpp"
+    namespace = (
+        "generated_df_auxiliary_g_derivatives"
+        if any(c == 4 for _, _, c in classes)
+        else "generated_df_derivatives"
+    )
     source.write_text(
         r"""
 #define __device__
 #define __forceinline__ inline
 #define __noinline__ __attribute__((noinline))
-#include "generated_df_rys_shell.cuh"
+#include "__INCLUDE__"
 using namespace generativeqc::scf;
 template<unsigned A,unsigned B,unsigned C>
 void evaluate(bool rys,unsigned item,double omega,const double* e,const double* r,double* out) {
@@ -75,9 +80,11 @@ __SHELL_CASES__
             "__SHELL_CASES__",
             "\n".join(
                 f"    case {100 * a + 10 * b + c}: return evaluate<{a},{b},{c}>(rys,item,omega,e,r,out);"
-                for a, b, c in RYS_SHELL_CLASSES
+                for a, b, c in classes
             ),
         )
+        .replace("__INCLUDE__", include)
+        .replace("generated_df_derivatives::", namespace + "::")
     )
     output = directory / "probe.so"
     native_cxx.build_shared(
@@ -98,6 +105,62 @@ __SHELL_CASES__
         double,
     ]
     library.probe.restype = None
+    return library
+
+
+@pytest.fixture(scope="module")
+def shell_evaluator(tmp_path_factory: typing.Any, native_cxx: typing.Any) -> typing.Any:
+    """Compile the emitted primitive arithmetic; no native runtime or GPU probe."""
+    directory = tmp_path_factory.mktemp("df_rys_shell")
+    (directory / "cuda_runtime.h").write_text("")
+    for name, emit in (
+        ("generated_df_derivatives.cuh", emit_df_derivatives_cuda),
+        ("generated_df_shell_derivatives.cuh", emit_df_shell_derivatives_cuda),
+        ("generated_df_rys.cuh", emit_df_rys_cuda),
+        ("generated_df_rys_shell.cuh", emit_df_rys_shell_cuda),
+        ("generated_df_rys_policy.hpp", emit_df_rys_policy_cpp),
+    ):
+        (directory / name).write_text(emit())
+    libraries = {
+        cls: library
+        for library in (
+            _compile_probe(
+                directory,
+                native_cxx,
+                "generated_df_rys_shell.cuh",
+                HEADER_RYS_SHELL_CLASSES,
+            ),
+        )
+        for cls in HEADER_RYS_SHELL_CLASSES
+    }
+    for angular in AUXILIARY_G_RYS_SHELL_CLASSES:
+        name = "".join(map(str, angular))
+        unit = tmp_path_factory.mktemp(f"df_rys_shell_{name}")
+        (unit / "cuda_runtime.h").write_text("")
+        polynomial, policy, math_header = (
+            f"df_shell_polynomial_{name}.cuh",
+            f"df_shell_policy_{name}.hpp",
+            f"df_shell_math_{name}.cuh",
+        )
+        for file, text in (
+            ("generated_df_derivatives.cuh", emit_df_derivatives_cuda()),
+            (
+                "generated_df_derivative_policy.cuh",
+                emit_df_policy_cuda(derivatives=True),
+            ),
+            ("generated_df_rys.cuh", emit_df_rys_cuda()),
+            (polynomial, emit_df_shell_derivatives_cuda(classes=(angular,))),
+            (policy, emit_df_rys_policy_cpp(classes=(angular,))),
+            (
+                math_header,
+                emit_df_rys_shell_cuda(
+                    classes=(angular,), shell_header=polynomial, policy_header=policy
+                ),
+            ),
+        ):
+            (unit / file).write_text(text)
+        libraries[angular] = _compile_probe(unit, native_cxx, math_header, (angular,))
+    double = ctypes.POINTER(ctypes.c_double)
 
     def evaluate(
         exponents: typing.Any,
@@ -119,7 +182,7 @@ __SHELL_CASES__
                 + row * (row + 1) // 2
                 + powers[2]
             )
-        library.probe(
+        libraries[tuple(degrees)].probe(
             int(100 * degrees[0] + 10 * degrees[1] + degrees[2]),
             rys,
             int(item),
@@ -218,7 +281,17 @@ def test_rys_retains_polynomial_force_contract_across_argument_branches(
         actual = shell_evaluator(exponents, centers, powers)
         expected = shell_evaluator(exponents, centers, powers, rys=False)
         assert np.isfinite(actual).all()
-        np.testing.assert_allclose(actual, expected, atol=8e-11, rtol=8e-11)
+        if angular in AUXILIARY_G_RYS_SHELL_CLASSES:
+            # Translation recovers C = -A-B. A tight orbital pair against a
+            # diffuse auxiliary g gives |A|,|B| near 2e7 with C near 1e2, so
+            # C carries their absolute rounding; A and B keep the same gate.
+            np.testing.assert_allclose(actual[:2], expected[:2], atol=8e-11, rtol=8e-11)
+            scale = max(1.0, float(np.max(np.abs(expected[:2]))))
+            np.testing.assert_allclose(
+                actual[2], expected[2], atol=8e-11 * scale, rtol=8e-11
+            )
+        else:
+            np.testing.assert_allclose(actual, expected, atol=8e-11, rtol=8e-11)
         np.testing.assert_allclose(actual.sum(axis=0), 0, atol=8e-11, rtol=0)
 
 
@@ -274,6 +347,14 @@ def test_independent_high_precision_center_differentiation(
             elif degree == 3:
                 operators.append(
                     ((3, 1 / (8 * exponent**3)), (1, 3 / (4 * exponent**2)))
+                )
+            elif degree == 4:
+                operators.append(
+                    (
+                        (4, 1 / (16 * exponent**4)),
+                        (2, 3 / (4 * exponent**3)),
+                        (0, 3 / (4 * exponent**2)),
+                    )
                 )
             else:
                 raise AssertionError("independent Gaussian operator is not defined")

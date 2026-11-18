@@ -48,7 +48,7 @@ qualification errors. `results.json.xz` adds every force vector.
   004/104/114/204 and still selects polynomial for 214/223/224. Energy errors are
   at most 6.8e-13 Eh and force errors at most 8.8e-12 Eh/Bohr (gate 1e-8).
   Candidate and auto differ by 3.3e-12.
-- `memcheck.log` is compute-sanitizer 12.9.79 memcheck over one candidate DF-HF
+- `memcheck.txt` is compute-sanitizer 12.9.79 memcheck over one candidate DF-HF
   energy+force call on the same system: 0 errors, without suppressing API errors.
 
 These measurements do not qualify any other GPU. The portable profile and the

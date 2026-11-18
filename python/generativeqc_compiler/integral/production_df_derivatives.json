@@ -280,7 +280,7 @@
         "candidate_report": "benchmarks/results/h100-df-aux-g-rys-20261118/README.md",
         "endpoint_384": "benchmarks/results/h100-df-aux-g-rys-20261118/endpoint-384.json",
         "endpoint_768": "benchmarks/results/h100-df-aux-g-rys-20261118/endpoint-768.json",
-        "sanitizer": "benchmarks/results/h100-df-aux-g-rys-20261118/memcheck.log",
+        "sanitizer": "benchmarks/results/h100-df-aux-g-rys-20261118/memcheck.txt",
         "gradient_fixtures": "benchmarks/results/h100-df-aux-g-rys-20261118/oracle.json",
         "base_profile": "portable (unchanged 23 classes); adds auxiliary-g 004/104/114/204 Rys/compact"
       }
