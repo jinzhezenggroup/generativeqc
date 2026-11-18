@@ -19,6 +19,7 @@
 #include "scf/cuda/df_derivatives.cuh"
 #include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/df_metric_kernels.hpp"
+#include "scf/cuda/df_metric_shell_derivatives.cuh"
 #include "scf/cuda/df_packed_values.hpp"
 #include "scf/cuda/df_response_weights.cuh"
 #include "scf/cuda/df_runtime.hpp"
@@ -103,6 +104,19 @@ __global__ void build_df_auxiliary_value_norms(DfShellBasisView view, std::size_
 }
 void check(cudaError_t status) {
   if (status != cudaSuccess) throw CudaFailure{status};
+}
+/** Complete metric panels contract each ordered auxiliary shell pair once with
+ * top-order Hermite Gaussians. 0 keeps the per-AO pair traversal; an explicit
+ * dense rollback (PAIRS=0) or an invalid pair control never reaches it. */
+bool metric_shells_selected(const core::System& auxiliary, double range_omega,
+                            DfMetricHermiteTable& table) {
+  const char* control = std::getenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS");
+  const std::string_view policy = control ? control : "1";
+  if (policy != "0" && policy != "1")
+    throw std::invalid_argument("unknown DF metric derivative shells (use 0 or 1)");
+  const char* pairs = std::getenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS");
+  return policy == "1" && (!pairs || std::string_view(pairs) == "1") && range_omega == 0.0 &&
+         prepare_df_metric_hermite_table(auxiliary, table);
 }
 /** Restore thread-local selection only after the arena has drained its stream. */
 struct DeviceGuard {
@@ -776,6 +790,11 @@ generativeqc_status execute_cuda_df_gradient(
     Arena arena(maximum_bytes);
     check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
     const auto o = arena.upload(host_o), x = arena.upload(host_a);
+    DfMetricHermiteTable metric_table;
+    std::unique_ptr<ShellMetadata> metric_shells;
+    if (!bar_m.empty() && metric_shells_selected(auxiliary, 0.0, metric_table))
+      metric_shells =
+          std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, false, expansion_terms);
     const auto* r = arena.upload(positions);
     auto* output = static_cast<double*>(arena.allocate(result.size() * sizeof(double)));
     arena.stats.host_bytes += result.capacity() * sizeof(double);
@@ -798,8 +817,12 @@ generativeqc_status execute_cuda_df_gradient(
         arena.stats.host_to_device_bytes += count * sizeof(double);
         arena.stats.response_host_to_device_bytes += count * sizeof(double);
         ++arena.stats.uploads;
-        check(launch_df_derivative_tile(o, x, r, kind, {begin, 1, 1, 1}, count, weights, schedule,
-                                        output, arena.stream, 0, 0, 1, false, expansion_terms));
+        if (kind == 1 && metric_shells && !schedule && !begin && count == a * a)
+          check(launch_df_metric_shell_derivative(metric_shells->view, metric_table, r, weights,
+                                                  output, arena.stream));
+        else
+          check(launch_df_derivative_tile(o, x, r, kind, {begin, 1, 1, 1}, count, weights, schedule,
+                                          output, arena.stream, 0, 0, 1, false, expansion_terms));
         ++arena.stats.tiles;
       }
     }
@@ -1450,6 +1473,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
     runtime::cuda_trace::trace_counter("shell_primitive_signature_policy", !primitive_buckets  ? 0
                                                                            : signature_packets ? 2
                                                                                                : 1);
+    DfMetricHermiteTable metric_table;
+    const bool metric_shell_admitted = metric_shells_selected(auxiliary, range_omega, metric_table);
+    std::unique_ptr<ShellMetadata> metric_shell_owner;
     std::unique_ptr<ShellMetadata> shell_o, shell_x;
     if (shell_execution) {
       {
@@ -1541,6 +1567,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                            static_cast<unsigned>(derivative_pairs));
       }
     }
+    if (metric_shell_admitted && !shell_x)
+      metric_shell_owner =
+          std::make_unique<ShellMetadata>(auxiliary, host_a, x, arena, false, expansion_terms);
+    const ShellMetadata* metric_shells = !metric_shell_admitted ? nullptr
+                                         : shell_x              ? shell_x.get()
+                                                                : metric_shell_owner.get();
     const auto* r = arena.upload(positions);
     auto* output = static_cast<double*>(arena.allocate(result.size() * sizeof(double)));
     arena.stats.host_bytes += result.capacity() * sizeof(double);
@@ -2459,7 +2491,17 @@ generativeqc_status execute_cuda_df_hf_gradient(
               }
               runtime::cuda_trace::trace_counter("three_center_shell_panels", 1);
             }
-            if (metric_weights || !shell_execution || !full_shell_domain)
+            const bool complete_metric = metric_weights && metric_shells && !schedule &&
+                                         gradient_copies == 1 && !range.offset && count == a * a &&
+                                         range.column_stride == 1 &&
+                                         range.row_stride == range.row_length;
+            if (metric_weights)
+              runtime::cuda_trace::trace_counter("metric_derivative_shell_panels",
+                                                 complete_metric ? 1 : 0);
+            if (complete_metric)
+              check(launch_df_metric_shell_derivative(metric_shells->view, metric_table, r, weights,
+                                                      derivative_output, arena.stream));
+            else if (metric_weights || !shell_execution || !full_shell_domain)
               check(launch_df_derivative_tile(
                   o, x, r, kind, range, count, weights, schedule, derivative_output, arena.stream,
                   0, result.size(), gradient_copies,
@@ -2530,9 +2572,20 @@ generativeqc_status execute_cuda_df_hf_gradient(
               runtime::cuda_trace::trace_counter(
                   kind ? "metric_derivative_weight_bytes" : "three_center_derivative_weight_bytes",
                   count * sizeof(double));
-              check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
-                                              output, arena.stream, begin, 0, 1, false,
-                                              expansion_terms, false, range_omega));
+              // One upload holding the complete metric uses the same shell kernel.
+              const bool complete_metric =
+                  kind == 1 && metric_shells && !schedule && !begin && count == a * a &&
+                  !range.offset && range.column_stride == 1 && range.row_stride == range.row_length;
+              if (kind == 1)
+                runtime::cuda_trace::trace_counter("metric_derivative_shell_panels",
+                                                   complete_metric ? 1 : 0);
+              if (complete_metric)
+                check(launch_df_metric_shell_derivative(metric_shells->view, metric_table, r,
+                                                        weights, output, arena.stream));
+              else
+                check(launch_df_derivative_tile(o, x, r, kind, range, count, weights, schedule,
+                                                output, arena.stream, begin, 0, 1, false,
+                                                expansion_terms, false, range_omega));
               ++arena.stats.tiles;
             }
             // The adapter reuses this host span after returning. Drain all its
