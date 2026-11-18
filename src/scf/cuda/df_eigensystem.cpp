@@ -133,6 +133,59 @@ generativeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*
   plan.ordinary_eigensystem = state;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
+
+/** Solve the column-major matrix already staged in state.matrix (and X in
+ * state.x when generalized). The output frame stays on the device: it is
+ * state.temporary after the back-transform, otherwise state.matrix. */
+generativeqc_status submit_ordinary_solve(CudaDensityFittingJkPlan& plan,
+                                          OrdinaryEigensystem& state, bool generalized,
+                                          CudaDfEigenDiagnostic& diagnostic, double*& output,
+                                          std::string& detail) {
+  namespace trace = runtime::cuda_trace;
+  namespace host = runtime::host_trace;
+  const auto n = plan.nbf;
+  auto error = cudaMemsetAsync(state.active, 1, 1, plan.stream);
+  if (error != cudaSuccess) return cuda_failure(error, "activate ordinary DF eigen solve", detail);
+  generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS;
+  if (generalized) {
+    trace::TraceRegion transform("generalized_transform", plan.stream);
+    status = scf_generalized_transform(plan, false, 1, n, state.matrix, state.x, state.temporary,
+                                       detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  }
+  const cuda_execution::EigensolverResources resources{
+      plan.stream,
+      static_cast<cusolverDnHandle_t>(plan.eigen_handles.view().solver),
+      static_cast<cusolverDnParams_t>(plan.eigen_handles.view().parameters),
+      nullptr,
+      state.workspace,
+      state.workspace_bytes,
+      state.host_workspace.empty() ? nullptr : state.host_workspace.data(),
+      state.host_workspace_bytes};
+  {
+    host::Region actual_solve("device_eigensolve", n);
+    trace::TraceRegion solve("device_eigensolve", plan.stream);
+    runtime::df_progress::label("eigen_provider", "cusolverDnXsyevd");
+    diagnostic.solver_calls = 1;
+    trace::trace_counter("device_eigensolves", 1);
+    status = cuda_execution::launch_solver(resources, CudaEigensolverFamily::xsyevd,
+                                           static_cast<int>(n), 1, state.matrix, nullptr,
+                                           state.values, 0, state.info, state.active);
+  }
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    detail = "ordinary CUDA DF Xsyevd submission failed";
+    return status;
+  }
+  output = state.matrix;
+  if (generalized) {
+    trace::TraceRegion transform("coefficient_backtransform", plan.stream);
+    status =
+        scf_generalized_transform(plan, true, 1, n, state.matrix, state.x, state.temporary, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    output = state.temporary;
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 }  // namespace
 
 void destroy_ordinary_eigensystem(void*& opaque) noexcept {
@@ -219,47 +272,13 @@ generativeqc_status solve_cuda_density_fitting_eigen(
       if (error == cudaSuccess && orthogonalizer)
         error =
             cudaMemcpyAsync(state->x, packed_x.data(), bytes, cudaMemcpyHostToDevice, plan->stream);
-      if (error == cudaSuccess) error = cudaMemsetAsync(state->active, 1, 1, plan->stream);
       trace::trace_counter("host_to_device_bytes", bytes * (orthogonalizer ? 2 : 1));
     }
     if (error != cudaSuccess) return cuda_failure(error, "upload ordinary DF eigen inputs", detail);
-    if (orthogonalizer) {
-      trace::TraceRegion transform("generalized_transform", plan->stream);
-      status = scf_generalized_transform(*plan, false, 1, n, state->matrix, state->x,
-                                         state->temporary, detail);
-      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    }
-    const cuda_execution::EigensolverResources resources{
-        plan->stream,
-        static_cast<cusolverDnHandle_t>(plan->eigen_handles.view().solver),
-        static_cast<cusolverDnParams_t>(plan->eigen_handles.view().parameters),
-        nullptr,
-        state->workspace,
-        state->workspace_bytes,
-        state->host_workspace.empty() ? nullptr : state->host_workspace.data(),
-        state->host_workspace_bytes};
-    {
-      host::Region actual_solve("device_eigensolve", n);
-      trace::TraceRegion solve("device_eigensolve", plan->stream);
-      runtime::df_progress::label("eigen_provider", "cusolverDnXsyevd");
-      diagnostic.solver_calls = 1;
-      trace::trace_counter("device_eigensolves", 1);
-      status = cuda_execution::launch_solver(resources, CudaEigensolverFamily::xsyevd,
-                                             static_cast<int>(n), 1, state->matrix, nullptr,
-                                             state->values, 0, state->info, state->active);
-    }
-    if (status != GENERATIVEQC_STATUS_SUCCESS) {
-      detail = "ordinary CUDA DF Xsyevd submission failed";
-      return status;
-    }
-    auto* output = state->matrix;
-    if (orthogonalizer) {
-      trace::TraceRegion transform("coefficient_backtransform", plan->stream);
-      status = scf_generalized_transform(*plan, true, 1, n, state->matrix, state->x,
-                                         state->temporary, detail);
-      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-      output = state->temporary;
-    }
+    double* output{};
+    status =
+        submit_ordinary_solve(*plan, *state, orthogonalizer != nullptr, diagnostic, output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     {
       trace::TraceRegion download("device_to_host", plan->stream);
       error = cudaMemcpyAsync(packed.data(), output, bytes, cudaMemcpyDeviceToHost, plan->stream);
@@ -289,6 +308,69 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "ordinary CUDA DF eigensystem allocation failed";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const std::overflow_error& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::runtime_error& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_CUDA_ERROR;
+  }
+}
+
+generativeqc_status solve_cuda_density_fitting_eigen_resident(
+    CudaDensityFittingJkPlan* plan, const double* matrix, const std::vector<double>& orthogonalizer,
+    CudaDfResidentEigenframe& frame, std::string& detail) {
+  using namespace cuda_df;
+  namespace trace = runtime::cuda_trace;
+  frame = {};
+  detail.clear();
+  if (!plan || !matrix || plan->nbf == 0 ||
+      plan->nbf > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+      !symmetric_finite(orthogonalizer, plan->nbf)) {
+    detail = "invalid resident CUDA DF eigensolver plan or orthogonalizer";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto n = plan->nbf;
+  auto error = cudaSetDevice(plan->device_id);
+  if (error != cudaSuccess) return cuda_failure(error, "select resident DF eigen device", detail);
+  cudaStreamCaptureStatus capture{};
+  error = cudaStreamIsCapturing(plan->stream, &capture);
+  if (error != cudaSuccess) return cuda_failure(error, "query resident DF eigen stream", detail);
+  if (capture != cudaStreamCaptureStatusNone) {
+    detail = "resident CUDA DF eigen operations require a noncapturing stream";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  trace::TraceOperation operation(
+      "resident_eigensolve", plan->stream,
+      {1, n, plan->naux, plan->integral_source != nullptr, plan->streamed});
+  try {
+    (void)df_eigen_device_reservation(n);
+    OrdinaryEigensystem* state{};
+    auto status = prepare(*plan, state, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto packed_x = column_major(orthogonalizer, n);
+    StreamDrain drain{plan->stream};
+    const auto bytes = n * n * sizeof(double);
+    // The staged copy keeps the caller's matrix intact for its own validation.
+    error = cudaMemcpyAsync(state->matrix, matrix, bytes, cudaMemcpyDeviceToDevice, plan->stream);
+    if (error == cudaSuccess)
+      error =
+          cudaMemcpyAsync(state->x, packed_x.data(), bytes, cudaMemcpyHostToDevice, plan->stream);
+    trace::trace_counter("host_to_device_bytes", bytes);
+    if (error != cudaSuccess) return cuda_failure(error, "stage resident DF eigen inputs", detail);
+    CudaDfEigenDiagnostic diagnostic;
+    double* output{};
+    status = submit_ordinary_solve(*plan, *state, true, diagnostic, output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    // Pageable X must survive its upload; the frame itself stays resident.
+    error = cudaStreamSynchronize(plan->stream);
+    if (error != cudaSuccess) return cuda_failure(error, "finish resident DF eigensolve", detail);
+    drain.active = false;
+    frame = {output, state->values, state->info};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    detail = "resident CUDA DF eigensystem allocation failed";
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const std::overflow_error& error) {
     detail = error.what();

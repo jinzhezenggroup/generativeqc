@@ -125,15 +125,22 @@ GENERATIVEQC_D4_EEQ_HD inline void eeq_cn_pair(const data::D4ElementData& a,
 
 }  // namespace eeq_detail
 
-// Molecular, nonperiodic EEQ2019 charge provider from pinned multicharge.
-// dqdr layout is [coordinate=(3*atom+axis)][charge_atom], i.e.
-// dqdr[(3*k+axis)*n+i] = dq_i / dR_{k,axis}.
-GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
-    int n, const std::int32_t* z, const double* xyz, double total_charge, EEQTables t,
-    double* workspace, std::size_t workspace_size, double* charges, double* dqdr) {
-  using namespace eeq_detail;
+// Shared EEQ2019 stages. The serial host provider and the cooperative CUDA
+// provider call these same functions, so every stored value is formed by the
+// same expression in the same order; only independent LU rows and response
+// columns may be distributed across threads.
+namespace eeq_stage {
+
+// Returns success with *complete=false when the evaluation must continue.
+// Any other status, or *complete=true, is the provider's final status.
+GENERATIVEQC_D4_EEQ_HD inline D4Status validate(int n, const std::int32_t* z, const double* xyz,
+                                                double total_charge, EEQTables t,
+                                                const double* workspace, std::size_t workspace_size,
+                                                const double* charges, const double* dqdr,
+                                                bool* complete) {
+  *complete = true;
   if (n < 0 || n > kEEQMaximumAtoms) return D4Status::unsupported;
-  if (!finite(total_charge) || workspace_size < eeq2019_workspace_elements(n))
+  if (!eeq_detail::finite(total_charge) || workspace_size < eeq2019_workspace_elements(n))
     return D4Status::invalid_argument;
   if (n == 0) return total_charge == 0.0 ? D4Status::success : D4Status::invalid_argument;
   if (!z || !xyz || !workspace || !charges || !dqdr) return D4Status::invalid_argument;
@@ -163,17 +170,35 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
   for (int i = 0; i < n; ++i) {
     if (z[i] < 1 || z[i] > static_cast<int>(t.element_count)) return D4Status::unsupported;
     for (int a = 0; a < 3; ++a)
-      if (!finite(xyz[3 * i + a])) return D4Status::invalid_argument;
+      if (!eeq_detail::finite(xyz[3 * i + a])) return D4Status::invalid_argument;
   }
+  *complete = false;
+  return D4Status::success;
+}
 
+struct Layout {
+  int m;
+  double* raw_cn;
+  double* rhs_cn_response;
+  double* lu;
+  double* solution;
+  double* responses;  // 3*n columns, each length m.
+};
+
+GENERATIVEQC_D4_EEQ_HD inline Layout layout(int n, double* workspace) {
   const int m = n + 1;
   double* raw_cn = workspace;
   double* rhs_cn_response = raw_cn + n;
   double* lu = rhs_cn_response + n;
   double* solution = lu + static_cast<std::size_t>(m) * m;
-  double* responses = solution + m;  // 3*n columns, each length m.
-  for (std::size_t i = 0; i < eeq2019_workspace_elements(n); ++i) workspace[i] = 0.0;
+  return {m, raw_cn, rhs_cn_response, lu, solution, solution + m};
+}
 
+// Expects a zeroed workspace. Builds raw CN, the bordered EEQ matrix and RHS.
+GENERATIVEQC_D4_EEQ_HD inline D4Status assemble(int n, const std::int32_t* z, const double* xyz,
+                                                double total_charge, EEQTables t, Layout w) {
+  using namespace eeq_detail;
+  const int m = w.m;
   // First pass: raw EEQ coordination numbers.
   for (int i = 1; i < n; ++i)
     for (int j = 0; j < i; ++j) {
@@ -184,22 +209,22 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       if (r > kEEQCutoff) continue;
       double count, dcountdr;
       eeq_cn_pair(t.elements[z[i] - 1], t.elements[z[j] - 1], r, count, dcountdr);
-      raw_cn[i] += count;
-      raw_cn[j] += count;
+      w.raw_cn[i] += count;
+      w.raw_cn[j] += count;
     }
 
   // Build A and x after the same CN saturation used by multicharge.
   for (int i = 0; i < n; ++i) {
     const auto qpar = t.charge_elements[z[i] - 1];
     double rhs[2];
-    ::generativeqc::generated::dispersion::eeq_rhs(raw_cn[i], qpar.chi, qpar.kcnchi, rhs);
-    solution[i] = rhs[0];
-    rhs_cn_response[i] = rhs[1];
-    lu[static_cast<std::size_t>(i) * m + i] = qpar.eta + kSqrtTwoOverPi / qpar.radius;
-    lu[static_cast<std::size_t>(i) * m + n] = 1.0;
-    lu[static_cast<std::size_t>(n) * m + i] = 1.0;
+    ::generativeqc::generated::dispersion::eeq_rhs(w.raw_cn[i], qpar.chi, qpar.kcnchi, rhs);
+    w.solution[i] = rhs[0];
+    w.rhs_cn_response[i] = rhs[1];
+    w.lu[static_cast<std::size_t>(i) * m + i] = qpar.eta + kSqrtTwoOverPi / qpar.radius;
+    w.lu[static_cast<std::size_t>(i) * m + n] = 1.0;
+    w.lu[static_cast<std::size_t>(n) * m + i] = 1.0;
   }
-  solution[n] = total_charge;
+  w.solution[n] = total_charge;
 
   for (int i = 1; i < n; ++i)
     for (int j = 0; j < i; ++j) {
@@ -211,15 +236,17 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       const double gamma = 1.0 / sqrt(qi.radius * qi.radius + qj.radius * qj.radius);
       double coulomb[1];
       ::generativeqc::generated::dispersion::eeq_coulomb<false>(r, gamma, coulomb);
-      lu[static_cast<std::size_t>(i) * m + j] = coulomb[0];
-      lu[static_cast<std::size_t>(j) * m + i] = coulomb[0];
+      w.lu[static_cast<std::size_t>(i) * m + j] = coulomb[0];
+      w.lu[static_cast<std::size_t>(j) * m + i] = coulomb[0];
     }
+  return D4Status::success;
+}
 
-  int pivots[kEEQMaximumAtoms + 1]{};
-  if (!lu_factor(lu, m, pivots) || !lu_solve(lu, m, pivots, solution))
-    return D4Status::numerical_failure;
-
-  // Build all right-hand sides dx/dR - (dA/dR)y before solving them.
+// Build all right-hand sides dx/dR - (dA/dR)y before solving them.
+GENERATIVEQC_D4_EEQ_HD inline void response_rhs(int n, const std::int32_t* z, const double* xyz,
+                                                EEQTables t, Layout w) {
+  using namespace eeq_detail;
+  const int m = w.m;
   for (int i = 1; i < n; ++i)
     for (int j = 0; j < i; ++j) {
       double v[3];
@@ -239,10 +266,10 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
           ::generativeqc::generated::dispersion::radial_projection(r, dcountdr, v[axis], projected);
           const double g = projected[0];
           const int ci = 3 * i + axis, cj = 3 * j + axis;
-          responses[static_cast<std::size_t>(ci) * m + i] += rhs_cn_response[i] * g;
-          responses[static_cast<std::size_t>(ci) * m + j] += rhs_cn_response[j] * g;
-          responses[static_cast<std::size_t>(cj) * m + i] -= rhs_cn_response[i] * g;
-          responses[static_cast<std::size_t>(cj) * m + j] -= rhs_cn_response[j] * g;
+          w.responses[static_cast<std::size_t>(ci) * m + i] += w.rhs_cn_response[i] * g;
+          w.responses[static_cast<std::size_t>(ci) * m + j] += w.rhs_cn_response[j] * g;
+          w.responses[static_cast<std::size_t>(cj) * m + i] -= w.rhs_cn_response[i] * g;
+          w.responses[static_cast<std::size_t>(cj) * m + j] -= w.rhs_cn_response[j] * g;
         }
       }
 
@@ -253,25 +280,56 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       for (int axis = 0; axis < 3; ++axis) {
         const double g = coulomb[1] * v[axis];
         const int ci = 3 * i + axis, cj = 3 * j + axis;
-        responses[static_cast<std::size_t>(ci) * m + i] -= g * solution[j];
-        responses[static_cast<std::size_t>(ci) * m + j] -= g * solution[i];
-        responses[static_cast<std::size_t>(cj) * m + i] += g * solution[j];
-        responses[static_cast<std::size_t>(cj) * m + j] += g * solution[i];
+        w.responses[static_cast<std::size_t>(ci) * m + i] -= g * w.solution[j];
+        w.responses[static_cast<std::size_t>(ci) * m + j] -= g * w.solution[i];
+        w.responses[static_cast<std::size_t>(cj) * m + i] += g * w.solution[j];
+        w.responses[static_cast<std::size_t>(cj) * m + j] += g * w.solution[i];
       }
     }
+}
 
-  for (int coordinate = 0; coordinate < 3 * n; ++coordinate) {
-    double* rhs = responses + static_cast<std::size_t>(coordinate) * m;
-    if (!lu_solve(lu, m, pivots, rhs)) return D4Status::numerical_failure;
-    for (int i = 0; i < n; ++i)
-      if (!finite(rhs[i])) return D4Status::numerical_failure;
-  }
+// Solve one response column in place; false is a numerical failure.
+GENERATIVEQC_D4_EEQ_HD inline bool solve_response(int n, Layout w, const int* pivots,
+                                                  int coordinate) {
+  double* rhs = w.responses + static_cast<std::size_t>(coordinate) * w.m;
+  if (!eeq_detail::lu_solve(w.lu, w.m, pivots, rhs)) return false;
+  for (int i = 0; i < n; ++i)
+    if (!eeq_detail::finite(rhs[i])) return false;
+  return true;
+}
+
+}  // namespace eeq_stage
+
+// Molecular, nonperiodic EEQ2019 charge provider from pinned multicharge.
+// dqdr layout is [coordinate=(3*atom+axis)][charge_atom], i.e.
+// dqdr[(3*k+axis)*n+i] = dq_i / dR_{k,axis}.
+GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
+    int n, const std::int32_t* z, const double* xyz, double total_charge, EEQTables t,
+    double* workspace, std::size_t workspace_size, double* charges, double* dqdr) {
+  using namespace eeq_detail;
+  bool complete = false;
+  auto status = eeq_stage::validate(n, z, xyz, total_charge, t, workspace, workspace_size, charges,
+                                    dqdr, &complete);
+  if (complete) return status;
+  const auto w = eeq_stage::layout(n, workspace);
+  const int m = w.m;
+  for (std::size_t i = 0; i < eeq2019_workspace_elements(n); ++i) workspace[i] = 0.0;
+  status = eeq_stage::assemble(n, z, xyz, total_charge, t, w);
+  if (status != D4Status::success) return status;
+
+  int pivots[kEEQMaximumAtoms + 1]{};
+  if (!lu_factor(w.lu, m, pivots) || !lu_solve(w.lu, m, pivots, w.solution))
+    return D4Status::numerical_failure;
+
+  eeq_stage::response_rhs(n, z, xyz, t, w);
+  for (int coordinate = 0; coordinate < 3 * n; ++coordinate)
+    if (!eeq_stage::solve_response(n, w, pivots, coordinate)) return D4Status::numerical_failure;
   // Transactional publication: outputs are untouched until every response solve succeeds.
-  for (int i = 0; i < n; ++i) charges[i] = solution[i];
+  for (int i = 0; i < n; ++i) charges[i] = w.solution[i];
   for (int coordinate = 0; coordinate < 3 * n; ++coordinate)
     for (int i = 0; i < n; ++i)
       dqdr[static_cast<std::size_t>(coordinate) * n + i] =
-          responses[static_cast<std::size_t>(coordinate) * m + i];
+          w.responses[static_cast<std::size_t>(coordinate) * m + i];
   return D4Status::success;
 }
 

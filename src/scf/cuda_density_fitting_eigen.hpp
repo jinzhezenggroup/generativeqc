@@ -80,4 +80,21 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     std::vector<double>& eigenvalues, std::vector<double>& coefficients,
     CudaDfEigenDiagnostic& diagnostic, std::string& detail, std::size_t system_index = 0);
 
+/** Device-borrowed outputs of one resident generalized solve. */
+struct CudaDfResidentEigenframe {
+  const double* vectors{};  // Column-major n x n, F C = S C epsilon.
+  const double* values{};   // Ascending provider order.
+  const int* info{};        // Provider status; the caller owns its gate.
+};
+
+/** Solve a column-major device matrix with the same Xsyevd provider and X
+ * transform as solve_cuda_density_fitting_eigen(), without any host copy of
+ * the matrix or frame. Outputs borrow the plan's ordinary eigensystem storage
+ * and stay valid until its next request; the input is not modified. No host
+ * canonicalization is applied: a consumer must reject a frame whose values are
+ * not ascending or whose info is nonzero rather than repairing it. */
+generativeqc_status solve_cuda_density_fitting_eigen_resident(
+    CudaDensityFittingJkPlan* plan, const double* matrix, const std::vector<double>& orthogonalizer,
+    CudaDfResidentEigenframe& frame, std::string& detail);
+
 }  // namespace generativeqc::scf

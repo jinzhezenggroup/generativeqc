@@ -127,82 +127,212 @@ __device__ void zero_item(std::uint32_t system, const std::uint32_t* offsets, do
   }
 }
 
-__global__ void eeq_prepare_kernel(std::uint32_t systems, const std::uint32_t* offsets,
-                                   const std::int32_t* atomic_numbers, const double* total_charges,
-                                   const double* coordinates, const std::uint8_t* active,
-                                   EEQTables eeq_tables, std::uint32_t* next_system,
-                                   double* eeq_workspace, std::size_t eeq_workspace_stride,
-                                   double* dqdr_workspace, std::size_t dqdr_stride,
-                                   D4Status* statuses, std::uint8_t* fixed_active, double* charges,
-                                   double* energies, double* gradients) {
-  if (threadIdx.x != 0) return;
+// One CTA owns one EEQ system. Lane zero runs every order-dependent stage
+// (validation, CN/matrix assembly, the charge solve and response assembly)
+// through the same shared stage functions as the host provider. Only work
+// whose stored values do not depend on traversal order is distributed: the
+// row updates of one LU elimination step, independent response-column solves
+// and plain stores. Every published value is therefore bitwise identical to
+// the former single-thread provider.
+constexpr unsigned kEEQThreads = 128;
+
+struct EEQCooperativeShared {
+  int pivots[kEEQMaximumAtoms + 1];
+  D4Status status;
+  int stop;
+  std::uint32_t system;
+};
+
+// Read a lane-zero decision on every lane. The trailing barrier keeps lane
+// zero from publishing its next decision before all lanes consumed this one.
+__device__ bool cta_decision(const int& flag) {
+  __syncthreads();
+  const bool value = flag != 0;
+  __syncthreads();
+  return value;
+}
+
+__device__ D4Status cooperative_eeq2019(int n, const std::int32_t* z, const double* xyz,
+                                        double total_charge, EEQTables t, double* workspace,
+                                        std::size_t workspace_size, double* charges, double* dqdr,
+                                        bool responses, EEQCooperativeShared& shared) {
+  const unsigned lane = threadIdx.x, width = blockDim.x;
+  if (lane == 0) {
+    bool complete = false;
+    shared.status = eeq_stage::validate(n, z, xyz, total_charge, t, workspace, workspace_size,
+                                        charges, dqdr, &complete);
+    shared.stop = complete ? 1 : 0;
+  }
+  // status is published before the decision and rewritten only after it.
+  if (cta_decision(shared.stop)) return shared.status;
+  const auto w = eeq_stage::layout(n, workspace);
+  const int m = w.m;
+  const std::size_t used = eeq2019_workspace_elements(n);
+  for (std::size_t i = lane; i < used; i += width) workspace[i] = 0.0;
+  __syncthreads();
+  if (lane == 0) {
+    shared.status = eeq_stage::assemble(n, z, xyz, total_charge, t, w);
+    shared.stop = shared.status != D4Status::success;
+  }
+  if (cta_decision(shared.stop)) return shared.status;
+
+  // Partial-pivot LU with the serial pivot choice; rows below the pivot are
+  // independent within each step and use the provider's exact update form.
+  double* a = w.lu;
+  for (int k = 0; k < m; ++k) {
+    if (lane == 0) {
+      int pivot = k;
+      double maximum = fabs(a[static_cast<std::size_t>(k) * m + k]);
+      for (int i = k + 1; i < m; ++i) {
+        const double value = fabs(a[static_cast<std::size_t>(i) * m + k]);
+        if (value > maximum) {
+          maximum = value;
+          pivot = i;
+        }
+      }
+      shared.stop = !(maximum > 1.0e-15) || !eeq_detail::finite(maximum);
+      shared.pivots[k] = pivot;
+    }
+    if (cta_decision(shared.stop)) return D4Status::numerical_failure;
+    const int pivot = shared.pivots[k];
+    if (pivot != k)
+      for (int j = static_cast<int>(lane); j < m; j += static_cast<int>(width)) {
+        const auto p = static_cast<std::size_t>(pivot) * m + j;
+        const auto q = static_cast<std::size_t>(k) * m + j;
+        const double tmp = a[p];
+        a[p] = a[q];
+        a[q] = tmp;
+      }
+    __syncthreads();
+    const double diagonal = a[static_cast<std::size_t>(k) * m + k];
+    for (int i = k + 1 + static_cast<int>(lane); i < m; i += static_cast<int>(width))
+      a[static_cast<std::size_t>(i) * m + k] /= diagonal;
+    __syncthreads();
+    const std::size_t extent = static_cast<std::size_t>(m - k - 1);
+    for (std::size_t e = lane; e < extent * extent; e += width) {
+      const int i = k + 1 + static_cast<int>(e / extent);
+      const int j = k + 1 + static_cast<int>(e % extent);
+      const double factor = a[static_cast<std::size_t>(i) * m + k];
+      a[static_cast<std::size_t>(i) * m + j] -= factor * a[static_cast<std::size_t>(k) * m + j];
+    }
+    __syncthreads();
+  }
+  if (lane == 0) {
+    shared.stop = !eeq_detail::lu_solve(w.lu, m, shared.pivots, w.solution);
+    if (!shared.stop && responses) eeq_stage::response_rhs(n, z, xyz, t, w);
+  }
+  if (cta_decision(shared.stop)) return D4Status::numerical_failure;
+  if (responses) {
+    bool response_failed = false;
+    for (int coordinate = static_cast<int>(lane); coordinate < 3 * n;
+         coordinate += static_cast<int>(width))
+      if (!eeq_stage::solve_response(n, w, shared.pivots, coordinate)) response_failed = true;
+    if (__syncthreads_or(response_failed)) return D4Status::numerical_failure;
+  }
+  // Transactional publication after every requested solve has succeeded.
+  for (int i = static_cast<int>(lane); i < n; i += static_cast<int>(width))
+    charges[i] = w.solution[i];
+  if (responses)
+    for (std::size_t e = lane; e < 3 * static_cast<std::size_t>(n) * n; e += width) {
+      const auto coordinate = e / static_cast<std::size_t>(n), i = e % static_cast<std::size_t>(n);
+      dqdr[e] = w.responses[coordinate * m + i];
+    }
+  __syncthreads();
+  return D4Status::success;
+}
+
+__device__ bool next_eeq_system(std::uint32_t systems, std::uint32_t* next_system,
+                                EEQCooperativeShared& shared) {
+  __syncthreads();
+  if (threadIdx.x == 0) shared.system = atomicAdd(next_system, 1u);
+  __syncthreads();
+  return shared.system < systems;
+}
+
+__global__ void __launch_bounds__(kEEQThreads)
+    eeq_prepare_kernel(std::uint32_t systems, const std::uint32_t* offsets,
+                       const std::int32_t* atomic_numbers, const double* total_charges,
+                       const double* coordinates, const std::uint8_t* active, EEQTables eeq_tables,
+                       std::uint32_t* next_system, double* eeq_workspace,
+                       std::size_t eeq_workspace_stride, double* dqdr_workspace,
+                       std::size_t dqdr_stride, D4Status* statuses, std::uint8_t* fixed_active,
+                       double* charges, double* energies, double* gradients) {
+  __shared__ EEQCooperativeShared shared;
   const auto slot = static_cast<std::size_t>(blockIdx.x);
   double* workspace = eeq_workspace + slot * eeq_workspace_stride;
   double* dqdr = dqdr_workspace + slot * dqdr_stride;
-  while (true) {
-    const std::uint32_t system = atomicAdd(next_system, 1u);
-    if (system >= systems) return;
+  while (next_eeq_system(systems, next_system, shared)) {
+    const std::uint32_t system = shared.system;
     if (!active[system]) {
-      statuses[system] = D4Status::success;
-      fixed_active[system] = 0;
-      zero_item(system, offsets, energies, gradients, charges);
+      if (threadIdx.x == 0) {
+        statuses[system] = D4Status::success;
+        fixed_active[system] = 0;
+        zero_item(system, offsets, energies, gradients, charges);
+      }
       continue;
     }
     const std::size_t begin = offsets[system];
     const int n = static_cast<int>(offsets[system + 1] - offsets[system]);
-    const auto status = evaluate_eeq2019_with_tables(
+    // Fixed-charge D4 consumes only q; the compose pass forms dq/dR itself.
+    const auto status = cooperative_eeq2019(
         n, atomic_numbers + begin, coordinates + 3 * begin, total_charges[system], eeq_tables,
-        workspace, eeq2019_workspace_elements(n), charges + begin, dqdr);
-    statuses[system] = status;
-    fixed_active[system] = status == D4Status::success ? 1 : 0;
-    if (status != D4Status::success) zero_item(system, offsets, energies, gradients, charges);
+        workspace, eeq2019_workspace_elements(n), charges + begin, dqdr, false, shared);
+    if (threadIdx.x == 0) {
+      statuses[system] = status;
+      fixed_active[system] = status == D4Status::success ? 1 : 0;
+      if (status != D4Status::success) zero_item(system, offsets, energies, gradients, charges);
+    }
   }
 }
 
-__global__ void eeq_compose_kernel(std::uint32_t systems, const std::uint32_t* offsets,
-                                   const std::int32_t* atomic_numbers, const double* total_charges,
-                                   const double* coordinates, const std::uint8_t* active,
-                                   const std::uint8_t* want_gradient,
-                                   const D4Status* fixed_statuses, EEQTables eeq_tables,
-                                   std::uint32_t* next_system, double* eeq_workspace,
-                                   std::size_t eeq_workspace_stride, double* dqdr_workspace,
-                                   std::size_t dqdr_stride, D4Status* statuses, double* energies,
-                                   double* gradients, double* charges, const double* dedq) {
-  if (threadIdx.x != 0) return;
+__global__ void __launch_bounds__(kEEQThreads)
+    eeq_compose_kernel(std::uint32_t systems, const std::uint32_t* offsets,
+                       const std::int32_t* atomic_numbers, const double* total_charges,
+                       const double* coordinates, const std::uint8_t* active,
+                       const std::uint8_t* want_gradient, const D4Status* fixed_statuses,
+                       EEQTables eeq_tables, std::uint32_t* next_system, double* eeq_workspace,
+                       std::size_t eeq_workspace_stride, double* dqdr_workspace,
+                       std::size_t dqdr_stride, D4Status* statuses, double* energies,
+                       double* gradients, double* charges, const double* dedq) {
+  __shared__ EEQCooperativeShared shared;
   const auto slot = static_cast<std::size_t>(blockIdx.x);
   double* workspace = eeq_workspace + slot * eeq_workspace_stride;
   double* dqdr = dqdr_workspace + slot * dqdr_stride;
-  while (true) {
-    const std::uint32_t system = atomicAdd(next_system, 1u);
-    if (system >= systems) return;
+  while (next_eeq_system(systems, next_system, shared)) {
+    const std::uint32_t system = shared.system;
     if (!active[system]) {
-      statuses[system] = D4Status::success;
+      if (threadIdx.x == 0) statuses[system] = D4Status::success;
       continue;
     }
     if (statuses[system] != D4Status::success) {
-      zero_item(system, offsets, energies, gradients, charges);
+      if (threadIdx.x == 0) zero_item(system, offsets, energies, gradients, charges);
       continue;
     }
     if (fixed_statuses[system] != D4Status::success) {
-      statuses[system] = fixed_statuses[system];
-      zero_item(system, offsets, energies, gradients, charges);
+      if (threadIdx.x == 0) {
+        statuses[system] = fixed_statuses[system];
+        zero_item(system, offsets, energies, gradients, charges);
+      }
       continue;
     }
     const std::size_t begin = offsets[system];
     const int n = static_cast<int>(offsets[system + 1] - offsets[system]);
     if (!want_gradient[system]) {
-      for (int coordinate = 0; coordinate < 3 * n; ++coordinate)
+      for (int coordinate = static_cast<int>(threadIdx.x); coordinate < 3 * n;
+           coordinate += static_cast<int>(blockDim.x))
         gradients[3 * begin + coordinate] = 0.0;
       continue;
     }
-    auto status = evaluate_eeq2019_with_tables(
+    auto status = cooperative_eeq2019(
         n, atomic_numbers + begin, coordinates + 3 * begin, total_charges[system], eeq_tables,
-        workspace, eeq2019_workspace_elements(n), charges + begin, dqdr);
-    if (status == D4Status::success)
-      status = ::generativeqc::generated::d4::compose_eeq_gradient(
-          n, dqdr, dedq + begin, gradients + 3 * begin, gradients + 3 * begin);
-    statuses[system] = status;
-    if (status != D4Status::success) zero_item(system, offsets, energies, gradients, charges);
+        workspace, eeq2019_workspace_elements(n), charges + begin, dqdr, true, shared);
+    if (threadIdx.x == 0) {
+      if (status == D4Status::success)
+        status = ::generativeqc::generated::d4::compose_eeq_gradient(
+            n, dqdr, dedq + begin, gradients + 3 * begin, gradients + 3 * begin);
+      statuses[system] = status;
+      if (status != D4Status::success) zero_item(system, offsets, energies, gradients, charges);
+    }
   }
 }
 
@@ -399,7 +529,7 @@ generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& para
   }
 
   const EEQTables eeq_tables{owner->elements, owner->charge_elements, kD4TableElementCount};
-  eeq_prepare_kernel<<<owner->workers, 1, 0, owner->stream>>>(
+  eeq_prepare_kernel<<<owner->workers, kEEQThreads, 0, owner->stream>>>(
       owner->systems, owner->offsets, owner->atomic_numbers, owner->total_charges,
       owner->coordinates, owner->active, eeq_tables, owner->next_system, owner->eeq_workspace,
       owner->eeq_workspace_stride, owner->dqdr_workspace, owner->dqdr_stride, owner->statuses,
@@ -428,7 +558,7 @@ generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& para
                                                [](std::uint8_t value) { return value != 0; });
   error = cudaMemsetAsync(owner->next_system, 0, sizeof(std::uint32_t), owner->stream);
   if (error != cudaSuccess) return cuda_failure(error, "reset D4 EEQ compose queue", detail);
-  eeq_compose_kernel<<<owner->workers, 1, 0, owner->stream>>>(
+  eeq_compose_kernel<<<owner->workers, kEEQThreads, 0, owner->stream>>>(
       owner->systems, owner->offsets, owner->atomic_numbers, owner->total_charges,
       owner->coordinates, owner->active, owner->want_gradient, owner->fixed_statuses, eeq_tables,
       owner->next_system, owner->eeq_workspace, owner->eeq_workspace_stride, owner->dqdr_workspace,
