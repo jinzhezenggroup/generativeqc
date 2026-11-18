@@ -19,8 +19,6 @@ import numpy as np
 from . import _native
 
 if typing.TYPE_CHECKING:
-    from pathlib import Path
-
     import generativeqc.vibrations
 
     from .calculator import Atom, Calculator
@@ -219,36 +217,44 @@ def optimize_saddle(
     minimum_occupied_overlap: float = 0.9,
     root_overlap_budget_bytes: int = 128 << 20,
     integral_budget_bytes: int = 64 << 20,
+    max_eri_primitives: int | None = None,
     output_budget_bytes: int = 64 << 20,
     grid_budget_bytes: int = 128 << 20,
     solver_options: GMRESOptions | None = None,
-    cache: str | Path = ".artifacts",
     progress: typing.Callable[[SaddleProgress], bool | None] | None = None,
     evaluation_progress: typing.Callable[[typing.Mapping[str, typing.Any]], None]
     | None = None,
     cancelled: typing.Callable[[], bool] | None = None,
 ) -> MolecularSaddleResult:
-    """Correct a local molecular saddle with one fixed qualified CPU hybrid RKS model.
+    """Correct a local saddle with one fixed qualified CPU hybrid RKS/UKS model.
 
     Supply a Calculator whose public Hessian and forces are admitted, finite
     ordered atoms in Bohr, and positive physical/isotopic masses in dalton.
-    This adapter currently requires all-electron, direct, full-range hybrid,
-    unpolarized CPU RKS; no UKS, ECP, DF, GPU, reference engine or lower-level
+    This adapter currently requires canonical B3LYP, all-electron, direct,
+    CPU RKS/UKS; no ECP, DF, GPU, reference engine or lower-level
     preoptimization is used.
     A qualified uncut two-body D3(BJ) source is retained unchanged. The native
     C++ corrector owns all optimizer steps and the <=100-attempt cap. Default
     controls enable rigid projection and use the five reference thresholds.
 
     Each geometry uses one prepared SCF for energy/forces and raw Hessian.
-    Independent cold SCFs must retain the occupied subspace: all principal
-    overlaps with the last accepted state's orbitals must meet
+    Independent cold SCFs must retain each occupied spin subspace and its
+    integer population: all principal overlaps with the last accepted state's
+    corresponding orbitals must meet
     ``minimum_occupied_overlap`` in (0, 1]. This is a fail-closed local continuity
     policy, not a stability proof, a global ground-state guarantee or spin-root
     selection. It never follows rejected-trial roots. MethodIR, basis, grid,
     charge and multiplicity remain fixed; changing the calculator in callbacks
-    fails explicitly. Electronic owners close before additive D3 publication.
+    fails explicitly. The retained native batch supplies coupled response and
+    exactly-once D3 curvature through the same bridge as Calculator.hessian.
+    No Python AO/grid reconstruction, numerical response or runtime compiler is
+    used. Native canonical orbitals are exported only for root continuity.
 
     Byte controls independently bound their named providers, not total RSS.
+    ``max_eri_primitives`` caps first-plus-curvature nuclear ERI primitive
+    visits over each complete requested Hessian (default 100,000,000), not over
+    individual columns or the entire optimization. Increasing it does not
+    change the model, qualify a domain, or bound endpoint time/induced-Fock work.
     ``progress`` follows correct_saddle; ``evaluation_progress`` observes
     detached start/complete/failed stage records, including geometry and elapsed
     seconds. Callback/SCF/response failures preserve the last accepted geometry
@@ -270,10 +276,10 @@ def optimize_saddle(
         minimum_occupied_overlap=minimum_occupied_overlap,
         root_overlap_budget_bytes=root_overlap_budget_bytes,
         integral_budget_bytes=integral_budget_bytes,
+        max_eri_primitives=max_eri_primitives,
         output_budget_bytes=output_budget_bytes,
         grid_budget_bytes=grid_budget_bytes,
         solver_options=solver_options,
-        cache=cache,
         progress=progress,
         evaluation_progress=evaluation_progress,
         cancelled=cancelled,

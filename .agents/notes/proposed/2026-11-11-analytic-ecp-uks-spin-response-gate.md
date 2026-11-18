@@ -166,3 +166,68 @@ output spins, the complete raw 9x9 matrix and both fresh HVPs. The original
 absolute numerical gates remain unchanged under the explicit reference
 contract. The synthetic CPU candidate is qualified at that scope only;
 canonical def2 and public ECP qualification remain open.
+
+## Subsequent canonical Cs spin evidence
+
+The separate [canonical Cs total-curvature decision](../implemented/numerics/2026-11-11-canonical-cs-spin-total-curvature.md)
+now retains completed low-level CsH RKS and CsH+ UKS total raw matrices, two
+fresh HVPs per state and all three independent moving-grid-gradient matrix
+comparisons. This is a separate source-matched acceptance, not a restamp of
+any failed synthetic process above. It resolves only the missing canonical Cs
+spin evidence; public ECP, iodine, mixed Ni/ECP and scale qualification remain
+separate gates.
+
+## Subsequent iodine RKS acceptance and UKS reference failure
+
+The separately declared canonical IH RKS process actually exits zero in
+1631.3904 seconds: real-spherical def2-SVP / I def2-ECP28, native-default grid,
+31 AOs and thirteen doubly occupied orbitals. Its complete total raw 6x6 matrix
+and two fresh HVPs pass all unchanged gates. Total independent matrix errors
+at `0.003`, `0.001`, `0.0003` Bohr are `1.3934244775803961e-6`,
+`1.57589897020749e-7`, and `1.4713035709906785e-8`. Raw arrays and the scoped
+receipt are in `build/qualification/canonical-i-rks-total-20261111/`.
+
+The original IH+ doublet UKS process actually exits one before a successful
+central-state screen: its independent PySCF SCF does not converge in the
+original 240-cycle cap. No native Hessian is computed or accepted by that run.
+The independent diagnostic then actually exits zero in 108.2896 seconds as a
+**diagnostic only**, retaining both a fresh plain-240 and a fresh Newton-240
+oracle, neither seeded from native density. Both fail convergence and the
+original state gates. Energy errors near `2.8e-9` coexist with maximum density
+errors above `0.325`; orbital-gradient norms remain `4.3e-8` and `1.14e-7`,
+above `2e-9`. Nearly equal energies do not certify the same electronic root.
+This is not the earlier arbitrary-AO Libxc conditioning problem, and neither
+the energy agreement nor an oracle change can relabel this failed run.
+
+The diagnostic's independent/native density, orbitals, occupations, energy
+frontiers and full iteration traces are retained under
+`build/qualification/ih-uks-independent-scf-diagnostic-20261111/`. The failed
+original receipt, driver and log remain unchanged. A separate nonaxial IH2
+doublet state screen is being attempted with the same potential, functional,
+representation and native-default grid; it is a distinct declared validation
+fixture, not a claim to fix the original IH+ reference or qualify public I UKS.
+
+## Completed iodine cohort local recovery
+
+The accepted low-level IH RKS run, failed original IH+ UKS run and diagnostic
+plain/Newton reference failures now have a separate verified recovery:
+`build/qualification/completed-i-h3-recovery-20261111/iodine-completed-cohorts.tar.gz`.
+It contains 358 members and 46,712,338 bytes; archive SHA256 is
+`e48d5df5a065f1188f079e4388807a45f31a5c7b3f59c40024860bc9c9245822`,
+and manifest SHA256 is
+`be9a930477129f0b541832468846bbd9d50fa18f83d209cd627d5482abdb2c19`.
+Every archived member and retained original was rehashed, including the frozen
+numerical sources and native library. The running distinct IH2 cohort is not
+included, no failure is relabeled, and earlier recovery objects are untouched.
+The generator `/tmp/gqc-completed-i-h3-recovery-20261111.py` is retained inside
+the archive. These are ignored local recoveries, not released/published assets.
+
+## Subsequent distinct IH2 doublet acceptance
+
+The separately declared IH2 full-matrix process now actually exits zero. Its
+raw 9x9 total matrix and two fresh HVPs pass the original three-step independent
+gates; completed postrun verification and local recovery are recorded in
+[the scoped IH2 evidence note](../implemented/numerics/2026-11-12-canonical-iodine-uks-total-curvature.md).
+The original IH+ SCF failures and earlier recovery objects remain unchanged.
+This low-level success does not open public/installed ECP, mixed/scale or TS
+admission; the proposed broader gate remains unresolved.

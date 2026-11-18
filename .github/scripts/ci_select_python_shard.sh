@@ -233,6 +233,9 @@ slow_paths=(
 # core-a timed out and runtime-heavy finished in 550 s. Transfer whole files
 # to its existing loadfile workers, retaining every ordinary core modulo slot.
 measured_core_runtime_paths=(
+  # Run 44034488465 repeated this module-scoped native build on worksteal
+  # workers while core-c timed out. Keep one complete fixture on loadfile.
+  tests/python/test_host_ks_nuclear_response.py
   # Cold protected run 43767173517 exhausted core-a's test deadline while
   # these intact Hessian modules used at least 690 + 450 worker-seconds.
   # Runtime-heavy finished in 503 s. Preserve ordinary/no-slot ownership while
@@ -265,6 +268,10 @@ measured_core_runtime_paths=(
 # worksteal, but count them in the existing core parity before
 # excluding them so unrelated core files do not swap owners.
 rebalance_paths=(
+  # Preserve the original modulo slots while transferring the complete
+  # cold native Hessian builds from timed-out core-b/core-c workers.
+  tests/python/test_host_ks_nuclear_hessian.py
+  tests/python/test_host_hessian_aot_cmake.py
   # Queue run 42164201724 exhausted core-c with late repeated LR owner builds.
   # Compiler-heavy finished in 609 s; keep this intact module on loadfile
   # while counting its original core slot and retaining all numerical cases.
@@ -669,9 +676,10 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_hessian_hvp.py
     )
     # Same-run posthf completed in 726 s; core-c exceeded 1800 s.
-    # These measured complete UCCSD owners keep all numerical/failure
+    # These measured complete Hessian/UCCSD owners keep all numerical/failure
     # gates and module-local oracle caches under the existing loadfile.
     for path in \
+      tests/python/test_host_ks_nuclear_hessian.py \
       tests/python/test_treutler_endpoints.py \
       tests/python/test_ccsdt_cbs_native.py \
       tests/python/test_uccsd_lambda.py \
@@ -769,6 +777,7 @@ case "${GENERATIVEQC_CI_SHARD}" in
       tests/python/test_cc_native_tensor_cpu.py \
       tests/python/test_uccsd_native.py \
       tests/python/test_uccsd_triples_fock_response.py \
+      tests/python/test_host_hessian_aot_cmake.py \
       tests/python/test_direct_lr_weighted_host.py; do
       if git ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
         test_targets+=("$path")

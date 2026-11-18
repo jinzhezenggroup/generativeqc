@@ -504,17 +504,19 @@ def _canonical_regions() -> str:
             "namespace canonical { using df::scf_gemm; using df::scf_generalized_transform; "
             "using df::solve_device_batch; namespace cuda_execution = scf; "
             "using scf::CudaEigensolverFamily; namespace trace = runtime::cuda_trace; "
-            "namespace host = runtime::host_trace;"
+            "namespace host = runtime::host_trace; "
+            "using OrdinaryEigensystem = dfao::OrdinaryEigensystem; "
+            "struct CudaDfEigenDiagnostic { int solver_calls{}; };"
         )
     ]
+    runtime = (ROOT / "src/scf/cuda/df_runtime.cpp").read_text()
+    parts.append(_definition(runtime, "generativeqc_status cuda_failure("))
     for name in ("df_eigensystem", "df_rhf_scf", "df_uhf_scf"):
         live = (ROOT / "src/scf/cuda" / (name + ".cpp")).read_text()
         if name == "df_eigensystem":
-            start = live.index(
-                "    if (orthogonalizer) {",
-                live.index('"upload ordinary DF eigen inputs"'),
-            )
-            end = live.index("    {\n      trace::TraceRegion download(", start)
+            # Compile the production submission helper rather than slicing its
+            # former inline body out of the upload/download wrapper.
+            region = _definition(live, "generativeqc_status submit_ordinary_solve(")
         elif name == "df_rhf_scf":
             # Include the optional stopping-residual transform as well as the
             # orbital frame. Slice before expansion so formatting/new phases
@@ -527,7 +529,8 @@ def _canonical_regions() -> str:
         else:
             start = live.index("    iteration_status = scf_generalized_transform(")
             end = live.index("      launch_update_device_uhf_convergence_kernel", start)
-        region = live[start:end]
+        if name != "df_eigensystem":
+            region = live[start:end]
         if name == "df_uhf_scf":
             region += "}\n"
         for baseline in (False, True):
@@ -538,13 +541,13 @@ def _canonical_regions() -> str:
             )
             function = ("baseline_" if baseline else "live_") + name
             if name == "df_eigensystem":
+                helper = function + "_submit"
                 parts.append(
-                    f"generativeqc_status {function}(CudaDensityFittingJkPlan* plan, "
+                    source.replace("submit_ordinary_solve(", helper + "(")
+                    + f"\ngenerativeqc_status {function}(CudaDensityFittingJkPlan* plan, "
                     "dfao::OrdinaryEigensystem* state, bool orthogonalizer, double*& published, "
-                    "std::string& detail) { const auto n = plan->nbf; "
-                    "generativeqc_status status = GENERATIVEQC_STATUS_SUCCESS; struct { int solver_calls{}; } diagnostic;\n"
-                    + source
-                    + "published = output; return status; }\n"
+                    "std::string& detail) { CudaDfEigenDiagnostic diagnostic; "
+                    + f"return {helper}(*plan, *state, orthogonalizer, diagnostic, published, detail); }}\n"
                 )
             else:
                 parts.append(

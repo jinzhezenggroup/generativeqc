@@ -419,6 +419,23 @@ SpinXcIntegral integrate_pbe_uks(const AoBasis& basis, const MolecularGrid& grid
 
 namespace {
 
+bool cartesian_spin_gram_accepted(const double (&gradient)[2][3], double cross_sigma) {
+  if (!std::isfinite(cross_sigma)) return false;
+  // Check Cauchy in scale-free Cartesian coordinates. Squared tail gradients
+  // can be subnormal, where a relative-only check on raw sigma is not valid.
+  double scaled[2][3]{};
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    double scale{};
+    for (double component : gradient[spin]) scale = std::max(scale, std::abs(component));
+    if (scale)
+      for (unsigned axis = 0; axis < 3; ++axis) scaled[spin][axis] = gradient[spin][axis] / scale;
+  }
+  std::array<double, 3> sigma{};
+  generated::sigma(scaled, sigma.data());
+  const double bound = std::sqrt(sigma[0]) * std::sqrt(sigma[2]);
+  return std::abs(sigma[1]) <= bound * (1.0 + 16.0 * std::numeric_limits<double>::epsilon());
+}
+
 std::array<double, 3> validate_gga_interior_point(const double rho[2],
                                                   const double (&gradient)[2][3],
                                                   const char* method) {
@@ -439,9 +456,7 @@ std::array<double, 3> validate_gga_interior_point(const double rho[2],
       if (!std::isfinite(component))
         throw std::domain_error(std::string(method) + " requires finite density gradients");
   }
-  const double bound = std::sqrt(sigma[0]) * std::sqrt(sigma[2]);
-  if (!std::isfinite(sigma[1]) ||
-      std::abs(sigma[1]) > bound * (1.0 + 16.0 * std::numeric_limits<double>::epsilon()))
+  if (!cartesian_spin_gram_accepted(gradient, sigma[1]))
     throw std::domain_error(std::string(method) + " spin-gradient Gram matrix is invalid");
   return sigma;
 }
@@ -464,10 +479,13 @@ std::array<double, 3> validate_b3lyp_production_point(const double rho[2],
     if (rho[spin] == 0.0 && same_sigma != 0.0)
       throw std::domain_error("B3LYP zero spin density requires zero same-spin gradient");
   }
-  const double bound = std::sqrt(sigma[0]) * std::sqrt(sigma[2]);
-  if (!std::isfinite(sigma[1]) ||
-      std::abs(sigma[1]) > bound * (1.0 + 16.0 * std::numeric_limits<double>::epsilon()))
-    throw std::domain_error("B3LYP spin-gradient Gram matrix is invalid");
+  if (!cartesian_spin_gram_accepted(gradient, sigma[1])) {
+    char detail[256];
+    std::snprintf(detail, sizeof(detail),
+                  "B3LYP spin-gradient Gram matrix is invalid: sigma=(%a,%a,%a), bound=%a",
+                  sigma[0], sigma[1], sigma[2], std::sqrt(sigma[0]) * std::sqrt(sigma[2]));
+    throw std::domain_error(detail);
+  }
   return sigma;
 }
 

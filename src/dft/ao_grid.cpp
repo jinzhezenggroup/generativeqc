@@ -94,10 +94,9 @@ void AoBasis::evaluate(const double* points, std::size_t npoint, unsigned order,
   const auto* primitives = packed.data() + 3 * natom;
   const auto* aos = primitives + 2 * nprimitive;
 
-  // Derivative identities are tile invariants. More importantly, all jets for
-  // one AO/point share the same center displacement and Gaussian radial factor.
-  // Evaluate those expensive invariants once, then accumulate every requested
-  // derivative while preserving each jet's primitive/term summation order.
+  // Derivative identities are tile invariants. Shell components also share
+  // their displacement, radial contraction and one-axis polynomials. Reuse
+  // those factors without changing any AO jet's primitive/term summation order.
   std::array<std::array<unsigned, 3>, 20> derivatives{};
   std::size_t derivative_count = 0;
   for (unsigned degree = 0; degree <= order; ++degree)
@@ -105,14 +104,36 @@ void AoBasis::evaluate(const double* points, std::size_t npoint, unsigned order,
       derivatives[derivative_count++] = {derivative[0], derivative[1], derivative[2]};
   if (derivative_count != jets) throw std::logic_error("AO jet enumeration mismatch");
 
-  // Keep one mathematical traversal while specializing its four legal jet
-  // extents. In particular, value-only work must not pay for a 20-jet array
-  // and a runtime inner reduction when radial reuse removes no work there.
+  // Ten components cover a Cartesian f shell. Chunking also bounds scratch
+  // for packed records that share a contraction across more than one shell.
+  // Form groups from selected records only: a sparse map never evaluates an
+  // omitted component just to complete its shell.
+  constexpr std::size_t maximum_components = 10;
   const auto evaluate_jets = [&]<std::size_t JetCount>() {
-    for (std::size_t point = 0; point < npoint; ++point) {
-      for (std::size_t ao = 0; ao < count; ++ao) {
-        const auto* record = aos + 16 * (ao_ids ? ao_ids[ao] : ao_begin + ao);
-        const auto atom = static_cast<std::size_t>(record[0]);
+    constexpr unsigned Order = JetCount == 1 ? 0 : JetCount == 4 ? 1 : JetCount == 10 ? 2 : 3;
+    for (std::size_t group_begin = 0; group_begin < count;) {
+      std::array<const double*, maximum_components> records{};
+      const auto* first_record = aos + 16 * (ao_ids ? ao_ids[group_begin] : ao_begin + group_begin);
+      std::size_t components = 0;
+      while (components < maximum_components && group_begin + components < count) {
+        const auto selected = group_begin + components;
+        const auto* record = aos + 16 * (ao_ids ? ao_ids[selected] : ao_begin + selected);
+        if (record[0] != first_record[0] || record[1] != first_record[1] ||
+            record[2] != first_record[2])
+          break;
+        records[components++] = record;
+      }
+      std::array<std::array<bool, 4>, 3> needed{};
+      for (std::size_t component = 0; component < components; ++component) {
+        const auto* record = records[component];
+        for (unsigned term = 0; term < static_cast<unsigned>(record[3]); ++term)
+          for (unsigned axis = 0; axis < 3; ++axis)
+            needed[axis][static_cast<unsigned>(record[4 + 4 * term + axis])] = true;
+      }
+      const auto atom = static_cast<std::size_t>(first_record[0]);
+      const auto first = static_cast<std::size_t>(first_record[1]);
+      const auto end = first + static_cast<std::size_t>(first_record[2]);
+      for (std::size_t point = 0; point < npoint; ++point) {
         std::array<double, 3> r{};
         double r2 = 0;
         for (unsigned k = 0; k < 3; ++k) {
@@ -120,49 +141,43 @@ void AoBasis::evaluate(const double* points, std::size_t npoint, unsigned order,
           r2 += r[k] * r[k];
         }
 
-        std::array<double, JetCount> values{};
-        const auto first = static_cast<std::size_t>(record[1]);
-        const auto end = first + static_cast<std::size_t>(record[2]);
+        std::array<std::array<double, JetCount>, maximum_components> values{};
         for (auto p = first; p < end; ++p) {
           const double alpha = primitives[2 * p];
           const double radial = primitives[2 * p + 1] * std::exp(-alpha * r2);
           // Exact exponential underflow contributes zero, without evaluating
           // potentially overflowing far-field polynomial factors.
           if (radial == 0) continue;
-          for (unsigned t = 0; t < static_cast<unsigned>(record[3]); ++t) {
-            const double weighted_radial = radial * record[7 + 4 * t];
-            if constexpr (JetCount == 1) {
-              // Value-only work has no derivative reuse and retains its direct
-              // traversal rather than constructing an intermediate array.
-              double term = weighted_radial;
-              for (unsigned k = 0; k < 3; ++k)
-                term *= differentiated_power(static_cast<unsigned>(record[4 + 4 * t + k]), 0, alpha,
-                                             r[k]);
-              values[0] += term;
-            } else {
-              // Every Cartesian jet reuses one-dimensional derivatives. Keep
-              // their polynomial recurrence and the per-jet multiplication order
-              // unchanged, but evaluate each axis/order pair only once.
-              constexpr unsigned Order = JetCount == 4 ? 1 : JetCount == 10 ? 2 : 3;
-              std::array<std::array<double, Order + 1>, 3> powers{};
-              for (unsigned k = 0; k < 3; ++k)
+          std::array<std::array<std::array<double, Order + 1>, 4>, 3> powers;
+          for (unsigned axis = 0; axis < 3; ++axis)
+            for (unsigned angular = 0; angular <= 3; ++angular)
+              if (needed[axis][angular])
                 for (unsigned derivative = 0; derivative <= Order; ++derivative)
-                  powers[k][derivative] = differentiated_power(
-                      static_cast<unsigned>(record[4 + 4 * t + k]), derivative, alpha, r[k]);
+                  powers[axis][angular][derivative] =
+                      differentiated_power(angular, derivative, alpha, r[axis]);
+          for (std::size_t component = 0; component < components; ++component) {
+            const auto* record = records[component];
+            for (unsigned t = 0; t < static_cast<unsigned>(record[3]); ++t) {
+              const double weighted_radial = radial * record[7 + 4 * t];
               for (std::size_t jet = 0; jet < JetCount; ++jet) {
                 double term = weighted_radial;
-                for (unsigned k = 0; k < 3; ++k) term *= powers[k][derivatives[jet][k]];
-                values[jet] += term;
+                for (unsigned axis = 0; axis < 3; ++axis)
+                  term *= powers[axis][static_cast<unsigned>(record[4 + 4 * t + axis])]
+                                [derivatives[jet][axis]];
+                values[component][jet] += term;
               }
             }
           }
         }
 
-        for (std::size_t jet = 0; jet < JetCount; ++jet) {
-          if (!std::isfinite(values[jet])) throw std::runtime_error("nonfinite AO jet result");
-          output[(jet * npoint + point) * count + ao] = values[jet];
-        }
+        for (std::size_t component = 0; component < components; ++component)
+          for (std::size_t jet = 0; jet < JetCount; ++jet) {
+            const double value = values[component][jet];
+            if (!std::isfinite(value)) throw std::runtime_error("nonfinite AO jet result");
+            output[(jet * npoint + point) * count + group_begin + component] = value;
+          }
       }
+      group_begin += components;
     }
   };
   switch (order) {

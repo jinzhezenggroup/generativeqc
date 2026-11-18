@@ -145,6 +145,17 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 }
 
+generativeqc_status borrow_dft_host_derivative_sources(PreparedBatch& batch, std::size_t index,
+                                                       const dft::CudaKsFinalStateToken& expected,
+                                                       KsHostDerivativeSources& output,
+                                                       std::string& detail) {
+  if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
+    return ks->borrow_host_derivative_sources(index, expected, output, detail);
+  output = {};
+  detail = "prepared batch is not a native KS source owner";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status borrow_dft_integral_system(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                const core::System*& output, std::string& detail) {

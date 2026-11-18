@@ -6,6 +6,7 @@ ci_prioritize_posthf_files() {
   # corroborated by PR #2387/run 38308786441. Counts alone underweight the
   # 10-case physical-response file and leave several workers idle at the end.
   local -a priority=(
+    tests/python/test_host_ks_nuclear_hessian.py
     # PR #2632/run 39351749228 recorded 527 s before the final fitted
     # VV10 case began. Start this intact oracle matrix on an initial
     # worker rather than appending another long serial core tail.

@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -30,6 +31,10 @@ struct GridSpec {
    * immutable identity without borrowed pointers. */
   std::array<double, 119> element_radii{};
   bool operator==(const GridSpec&) const = default;
+};
+
+struct GridWeightDirectionWork {
+  std::size_t point_visits{}, pair_visits{};
 };
 
 /** Pure prescription validation, shared by preparation and materialization. */
@@ -108,10 +113,40 @@ class MolecularGrid {
    * point coordinates or the element/radial/angular atomic measure. */
   std::vector<double> contract_weight_derivative(std::span<const double> weight_sensitivity) const;
 
+  /** Numeric workspace for one consecutive tile of analytic weight motion.
+   * Includes staged outputs and atom-sized partition derivatives, not grid
+   * storage, metadata or allocator overhead. No array grows with the full
+   * grid unless the caller explicitly requests the full grid as one tile.
+   */
+  std::size_t weight_direction_workspace_bytes(std::size_t count) const;
+  /** Shape-only traversal census for caller-owned complete-source work gates. */
+  GridWeightDirectionWork weight_direction_work(std::size_t count) const;
+
+  /** Differentiate the exact retained partition weights with grid points
+   * translating with their owner atoms. direction is [atom,xyz], output is
+   * [requested point]. Atomic quadrature measures and the grid topology are
+   * geometry-independent. This is weight motion only, not AO or XC response.
+   *
+   * Uses the same generated local derivatives and partition normalization as
+   * contract_weight_derivative. Workspace must be large enough and disjoint
+   * from directions, outputs and retained grid data. Outputs may alias the
+   * direction but never retained grid data; publication is transactional.
+   * Each call visits every atom pair for each requested point. No finite
+   * differences, alternate quadrature or reference-engine fallback is used.
+   */
+  GridWeightDirectionWork weight_direction(std::size_t begin, std::size_t count,
+                                           std::span<const double> direction,
+                                           std::span<double> output,
+                                           std::span<double> workspace) const;
+
  private:
   struct Deferred {};
   MolecularGrid(const core::System& system, GridSpec spec, Deferred);
   static std::pair<std::vector<double>, std::vector<double>> legendre_rule(std::size_t count);
+  void visit_partition_derivative(
+      std::size_t begin, std::size_t count, std::span<double> workspace,
+      const std::function<void(std::size_t, std::span<const double>, std::span<const double>)>&
+          visitor) const;
   core::System system_;
   GridSpec spec_;
   std::vector<double> points_;

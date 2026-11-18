@@ -88,7 +88,9 @@ struct EspContractedGeometryDerivative {
  * Values-only full-range s/p/d quartets use the shared compiler shell-class
  * DAG and reuse primitive geometry, including in a basis containing f/g.
  * Value-only f quartets share preparation of the retained Hermite/Coulomb
- * recurrence across a bounded Cartesian shell block. ERI derivatives and g+
+ * recurrence across a bounded Cartesian shell block. Spherical values through f
+ * project each such block directly into the final public-basis tensor, without
+ * a molecule-wide Cartesian ERI intermediate. ERI derivatives and g+
  * quartets retain the scalar recurrence schedule. Symmetry-qualified spherical values and
  * physical-atom derivatives transform each eightfold orbit once; arbitrary supplied tensors do not.
  * Other host integral families retain their existing implementation here.
@@ -136,6 +138,22 @@ enum class WeightedEriDerivativeExecution { Reference, PackagedCpu };
 /** Build-time capability only. Packaged execution covers s/p/d/f and
  * never initiates JIT or falls back silently to the reference recurrence. */
 bool has_packaged_cpu_eri_shell_derivatives() noexcept;
+
+enum class PackagedEriGradientStatus { Success, Unavailable, EvaluationFailed };
+
+/** Unscaled primitive s/p/d gradients in independent Axyz/Bxyz/Cxyz/Dxyz order.
+ * Input has sixteen doubles: four exponents and twelve center coordinates.
+ * Canonical slots/axes are restored through the same native owner as packaged
+ * shell contractions. The gradient-only consumer uses a common coordinate
+ * origin; public-AO normalization and radial weights remain with its caller.
+ * Unsupported components/artifacts report Unavailable without evaluating a
+ * different recurrence, including f even when the stationary f route exists.
+ * Invalid inputs or numerical failure report EvaluationFailed, never a request
+ * for capability fallback. Only Success publishes the twelve output doubles.
+ */
+PackagedEriGradientStatus packaged_eri_primitive_gradient(const unsigned* angular,
+                                                          unsigned component, const double* record,
+                                                          double* output);
 
 /** Query complete shell-component coverage in the compiled derivative artifact.
  * Invalid shell indices and unavailable/unsupported artifacts return false.

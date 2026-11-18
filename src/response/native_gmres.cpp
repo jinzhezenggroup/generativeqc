@@ -1,6 +1,7 @@
 #include "response/native_gmres.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <limits>
@@ -66,15 +67,369 @@ bool solve_upper(std::span<const double> hessenberg, std::size_t stride,
     for (std::size_t column = row + 1; column < count; ++column)
       value -= hessenberg[row * stride + column] * solution[column];
     const double diagonal = hessenberg[row * stride + row];
-    // An absolute pivot floor rejects valid, uniformly scaled systems, while a
-    // relative floor adds a condition-number cutoff. Attempt every finite,
-    // nonzero pivot; finite coefficients and the true residual guard acceptance.
+    // Attempt every finite, nonzero pivot; a scale-dependent pivot floor would
+    // reject valid systems. Finite coefficients and true residuals gate success.
     if (!std::isfinite(diagonal) || diagonal == 0.0) return false;
     solution[row] = value / diagonal;
     if (!std::isfinite(solution[row])) return false;
   }
   return true;
 }
+
+void validate_plan(const GmresPlan& plan) {
+  const auto expected = prepare_gmres(plan.dimension, plan.options);
+  if (plan.restart != expected.restart || plan.workspace_bytes != expected.workspace_bytes)
+    throw std::invalid_argument("GMRES plan does not match its dimensions and options");
+}
+
+/** The single numerical owner for serial and independently batched solves.
+ * Only physical operator calls suspend execution. All arrays retain an explicit
+ * per-solve allocation domain; no coroutine frame, thread or borrowed numerical
+ * state hides additional Krylov payload outside prepare_gmres's array bound.
+ */
+class GmresState {
+ public:
+  GmresState(const GmresPlan& plan, const ResponseSolveRequest& request, bool has_operator,
+             const LinearOperator& right_preconditioner)
+      : plan_(plan),
+        request_(request),
+        right_preconditioner_(right_preconditioner),
+        allocator_(std::make_shared<runtime::AllocationCounter>()),
+        solution_(allocator_),
+        image_(allocator_),
+        residual_(allocator_),
+        basis_(allocator_),
+        preconditioned_(allocator_),
+        hessenberg_(allocator_),
+        cosine_(allocator_),
+        sine_(allocator_),
+        transformed_(allocator_),
+        work_(allocator_),
+        candidate_(allocator_),
+        candidate_image_(allocator_),
+        candidate_residual_(allocator_),
+        best_solution_(allocator_),
+        best_residual_(allocator_),
+        coefficients_(allocator_),
+        base_solution_(allocator_),
+        history_(allocator_),
+        best_basis_(allocator_) {
+    const auto dimension = plan_.dimension;
+    solution_.assign(dimension, 0.0);
+    if (request_.rhs.size() != dimension || !finite(request_.rhs) ||
+        (!request_.initial_guess.empty() &&
+         (request_.initial_guess.size() != dimension || !finite(request_.initial_guess))) ||
+        (!request_.diagonal_preconditioner.empty() &&
+         (request_.diagonal_preconditioner.size() != dimension ||
+          !finite(request_.diagonal_preconditioner)))) {
+      finish(std::move(solution_), GmresStatus::nonfinite_input,
+             std::numeric_limits<double>::infinity());
+      return;
+    }
+    if (!has_operator) throw std::invalid_argument("GMRES operator callback is empty");
+    if (right_preconditioner_ && !request_.diagonal_preconditioner.empty())
+      throw std::invalid_argument(
+          "GMRES preconditioner callback and diagonal are mutually exclusive");
+    for (double value : request_.diagonal_preconditioner)
+      if (std::abs(value) <= plan_.options.breakdown_tolerance)
+        throw std::invalid_argument("GMRES diagonal preconditioner contains a zero entry");
+    if (!request_.initial_guess.empty())
+      std::copy(request_.initial_guess.begin(), request_.initial_guess.end(), solution_.begin());
+    if (plan_.options.collect_history) history_.reserve(plan_.options.max_iterations + 2);
+    try {
+      rhs_norm_ = stable_norm(request_.rhs);
+    } catch (const std::exception&) {
+      finish(std::move(solution_), GmresStatus::nonfinite_input,
+             std::numeric_limits<double>::infinity());
+      return;
+    }
+    target_ =
+        std::max(plan_.options.absolute_tolerance, plan_.options.relative_tolerance * rhs_norm_);
+    image_.assign(dimension, 0.0);
+    residual_.assign(request_.rhs.begin(), request_.rhs.end());
+    if (!request_.initial_guess.empty()) {
+      suspend(Phase::initial, solution_, image_);
+    } else {
+      initialize_residual();
+    }
+  }
+
+  [[nodiscard]] bool done() const noexcept { return phase_ == Phase::done; }
+  [[nodiscard]] LinearAction action() const noexcept { return action_; }
+  [[nodiscard]] const char* action_name() const noexcept {
+    switch (phase_) {
+      case Phase::initial:
+        return "gmres_initial_residual";
+      case Phase::arnoldi:
+        return "gmres_arnoldi_action";
+      case Phase::candidate:
+        return "gmres_exact_residual_replay";
+      case Phase::done:
+        return "gmres_complete";
+    }
+    return "gmres_unknown";
+  }
+  [[nodiscard]] bool collect_timing() const noexcept { return plan_.options.collect_timing; }
+  GmresResult take_result() { return std::move(result_); }
+
+  /** Resume only after a newly evaluated physical action, including every
+   * requested true residual. Finite/preconditioner gates stay per RHS.
+   */
+  void complete_action(double elapsed) {
+    ++operator_actions_;
+    if (collect_timing()) operator_seconds_ += elapsed;
+    if (!finite(action_.output)) {
+      const bool initial = phase_ == Phase::initial;
+      finish(initial ? std::move(solution_) : std::move(best_solution_),
+             GmresStatus::nonfinite_operator,
+             initial ? std::numeric_limits<double>::infinity() : best_norm_);
+      return;
+    }
+    switch (phase_) {
+      case Phase::initial:
+        for (std::size_t index = 0; index < plan_.dimension; ++index)
+          residual_[index] -= image_[index];
+        initialize_residual();
+        break;
+      case Phase::arnoldi:
+        complete_arnoldi();
+        break;
+      case Phase::candidate:
+        complete_candidate();
+        break;
+      case Phase::done:
+        throw std::logic_error("completed GMRES state cannot resume an action");
+    }
+  }
+
+ private:
+  enum class Phase { initial, arnoldi, candidate, done };
+
+  void finish(WorkspaceVector solution, GmresStatus status, double residual) {
+    result_ = build_result(plan_, std::move(solution), status, residual, rhs_norm_, iterations_,
+                           restarts_, operator_actions_, preconditioner_actions_);
+    result_.history = std::move(history_);
+    result_.basis = std::move(best_basis_);
+    result_.basis_columns = best_basis_columns_;
+    result_.orthogonalization_seconds = orthogonalization_seconds_;
+    result_.operator_seconds = operator_seconds_;
+    phase_ = Phase::done;
+    action_ = {};
+  }
+
+  void suspend(Phase phase, std::span<const double> input, std::span<double> output) {
+    std::fill(output.begin(), output.end(), 0.0);
+    action_ = {input, output};
+    phase_ = phase;
+  }
+
+  void initialize_residual() {
+    try {
+      beta_ = stable_norm(residual_);
+    } catch (const std::exception&) {
+      finish(std::move(solution_), GmresStatus::nonfinite_input,
+             std::numeric_limits<double>::infinity());
+      return;
+    }
+    if (plan_.options.collect_history) history_.push_back(beta_);
+    if (beta_ <= target_) {
+      finish(std::move(solution_), GmresStatus::initial_residual, beta_);
+      return;
+    }
+    const auto dimension = plan_.dimension;
+    const auto restart = plan_.restart;
+    basis_.assign((restart + 1) * dimension, 0.0);
+    preconditioned_.assign(restart * dimension, 0.0);
+    hessenberg_.assign((restart + 1) * restart, 0.0);
+    cosine_.assign(restart, 0.0);
+    sine_.assign(restart, 0.0);
+    transformed_.assign(restart + 1, 0.0);
+    work_.assign(dimension, 0.0);
+    candidate_.assign(dimension, 0.0);
+    candidate_image_.assign(dimension, 0.0);
+    candidate_residual_.assign(dimension, 0.0);
+    best_solution_ = solution_;
+    best_residual_ = residual_;
+    coefficients_.assign(restart, 0.0);
+    if (plan_.options.collect_basis) best_basis_.reserve(dimension * restart);
+    begin_cycle();
+  }
+
+  void begin_cycle() {
+    std::fill(basis_.begin(), basis_.end(), 0.0);
+    std::fill(preconditioned_.begin(), preconditioned_.end(), 0.0);
+    std::fill(hessenberg_.begin(), hessenberg_.end(), 0.0);
+    std::fill(transformed_.begin(), transformed_.end(), 0.0);
+    transformed_[0] = beta_;
+    for (std::size_t index = 0; index < plan_.dimension; ++index)
+      basis_[index] = residual_[index] / beta_;
+    base_solution_ = solution_;
+    best_norm_ = beta_;
+    column_ = 0;
+    prepare_column();
+  }
+
+  void prepare_column() {
+    const auto dimension = plan_.dimension;
+    const auto basis_column =
+        std::span<const double>(basis_.data() + column_ * dimension, dimension);
+    auto z_column = std::span<double>(preconditioned_.data() + column_ * dimension, dimension);
+    if (right_preconditioner_) {
+      ++preconditioner_actions_;
+      std::fill(z_column.begin(), z_column.end(), 0.0);
+      right_preconditioner_(basis_column, z_column);
+    } else if (request_.diagonal_preconditioner.empty()) {
+      std::copy(basis_column.begin(), basis_column.end(), z_column.begin());
+    } else {
+      ++preconditioner_actions_;
+      for (std::size_t index = 0; index < dimension; ++index)
+        z_column[index] = basis_column[index] / request_.diagonal_preconditioner[index];
+    }
+    if (!finite(z_column)) {
+      finish(std::move(best_solution_), GmresStatus::nonfinite_preconditioner, best_norm_);
+      return;
+    }
+    suspend(Phase::arnoldi, z_column, work_);
+  }
+
+  void complete_arnoldi() {
+    const auto dimension = plan_.dimension;
+    const auto restart = plan_.restart;
+    const auto begin = collect_timing() ? std::chrono::steady_clock::now()
+                                        : std::chrono::steady_clock::time_point{};
+    for (unsigned pass = 0; pass < plan_.options.reorthogonalize; ++pass)
+      for (std::size_t row = 0; row <= column_; ++row) {
+        double projection = 0.0;
+        for (std::size_t index = 0; index < dimension; ++index)
+          projection += basis_[row * dimension + index] * work_[index];
+        hessenberg_[row * restart + column_] += projection;
+        for (std::size_t index = 0; index < dimension; ++index)
+          work_[index] -= projection * basis_[row * dimension + index];
+      }
+    double next_norm = 0.0;
+    try {
+      next_norm = stable_norm(work_);
+    } catch (const std::exception&) {
+      finish(std::move(best_solution_), GmresStatus::nonfinite_operator, best_norm_);
+      return;
+    }
+    if (collect_timing())
+      orthogonalization_seconds_ +=
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+    hessenberg_[(column_ + 1) * restart + column_] = next_norm;
+    broke_down_ = next_norm <= plan_.options.breakdown_tolerance;
+    if (!broke_down_)
+      for (std::size_t index = 0; index < dimension; ++index)
+        basis_[(column_ + 1) * dimension + index] = work_[index] / next_norm;
+    for (std::size_t row = 0; row < column_; ++row) {
+      const double upper = hessenberg_[row * restart + column_];
+      const double lower = hessenberg_[(row + 1) * restart + column_];
+      hessenberg_[row * restart + column_] = cosine_[row] * upper + sine_[row] * lower;
+      hessenberg_[(row + 1) * restart + column_] = -sine_[row] * upper + cosine_[row] * lower;
+    }
+    const double upper = hessenberg_[column_ * restart + column_];
+    const double lower = hessenberg_[(column_ + 1) * restart + column_];
+    const double rotation_norm = std::hypot(upper, lower);
+    if (rotation_norm > plan_.options.breakdown_tolerance) {
+      cosine_[column_] = upper / rotation_norm;
+      sine_[column_] = lower / rotation_norm;
+    } else {
+      cosine_[column_] = 1.0;
+      sine_[column_] = 0.0;
+    }
+    hessenberg_[column_ * restart + column_] = cosine_[column_] * upper + sine_[column_] * lower;
+    hessenberg_[(column_ + 1) * restart + column_] = 0.0;
+    const double transformed_upper = transformed_[column_];
+    transformed_[column_] = cosine_[column_] * transformed_upper;
+    transformed_[column_ + 1] = -sine_[column_] * transformed_upper;
+    ++iterations_;
+    // Predicted convergence requests, but never replaces, a new physical
+    // candidate-residual action. The numerical checkpoint policy is unchanged.
+    const bool checkpoint = std::abs(transformed_[column_ + 1]) <= target_ || broke_down_ ||
+                            column_ + 1 == restart || iterations_ == plan_.options.max_iterations ||
+                            iterations_ % plan_.options.true_residual_every == 0;
+    if (!checkpoint) {
+      ++column_;
+      prepare_column();
+      return;
+    }
+    const auto columns = column_ + 1;
+    solvable_ = solve_upper(hessenberg_, restart, transformed_, columns, coefficients_);
+    candidate_ = base_solution_;
+    if (solvable_)
+      for (std::size_t vector = 0; vector < columns; ++vector)
+        for (std::size_t index = 0; index < dimension; ++index)
+          candidate_[index] += preconditioned_[vector * dimension + index] * coefficients_[vector];
+    // Sparse operators need not observe an overflowing coordinate. Refuse it
+    // here rather than allowing such an operator to certify a false residual.
+    if (!finite(candidate_)) {
+      finish(std::move(best_solution_), GmresStatus::breakdown, best_norm_);
+      return;
+    }
+    suspend(Phase::candidate, candidate_, candidate_image_);
+  }
+
+  void complete_candidate() {
+    for (std::size_t index = 0; index < plan_.dimension; ++index)
+      candidate_residual_[index] = request_.rhs[index] - candidate_image_[index];
+    double candidate_norm = 0.0;
+    try {
+      candidate_norm = stable_norm(candidate_residual_);
+    } catch (const std::exception&) {
+      finish(std::move(best_solution_), GmresStatus::nonfinite_operator, best_norm_);
+      return;
+    }
+    if (plan_.options.collect_history) history_.push_back(candidate_norm);
+    if (candidate_norm < best_norm_) {
+      best_norm_ = candidate_norm;
+      best_solution_ = candidate_;
+      best_residual_ = candidate_residual_;
+      stagnation_ = 0;
+      if (plan_.options.collect_basis) {
+        best_basis_.assign(basis_.begin(), basis_.begin() + (column_ + 1) * plan_.dimension);
+        best_basis_columns_ = column_ + 1;
+      }
+    } else if (candidate_norm >= best_norm_ * (1.0 - plan_.options.stagnation_tolerance)) {
+      ++stagnation_;
+    }
+    if (candidate_norm <= target_) {
+      finish(std::move(candidate_), GmresStatus::converged, candidate_norm);
+    } else if (broke_down_ || !solvable_) {
+      finish(std::move(best_solution_), GmresStatus::breakdown, best_norm_);
+    } else if (stagnation_ >= plan_.options.stagnation_window) {
+      finish(std::move(best_solution_), GmresStatus::stagnation, best_norm_);
+    } else if (column_ + 1 == plan_.restart || iterations_ == plan_.options.max_iterations) {
+      solution_ = best_solution_;
+      residual_ = best_residual_;
+      beta_ = best_norm_;
+      if (iterations_ >= plan_.options.max_iterations || beta_ == 0.0) {
+        finish(std::move(best_solution_), GmresStatus::max_iterations, beta_);
+      } else {
+        ++restarts_;
+        begin_cycle();
+      }
+    } else {
+      ++column_;
+      prepare_column();
+    }
+  }
+
+  const GmresPlan& plan_;
+  const ResponseSolveRequest& request_;
+  const LinearOperator& right_preconditioner_;
+  runtime::TrackedAllocator<double> allocator_;
+  WorkspaceVector solution_, image_, residual_, basis_, preconditioned_, hessenberg_, cosine_,
+      sine_, transformed_, work_, candidate_, candidate_image_, candidate_residual_, best_solution_,
+      best_residual_, coefficients_, base_solution_, history_, best_basis_;
+  GmresResult result_;
+  LinearAction action_;
+  Phase phase_{Phase::done};
+  double rhs_norm_{}, target_{}, beta_{}, best_norm_{};
+  double orthogonalization_seconds_{}, operator_seconds_{};
+  std::size_t column_{}, iterations_{}, restarts_{}, stagnation_{}, operator_actions_{};
+  std::size_t preconditioner_actions_{}, best_basis_columns_{};
+  bool broke_down_{}, solvable_{};
+};
 }  // namespace
 
 double stable_norm(std::span<const double> values) {
@@ -107,19 +462,12 @@ GmresPlan prepare_gmres(std::size_t dimension, const GmresOptions& options) {
   const auto restart = std::min({dimension, options.restart, options.max_iterations});
   const auto restart_plus_one = checked_add(restart, 1);
   const auto iterations_plus_two = checked_add(options.max_iterations, 2);
-  // Bound simultaneously live payload, including the returned solution. The
-  // Arnoldi basis owns (restart+1) vectors, the right-preconditioned basis owns
-  // restart, and x/image/residual, work/candidate/image/residual, best x/residual
-  // and the cycle's base x own ten more. One spare vector keeps publication
-  // headroom without reserving several unused Krylov bases in every caller.
+  // The Arnoldi/preconditioned bases and ten vector panels, plus publication
+  // headroom. Every independently suspended state owns and prices this payload.
   const auto vector_slots = checked_add(checked_multiply(2, restart), 12);
   std::size_t elements = checked_multiply(vector_slots, dimension);
-  // Hessenberg, cosine, sine, transformed RHS and backsolve coefficients.
   elements = checked_add(elements, checked_multiply(restart_plus_one, restart));
   elements = checked_add(elements, checked_add(checked_multiply(4, restart), 1));
-  // These vectors reserve their full capacity once, before any append/assign;
-  // disabled diagnostics retain no numeric payload. Input spans, callbacks and
-  // allocator metadata remain outside this controller's numeric workspace.
   if (options.collect_basis) elements = checked_add(elements, checked_multiply(dimension, restart));
   if (options.collect_history) elements = checked_add(elements, iterations_plus_two);
   return {dimension, restart, checked_multiply(elements, sizeof(double)), options};
@@ -129,265 +477,96 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess,
                         std::span<const double> diagonal_preconditioner,
                         const LinearOperator& right_preconditioner) {
-  // Plans are public value objects. Revalidate derived capacity and controls
-  // before trusting admission, allocating output, or invoking a callback.
-  const auto expected = prepare_gmres(plan.dimension, plan.options);
-  if (plan.restart != expected.restart || plan.workspace_bytes != expected.workspace_bytes)
-    throw std::invalid_argument("GMRES plan does not match its dimensions and options");
-  const auto n = plan.dimension;
-  // Admission precedes even the output allocation: refusal must not allocate
-  // O(dimension) bytes or invoke the operator with an insufficient budget.
+  validate_plan(plan);
   if (plan.options.max_workspace_bytes < plan.workspace_bytes)
     return build_result(plan, {}, GmresStatus::workspace_limit,
                         std::numeric_limits<double>::infinity(), 0.0, 0, 0, 0, 0);
-  const runtime::TrackedAllocator<double> allocator(std::make_shared<runtime::AllocationCounter>());
-  WorkspaceVector history(allocator), best_basis(allocator);
-  std::size_t best_basis_columns = 0;
-  double orthogonalization_seconds = 0, operator_seconds = 0;
-  const auto result_for = [&](const GmresPlan& admitted, WorkspaceVector solution,
-                              GmresStatus status, double residual, double rhs_norm,
-                              std::size_t iterations, std::size_t restarts,
-                              std::size_t operator_actions, std::size_t preconditioner_actions) {
-    auto result = build_result(admitted, std::move(solution), status, residual, rhs_norm,
-                               iterations, restarts, operator_actions, preconditioner_actions);
-    result.history = std::move(history);
-    result.basis = std::move(best_basis);
-    result.basis_columns = best_basis_columns;
-    result.orthogonalization_seconds = orthogonalization_seconds;
-    result.operator_seconds = operator_seconds;
-    return result;
-  };
-  WorkspaceVector x(n, 0.0, allocator);
-  if (rhs.size() != n || !finite(rhs) ||
-      (!initial_guess.empty() && (initial_guess.size() != n || !finite(initial_guess))) ||
-      (!diagonal_preconditioner.empty() &&
-       (diagonal_preconditioner.size() != n || !finite(diagonal_preconditioner))))
-    return result_for(plan, std::move(x), GmresStatus::nonfinite_input,
-                      std::numeric_limits<double>::infinity(), 0.0, 0, 0, 0, 0);
-  if (!apply) throw std::invalid_argument("GMRES operator callback is empty");
-  if (right_preconditioner && !diagonal_preconditioner.empty())
-    throw std::invalid_argument(
-        "GMRES preconditioner callback and diagonal are mutually exclusive");
-  for (double value : diagonal_preconditioner)
-    if (std::abs(value) <= plan.options.breakdown_tolerance)
-      throw std::invalid_argument("GMRES diagonal preconditioner contains a zero entry");
-  if (!initial_guess.empty()) std::copy(initial_guess.begin(), initial_guess.end(), x.begin());
-  if (plan.options.collect_history) history.reserve(plan.options.max_iterations + 2);
-
-  std::size_t operator_actions = 0;
-  std::size_t preconditioner_actions = 0;
-  auto apply_checked = [&](std::span<const double> input, std::span<double> output,
-                           const char* phase) {
-    runtime::df_progress::Scope action(phase);
-    std::fill(output.begin(), output.end(), 0.0);
-    const auto begin = plan.options.collect_timing ? std::chrono::steady_clock::now()
-                                                   : std::chrono::steady_clock::time_point{};
-    apply(input, output);
-    if (plan.options.collect_timing)
-      operator_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
-    ++operator_actions;
-    if (action.enabled()) runtime::df_progress::Scope::number("operator_action", operator_actions);
-    return finite(output);
-  };
-  auto precondition = [&](std::span<const double> input, std::span<double> output) {
-    if (right_preconditioner) {
-      ++preconditioner_actions;
-      std::fill(output.begin(), output.end(), 0.0);
-      right_preconditioner(input, output);
-    } else if (diagonal_preconditioner.empty()) {
-      std::copy(input.begin(), input.end(), output.begin());
-    } else {
-      ++preconditioner_actions;
-      for (std::size_t index = 0; index < n; ++index)
-        output[index] = input[index] / diagonal_preconditioner[index];
-    }
-  };
-
-  double rhs_norm = 0.0;
-  try {
-    rhs_norm = stable_norm(rhs);
-  } catch (const std::exception&) {
-    return result_for(plan, std::move(x), GmresStatus::nonfinite_input,
-                      std::numeric_limits<double>::infinity(), 0.0, 0, 0, 0, 0);
+  const ResponseSolveRequest request{rhs, initial_guess, diagonal_preconditioner};
+  GmresState state(plan, request, static_cast<bool>(apply), right_preconditioner);
+  std::size_t actions = 0;
+  while (!state.done()) {
+    runtime::df_progress::Scope action(state.action_name());
+    const auto begin = state.collect_timing() ? std::chrono::steady_clock::now()
+                                              : std::chrono::steady_clock::time_point{};
+    const auto pending = state.action();
+    apply(pending.input, pending.output);
+    const double elapsed =
+        state.collect_timing()
+            ? std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count()
+            : 0.0;
+    if (action.enabled()) runtime::df_progress::Scope::number("operator_action", ++actions);
+    action.finish();
+    state.complete_action(elapsed);
   }
-  const double target =
-      std::max(plan.options.absolute_tolerance, plan.options.relative_tolerance * rhs_norm);
-  WorkspaceVector image(n, 0.0, allocator), residual(rhs.begin(), rhs.end(), allocator);
-  if (!initial_guess.empty()) {
-    if (!apply_checked(x, image, "gmres_initial_residual"))
-      return result_for(plan, std::move(x), GmresStatus::nonfinite_operator,
-                        std::numeric_limits<double>::infinity(), rhs_norm, 0, 0, operator_actions,
-                        preconditioner_actions);
-    for (std::size_t index = 0; index < n; ++index) residual[index] -= image[index];
-  }
-  double beta = 0.0;
-  try {
-    beta = stable_norm(residual);
-  } catch (const std::exception&) {
-    return result_for(plan, std::move(x), GmresStatus::nonfinite_input,
-                      std::numeric_limits<double>::infinity(), rhs_norm, 0, 0, operator_actions,
-                      preconditioner_actions);
-  }
-  if (plan.options.collect_history) history.push_back(beta);
-  if (beta <= target)
-    return result_for(plan, std::move(x), GmresStatus::initial_residual, beta, rhs_norm, 0, 0,
-                      operator_actions, preconditioner_actions);
+  return state.take_result();
+}
 
-  const auto restart = plan.restart;
-  WorkspaceVector basis((restart + 1) * n, 0.0, allocator),
-      preconditioned(restart * n, 0.0, allocator);
-  WorkspaceVector hessenberg((restart + 1) * restart, 0.0, allocator);
-  WorkspaceVector cosine(restart, 0.0, allocator), sine(restart, 0.0, allocator),
-      transformed(restart + 1, 0.0, allocator);
-  WorkspaceVector work(n, 0.0, allocator), candidate(n, 0.0, allocator),
-      candidate_image(n, 0.0, allocator), candidate_residual(n, 0.0, allocator);
-  WorkspaceVector best_x(x), best_residual_vector(residual), coefficients(restart, 0.0, allocator);
-  std::size_t iterations = 0, restarts = 0, stagnation = 0;
-  if (plan.options.collect_basis) best_basis.reserve(plan.dimension * restart);
+std::size_t gmres_batch_workspace_bytes(const GmresPlan& plan, std::size_t request_count,
+                                        std::size_t concurrent_requests) {
+  validate_plan(plan);
+  if (!concurrent_requests || concurrent_requests > 4)
+    throw std::invalid_argument("independent GMRES batch width must be one through four");
+  if (!request_count) return 0;
+  auto retained = plan.dimension;
+  if (plan.options.collect_basis)
+    retained = checked_add(retained, checked_multiply(plan.dimension, plan.restart));
+  if (plan.options.collect_history)
+    retained = checked_add(retained, checked_add(plan.options.max_iterations, 2));
+  retained = checked_multiply(retained, sizeof(double));
+  const auto active = std::min(concurrent_requests, request_count);
+  return checked_add(checked_multiply(active, plan.workspace_bytes),
+                     checked_multiply(request_count - active, retained));
+}
 
-  while (iterations < plan.options.max_iterations) {
-    std::fill(basis.begin(), basis.end(), 0.0);
-    std::fill(preconditioned.begin(), preconditioned.end(), 0.0);
-    std::fill(hessenberg.begin(), hessenberg.end(), 0.0);
-    std::fill(transformed.begin(), transformed.end(), 0.0);
-    transformed[0] = beta;
-    for (std::size_t index = 0; index < n; ++index) basis[index] = residual[index] / beta;
-    const auto base_x = x;
-    double best_norm = beta;
-    bool completed_cycle = false;
-
-    for (std::size_t column = 0; column < restart && iterations < plan.options.max_iterations;
-         ++column) {
-      const auto basis_column = std::span<const double>(basis.data() + column * n, n);
-      auto z_column = std::span<double>(preconditioned.data() + column * n, n);
-      precondition(basis_column, z_column);
-      if (!finite(z_column))
-        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_preconditioner, best_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      if (!apply_checked(z_column, work, "gmres_arnoldi_action"))
-        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      const auto orthogonalization_begin = plan.options.collect_timing
-                                               ? std::chrono::steady_clock::now()
-                                               : std::chrono::steady_clock::time_point{};
-      for (unsigned pass = 0; pass < plan.options.reorthogonalize; ++pass) {
-        for (std::size_t row = 0; row <= column; ++row) {
-          const auto prior = std::span<const double>(basis.data() + row * n, n);
-          double projection = 0.0;
-          for (std::size_t index = 0; index < n; ++index) projection += prior[index] * work[index];
-          hessenberg[row * restart + column] += projection;
-          for (std::size_t index = 0; index < n; ++index) work[index] -= projection * prior[index];
+std::vector<GmresResult> solve_gmres_batch(const GmresPlan& plan, const BatchLinearOperator& apply,
+                                           std::span<const ResponseSolveRequest> requests,
+                                           std::size_t concurrent_requests,
+                                           std::size_t max_numeric_bytes) {
+  const auto needed = gmres_batch_workspace_bytes(plan, requests.size(), concurrent_requests);
+  if (needed > max_numeric_bytes ||
+      (!requests.empty() && plan.workspace_bytes > plan.options.max_workspace_bytes))
+    return {};
+  std::vector<GmresResult> results(requests.size());
+  // Fixed-size descriptors contain only spans/control data, never numerical
+  // panels. Completed states release their full workspaces before another cohort.
+  std::array<std::unique_ptr<GmresState>, 4> states;
+  std::array<LinearAction, 4> actions;
+  std::array<std::size_t, 4> owners;
+  for (std::size_t first = 0; first < requests.size();) {
+    const auto count = std::min(concurrent_requests, requests.size() - first);
+    for (std::size_t index = 0; index < count; ++index)
+      states[index] =
+          std::make_unique<GmresState>(plan, requests[first + index], static_cast<bool>(apply),
+                                       requests[first + index].right_preconditioner);
+    while (true) {
+      std::size_t pending = 0;
+      for (std::size_t index = 0; index < count; ++index) {
+        if (!states[index]) continue;
+        if (states[index]->done()) {
+          results[first + index] = states[index]->take_result();
+          states[index].reset();
+        } else {
+          owners[pending] = index;
+          actions[pending++] = states[index]->action();
         }
       }
-      double next_norm = 0.0;
-      try {
-        next_norm = stable_norm(work);
-      } catch (const std::exception&) {
-        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      }
-      if (plan.options.collect_timing)
-        orthogonalization_seconds += std::chrono::duration<double>(
-                                         std::chrono::steady_clock::now() - orthogonalization_begin)
-                                         .count();
-      hessenberg[(column + 1) * restart + column] = next_norm;
-      const bool broke_down = next_norm <= plan.options.breakdown_tolerance;
-      if (!broke_down)
-        for (std::size_t index = 0; index < n; ++index)
-          basis[(column + 1) * n + index] = work[index] / next_norm;
-
-      for (std::size_t row = 0; row < column; ++row) {
-        const double upper = hessenberg[row * restart + column];
-        const double lower = hessenberg[(row + 1) * restart + column];
-        hessenberg[row * restart + column] = cosine[row] * upper + sine[row] * lower;
-        hessenberg[(row + 1) * restart + column] = -sine[row] * upper + cosine[row] * lower;
-      }
-      const double upper = hessenberg[column * restart + column];
-      const double lower = hessenberg[(column + 1) * restart + column];
-      const double rotation_norm = std::hypot(upper, lower);
-      if (rotation_norm > plan.options.breakdown_tolerance) {
-        cosine[column] = upper / rotation_norm;
-        sine[column] = lower / rotation_norm;
-      } else {
-        cosine[column] = 1.0;
-        sine[column] = 0.0;
-      }
-      hessenberg[column * restart + column] = cosine[column] * upper + sine[column] * lower;
-      hessenberg[(column + 1) * restart + column] = 0.0;
-      const double transformed_upper = transformed[column];
-      transformed[column] = cosine[column] * transformed_upper;
-      transformed[column + 1] = -sine[column] * transformed_upper;
-      ++iterations;
-
-      // The small Hessenberg residual can request an exact check; it can never
-      // accept a solution. This lets expensive operators amortize intermediate
-      // checks without waiting until restart after predicted convergence.
-      const bool checkpoint = std::abs(transformed[column + 1]) <= target || broke_down ||
-                              column + 1 == restart || iterations == plan.options.max_iterations ||
-                              iterations % plan.options.true_residual_every == 0;
-      if (!checkpoint) continue;
-      const std::size_t columns = column + 1;
-      const bool solvable = solve_upper(hessenberg, restart, transformed, columns, coefficients);
-      candidate = base_x;
-      if (solvable)
-        for (std::size_t vector = 0; vector < columns; ++vector)
-          for (std::size_t index = 0; index < n; ++index)
-            candidate[index] += preconditioned[vector * n + index] * coefficients[vector];
-      // Finite backsolve coefficients can still overflow in the preconditioned
-      // combination. A sparse action may ignore that coordinate, so reject it
-      // before asking the operator to certify the physical residual.
-      if (!finite(candidate))
-        return result_for(plan, std::move(best_x), GmresStatus::breakdown, best_norm, rhs_norm,
-                          iterations, restarts, operator_actions, preconditioner_actions);
-      if (!apply_checked(candidate, candidate_image, "gmres_exact_residual_replay"))
-        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      for (std::size_t index = 0; index < n; ++index)
-        candidate_residual[index] = rhs[index] - candidate_image[index];
-      double candidate_norm = 0.0;
-      try {
-        candidate_norm = stable_norm(candidate_residual);
-      } catch (const std::exception&) {
-        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      }
-      if (plan.options.collect_history) history.push_back(candidate_norm);
-      if (candidate_norm < best_norm) {
-        best_norm = candidate_norm;
-        best_x = candidate;
-        best_residual_vector = candidate_residual;
-        stagnation = 0;
-        if (plan.options.collect_basis) {
-          best_basis.assign(basis.begin(), basis.begin() + columns * plan.dimension);
-          best_basis_columns = columns;
-        }
-      } else if (candidate_norm >= best_norm * (1.0 - plan.options.stagnation_tolerance)) {
-        ++stagnation;
-      }
-      if (candidate_norm <= target)
-        return result_for(plan, std::move(candidate), GmresStatus::converged, candidate_norm,
-                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      if (broke_down || !solvable)
-        return result_for(plan, std::move(best_x), GmresStatus::breakdown, best_norm, rhs_norm,
-                          iterations, restarts, operator_actions, preconditioner_actions);
-      if (stagnation >= plan.options.stagnation_window)
-        return result_for(plan, std::move(best_x), GmresStatus::stagnation, best_norm, rhs_norm,
-                          iterations, restarts, operator_actions, preconditioner_actions);
-      if (column + 1 == restart || iterations == plan.options.max_iterations) {
-        completed_cycle = true;
-        break;
-      }
+      if (!pending) break;
+      runtime::df_progress::Scope action("gmres_independent_actions");
+      if (action.enabled()) runtime::df_progress::Scope::number("physical_actions", pending);
+      const auto begin = plan.options.collect_timing ? std::chrono::steady_clock::now()
+                                                     : std::chrono::steady_clock::time_point{};
+      apply(std::span<const LinearAction>(actions.data(), pending));
+      const double elapsed =
+          plan.options.collect_timing
+              ? std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count()
+              : 0.0;
+      action.finish();
+      for (std::size_t index = 0; index < pending; ++index)
+        states[owners[index]]->complete_action(elapsed);
     }
-    x = best_x;
-    residual = best_residual_vector;
-    beta = best_norm;
-    if (iterations >= plan.options.max_iterations) break;
-    if (!completed_cycle || beta == 0.0) break;
-    ++restarts;
+    first += count;
   }
-  return result_for(plan, std::move(best_x), GmresStatus::max_iterations, beta, rhs_norm,
-                    iterations, restarts, operator_actions, preconditioner_actions);
+  return results;
 }
 
 }  // namespace generativeqc::response

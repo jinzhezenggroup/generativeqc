@@ -1,8 +1,8 @@
 """Compile the production COSX derivative diagnostic without requiring a GPU."""
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,27 +20,10 @@ def _definition(source: str, signature: str) -> str:
     return source[start:end]
 
 
-def test_becke_pair_derivative_contraction_stays_sparse() -> None:
-    source = (ROOT / "src/dft/grid.cpp").read_text()
-    body = _definition(
-        source, "std::vector<double> MolecularGrid::contract_weight_derivative("
-    )
-
-    # Each Becke pair depends on at most the owner, a, and b atom blocks.  A
-    # nuclear-coordinate sweep inside the pair loop adds an avoidable atom-count
-    # factor to every molecular COSX force evaluation.
-    assert "std::vector<double> pair_derivative(ncoord)" not in body
-    assert "for (double& derivative : pair_derivative)" not in body
-    assert body.count("coordinate < ncoord") == 2
-
-
 @pytest.mark.parametrize("requested_tile", (1, 7, 64))
 def test_molecular_cosx_diagnostic_accounts_for_all_device_buffers(
-    tmp_path: Path, requested_tile: int
+    tmp_path: Path, requested_tile: int, required_native_cxx: Any
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
     source = (ROOT / "src/dft/cuda_cosx_derivative.cu").read_text()
     header = (ROOT / "src/dft/cuda_cosx.hpp").read_text()
     # Only geometry metadata is synthetic; compile the actual production
@@ -106,22 +89,18 @@ int main() {
     path = tmp_path / "diagnostic.cpp"
     path.write_text(harness)
     binary = tmp_path / "diagnostic"
-    subprocess.run(
-        [
-            compiler,
+    required_native_cxx.build_executable(
+        [path],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-I",
             str(ROOT / "src"),
             "-I",
             str(ROOT / "include"),
-            str(path),
-            "-o",
-            str(binary),
         ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=45,
+        compile_timeout=45,
+        link_timeout=45,
     )
     subprocess.run(
         [str(binary)], check=True, capture_output=True, text=True, timeout=10

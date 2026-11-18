@@ -171,8 +171,9 @@ struct Row {
  std::array<double,2> electrons;
 };
 struct Result {
- unsigned iterations{}; double energy{},energy_change{},density_rms{},physical_residual_rms{};
+ unsigned iterations{},fock_builds{}; double energy{},energy_change{},density_rms{},physical_residual_rms{};
 };
+namespace runtime::df_progress { void number(const char*,unsigned) {} }
 struct Ks {
  double physical_residual{},density_change{}; Components components;
  std::array<double,2> electrons; std::vector<Row> history;
