@@ -17,7 +17,7 @@
     "src/dft/cuda_stationary_controller.cpp"
   ],
   "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate. Native stationary controllers restore the same derivative-specific cutoff through bounded exact sampled-jet bitmasks at the 2**35 work crossover, retaining dense execution on resource or occupancy misses.",
-  "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Ordinary DF already uses the independently qualified native AO-jet bitmask producer at its own 2**35 dense-work crossover. Broaden to composite execution or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
+  "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Admitted public native ordinary/composite Direct/DF bindings share the exact-jet producer at the existing 2**35 crossover; source-bound RKS/UKS execution, independent E/F, moved/minimum fallback and fresh-process RKS endpoint evidence are retained separately from the Python explicit portfolio. The identified SM120 build disables integral AOT shells, and some cold pairs lose; do not infer universal cold/device benefit or promote other packaging/profiles. ECP and unsupported/resource/occupancy misses remain dense.",
   "evidence": [
     "issue:#1853",
     "issue:#1598",
@@ -25,6 +25,8 @@
     "pr:#1934",
     "benchmarks:benchmarks/results/pbe0-public-force-policy-20261005/README.md",
     "benchmarks:benchmarks/results/pbe0-force-followups-20261005/README.md",
+    "benchmarks:benchmarks/results/native-force-ao-20261117/README.md",
+    "note:.agents/notes/implemented/performance/2026-11-17-native-cross-functional-force-ao.md",
     "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md",
     "note:.agents/notes/implemented/performance/2026-10-25-df-force-bitmask-crossover.md",
     "note:.agents/notes/implemented/performance/2026-10-30-stationary-ao-capacity-cliff.md"

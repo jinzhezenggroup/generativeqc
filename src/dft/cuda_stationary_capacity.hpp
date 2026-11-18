@@ -73,7 +73,9 @@ inline CudaStationaryCapacity cuda_stationary_capacity(
       runtime::size_add(capacity.grid.allocation_bytes, capacity.grid.provider_allowance);
   capacity.minimum_device_bytes = runtime::size_add(grid_upper, capacity.stationary_minimum_bytes);
   capacity.cached_device_bytes = runtime::size_add(grid_upper, capacity.stationary_cached_bytes);
-  // Restore the indexed force consumer for substantial ordinary grid work.
+  // The same indexed force consumer serves every admitted composition. Model
+  // admission belongs to the binding; map admission depends only on supported
+  // AO jets, work and bounded optional storage, not on functional/Fock names.
   // Force discovery inspects every required derivative jet at 1e-16; an SCF
   // order-one map cannot authorize dropping order-two force columns. This
   // crossover is a work estimate, independent of device or functional names.

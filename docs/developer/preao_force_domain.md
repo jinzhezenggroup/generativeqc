@@ -5,10 +5,70 @@ before AO evaluation. Compiler-owned Gaussian region envelopes produce an
 ascending, unique device CSR inventory. Each tile lends the existing `AoGridBlockLayout`
 to the indexed AO, local density and projection consumers; AO labels do not
 round-trip through Python or upload again on warm replay. Current public force
-calls use the native prepared controller when its item capability is admitted;
-that controller currently evaluates dense force AO tiles and does not consult
-the Python active-AO profile registry. The policies below govern the retained
-explicit/compatibility stationary consumer, not that native public route.
+calls use the native prepared controller when its item capability is admitted.
+That controller has its own capability/work/resource-based exact-jet map
+admission; it does not consult the Python active-AO profile registry. The
+explicit/compatibility selector and the native prepared controller are distinct
+execution routes, not evidence that one route's policy was used by the other.
+
+## Native prepared forces
+
+`src/dft/cuda_stationary_capacity.hpp` admits optional exact-jet bitmasks for
+supported four-/ten-jet force bindings at dense point×AO² work of at least
+`2**35`, with at most 16 MiB of optional map storage. This is independent of
+functional name, spin, ordinary/composite composition and Direct/DF Fock
+selection. Public method admission is still determined by the compiled
+scientific binding; map capability cannot widen it. Unsupported jet orders,
+ECPs, insufficient capacity, optional allocation failure and mean occupancy
+above 0.8 retain the full dense force domain at the same `1e-16` cutoff.
+
+The geometry-owned native grid consumer discovers every required derivative
+jet, retains masks across density-only replay, and rejects stale point spans,
+geometry epochs, derivative orders and binding identities. A moved geometry
+replaces the parent quadrature and controller. A shared XC/nonlocal quadrature
+may consume the same indexed panel; a distinct nonlocal quadrature retains its
+independent dense traversal. The separate FP32 grid route does not consume an
+FP64 map. Optional maps never shrink mandatory dense AO or stationary capacity;
+the cached tier charges device masks/staging and host offsets.
+
+For same-endpoint dense ablations, set
+`GENERATIVEQC_CUDA_FORCE_ACTIVE_AO=0` before the native force controller is
+created. This only declines optional selection; it cannot force admission or
+change the cutoff, precision, scientific model, or native force capability.
+Existing controllers retain their prepared schedule. The capacity query remains
+a conservative upper bound even when this debug control declines the map.
+
+With `GENERATIVEQC_DF_TRACE`, each `stationary_force` receipt reports executed
+`grid_active_point_ao`, `grid_dense_point_ao`, `grid_ao_jet_values`,
+`grid_projection_fma_pairs`, `grid_discovery_ao_jet_values` and discovery passes.
+`indexed_grid` identifies actual indexed execution, not merely a retained map
+that the FP32 route does not use. Discovery belongs to the first force call;
+warm replay has zero rediscovery. Trace stage durations are diagnostic, not
+complete endpoint timings.
+
+`tests/python/test_native_cross_functional_force_ao_cuda.py` exercises public
+native LDA/PBE/PBE0/r2SCAN/WB97M-V RKS/UKS force calls above the unmodified
+production work crossover, including fitted and Direct controls. It independently
+reconverges both geometries, forbids Python/CPU force orchestration, and compares
+automatic, same-capacity dense and minimum-capacity native endpoints. Its
+cold/warm/moved/moved-warm samples retain numerical errors, physical residuals,
+SCF/Fock counts, complete E/F timing and actual AO work. Run with
+`GENERATIVEQC_DFT_CUDA_TEST=1` in a finite Slurm allocation and a matching native
+build/reference environment. These tests establish native execution and
+numerical/resource behavior, not universal profitability or a new crossover.
+The source/build-bound [retained qualification](../../benchmarks/results/native-force-ao-20261117/README.md)
+provides raw independent arrays, semantic work and complete endpoint replay.
+
+For fresh-process comparisons without importing an oracle, use
+`python -m benchmarks.native_force_ao_endpoint --receipt ... --method ...
+--mode auto --output ...` and the same-binary `--mode dense` arm. Independent
+references must already be retained in the receipt. Interleave matched fresh
+processes on one finite Slurm allocation, including cold and moved convergence,
+and compare SCF/Fock branches as well as actual force AO work. A private minimum
+allowance may first retire an automatic force tile; re-query the bounded
+capacity before checking its exact minimum-minus-one rejection.
+
+## Explicit/compatibility forces
 
 The automatic portfolio in `python/generativeqc/_force_active_ao.py` targets
 CUDA, all-electron, non-density-fitted RKS/UKS, deriv=1 or deriv=2,
