@@ -7,6 +7,13 @@
 
 namespace generativeqc::scf::cuda_df {
 
+// Fitted RHF owns one system per block and streams whole AO matrices through
+// its energy, convergence and DIIS reductions. A warp cannot approach memory
+// bandwidth at production AO counts, so these DF owners use a full CTA with a
+// fixed thread-strided partition and a fixed warp-then-block combination order.
+inline constexpr unsigned kDfMatrixReductionThreads = 512;
+static_assert(kDfMatrixReductionThreads % 32 == 0 && kDfMatrixReductionThreads <= 1024);
+
 /** Scale the retained, sorted positive eigenvectors into column-major L.
  * Rank selection is already validated; occupation is absorbed in sqrt(lambda).
  */
