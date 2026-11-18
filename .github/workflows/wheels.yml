@@ -53,7 +53,7 @@ jobs:
     name: Build CUDA manylinux wheel
     runs-on: ubuntu-24.04
     # Multi-architecture compilation needs a larger finite budget than the
-    # single-target wheel. Reserve 30 minutes for setup, cache retention and
+    # single-target wheel. Reserve 15 minutes for setup, cache retention and
     # payload checks within GitHub-hosted runners' six-hour job limit.
     # A full wheel run remains the acceptance gate; this budget is not a timing
     # guarantee. Keep repair, smoke and payload checks required.
@@ -114,7 +114,10 @@ jobs:
 
       - name: Build and test wheel
         id: wheel_build
-        timeout-minutes: 330
+        # Run 44034488504 reached task 1181/1200 at the old 330-minute cap
+        # without compiler failures. Keep the six-hour job and all checks,
+        # leaving 15 minutes outside this step for setup and bounded cleanup.
+        timeout-minutes: 345
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
           CIBW_CACHE_PATH: ${{ runner.temp }}/cibw-cache

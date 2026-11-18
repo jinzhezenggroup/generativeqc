@@ -1,0 +1,24 @@
+{
+  "schema": "generativeqc.host-hessian-aot-inventory/v1",
+  "method": "B3LYP",
+  "spins": ["unpolarized", "polarized"],
+  "arrays": [
+    "xc",
+    "coefficients",
+    "coefficient_response",
+    "grid_mixed_norm",
+    "grid_mixed_ratio",
+    "grid_mixed_log",
+    "grid_mixed_becke",
+    "nuclear_pair_hvp",
+    "nuclear_pair_column",
+    "ao_first_motion",
+    "gga_field_response",
+    "gga_energy_mixed",
+    "integral_direction",
+    "d3_coordination_column",
+    "d3_reference_column",
+    "d3_pair_column",
+    "d3_scatter_column"
+  ]
+}

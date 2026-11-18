@@ -399,7 +399,11 @@ enum {
    * intended only for diagnosing divergent fleets. Leave it disabled during
    * production endpoint timing.
    */
-  GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING = 1u << 2
+  GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING = 1u << 2,
+  /** CPU KS energy-only owner: do not retain or certify a derivative snapshot.
+   * Forces and stationary-state export are unavailable for this owner. Ordinary
+   * SCF convergence gates remain unchanged, including stabilized occupations. */
+  GENERATIVEQC_BATCH_DISABLE_KS_EXPORT = 1u << 3
 };
 
 /** Number of pair/pair-exchange-reduced s/p/d/f quartet shell classes. */

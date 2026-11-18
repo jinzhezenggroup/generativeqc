@@ -43,9 +43,12 @@ def _scalar_function(
     )
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=64, typed=True)
 def emit_first_derivative_cpu(
-    requests: typing.Any, *, symbol: str = "generativeqc_first_derivative_cpu"
+    requests: typing.Any,
+    *,
+    symbol: str = "generativeqc_first_derivative_cpu",
+    positive_full_moments: bool = False,
 ) -> typing.Any:
     """Emit ordered ``(operator, components)`` kernels and a checked dispatcher.
 
@@ -53,8 +56,18 @@ def emit_first_derivative_cpu(
     nuclear charge with its physical negative sign in the graph. Nuclear pair
     repulsion uses e[0:2] as charges. ERIs use full-range Coulomb and unit graph
     weights. The runtime record weight is the sole external multiplicity.
+    Only explicitly qualified CPU ERI consumers opt into positive Full moments;
+    other operators and the default emitter retain their original evaluation.
+    Typed cache keys keep integer policies from bypassing boolean validation.
     """
-    return _emit_first_derivative(requests, backend="cpu", symbol=symbol)
+    if type(positive_full_moments) is not bool:
+        raise TypeError("positive_full_moments must be an explicit boolean")
+    return _emit_first_derivative(
+        requests,
+        backend="cpu",
+        symbol=symbol,
+        positive_full_moments=positive_full_moments,
+    )
 
 
 @lru_cache(maxsize=64)
@@ -70,7 +83,11 @@ def emit_first_derivative_cuda(
 
 
 def _emit_first_derivative(
-    requests: typing.Any, *, backend: typing.Any, symbol: str = "first_derivative"
+    requests: typing.Any,
+    *,
+    backend: typing.Any,
+    symbol: str = "first_derivative",
+    positive_full_moments: bool = False,
 ) -> typing.Any:
     requests = tuple(requests)
     if not requests or len(requests) != len(set(requests)):
@@ -165,7 +182,11 @@ def _emit_first_derivative(
                 )
         parts.append(_scalar_function(name, graph, roots, variables, prefix, qualifier))
     if eri:
-        parts.append(emit_weighted_eri_primitive_header(tuple(eri), backend=backend))
+        parts.append(
+            emit_weighted_eri_primitive_header(
+                tuple(eri), backend=backend, positive_full_moments=positive_full_moments
+            )
+        )
         for _, name in eri:
             parts.append(f"""{qualifier} bool {name}(const double* e, const double* c, double* out) {{
   generativeqc::scf::generated_weighted_eri::Gradient result{{}};

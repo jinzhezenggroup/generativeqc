@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import typing
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
@@ -20,6 +21,48 @@ from generativeqc_compiler.method import (
     resolve_method,
 )
 from generativeqc_compiler.xc.spec import FunctionalSpec, functional
+
+
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_b3lyp_bj_keeps_canonical_electronic_and_parameter_composition(
+    spin: str,
+) -> None:
+    from generativeqc_compiler.method._generated_parameters import d3_parameters
+    from generativeqc_compiler.method.dispersion import D3Spec
+
+    bare = resolve_method("B3LYP", spin=spin)
+    total = resolve_method("B3LYP-D3(BJ)", spin=spin)
+    assert total.primitives[:-1] == bare.primitives
+    assert total.primitives[-1].specification == D3Spec(**d3_parameters("B3LYP-D3(BJ)"))
+    assert total.identity != bare.identity
+    assert total.primitives[-1].derivative_capabilities == (
+        "energy",
+        "nuclear-gradient",
+        "nuclear-hessian",
+        "nuclear-hessian-vector-product",
+    )
+
+
+def test_bj_second_order_declaration_does_not_promote_other_corrections() -> None:
+    from generativeqc_compiler.method.dispersion import (
+        DispersionCorrectionPrimitive,
+        b3lyp_d3_bj_spec,
+        pbe_d3_zero_spec,
+        pbe_d4_eeq_spec,
+    )
+
+    bj = b3lyp_d3_bj_spec()
+    for specification in (
+        replace(bj, s9=1, version="d3-bj-atm-spec-v1"),
+        replace(bj, cn_cutoff=40),
+        replace(bj, pair_cutoff=50),
+        pbe_d3_zero_spec(),
+        pbe_d4_eeq_spec(),
+    ):
+        assert DispersionCorrectionPrimitive(specification).derivative_capabilities == (
+            "energy",
+            "nuclear-gradient",
+        )
 
 
 def test_pbe_and_pbe0_resolve_to_typed_primitive_graphs() -> None:

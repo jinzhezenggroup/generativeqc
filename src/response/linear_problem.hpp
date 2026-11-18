@@ -11,6 +11,16 @@ namespace generativeqc::response {
 
 using LinearOperator = std::function<void(std::span<const double> input, std::span<double> output)>;
 
+/** One independent physical action. Batch execution may share immutable source
+ * work, but cannot replace any output with a linear combination of old actions.
+ */
+struct LinearAction {
+  std::span<const double> input;
+  std::span<double> output;
+};
+
+using BatchLinearOperator = std::function<void(std::span<const LinearAction>)>;
+
 /** Symmetry of one logical response operator in its declared response-vector metric.
  *
  * `General` is deliberately the fail-closed default: matching dimensions do not
@@ -36,11 +46,12 @@ class LinearResponseProblem {
  public:
   LinearResponseProblem(std::size_t dimension, LinearOperator apply,
                         LinearResponseSymmetry symmetry = LinearResponseSymmetry::General,
-                        LinearOperator apply_transpose = {})
+                        LinearOperator apply_transpose = {}, BatchLinearOperator apply_batch = {})
       : dimension_(dimension),
         apply_(checked_operator(dimension, std::move(apply))),
         symmetry_(symmetry),
-        apply_transpose_(checked_operator(dimension, std::move(apply_transpose))) {
+        apply_transpose_(checked_operator(dimension, std::move(apply_transpose))),
+        apply_batch_(std::move(apply_batch)) {
     if (!dimension_) throw std::invalid_argument("response problem dimension must be positive");
     if (!apply_) throw std::invalid_argument("response problem operator callback is empty");
     if (symmetry_ != LinearResponseSymmetry::General &&
@@ -66,6 +77,20 @@ class LinearResponseProblem {
 
   [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
   [[nodiscard]] const LinearOperator& apply() const noexcept { return apply_; }
+  /** Validate the entire batch before source work; ordinary operators retain a
+   * portable sequential fallback. The adapter owns any shared-work admission.
+   */
+  void apply_batch(std::span<const LinearAction> actions) const {
+    for (const auto& action : actions)
+      if (action.input.size() != dimension_ || action.output.size() != dimension_)
+        throw std::invalid_argument("response batch operator dimensions do not match");
+    if (actions.empty()) return;
+    if (apply_batch_) {
+      apply_batch_(actions);
+    } else {
+      for (const auto& action : actions) apply_(action.input, action.output);
+    }
+  }
   [[nodiscard]] LinearResponseSymmetry symmetry() const noexcept { return symmetry_; }
   [[nodiscard]] bool has_transpose() const noexcept {
     return symmetry_ == LinearResponseSymmetry::Symmetric || static_cast<bool>(apply_transpose_);
@@ -96,6 +121,7 @@ class LinearResponseProblem {
   LinearOperator apply_;
   LinearResponseSymmetry symmetry_{LinearResponseSymmetry::General};
   LinearOperator apply_transpose_;
+  BatchLinearOperator apply_batch_;
   std::shared_ptr<const Binding> binding_;
 };
 

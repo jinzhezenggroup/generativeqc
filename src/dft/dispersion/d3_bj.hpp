@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "d3_data.hpp"
+#include "dft/dispersion/d3_parameters.hpp"
 #include "generated_dispersion_scalar.hpp"
 
 #if defined(__CUDACC__)
@@ -16,19 +17,11 @@
 
 namespace generativeqc::dft::dispersion {
 
-inline constexpr std::size_t kD3MaximumAtomsPerSystem = 4096;
-
 enum class D3Status : std::int32_t {
   success = 0,
   invalid_argument = 1,
   unsupported = 2,
   numerical_failure = 3,
-};
-
-struct D3Parameters {
-  double s6{}, s8{}, a1{}, a2{}, s9{};
-  // Zero means an unscreened reference path. Positive values are bohr.
-  double cn_cutoff{}, pair_cutoff{}, pair_switch_width{};
 };
 
 struct D3Tables {

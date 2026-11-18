@@ -39,26 +39,13 @@ class ResponsePlan : public GmresPlan {
   std::shared_ptr<const LinearResponseProblem::Binding> binding_;
 };
 
-/** Perturbation-specific inputs; preconditioners never change the physical action.
- *
- * The callback form is needed by the existing HF optional inverse. Its owned
- * callable is descriptor storage; its workspace remains method-owned and must
- * be admitted separately. Diagonal and callback forms are mutually exclusive.
- */
-struct ResponseSolveRequest {
-  std::span<const double> rhs;
-  std::span<const double> initial_guess{};
-  std::span<const double> diagonal_preconditioner{};
-  LinearOperator right_preconditioner{};
-};
-
 enum class ResponseBatchStatus { complete, workspace_limit };
 
-/** Numeric-payload admission for a sequential multi-RHS response batch.
+/** Numeric-payload admission for independent multi-RHS response scheduling.
  *
- * Each solve may use the full GMRES workspace while solutions from earlier
- * requests remain live. `peak_numeric_bytes` therefore includes one active
- * solver workspace plus all previously retained solution/history/basis storage.
+ * Each concurrent solve may use the full GMRES workspace while solutions from
+ * earlier requests remain live. The default width of one retains sequential
+ * scheduling; wider schedules share physical actions, never Krylov equations.
  * Optional diagnostics retain their reserved capacities, not just used entries.
  * It excludes
  * `std::vector`/allocator bookkeeping and any storage owned by the operator or
@@ -72,6 +59,7 @@ struct ResponseBatchPlan {
   std::size_t max_numeric_bytes{};
   bool admitted{};
   std::size_t retained_diagnostic_bytes{};
+  std::size_t concurrent_requests{1};
 };
 
 struct ResponseBatchResult {
@@ -127,9 +115,13 @@ inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponse
 inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& problem,
                                                 const GmresOptions& options,
                                                 std::size_t request_count,
-                                                std::size_t max_numeric_bytes) {
+                                                std::size_t max_numeric_bytes,
+                                                std::size_t concurrent_requests = 1) {
   const auto solve_plan = prepare_response(problem, options);
-  if (request_count == 0) return {solve_plan, 0, 0, 0, max_numeric_bytes, true};
+  const auto peak_numeric_bytes =
+      gmres_batch_workspace_bytes(solve_plan, request_count, concurrent_requests);
+  if (request_count == 0)
+    return {solve_plan, 0, 0, 0, max_numeric_bytes, true, 0, concurrent_requests};
 
   const auto solution_bytes =
       detail::response_checked_multiply(problem.dimension(), sizeof(double));
@@ -146,14 +138,10 @@ inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& pro
   const auto diagnostic_bytes = detail::response_checked_add(history_bytes, basis_bytes);
   const auto retained_diagnostic_bytes =
       detail::response_checked_multiply(request_count, diagnostic_bytes);
-  const auto prior_result_bytes = detail::response_checked_multiply(
-      request_count - 1, detail::response_checked_add(solution_bytes, diagnostic_bytes));
-  const auto peak_numeric_bytes =
-      detail::response_checked_add(solve_plan.workspace_bytes, prior_result_bytes);
   const bool admitted = solve_plan.options.max_workspace_bytes >= solve_plan.workspace_bytes &&
                         peak_numeric_bytes <= max_numeric_bytes;
-  return {solve_plan,        request_count, retained_solution_bytes,  peak_numeric_bytes,
-          max_numeric_bytes, admitted,      retained_diagnostic_bytes};
+  return {solve_plan,        request_count, retained_solution_bytes,   peak_numeric_bytes,
+          max_numeric_bytes, admitted,      retained_diagnostic_bytes, concurrent_requests};
 }
 
 inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
@@ -163,7 +151,7 @@ inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
   if (!plan.solve_plan.is_bound_to(problem))
     throw std::invalid_argument("response batch plan belongs to a different problem binding");
   const auto expected = prepare_response_batch(problem, plan.solve_plan.options, plan.request_count,
-                                               plan.max_numeric_bytes);
+                                               plan.max_numeric_bytes, plan.concurrent_requests);
   if (plan.solve_plan.dimension != expected.solve_plan.dimension ||
       plan.solve_plan.restart != expected.solve_plan.restart ||
       plan.solve_plan.workspace_bytes != expected.solve_plan.workspace_bytes ||
@@ -179,8 +167,9 @@ inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
   result.responses.reserve(requests.size());
   result.status = ResponseBatchStatus::complete;
   result.planned_peak_numeric_bytes = plan.peak_numeric_bytes;
-  for (const auto& request : requests)
-    result.responses.push_back(solve_response(plan.solve_plan, problem, request));
+  result.responses = solve_gmres_batch(
+      plan.solve_plan, [&problem](auto actions) { problem.apply_batch(actions); }, requests,
+      plan.concurrent_requests, plan.max_numeric_bytes);
   result.retained_solution_bytes = plan.retained_solution_bytes;
   result.retained_diagnostic_bytes = plan.retained_diagnostic_bytes;
   return result;

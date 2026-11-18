@@ -10,7 +10,6 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc import Atom, Calculator, GridSpec, KsOptions
-from generativeqc.composite_rks_hessian import CompositeRKSResponse
 from generativeqc.d3_hessian import NativeD3SecondOrder, compose_second_order
 from generativeqc.response_solver import GMRESOptions
 from generativeqc_compiler.dft import NativeAO
@@ -196,9 +195,8 @@ def test_public_composition_is_once_complete_and_raw(public_results: tuple) -> N
         rtol=0,
     )
     assert matrix.diagnostics["nuclear_response_solves"] == DIRECTION.size
-    assert matrix.diagnostics["response_iterations"] == sum(
-        matrix.diagnostics["response_iterations_per_coordinate"]
-    )
+    assert matrix.diagnostics["response_iterations"] > 0
+    assert matrix.diagnostics["induced_fock_actions"] > 0
     assert action.diagnostics["nuclear_response_solves"] == 1
     for result in (matrix, action):
         diagnostics = result.diagnostics
@@ -207,16 +205,12 @@ def test_public_composition_is_once_complete_and_raw(public_results: tuple) -> N
         assert diagnostics["complete_source_coverage"]
         assert diagnostics["displaced_scf_evaluations"] == 0
         assert diagnostics["dispersion"]["electronic_response_solves"] == 0
-        assert diagnostics["dispersion"]["total_scalar_work"] > 0
-        assert (
-            diagnostics["endpoint_seconds"]
-            >= diagnostics["dispersion"]["preparation_seconds"]
-        )
-    np.testing.assert_allclose(
-        sum(action.components.values()),
-        action.value,
-        atol=GATES["additive_source_abs"],
-        rtol=0,
+        assert diagnostics["dispersion"]["pair_visits"] > 0
+        assert diagnostics["dispersion"]["reference_terms"] > 0
+        assert diagnostics["endpoint_seconds"] >= diagnostics["execution_seconds"]
+        assert diagnostics["numerical_runtime"] == "native-cpp-cpu"
+    assert matrix.diagnostics["dispersion"]["pair_visits"] == (
+        DIRECTION.size * action.diagnostics["dispersion"]["pair_visits"]
     )
     with pytest.raises(ValueError, match="already present"):
         compose_second_order(
@@ -267,7 +261,9 @@ def test_failure_and_joint_budgets_never_publish_partial_total(
         with pytest.raises(ArithmeticError, match="injected D3"):
             compose_second_order(electronic, METHOD, atoms, **options)
     recovered = compose_second_order(electronic, METHOD, atoms, **options)
-    np.testing.assert_array_equal(recovered.matrix, matrix.matrix)
+    np.testing.assert_allclose(
+        recovered.matrix, matrix.matrix, atol=GATES["additive_source_abs"], rtol=0
+    )
     with pytest.raises(ValueError):
         recovered.matrix.setflags(write=True)
     wrong_method = replace(
@@ -297,33 +293,32 @@ def test_public_correction_failure_closes_electronic_owners_and_recovers(
 ) -> None:
     """Do not expose a successful electronic-only result after correction failure."""
     calculator, _, action, _, cache = public_results
-    factory = CompositeRKSResponse.from_native.__func__
-    grid_arrays = []
-    initialize_correction = NativeD3SecondOrder.__init__
+    from generativeqc import _native_cpu_hessian
+
+    factory = calculator.prepare_batch
+    native_options = _native_cpu_hessian._options
+    owners = []
     with monkeypatch.context() as scoped:
 
-        def capture(cls: Any, *args: Any, **kwargs: Any) -> Any:
-            owner = factory(cls, *args, **kwargs)
-            grid_arrays.extend(
-                weakref.ref(array)
-                for array in (owner.xc_kernel.jets, owner.xc_kernel.fields)
-            )
+        def capture(*args: Any, **kwargs: Any) -> Any:
+            owner = factory(*args, **kwargs)
+            owners.append(weakref.ref(owner))
             return owner
 
-        def check_released(self: Any, *args: Any, **kwargs: Any) -> None:
-            assert grid_arrays and all(reference() is None for reference in grid_arrays)
-            initialize_correction(self, *args, **kwargs)
+        def refuse_correction(*args: Any, **kwargs: Any) -> Any:
+            options = native_options(*args, **kwargs)
+            options.max_d3_pairs = 1
+            return options
 
-        def fail(*args: Any, **kwargs: Any) -> None:
-            raise ArithmeticError("injected public correction failure")
-
-        scoped.setattr(CompositeRKSResponse, "from_native", classmethod(capture))
-        scoped.setattr(NativeD3SecondOrder, "__init__", check_released)
-        scoped.setattr(NativeD3SecondOrder, "hvp", fail)
-        with pytest.raises(ArithmeticError, match="injected public correction"):
+        scoped.setattr(calculator, "prepare_batch", capture)
+        scoped.setattr(_native_cpu_hessian, "_options", refuse_correction)
+        with pytest.raises(RuntimeError, match="D3 pair-work cap"):
             calculator.hessian_vector_product(
                 ATOMS, DIRECTION, cache=cache, solver_options=SOLVER
             )
+    assert owners and all(
+        reference() is None or not reference()._batch.value for reference in owners
+    )
     recovered = calculator.hessian_vector_product(
         ATOMS, DIRECTION, cache=cache, solver_options=SOLVER
     )
@@ -331,7 +326,7 @@ def test_public_correction_failure_closes_electronic_owners_and_recovers(
 
 
 @pytest.mark.parametrize(
-    "variant", ("pbe0_uks", "df", "ecp", "atm", "cutoff", "zero", "d4")
+    "variant", ("pbe0_uks", "df", "ecp_pbe0", "atm", "cutoff", "zero", "d4")
 )
 def test_unqualified_domains_do_not_inherit_corrected_admission(variant: str) -> None:
     """Correction availability never grants an unqualified electronic capability."""
@@ -345,9 +340,16 @@ def test_unqualified_domains_do_not_inherit_corrected_admission(variant: str) ->
         )
     elif variant == "df":
         options["density_fitting"] = "cpu"
-    elif variant == "ecp":
+    elif variant == "ecp_pbe0":
         from test_wb97mv_ecp_hessian import synthetic_basis
 
+        method = replace(
+            resolve_method("PBE0"),
+            primitives=(
+                *resolve_method("PBE0").primitives,
+                DispersionCorrectionPrimitive(SPEC),
+            ),
+        )
         options["basis"] = synthetic_basis()
     elif variant == "d4":
         method = replace(

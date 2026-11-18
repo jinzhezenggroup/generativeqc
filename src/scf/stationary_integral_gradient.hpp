@@ -40,6 +40,9 @@ struct CpuStationaryIntegralGradient {
  * authenticates the MethodIR/Fock composition and the live final-state token. This helper
  * validates the exact full-range source and contracts bounded shell-local weights
  * into derivatives; it neither owns an SCF solver nor publishes a final force.
+ * Ordered cotangents are folded over distinct eightfold shell-permutation orbits
+ * before recurrence evaluation. This is physical nuclear-gradient reuse, not
+ * an independent-slot derivative identity or an assumption of symmetric D/W.
  * UKS requires both beta blocks, including explicit zero matrices for an empty
  * beta population. Compact flattening serves the compiler-owned spin layout;
  * its live capacities are charged, without copying any density equations.

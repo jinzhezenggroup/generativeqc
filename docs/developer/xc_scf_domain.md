@@ -126,6 +126,15 @@ complete source layout and scientific identity.
 
 ## Stable positive-density algebra
 
+The native Cartesian GGA point validators check the spin-gradient Gram
+inequality after independently scaling each finite Cartesian gradient by its
+largest component. The relative allowance remains 16 machine epsilons, but
+the check no longer mistakes subnormal squared-gradient rounding for an
+unphysical spin pair. The original unscaled sigma values still enter the
+generated energy/potential program unchanged; this is not density/sigma
+clipping, a field floor or a change to the functional. Density, finiteness,
+empty-spin and representability checks remain in force.
+
 The evaluator does not clip rho or sigma and has no positive density floor.
 It rejects negative/nonfinite densities, nonfinite gradients, a normal nonzero
 gradient in an exactly empty spin, and any unrepresentable output. When AO

@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from functools import cache
 
-from generativeqc_compiler.integral.expr import Expr, Graph, Node
+from generativeqc_compiler.integral.graph_composition import import_roots
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import feature_programs
-from generativeqc_compiler.tensor import Program, transpose_program
+from generativeqc_compiler.tensor import Program, rewrite, transpose_program
 from generativeqc_compiler.xc.coefficients import coefficient_program
 from generativeqc_compiler.xc.program import build_program
 from generativeqc_compiler.xc.wb97mv_maple import (
@@ -20,31 +20,6 @@ from generativeqc_compiler.xc.wb97mv_maple import (
     SIGMA_THRESHOLD,
     TAU_THRESHOLD,
 )
-
-
-def _import_roots(
-    target: Graph, source: Graph, roots: tuple, bindings: dict[str, Expr]
-) -> tuple:
-    """Rehome coefficient DAG nodes verbatim, with simultaneous leaf binding.
-
-    Interner reuse preserves all existing operations and exact constants. This
-    is graph composition, not a second implementation of the scalar algebra.
-    """
-    imported = {}
-    for identifier in source.topological_order(roots):
-        node = source.nodes[identifier]
-        imported[identifier] = (
-            bindings[str(node.payload)]
-            if node.operation == "variable"
-            else target._intern(
-                Node(
-                    node.operation,
-                    tuple(imported[child].identifier for child in node.arguments),
-                    node.payload,
-                )
-            )
-        )
-    return tuple(imported[root.identifier] for root in roots)
 
 
 @cache
@@ -141,18 +116,14 @@ def _point_terms(spins: int) -> tuple:
         value * (2 if index % 5 == 4 else 1)
         for coefficients in programs
         for index, value in enumerate(
-            _import_roots(
-                graph, coefficients.graph, tuple(coefficients.roots), bindings
-            )
+            import_roots(graph, coefficients.graph, tuple(coefficients.roots), bindings)
         )
     )
     outputs = tuple(
         value * weight * (2 if index % 5 == 4 else 1)
         for coefficients in programs
         for index, value in enumerate(
-            _import_roots(
-                graph, coefficients.graph, tuple(coefficients.roots), bindings
-            )
+            import_roots(graph, coefficients.graph, tuple(coefficients.roots), bindings)
         )
     )
     threshold = graph.constant(DENSITY_THRESHOLD)
@@ -201,7 +172,9 @@ def point_field_partials(spins: int) -> tuple:
     )
 
 
-def grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
+def grid_maps(
+    points: int = 3, nao: int = 2, *, shared_contractions: bool = False
+) -> dict[str, Program]:
     """Reuse the AO-feature primal and derive its density adjoint with TensorIR.
 
     Feature extraction is linear in D for fixed AOs. Thus the same primal map
@@ -209,9 +182,14 @@ def grid_maps(points: int = 3, nao: int = 2) -> dict[str, Program]:
     The reverse map assembles physical feature cotangents, including tau's
     one-half, and needs neither a D input nor an explicit point-by-AO-pair panel.
     """
-    primal, _ = feature_programs(points, nao)
+    primal, _ = feature_programs(points, nao, shared_contractions=shared_contractions)
     reverse = transpose_program(primal, tuple(primal.outputs), inputs=("density",))
-    return {
+    result = {
         "features": primal,
         "potential": Program({"potential": reverse.program.outputs["bar_density"]}),
     }
+    return (
+        {name: rewrite(program, "exact_cse") for name, program in result.items()}
+        if shared_contractions
+        else result
+    )

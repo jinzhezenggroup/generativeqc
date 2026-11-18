@@ -15,6 +15,26 @@ from generate_cli_method_catalog import render, rows
 
 
 class NativeMethodirProjectionTests(unittest.TestCase):
+    def test_b3lyp_bj_complete_native_program_uses_canonical_total_identity(
+        self,
+    ) -> None:
+        from generativeqc_compiler.method.spec import resolve_method
+
+        table = {row.name: row for row in rows()}
+        for spin, suffix in (("unpolarized", "rks"), ("polarized", "uks")):
+            total = resolve_method("B3LYP-D3(BJ)", spin=spin)
+            row = table[f"b3lyp-d3(bj)-{suffix}"]
+            bare = table[f"b3lyp-{suffix}"]
+            self.assertTrue(row.cpu)
+            self.assertEqual(row.identity, total.identity)
+            self.assertEqual(row.components, bare.components)
+            self.assertEqual(row.exchange, bare.exchange)
+            correction = total.primitives[-1].specification
+            self.assertEqual(
+                row.dispersion[:6],
+                (1, correction.s6, correction.s8, 0, correction.a1, correction.a2),
+            )
+
     def test_generator_needs_no_installed_runtime_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "catalog.hpp"

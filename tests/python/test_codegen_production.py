@@ -6,6 +6,8 @@ Moved behavior-neutrally from the legacy codegen compatibility suite for #489.
 from __future__ import annotations
 
 # ruff: noqa: F401  # Keep this move behavior-neutral; imports mirror legacy ownership.
+import sys
+
 from codegen_test_support import (
     CAPABILITY_MIXED_FOCK,
     CAPABILITY_STREAMING_FOCK,
@@ -1452,6 +1454,7 @@ def test_production_codegen_cmake_tracks_transitive_generator_inputs(
             "Ninja",
             "-DGENERATIVEQC_ENABLE_CUDA=OFF",
             "-DGENERATIVEQC_BUILD_TESTS=OFF",
+            f"-DPython3_EXECUTABLE={sys.executable}",
         ],
         check=True,
         capture_output=True,
