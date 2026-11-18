@@ -3,6 +3,12 @@
 Status: implemented
 Date: 2026-11-18
 
+The final-closure strategy below is superseded by
+[monotone physical polishing](2026-11-18-uks-monotone-final-polishing.md).
+The primary DIIS certificate remains required. Hosted run `44218958302` passes
+core-b and compiler-heavy, but exposes two VV10 force-residual regressions in
+core-c; the local results below do not establish an all-green hosted result.
+
 ## Problem
 
 PR #3083's CI run `44134150903` finished its Python shards within their existing

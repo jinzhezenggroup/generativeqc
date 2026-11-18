@@ -509,20 +509,34 @@ ScfResult run_uks_impl(
       const double change_b = density_rms(projected_b, beta);
       const double density_change = std::max(change_a, change_b);
       result.density_rms = std::hypot(change_a, change_b) / std::sqrt(2.0);
-      // Ordinary exported states have already passed the unshifted projector
-      // certificate inside DIIS. Rebuild F[D] for that same density: replacing
-      // it with another undamped projector can amplify the remaining roundoff.
-      if (!ordinary_primary || !(evaluate_xc.program || options.certify_ks_export)) {
+      auto next = evaluate(plan, long_range_correction, basis, grid, projected_a, projected_b,
+                           evaluate_xc, options, nonlocal_correlation, nonlocal_domain);
+      ++result.fock_builds;
+      diagnostic.coulomb_exchange_work.add(next.coulomb_exchange_work);
+      Matrix ra = commutator_residual(next.fock.alpha, projected_a, ints.overlap, n);
+      Matrix rb = commutator_residual(next.fock.beta, projected_b, ints.overlap, n);
+      runtime::sample_cpu_capacity(runtime::add_capacity(
+          runtime::add_capacity(
+              runtime::add_capacity(
+                  plan.cpu_observation_capacity(),
+                  long_range_correction ? long_range_correction->cpu_observation_capacity() : 0),
+              diis.numeric_capacity()),
+          runtime::vector_capacities(
+              basis.packed, grid.points(), grid.weights(), grid.owners(), x, alpha, beta, ca.values,
+              ca.vectors, cb.values, cb.vectors, final.fock.alpha, final.fock.beta, next.fock.alpha,
+              next.fock.beta, projected_a, projected_b, ra, rb, diagnostic.history)));
+      // Keep beneficial physical polishing (including nonlocal force states),
+      // but do not replace a certified DIIS state with a less stationary trial.
+      // Rejected trial work still belongs in the endpoint's semantic counters.
+      if (ordinary_primary && (evaluate_xc.program || options.certify_ks_export) &&
+          std::max(residual_rms(ra), residual_rms(rb)) > diagnostic.physical_residual) {
+        next = std::move(final);
+        ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
+        rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
+      } else {
         alpha = std::move(projected_a);
         beta = std::move(projected_b);
       }
-
-      auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
-                           options, nonlocal_correlation, nonlocal_domain);
-      ++result.fock_builds;
-      diagnostic.coulomb_exchange_work.add(next.coulomb_exchange_work);
-      const Matrix ra = commutator_residual(next.fock.alpha, alpha, ints.overlap, n);
-      const Matrix rb = commutator_residual(next.fock.beta, beta, ints.overlap, n);
       const double residual_a = residual_rms(ra), residual_b = residual_rms(rb);
       diagnostic.physical_residual = std::max(residual_a, residual_b);
       result.physical_residual_rms = std::hypot(residual_a, residual_b) / std::sqrt(2.0);
