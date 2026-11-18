@@ -2,9 +2,11 @@
 
 The [combined #3064/#3065 RTX 5090 refresh](readme-rtx5090-composed-20261111/README.md)
 retains all 512 fresh HF/DFT E+force calls and both engines' per-pair errors.
-The [H100 counterpart on `a7241b4fd`](readme-h100-20261112/README.md) retains the
+The [H100 counterpart on `46942b9f0`](readme-h100-20261117/README.md) retains the
 same 512-call matrix, its per-pair errors and every slow point; the
-[preceding H100 cohort on `5533417aa`](readme-h100-20261111/README.md) records the #3069 DF ωB97M-V fix.
+[H100 cohort on `a7241b4fd`](readme-h100-20261112/README.md) is the pre-#3111/#3112
+ωB97M-V baseline, and the [cohort on `5533417aa`](readme-h100-20261111/README.md)
+records the #3069 DF ωB97M-V fix.
 
 The [final 2026-10-25 default-only refresh](readme-refresh-20261025/README.md)
 retains all 128 populations / 512 complete E+F calls under the #2786 framework,

@@ -158,22 +158,23 @@ timing/error summaries and exact source/image identities. Cold DF HF96 now takes
 GenerativeQC. Matching SCF thresholds still does not imply identical work or a
 universal speedup guarantee.
 
-**HF/DFT energy + analytic forces — H100 (2026-11-12)**
+**HF/DFT energy + analytic forces — H100 (2026-11-17)**
 
-The same 64 pairs on master `a7241b4fd` (after #3072) on one H100 80GB,
-against GPU4PySCF 1.9.0 defaults, show GenerativeQC faster in **62/64 cold**
-and **61/64 warm** cases. **H100 is not ahead everywhere:** the slow points are
-Direct HF96 (cold 6.74 vs 5.99 s, warm 1.40 vs 1.33 s), Direct ωB97M-V96 cold
-(48.3 vs 40.7 s), Direct r2SCAN-3c96 warm (4.02 vs 3.75 s) and DF HF96 warm
-(0.98 vs 0.75 s). [Per-pair errors](benchmarks/results/readme-h100-20261112/errors.md)
+The same 64 pairs on master `46942b9f0` (after #3112) on one H100 80GB,
+against GPU4PySCF 1.9.0 defaults, show GenerativeQC faster in **64/64 cold**
+and **62/64 warm** cases. **H100 is not ahead everywhere:** the slow points are
+DF HF96 warm (0.97 vs 0.76 s) and Direct r2SCAN-3c96 warm (4.02 vs 3.90 s).
+Direct ωB97M-V96 is now 34.2 vs 43.0 s cold and 5.0 vs 12.8 s warm. Direct
+HF96 is faster on this GPU only because the reference was slower; its native
+times are unchanged. [Per-pair errors](benchmarks/results/readme-h100-20261117/errors.md)
 match the RTX 5090 cohort: largest 2.1e-5 Eh/atom and 5.7e-5 Eh/Bohr for both engines,
 with the same call-by-call bounds of 1.6e-9 Eh/atom and 3.5e-6 Eh/Bohr.
 
-![Direct cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-direct-defaults-h100.svg)
+![Direct cold and warm endpoint timings on H100, measured 2026-11-17](assets/readme-direct-defaults-h100.svg)
 
-![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-12](assets/readme-df-defaults-h100.svg)
+![Density-fitted cold and warm endpoint timings on H100, measured 2026-11-17](assets/readme-df-defaults-h100.svg)
 
-See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261112/README.md).
+See [H100 measurements, accuracy and conditions](benchmarks/results/readme-h100-20261117/README.md).
 
 The later three-process paper figures for
 [H100](assets/paper-hfdft-cold3-h100.svg) and

@@ -122,6 +122,7 @@ def test_reject_incomplete_or_mismatched_evidence(
         "readme-rtx5090-composed-20261111",
         "readme-h100-20261111",
         "readme-h100-20261112",
+        "readme-h100-20261117",
     ],
 )
 def test_retained_samples_recompute_the_published_summary(
@@ -176,7 +177,12 @@ def test_error_table_reports_largest_call_error_for_both_engines(
 
 
 @pytest.mark.parametrize(
-    "campaign", ["readme-rtx5090-composed-20261111", "readme-h100-20261112"]
+    "campaign",
+    [
+        "readme-rtx5090-composed-20261111",
+        "readme-h100-20261112",
+        "readme-h100-20261117",
+    ],
 )
 def test_published_error_table_matches_retained_samples(
     replay: ModuleType, campaign: str
@@ -188,7 +194,12 @@ def test_published_error_table_matches_retained_samples(
 
 
 @pytest.mark.parametrize(
-    "campaign", ["readme-rtx5090-composed-20261111", "readme-h100-20261112"]
+    "campaign",
+    [
+        "readme-rtx5090-composed-20261111",
+        "readme-h100-20261112",
+        "readme-h100-20261117",
+    ],
 )
 def test_published_call_by_call_error_bounds_hold(campaign: str) -> None:
     """README states absolute cold-with-cold / warm-with-warm error differences."""
