@@ -228,7 +228,12 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
     resources_.grid_prepare_device_delta = metrics.prepare_device_delta;
     if (metrics.provider_retained_bytes > storage.provider_allowance)
       throw std::runtime_error("native stationary grid provider exceeds its retained allowance");
-    if (admit_map && capacity.ao_map_bytes && system.ecp_terms.empty()) {
+    // A dense ablation must use this same complete native endpoint, rather
+    // than changing the scientific model or routing through Python forces.
+    // This control can only decline an otherwise admitted optional map.
+    const auto* ao_map_control = std::getenv("GENERATIVEQC_CUDA_FORCE_ACTIVE_AO");
+    const bool ao_map_enabled = !ao_map_control || std::string_view(ao_map_control) != "0";
+    if (ao_map_enabled && admit_map && capacity.ao_map_bytes && system.ecp_terms.empty()) {
       // The controller owns an immutable basis and borrows its parent's frozen
       // quadrature for its entire lifetime. Geometry updates replace that parent
       // and controller. The grid owner additionally checks its geometry epoch,
@@ -681,7 +686,8 @@ generativeqc_status CudaStationaryController::gradient(
         work.discovery_ao_jet_values - previous_grid_work.discovery_ao_jet_values);
     runtime::cuda_trace::trace_counter("grid_discovery_passes",
                                        work.discovery_passes - previous_grid_work.discovery_passes);
-    runtime::cuda_trace::trace_counter("indexed_grid", indexed_grid_ ? 1 : 0);
+    // An admitted FP64 map is not consumed by the separate FP32 grid route.
+    runtime::cuda_trace::trace_counter("indexed_grid", indexed_grid_ && !mixed_grid ? 1 : 0);
     runtime::cuda_trace::trace_counter("cached_geometry", resources_.cached_geometry ? 1 : 0);
     runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
     runtime::cuda_trace::trace_counter("shared_nonlocal_grid", shared_nonlocal_grid ? 1 : 0);

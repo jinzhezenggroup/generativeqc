@@ -216,7 +216,7 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
-Large ordinary fitted CUDA force workloads may use the native active-AO bitmask
+Large admitted native CUDA force workloads may use the native active-AO bitmask
 consumer under the unchanged stationary force budgets. It examines all requested
 AO value/derivative jets at the existing `1e-16` force cutoff, including second
 derivatives where needed; SCF masks are not reused for a different derivative

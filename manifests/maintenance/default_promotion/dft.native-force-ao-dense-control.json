@@ -1,0 +1,20 @@
+{
+  "id": "dft.native-force-ao-dense-control",
+  "classification": "diagnostic-test-only",
+  "controls": [
+    "dft-policy:GENERATIVEQC_CUDA_FORCE_ACTIVE_AO"
+  ],
+  "owner_issues": [1853, 1598],
+  "sources": [
+    "src/dft/cuda_stationary_controller.cpp"
+  ],
+  "rationale": "Setting this decline-only control to 0 before native force-controller construction disables optional exact-jet AO maps for a same-binary complete-endpoint dense ablation or explicit dense execution. Unset and nonzero settings retain existing capability/work/resource/occupancy admission; no value forces sparse selection or changes SCF, quadrature, precision, integral approximation, convergence, mandatory dense capacity or geometry caching. This is not a new scientific model or performance default.",
+  "revisit_condition": "Retain the identical native scientific endpoint and full dense capacity when changing the control. Default-policy changes require source/device-matched complete cold/warm/moved E/F, independent references and actual work counters; preserve negative timing observations rather than adding functional-name exceptions.",
+  "evidence": [
+    "tests/python/test_native_cross_functional_force_ao_cuda.py",
+    "tests/python/test_native_force_ao_capacity.py",
+    "tests/python/test_native_force_ao_validation.py",
+    "docs/developer/preao_force_domain.md",
+    "benchmarks/results/native-force-ao-20261117/README.md"
+  ]
+}

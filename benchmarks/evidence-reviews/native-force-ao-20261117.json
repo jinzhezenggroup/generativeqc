@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "native-force-ao-20261117",
+  "owner": "Native cross-functional force AO adoption (#1853)",
+  "reason": "Retain compact independent reference arrays, complete native E/F outputs and actual AO/jet/projection work for 28 scientific cases and 480 separate fresh-process endpoints. Keep all timing samples, including cold regressions, together with source/build/Slurm identity and explicit rejected-diagnostic boundaries. These hash-pinned compressed records support executable replay; they do not certify later master changes, another build profile or universal performance. Register only this campaign's exact checkout growth without relaxing per-file or per-change review limits.",
+  "review_document": "benchmarks/results/native-force-ao-20261117/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/native-force-ao-20261117/acceptance.json.xz",
+      "family": "native-force-ao-20261117",
+      "classification": "required-compact-accepted-evidence",
+      "role": "28 source-matched RKS/UKS scientific cases, independent references, dense/auto/minimum endpoints, resource and map lifecycle gates",
+      "bytes": 266272,
+      "sha256": "4b7ffbfa75173ce459db80749f0a35726e0ba810b0bf035bd9bd73d7ce1ef2e1"
+    },
+    {
+      "path": "benchmarks/results/native-force-ao-20261117/endpoints.json.xz",
+      "family": "native-force-ao-20261117",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 60 fresh-process populations and 480 complete native E/F calls with paired timings, full outputs, semantic work and negative cold observations",
+      "bytes": 241452,
+      "sha256": "830112b45a26f580b9b0d67e90516feb3691f55f90dbe4cb5f21517db0a082ef"
+    }
+  ]
+}
