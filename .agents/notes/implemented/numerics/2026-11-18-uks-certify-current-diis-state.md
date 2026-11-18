@@ -80,6 +80,12 @@ combinations, sticky-failure injections and the finite timeout stay unchanged.
 Its full 21-case module passes locally in 57.23 s; this host emulation is not
 real-GPU evidence.
 
+Hosted run `44224991871` subsequently exposes another 60-second emulation
+timeout despite the local pass and an intervening hosted pass. The
+[persistent sleeping-team decision](../performance/2026-11-18-persistent-host-cooperative-emulation.md)
+supersedes that limited per-block worker reuse; no scientific case or timeout
+gate is removed.
+
 ## Revisit when
 
 RKS and UKS share a typed physical-state certificate with the export owner.
