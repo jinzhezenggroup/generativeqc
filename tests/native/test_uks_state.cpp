@@ -17,7 +17,7 @@ void require(bool passed, const char* message) {
 }
 
 void check_state(bool pbe, unsigned max_iterations, bool hydroxyl = false,
-                 bool retain_state = false) {
+                 bool retain_state = false, bool certify_export = false) {
   // Asymmetric H3 has two occupied alpha orbitals and one beta orbital.
   // Its initial core density is not stationary, unlike a one-AO atom.
   core::System system;
@@ -62,6 +62,7 @@ void check_state(bool pbe, unsigned max_iterations, bool hydroxyl = false,
   scf::ScfOptions options;
   options.compute_forces = false;
   options.retain_ks_state = retain_state;
+  options.certify_ks_export = certify_export;
   options.max_iterations = max_iterations;
   options.energy_tolerance = 1e-10;
   options.density_tolerance = 1e-7;
@@ -101,6 +102,20 @@ void check_state(bool pbe, unsigned max_iterations, bool hydroxyl = false,
   } else {
     require(result.ks_physical_fock.empty(), "unrequested final Fock was retained");
   }
+  if (certify_export && result.converged) {
+    const auto orthogonalizer = scf::reference::symmetric_orthogonalizer(ints.overlap, n);
+    const auto alpha_orbitals = scf::reference::generalized_eigen(fock.alpha, orthogonalizer, n);
+    const auto beta_orbitals = scf::reference::generalized_eigen(fock.beta, orthogonalizer, n);
+    const auto alpha_projector =
+        scf::reference::density_from_orbitals(alpha_orbitals.vectors, n, hydroxyl ? 5U : 2U, 1.0);
+    const auto beta_projector =
+        scf::reference::density_from_orbitals(beta_orbitals.vectors, n, hydroxyl ? 4U : 1U, 1.0);
+    const double tolerance = std::min(1e-9, options.density_tolerance);
+    for (std::size_t index = 0; index < alpha.size(); ++index)
+      require(std::abs(alpha_projector[index] - alpha[index]) <= tolerance &&
+                  std::abs(beta_projector[index] - beta[index]) <= tolerance,
+              "certified UKS export did not reconstruct the unshifted physical projector");
+  }
   const auto residual_a = scf::reference::commutator_residual(fock.alpha, alpha, ints.overlap, n);
   const auto residual_b = scf::reference::commutator_residual(fock.beta, beta, ints.overlap, n);
   const double physical_rms =
@@ -138,6 +153,7 @@ int main() {
       for (unsigned iterations : {1U, 150U}) check_state(pbe, iterations);
       check_state(pbe, 200, true);
       check_state(pbe, 200, true, true);
+      check_state(pbe, 150, false, true, true);
     }
     std::cout << "UKS accepted and exhausted-budget states are physically consistent\n";
   } catch (const std::exception& error) {

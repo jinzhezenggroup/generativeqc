@@ -25,6 +25,7 @@ def emit_weighted_eri_primitive_header(
     functions: tuple[tuple[WeightedEriKernel, str], ...],
     *,
     backend: typing.Any = "cuda",
+    positive_full_moments: bool = False,
 ) -> str:
     """Emit CPU/CUDA values and all twelve derivatives for packed weight subsets.
 
@@ -36,8 +37,21 @@ def emit_weighted_eri_primitive_header(
     The operator family and exact normalized omega are embedded in the source;
     they cannot be changed by replaying a compiled callable with new geometry.
     No screening, omega derivative, Hessian or range-separated DF is implied.
+
+    Qualified CPU consumers may explicitly select the shared positive Full
+    moment evaluator and its bounded fallback. The generic/CUDA defaults and
+    every LR/SR geometry keep their original numerical schedule and domain.
     """
+    if type(positive_full_moments) is not bool:
+        raise TypeError("positive_full_moments must be an explicit boolean")
+    if positive_full_moments and backend != "cpu":
+        raise ValueError("positive Full moments require a qualified CPU consumer")
     source = emit_weighted_eri_header(functions, backend=backend, packed_weights=True)
+    geometry = (
+        "make_eri_geometry<Geometry, 13, 0, true>"
+        if positive_full_moments
+        else "make_eri_geometry"
+    )
     qualifier = "__device__ __forceinline__" if backend == "cuda" else "inline"
     lines = [
         "#ifndef GENERATIVEQC_GENERATED_WEIGHTED_ERI_PRIMITIVE_HPP",
@@ -61,7 +75,7 @@ def emit_weighted_eri_primitive_header(
                 f"  for (unsigned i = 0; i < {len(kernel.component_indices)}; ++i)",
                 "    if (!std::isfinite(component_weights[i])) return false;",
                 "  Geometry geometry{};",
-                "  if (!generativeqc::integrals::make_eri_geometry(exponents, centers,",
+                f"  if (!generativeqc::integrals::{geometry}(exponents, centers,",
                 f"      {kernel.integral.maximum_coulomb_order}, generativeqc::integrals::CoulombRange::{native_ranges[CoulombKernelFamily(radial.family)]},",
                 f"      {float(radial.omega).hex()}, geometry)) return false;",
                 f"  const auto candidate = {name}(geometry, component_weights);",

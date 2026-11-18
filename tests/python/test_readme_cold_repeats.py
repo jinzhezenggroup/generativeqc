@@ -10,10 +10,10 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from test_readme_defaults import receipt
 
 from benchmarks.readme_cold_repeats import SCHEMA, aggregate, population_order
 from benchmarks.readme_defaults import allocation_metadata
-from tests.python.test_readme_defaults import receipt
 
 
 def matrix() -> list[dict]:

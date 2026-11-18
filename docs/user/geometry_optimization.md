@@ -84,8 +84,8 @@ analytic nuclear forces.
 
 The installed C SDK separately exports `generativeqc_saddle_correct_v1` from
 `generativeqc/saddle.h`. This bounded local eigenvector-following owner accepts
-caller-supplied energy/gradient and raw-Hessian callbacks; it does not provide
-a molecular TS task or extend the method domains of `generativeqc optimize`.
+caller-supplied energy/gradient and raw-Hessian callbacks; the corrector itself
+does not establish chemistry or extend the method domains of `generativeqc optimize`.
 The caller must bind one qualified physical model, basis, grid and electronic
 state policy across all geometries. No external optimizer, reference engine,
 lower-level preliminary method or displaced production derivative is launched
@@ -125,14 +125,116 @@ for callback lifetimes, output capacities and failure semantics. This callback
 API is algorithm infrastructure, not independent molecular or Ni/ECP TS
 qualification.
 
+(native-saddle-cli)=
+## Native molecular saddle command
+
+`generativeqc saddle` is a separate Python-free molecular task over the same
+native corrector. Unlike `optimize`, it never introduces a cheaper preliminary
+method, basis or grid. It requires a negative target mode in a nonstationary
+starting geometry; it is not a minimum-escape or reaction-path search.
+
+```bash
+generativeqc saddle near-saddle.xyz --method 'b3lyp-d3(bj)-rks' \
+  --basis sto-3g --representation spherical --backend cpu \
+  --masses masses.json --max-attempts 100 --progress-json --json
+```
+
+`masses.json` must contain one positive finite physical/isotopic mass in dalton
+per atom, in XYZ order. There is no implicit isotope assignment. Coordinates
+follow `--units` (Angstrom by default). Optional `--initial-mode FILE.json`
+contains a nonzero finite `natoms`-by-3 Cartesian target direction. Molecular
+rigid projection is mandatory; it never removes small vibrational eigenvalues.
+
+The current domain is the linked canonical Gaussian/VWN-RPA B3LYP RKS/UKS
+CPU direct-FP64 domain, optionally with uncut two-body D3(BJ), ATM off.
+The command defaults to bare `b3lyp-rks`; choose UKS and the supplied
+multiplicity explicitly. ECP, DF, CUDA, semilocal-only and range/nonlocal
+molecular saddle paths refuse. Prepared native force admission is checked
+before SCF, and each raw Hessian consumes that geometry's actual retained
+native batch. No Python, runtime compiler, reference engine, displaced SCF
+or external optimizer runs. Occupied-root continuity is checked separately
+for each spin against the last accepted geometry, not a rejected trial.
+
+All five convergence controls remain independent:
+
+| Flag | Default | Unit |
+| --- | --- | --- |
+| `--energy-change` | `1e-6` | Hartree |
+| `--gradient-rms` | `3e-4` | Hartree/Bohr |
+| `--gradient-max` | `4.5e-4` | Hartree/Bohr |
+| `--displacement-rms` | `1.2e-3` | Angstrom |
+| `--displacement-max` | `1.8e-3` | Angstrom |
+
+`--max-attempts` defaults to 100 and cannot exceed 100; accepted **and rejected**
+steps consume that budget. Initial preparation and fresh-final verification
+are counted separately as derivative work. Trust-radius controls are
+`--initial-radius 0.1`, `--minimum-radius 1e-8`, and `--maximum-radius 0.5`
+(Bohr). Other controls are `--curvature-tolerance 1e-7`,
+`--raw-symmetry-tolerance 1e-10` (Hartree/Bohr²),
+`--minimum-mode-overlap 0.5`, `--minimum-occupied-overlap 0.7`, and
+`--acceptance-ratio 0.1`. SCF defaults are 240 iterations,
+`--energy-tolerance 1e-13`, and `--density-tolerance 1e-11`; explicit values
+are forwarded without relaxing the native accepted-state verification gate.
+Derivative work/response controls are the same as
+[the native CPU Hessian command](native_cli.md#native-cpu-b3lyp-hessian-and-hvp).
+
+`--saddle-budget-bytes` (128 MiB) bounds the corrector and, separately, final
+harmonic analysis. `--root-budget-bytes` (128 MiB) bounds retained orbital
+panels and root-tracking matrices, including the current orbital export
+reservation. These are owner-specific numeric bounds, not an aggregate RSS
+promise; primal/provider scratch, cross-overlap integral scratch, allocation
+metadata, JSON and process overhead are excluded. `--output-budget-bytes`
+also admits the task's dense result panels; `--max-coordinates` defaults to
+300 and cannot exceed 300. Bounded storage does not imply practical electronic
+work at the largest admitted dimension.
+
+With `--json`, stdout contains one final `generativeqc.native-molecular-saddle-result/v1`
+record. `--progress-json` streams derivative-stage and last-accepted optimizer
+observations as JSON lines to stderr. The result separates optimizer attempts,
+SCF iterations/Fock builds and completed response/integral/D3 work. Counters
+do not invent unknown work inside a failed derivative stage. Each native
+energy/gradient evaluation additionally reports `system_prepare`, `batch_prepare`
+and `scf_forces` phase starts and completions (or failures), with coordinates
+and elapsed time; terminal phase records include `phase_seconds`. A phase start
+is not evidence of convergence or completed work. If the process is interrupted
+before a terminal record, use the external wall timer rather than the last
+record's timestamp as the total duration.
+
+For deeper CPU SCF diagnostics, set `GENERATIVEQC_DF_PROGRESS_TRACE` to a fresh
+JSONL path. The separate append-only journal records RKS/UKS SCF scopes, basis
+and grid sizes, physical-evaluation durations and completed iteration/Fock-build
+observations, plus terminal counts and convergence when the call returns.
+A physical evaluation or SCF scope returning is not itself convergence; a missing
+scope end denotes interrupted/incomplete evidence. This diagnostic does not
+change tolerances or count in-flight work as completed in the final result.
+
+The last fully accepted coordinates, energy, gradient and **raw** Hessian survive
+algorithm failures. An initial derivative failure has no accepted state and
+publishes null derivative panels plus the original coordinates. A verified
+stationary result additionally publishes mass-weighted and Cartesian normal
+modes and signed, **unscaled** frequencies in cm⁻¹. Harmonic analysis checks
+raw symmetry before roundoff averaging its own copy; the published raw Hessian
+is unchanged. Cartesian curvatures are explicitly separate from frequencies.
+Harmonic rank/index disagreement or mode-publication failure retains the
+verified geometry but prevents a successful task result.
+
+Exit zero requires a freshly verified first-order saddle **and** successful
+harmonic publication. Other indices, nonnegative targets, attempt/resource
+limits, derivative failures and cancellation are not success. SIGINT/SIGTERM
+request cancellation after the current synchronous derivative stage completes;
+they do not interrupt native source cleanup. Input/closure/argument refusals
+before the task starts produce no result. Small all-electron controls do not
+qualify Ni/ECP transition states or practical 25–40-atom complete electronic work.
+
 ## Python saddle interfaces
 
 `generativeqc.saddle.correct_saddle` binds that same native corrector to Python
 energy/gradient and raw-Hessian callbacks. It does not reimplement the optimizer.
 `generativeqc.saddle.optimize_saddle` supplies the molecular adapter, using an
 existing `Calculator` without switching the method, basis or grid. These APIs do
-not change `generativeqc optimize`, which remains a Python-free minimum search;
-there is not yet a molecular TS CLI task.
+not change `generativeqc optimize`, which remains a Python-free minimum search.
+The separate {ref}`native saddle command <native-saddle-cli>` binds the same
+derivative owners without Python.
 
 ### Small all-electron control
 
@@ -186,20 +288,47 @@ endpoint includes fresh final derivatives, not just the last accepted step.
 ### Admission and execution
 
 The molecular adapter requires an already qualified public Hessian and forces,
-CPU FP64 direct all-electron unpolarized full-range hybrid RKS, and one fixed
-charge with multiplicity one. Semilocal-only, range/nonlocal, UKS, ECP, DF and
-CUDA calculators are not admitted by this adapter. A qualified uncut two-body
+CPU FP64 direct all-electron canonical B3LYP RKS/UKS, and one fixed charge
+and multiplicity. Restricted calculations require multiplicity one; UKS must
+already have public Hessian admission. Semilocal-only, range/nonlocal, ECP, DF
+and CUDA calculators are not admitted by this adapter. A qualified uncut two-body
 D3(BJ) correction remains part of the same total MethodIR. This narrower adapter
 does not promote an unqualified derivative domain. In particular, it does not
 deliver the requested Ni/I/Cs transition-state endpoint.
 
-One prepared native SCF supplies energy/forces and the raw Hessian at each
-geometry. All electronic owners close before additive D3 curvature publication.
-No reference engine, finite differences, external optimizer or preliminary
-lower-level calculation runs in production. Independent cold SCFs must preserve
+One prepared native SCF supplies native energy/forces and the raw Hessian at each
+geometry. The Hessian callback consumes that retained batch through the same
+native CPU bridge as `Calculator.hessian`; coupled response and exactly-once
+D3 curvature are composed in C++. Python does not reconstruct AO/grid owners,
+solve electronic response or compile derivative code at runtime. Missing native
+force or second-order closure fails explicitly rather than falling back to the
+development Python numerical path. Canonical C and integer occupations cross a
+separate bounded bridge only for root tracking, not to implement derivatives.
+The obsolete molecular `cache` option is removed; no compiler cache is needed
+by this precompiled endpoint. No reference engine, finite differences, external
+optimizer or preliminary lower-level calculation runs in production.
+
+`max_eri_primitives` optionally overrides the native nuclear-integral work cap
+for each complete Hessian request; its default and scope are defined in the
+[native CPU derivative contract](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+It is not a bound on time, induced-Fock work or the complete optimization, and
+does not promote an unqualified molecular domain.
+
+Independent cold SCFs must preserve
 the occupied subspace relative to the **last accepted** state: the smallest
-principal cross-geometry AO overlap must meet `minimum_occupied_overlap`
-(default `0.9`). Rejected trial roots never replace the accepted reference.
+principal cross-geometry AO overlap in **each occupied spin channel** must meet
+`minimum_occupied_overlap` (default `0.9`). Each channel retains its integer
+population; an empty channel must remain empty. Independent occupied-orbital
+gauge rotations do not change this test, and one continuous spin cannot mask
+a root change in the other. Rejected trial roots never replace the accepted reference.
+For this comparison alone, the current AO centres are translated to the last
+accepted geometry's mass-weighted centre. This removes arbitrary whole-molecule
+translation, which otherwise attenuates compact core-orbital overlaps even for
+an unchanged state. AO coefficients do not change under this translation.
+Rotations are not registered because the finite angular grid has a fixed
+orientation. Production coordinates, derivatives, steps and the unaligned
+convergence RMS conventions are unchanged. Evaluation records report the
+comparison frame and its translation in Bohr.
 This fail-closed local policy is not an electronic stability proof, a guarantee
 of the global ground state or an unrestricted root-selection algorithm.
 
@@ -265,7 +394,10 @@ prepared electronic owner survives the molecular endpoint, including failures.
 Changing the calculator's physical model during a callback fails explicitly.
 
 `maximum_numeric_bytes` bounds the native optimizer only; overlap, integral,
-grid and output controls bound their named providers independently. Neither
+grid and output controls bound their named providers independently. The root
+overlap budget separately admits canonical-frame export (verified frame,
+staged C and caller C) and the rectangular cross-geometry overlap matrix;
+it excludes producer eigensolver scratch and detached Python copies. Neither
 these bounds nor their sum is a whole-process peak-RSS claim. Complete endpoint
 seconds include preparation, derivative work, native optimization and final
 mode analysis. Qualification must independently measure process peak memory

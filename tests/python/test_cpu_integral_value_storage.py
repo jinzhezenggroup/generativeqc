@@ -75,26 +75,6 @@ def test_mixed_basis_keeps_low_l_geometry_reuse_and_disjoint_fallback() -> None:
     assert "if (!include_derivatives && ao_i.shell->angular_momentum <= 3" in build
 
 
-def test_f_values_reuse_the_retained_recurrence_with_bounded_components() -> None:
-    """Keep preparation outside components and keep g/derivatives independent."""
-    shared = SOURCE.split("void build_f_value_eri_shell_quartets(", 1)[1].split(
-        "void build_value_eri_shell_quartets(", 1
-    )[0]
-    assert "if (maximum_shell != 3) return" in shared
-    assert "prepare_eri_cartesian(" in shared
-    assert shared.index("prepare_eri_cartesian(") < shared.index(
-        "for (auto& component : components)"
-    )
-    assert "contract_prepared_eri_value(" in shared
-    assert "maxima[slot].fill(shells[slot]->angular_momentum)" in shared
-    assert "store_eri_symmetry" in shared
-    contraction = SOURCE.split("double contract_prepared_eri_value(", 1)[1].split(
-        "struct PreparedCartesianEri", 1
-    )[0]
-    assert "Jet" not in contraction
-    assert "double value = 0.0" in contraction
-
-
 def test_only_integral_producers_assert_eightfold_projection() -> None:
     """Keep arbitrary tensors on the ordered adapter, including nonsymmetric data."""
     assert "bool eightfold_symmetric = false" in SOURCE

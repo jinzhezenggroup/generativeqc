@@ -14,10 +14,28 @@
 namespace generativeqc::dft {
 namespace {
 
+std::size_t add(std::size_t left, std::size_t right) {
+  if (right > std::numeric_limits<std::size_t>::max() - left)
+    throw std::invalid_argument("DFT grid size overflow");
+  return left + right;
+}
+
 std::size_t multiply(std::size_t a, std::size_t b) {
   if (b && a > std::numeric_limits<std::size_t>::max() / b)
     throw std::invalid_argument("DFT grid size overflow");
   return a * b;
+}
+
+std::size_t partition_derivative_elements(std::size_t atoms) {
+  return add(multiply(3, multiply(atoms, atoms)), multiply(5, atoms));
+}
+
+bool overlapping_ranges(const void* first, std::size_t first_bytes, const void* second,
+                        std::size_t second_bytes) {
+  if (!first_bytes || !second_bytes) return false;
+  const auto left = reinterpret_cast<std::uintptr_t>(first);
+  const auto right = reinterpret_cast<std::uintptr_t>(second);
+  return left <= right ? right - left < first_bytes : left - right < second_bytes;
 }
 
 std::pair<std::size_t, std::size_t> angular_shape(const GridSpec& spec, std::size_t radial) {
@@ -375,9 +393,35 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
   std::vector<double> result(ncoord, 0.0);
   if (atoms == 1) return result;
 
-  std::vector<double> logs(atoms), partition(atoms), log_derivative(multiply(atoms, ncoord));
-  std::vector<double> average(ncoord);
-  for (std::size_t point_index = 0; point_index < point_count(); ++point_index) {
+  std::vector<double> workspace(partition_derivative_elements(atoms));
+  visit_partition_derivative(
+      0, point_count(), workspace,
+      [&](std::size_t point_index, std::span<const double> owner_derivative,
+          std::span<const double> average) {
+        const double scale = weight_sensitivity[point_index] * weights_[point_index];
+        for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
+          result[coordinate] += ::generativeqc::generated::atomic_grid::normalized_log_tangent(
+              scale, owner_derivative[coordinate], average[coordinate])[0];
+      });
+  if (!std::all_of(result.begin(), result.end(), [](double value) { return std::isfinite(value); }))
+    throw std::runtime_error("nonfinite contracted DFT grid weight derivative");
+  return result;
+}
+
+void MolecularGrid::visit_partition_derivative(
+    std::size_t begin, std::size_t count, std::span<double> workspace,
+    const std::function<void(std::size_t, std::span<const double>, std::span<const double>)>&
+        visitor) const {
+  const auto atoms = system_.atoms.size();
+  const auto ncoord = multiply(3, atoms);
+  if (begin > point_count() || count > point_count() - begin ||
+      workspace.size() < partition_derivative_elements(atoms))
+    throw std::invalid_argument("DFT grid partition derivative range or workspace mismatch");
+  const auto logs = workspace.first(atoms);
+  const auto partition = workspace.subspan(atoms, atoms);
+  const auto log_derivative = workspace.subspan(2 * atoms, multiply(atoms, ncoord));
+  const auto average = workspace.subspan(2 * atoms + atoms * ncoord, ncoord);
+  for (std::size_t point_index = begin; point_index < begin + count; ++point_index) {
     std::fill(logs.begin(), logs.end(), 0.0);
     std::fill(log_derivative.begin(), log_derivative.end(), 0.0);
     const double* point = points_.data() + 3 * point_index;
@@ -483,15 +527,77 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
         average[coordinate] += ::generativeqc::generated::atomic_grid::normalized_log_tangent(
             partition[atom], log_derivative[atom * ncoord + coordinate], 0.0)[0];
 
-    const double scale = weight_sensitivity[point_index] * weights_[point_index];
-    for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
-      result[coordinate] += ::generativeqc::generated::atomic_grid::normalized_log_tangent(
-          scale, log_derivative[owner * ncoord + coordinate], average[coordinate])[0];
-    }
+    visitor(point_index, log_derivative.subspan(owner * ncoord, ncoord), average);
   }
-  if (!std::all_of(result.begin(), result.end(), [](double value) { return std::isfinite(value); }))
-    throw std::runtime_error("nonfinite contracted DFT grid weight derivative");
-  return result;
+}
+
+std::size_t MolecularGrid::weight_direction_workspace_bytes(std::size_t count) const {
+  if (count > point_count())
+    throw std::invalid_argument("DFT grid weight direction count mismatch");
+  return count ? multiply(add(partition_derivative_elements(system_.atoms.size()), count),
+                          sizeof(double))
+               : 0;
+}
+
+GridWeightDirectionWork MolecularGrid::weight_direction(std::size_t begin, std::size_t count,
+                                                        std::span<const double> direction,
+                                                        std::span<double> output,
+                                                        std::span<double> workspace) const {
+  const auto atoms = system_.atoms.size();
+  if (begin > point_count() || count > point_count() - begin ||
+      direction.size() != multiply(3, atoms) || output.size() != count ||
+      (!direction.empty() && !direction.data()) || (count && !output.data()))
+    throw std::invalid_argument("DFT grid weight direction shape mismatch");
+  const auto bytes = weight_direction_workspace_bytes(count);
+  if (workspace.size() < bytes / sizeof(double) || (bytes && !workspace.data()))
+    throw std::length_error("DFT grid weight direction workspace budget exceeded");
+  const auto output_bytes = multiply(output.size(), sizeof(double));
+  const auto aliases = [&](const void* data, std::size_t size) {
+    return overlapping_ranges(output.data(), output_bytes, data, size) ||
+           overlapping_ranges(workspace.data(), bytes, data, size);
+  };
+  if (overlapping_ranges(workspace.data(), bytes, direction.data(),
+                         multiply(direction.size(), sizeof(double))) ||
+      overlapping_ranges(workspace.data(), bytes, output.data(), output_bytes) ||
+      aliases(points_.data(), multiply(points_.size(), sizeof(double))) ||
+      aliases(weights_.data(), multiply(weights_.size(), sizeof(double))) ||
+      aliases(owners_.data(), multiply(owners_.size(), sizeof(std::uint32_t))))
+    throw std::invalid_argument("DFT grid weight direction aliases retained data or workspace");
+  for (const auto& atom : system_.atoms)
+    if (aliases(atom.position.data(), 3 * sizeof(double)))
+      throw std::invalid_argument("DFT grid weight direction aliases retained centers");
+  for (double value : direction)
+    if (!std::isfinite(value)) throw std::invalid_argument("nonfinite DFT grid nuclear direction");
+  if (!count) return {};
+  const auto work = weight_direction_work(count);
+  const auto partition_size = partition_derivative_elements(atoms);
+  auto staged = workspace.subspan(partition_size, count);
+  std::fill(staged.begin(), staged.end(), 0.0);
+  if (atoms > 1)
+    visit_partition_derivative(
+        begin, count, workspace.first(partition_size),
+        [&](std::size_t point_index, std::span<const double> owner_derivative,
+            std::span<const double> average) {
+          double value = 0.0;
+          for (std::size_t coordinate = 0; coordinate < direction.size(); ++coordinate)
+            value +=
+                direction[coordinate] *
+                ::generativeqc::generated::atomic_grid::normalized_log_tangent(
+                    weights_[point_index], owner_derivative[coordinate], average[coordinate])[0];
+          if (!std::isfinite(value))
+            throw std::runtime_error("nonfinite DFT grid weight direction");
+          staged[point_index - begin] = value;
+        });
+  std::copy(staged.begin(), staged.end(), output.begin());
+  return work;
+}
+
+GridWeightDirectionWork MolecularGrid::weight_direction_work(std::size_t count) const {
+  if (count > point_count())
+    throw std::invalid_argument("DFT grid weight direction count mismatch");
+  const auto atoms = system_.atoms.size();
+  const auto pairs = atoms > 1 ? multiply(atoms, atoms - 1) / 2 : 0;
+  return {count, multiply(count, pairs)};
 }
 
 }  // namespace generativeqc::dft

@@ -35,6 +35,7 @@ def _jet_function(
             "full": ("value", "directional", "gradient", "jvp"),
             "first": ("value", "gradient"),
             "directional": ("value", "directional"),
+            "value": ("value",),
         }[output]
         pairs = tuple(
             (root, target)
@@ -115,6 +116,8 @@ template<unsigned Dimension> GQC_FACTOR_FUNCTION Jet<Dimension> multiply(
 
 
 def _pair_source(output: str) -> str:
+    direction_attribute = "[[maybe_unused]] " if output in ("first", "value") else ""
+    scale_attribute = "[[maybe_unused]] " if output == "value" else ""
     graph = Graph()
     differentiate = _eri_differentiate(graph, 0)
     variables = {
@@ -179,12 +182,12 @@ def _pair_source(output: str) -> str:
             + "\nreturn true; }"
         )
     return (
-        """
+        f"""
 GQC_FACTOR_FUNCTION bool pair_coefficients(unsigned left_power, unsigned right_power,
     double inverse_two, double left_shift, double right_shift,
-    double left_scale, double right_scale, double left_direction,
-    double right_direction, Jet<2>* output) {
-  switch (5*left_power+right_power) {
+    {scale_attribute}double left_scale, {scale_attribute}double right_scale, {direction_attribute}double left_direction,
+    {direction_attribute}double right_direction, Jet<2>* output) {{
+  switch (5*left_power+right_power) {{
 """
         + "\n".join(cases)
         + "\n} return false; }\n"
@@ -192,6 +195,7 @@ GQC_FACTOR_FUNCTION bool pair_coefficients(unsigned left_power, unsigned right_p
 
 
 def _coulomb_source(output: str) -> str:
+    direction_attribute = "[[maybe_unused]] " if output in ("first", "value") else ""
     algebra = build_coulomb_derivative_algebra(12)
     graph = algebra.graph
     differentiate = _eri_differentiate(graph, 14)
@@ -232,7 +236,7 @@ def _coulomb_source(output: str) -> str:
         code = 169 * orders[0] + 13 * orders[1] + orders[2]
         name = "coulomb_" + "_".join(map(str, orders))
         functions.append(
-            f"GQC_FACTOR_FUNCTION Jet<3> {name}(const Geometry& geometry, const double* direction) {{\nJet<3> result{{}};\n"
+            f"GQC_FACTOR_FUNCTION Jet<3> {name}(const Geometry& geometry, {direction_attribute}const double* direction) {{\nJet<3> result{{}};\n"
             + _jet_function(
                 graph,
                 roots,
@@ -258,6 +262,7 @@ GQC_FACTOR_FUNCTION Jet<3> coulomb_state(unsigned first, unsigned second, unsign
 
 
 def _prefactor_source(output: str) -> str:
+    direction_attribute = "[[maybe_unused]] " if output in ("first", "value") else ""
     graph = Graph()
     value = graph.variable("prefactor")
     differentiate = _eri_differentiate(graph, 0)
@@ -300,9 +305,9 @@ def _prefactor_source(output: str) -> str:
         *(f"result.jvp[{index}]" for index in range(12)),
     )
     return (
-        """
-GQC_FACTOR_FUNCTION Jet<12> gaussian_prefactor(const Geometry& geometry, const double* direction) {
-  Jet<12> result{};
+        f"""
+GQC_FACTOR_FUNCTION Jet<12> gaussian_prefactor(const Geometry& geometry, {direction_attribute}const double* direction) {{
+  Jet<12> result{{}};
 """
         + _jet_function(
             graph,
@@ -328,14 +333,21 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
     same immutable record for one component page. Omitting that binding retains
     the original canonical binder; CUDA emission has no borrowed-geometry API.
     ``output`` selects full value/gradient/gradient-JVP, value/gradient only,
-    or value/scalar-directional packing. Selection is independent of motion:
+    value/scalar-directional, or value-only packing. Selection is independent of motion:
     a zero direction does not change the requested operation or its ABI.
     """
     if backend not in ("cpu", "cuda"):
         raise ValueError("factorized second-order backend must be cpu or cuda")
-    if output not in ("full", "first", "directional"):
-        raise ValueError("factorized output must be full, first or directional")
+    if output not in ("full", "first", "directional", "value"):
+        raise ValueError("factorized output must be full, first, directional or value")
     qualifier = "static" if backend == "cpu" else "__device__ __noinline__"
+    # Only CPU Full consumers have qualified the positive moment schedule;
+    # retain CUDA's geometry instantiations and every LR/SR numerical path.
+    geometry_arguments = (
+        ("Geometry,14,0,true", "Geometry,14,8,true", "Geometry,14,10,true")
+        if backend == "cpu"
+        else ("Geometry,14", "Geometry,14,8", "Geometry,14,10")
+    )
     components = []
     for angular in range(5):
         entries = [
@@ -347,9 +359,9 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         '#include "integrals/eri_geometry.hpp"\n#include <cmath>\n'
         f"#define GQC_FACTOR_FUNCTION {qualifier}\n"
         "namespace generativeqc::scf::factorized_second {\n"
-        f"constexpr bool emit_gradient={'true' if output != 'directional' else 'false'};\n"
+        f"constexpr bool emit_gradient={'true' if output in ('full', 'first') else 'false'};\n"
         f"constexpr bool emit_jvp={'true' if output == 'full' else 'false'};\n"
-        f"constexpr bool emit_directional={'true' if output != 'first' else 'false'};\n"
+        f"constexpr bool emit_directional={'true' if output in ('full', 'directional') else 'false'};\n"
         "template<unsigned Dimension> struct Jet { double value{}, directional{}; double gradient[Dimension]{}, jvp[Dimension]{}; };\n"
         "struct Geometry { double inverse_two_p, inverse_two_q, rho; double difference[3], shifts[4][3], product_scales[4], decay[4][3]; double prefactor, boys[15]; };\n"
         + _product_source(output)
@@ -411,9 +423,9 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
             if backend == "cpu"
             else ""
         )
-        + r"""  if (family==0) valid=generativeqc::integrals::make_eri_geometry<Geometry,14>(exponents,coordinates,maximum_order,range,omega,geometry);
-  if (family==1) valid=generativeqc::integrals::make_eri_geometry<Geometry,14,8>(exponents,coordinates,maximum_order,range,omega,geometry);
-  if (family==2) valid=generativeqc::integrals::make_eri_geometry<Geometry,14,10>(exponents,coordinates,maximum_order,range,omega,geometry);
+        + f"""  if (family==0) valid=generativeqc::integrals::make_eri_geometry<{geometry_arguments[0]}>(exponents,coordinates,maximum_order,range,omega,geometry);
+  if (family==1) valid=generativeqc::integrals::make_eri_geometry<{geometry_arguments[1]}>(exponents,coordinates,maximum_order,range,omega,geometry);
+  if (family==2) valid=generativeqc::integrals::make_eri_geometry<{geometry_arguments[2]}>(exponents,coordinates,maximum_order,range,omega,geometry);
 """
         + ("  }\n" if backend == "cpu" else "")
         + r"""  if (!valid) return false;
@@ -469,7 +481,11 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
       }
   result=multiply(gaussian_prefactor(geometry,motion),result);
   output[0]=result.value;
-  constexpr unsigned derivative_blocks=emit_jvp ? 2 : 1;
+"""
+        + (
+            "  constexpr unsigned output_size=1;\n"
+            if output == "value"
+            else r"""  constexpr unsigned derivative_blocks=emit_jvp ? 2 : 1;
   const unsigned output_size=emit_gradient ? 1+3*centers*derivative_blocks : 2;
   for (unsigned index=1; index<output_size; ++index) output[index]=0;
   if constexpr (!emit_gradient) output[1]=result.directional;
@@ -478,7 +494,9 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
       output[1+3*incidence[center]+axis]+=result.gradient[3*center+axis];
       if constexpr (emit_jvp) output[1+3*centers+3*incidence[center]+axis]+=result.jvp[3*center+axis];
     }
-  for (unsigned index=0; index<output_size; ++index) if (!std::isfinite(output[index])) return false;
+"""
+        )
+        + r"""  for (unsigned index=0; index<output_size; ++index) if (!std::isfinite(output[index])) return false;
   return true;
 }
 }  // namespace generativeqc::scf::factorized_second

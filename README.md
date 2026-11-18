@@ -182,6 +182,9 @@ The later three-process paper figures for
 [original timing tables, complete E+F records and offline reproduction](benchmarks/results/paper-hfdft-cold3-20261115/README.md).
 Each figure is bound to its own recorded source; the RTX experiment is not a
 qualification of the current master implementation.
+A later [H100 three-process cohort on unmodified master `a6d5a3c00`](benchmarks/results/paper-hfdft-cold3-20261118/README.md)
+([figure](assets/paper-hfdft-cold3-20261118-h100.svg)) wins 64/64 cold and
+62/64 warm medians; DF HF96 and Direct r2SCAN-3c96 warm remain slower.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 

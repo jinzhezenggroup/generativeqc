@@ -48,12 +48,65 @@ def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
         "struct { size_t x{}; } threadIdx, blockIdx, blockDim;",
         r"""
 #include <atomic>
-#include <barrier>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
 #include <thread>
 struct Dimension { size_t x{}; };
 thread_local Dimension threadIdx, blockIdx;
 Dimension blockDim;
-thread_local std::barrier<>* active_barrier;
+// Hosted CI oversubscribes this GPU-warp emulation. Sleep instead of spinning
+// while a different simulated rank owns the available CPU time slice.
+class HostBarrier {
+  const size_t participants_;
+  size_t remaining_, generation_=0;
+  std::mutex mutex_;
+  std::condition_variable changed_;
+public:
+  explicit HostBarrier(size_t participants)
+      : participants_(participants), remaining_(participants) {}
+  void arrive_and_wait() {
+    std::unique_lock lock(mutex_);
+    const size_t generation=generation_;
+    if (--remaining_==0) {
+      remaining_=participants_;
+      ++generation_;
+      lock.unlock();
+      changed_.notify_all();
+    } else {
+      changed_.wait(lock,[&] { return generation_!=generation; });
+    }
+  }
+};
+thread_local HostBarrier* active_barrier;
+class HostTeam {
+  HostBarrier team_, dispatch_;
+  std::function<void(size_t)> work_;
+  bool stopping_=false;
+  std::vector<std::thread> workers_;
+public:
+  explicit HostTeam(size_t participants) : team_(participants), dispatch_(participants+1) {
+    for(size_t rank=0;rank<participants;++rank) workers_.emplace_back([this,rank] {
+      active_barrier=&team_;
+      for(;;) {
+        dispatch_.arrive_and_wait();
+        if(stopping_) return;
+        work_(rank);
+        dispatch_.arrive_and_wait();
+      }
+    });
+  }
+  ~HostTeam() {
+    stopping_=true;
+    dispatch_.arrive_and_wait();
+    for(auto& worker:workers_) worker.join();
+  }
+  void run(std::function<void(size_t)> work) {
+    work_=std::move(work);
+    dispatch_.arrive_and_wait();
+    dispatch_.arrive_and_wait();
+  }
+};
 #define __syncthreads() active_barrier->arrive_and_wait()
 #define __shared__ static
 double* geometry_pair_storage;
@@ -98,6 +151,7 @@ double* geometry_pair_storage;
         + r"""
 int main() {
   using Arithmetic=ARITHMETIC;
+  HostTeam team(32);
   constexpr size_t na=ATOMS,n=AOS,np=(na>32?5:17),pairs=na*(na-1)/2;
   constexpr size_t state_count=na<=32?pairs:4*(2*na-5)/2;
   double centers[3*na];
@@ -159,14 +213,14 @@ int main() {
     const auto expected=reduce();
     std::fill(partial.begin(),partial.end(),987654);
     auto execute=[&] {
-      for(size_t lane=0;lane<lanes;++lane) {
-        std::barrier barrier(32);
-        std::vector<std::thread> workers;
-        for(size_t rank=0;rank<32;++rank) workers.emplace_back([&,rank] {
-          active_barrier=&barrier; invoke(true,lane,rank);
-        });
-        for(auto& worker:workers) worker.join();
-      }
+      // Keep all 32 ranks for every block and failure injection, without
+      // repeatedly creating OS threads for the complete parameter matrix.
+      team.run([&](size_t rank) {
+        for(size_t lane=0;lane<lanes;++lane) {
+          invoke(true,lane,rank);
+          active_barrier->arrive_and_wait();
+        }
+      });
     };
     ao_evaluations=0;
     execute();

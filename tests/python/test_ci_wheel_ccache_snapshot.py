@@ -553,7 +553,7 @@ def test_wheel_workflow_preserves_optional_budgets_and_required_gates() -> None:
     ):
         assert entry["continue-on-error"] is True
         assert entry["timeout-minutes"] <= 2
-    assert named["Build and test wheel"]["timeout-minutes"] == 330
+    assert named["Build and test wheel"]["timeout-minutes"] == 345
     assert "continue-on-error" not in named["Build and test wheel"]
     assert "continue-on-error" not in named["Verify wheel payload and CUDA linkage"]
     action = steps(

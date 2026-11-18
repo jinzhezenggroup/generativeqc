@@ -32,6 +32,7 @@ from .dispersion import (
     D3Spec,
     D4Spec,
     DispersionCorrectionPrimitive,
+    b3lyp_d3_bj_spec,
     d4_eeq_spec_for_method,
     pbe0_d3_bj_spec,
     pbe0_d3_zero_spec,
@@ -855,6 +856,11 @@ METHOD_CATALOG = MappingProxyType(
         ),
         **_GENERATED_LIBXC_METHOD_SPECS,
         **_GENERATED_SPLIT_HYBRID_METHOD_SPECS,
+        "B3LYP-D3(BJ)": replace(
+            _GENERATED_LIBXC_METHOD_SPECS["B3LYP"],
+            identifier="B3LYP-D3(BJ)",
+            dispersion=b3lyp_d3_bj_spec(),
+        ),
     }
 )
 

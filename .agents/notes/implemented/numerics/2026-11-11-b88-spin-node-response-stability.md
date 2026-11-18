@@ -167,3 +167,12 @@ predates this footer and the historical proposal's lifecycle-label clarification
 it is not restamped. It explicitly excludes live installed Ni and canonical
 CsH UKS calculations and does not confer public/installed or full ECP-domain
 qualification. The earlier failed-candidate archive remains unchanged.
+
+## Subsequent completed Cs spin evidence
+
+The separate [canonical Cs RKS/UKS total-curvature decision](2026-11-11-canonical-cs-spin-total-curvature.md)
+records the now-completed CsH+ UKS matrix, both fresh HVPs and three independent
+total matrices, alongside the earlier CsH RKS cohort. Its own member/hash-verified
+recovery preserves both cases without changing the archived snapshots above.
+This advances only canonical Cs low-level evidence, not installed/public,
+iodine, mixed Ni/ECP, scale or TS qualification.

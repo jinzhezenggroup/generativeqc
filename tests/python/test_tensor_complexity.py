@@ -168,3 +168,54 @@ def test_intermediate_axis_limits_validate_domains(limits: dict[str, int]) -> No
     matrix = _matrix("a", space, "i", "j")
     with pytest.raises(ValueError, match="axis limits"):
         reassociate_einsums(Program({"out": matrix}), max_intermediate_axes=limits)
+
+
+@pytest.mark.parametrize("size", [2, 7])
+def test_degree_neutral_contraction_is_explicit_bounded_and_numerical(
+    size: int,
+) -> None:
+    """A constant-work schedule preserves signed bilinears and the default policy."""
+    orbital = IndexSpace("ao", "ao", size)
+    point = IndexSpace("point", "batch", 5)
+    density = _matrix("density", orbital, "i", "j")
+    panel = TensorSpec((Index("p", point), Index("i", orbital)), role="input")
+    left, right = input_tensor("left", panel), input_tensor("right", panel)
+    direct = Program({"out": einsum("pi,ij,pj->p", left, density, right)})
+    assert reassociate_einsums(direct).logical_hash == direct.logical_hash
+    limits = {"batch": 1, "ao": 1}
+    scheduled = reassociate_einsums(
+        direct, require_degree_reduction=False, max_intermediate_axes=limits
+    )
+    assert (
+        analyze_complexity(scheduled).max_work_degree
+        == analyze_complexity(direct).max_work_degree
+    )
+    for node in scheduled.nodes:
+        if node.op == "input" or node in scheduled.outputs.values():
+            continue
+        assert sum(axis.space.kind == "ao" for axis in node.spec.indices) <= 1
+        assert sum(axis.space.kind == "batch" for axis in node.spec.indices) <= 1
+    rng = np.random.default_rng(2844 + size)
+    feeds = {
+        "left": rng.normal(size=(5, size)),
+        "right": rng.normal(size=(5, size)),
+        "density": rng.normal(size=(size, size)),
+    }
+    expected = np.einsum("pi,ij,pj->p", feeds["left"], feeds["density"], feeds["right"])
+    np.testing.assert_allclose(
+        execute(scheduled, feeds).outputs["out"], expected, atol=3e-12, rtol=3e-12
+    )
+    blocked = reassociate_einsums(
+        direct,
+        require_degree_reduction=False,
+        max_intermediate_axes={"batch": 0, "ao": 0},
+    )
+    assert blocked.logical_hash == direct.logical_hash
+
+
+@pytest.mark.parametrize("policy", [None, 0, 1, "false"])
+def test_degree_reduction_policy_requires_an_explicit_boolean(policy: object) -> None:
+    space = IndexSpace("ao", "ao", 2)
+    matrix = _matrix("density", space, "i", "j")
+    with pytest.raises(TypeError, match="require_degree_reduction"):
+        reassociate_einsums(Program({"out": matrix}), require_degree_reduction=policy)

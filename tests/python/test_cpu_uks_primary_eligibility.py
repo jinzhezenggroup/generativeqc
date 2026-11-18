@@ -44,6 +44,7 @@ enum class FockBackend { Cpu, Cuda };
 struct UksLoopEvaluation {
   Matrix alpha_residual, beta_residual;
   double energy{}, state_rms{}, residual_rms{};
+  bool canonical_density_converged = true;
 };
 """
         + norm
@@ -67,6 +68,9 @@ int main() {
       if (!eligible(progress, evaluation)) throw std::runtime_error("equality rejected");
       residual[1] = std::nextafter(gate, 0.0);
       if (!eligible(progress, evaluation)) throw std::runtime_error("below gate rejected");
+      evaluation.canonical_density_converged = false;
+      if (eligible(progress, evaluation)) throw std::runtime_error("uncertified density accepted");
+      evaluation.canonical_density_converged = true;
       residual[1] = std::nextafter(gate, std::numeric_limits<double>::infinity());
       const double rms = std::hypot(residual[1], residual[64]) / 64.0;
       if (!(rms < std::min(1e-9, tolerance)))
@@ -89,6 +93,8 @@ int main() {
   options.density_tolerance = 1e-10;
   for (bool use_gate : {false, true}) {
     for (unsigned good_at : {3U, 99U}) {
+     for (unsigned canonical_good_at : {2U, 4U, 99U}) {
+      const unsigned certified_at = std::max(good_at, canonical_good_at);
       const generativeqc::solver::SelfConsistentPolicy policy{4, 1e-12, 1e-10, 1e-10, true};
       unsigned builds = 0, records = 0, accepts = 0;
       const auto evaluate = [&](double current, unsigned iteration) {
@@ -97,6 +103,7 @@ int main() {
         UksLoopEvaluation value{Matrix(4096), Matrix(4096)};
         value.alpha_residual[1] = iteration < good_at ? 2e-10 : 5e-11;
         value.residual_rms = value.alpha_residual[1] / 64.0;
+        value.canonical_density_converged = iteration >= canonical_good_at;
         return value;
       };
       const auto record = [&](const generativeqc::solver::SelfConsistentProgress& progress,
@@ -104,7 +111,7 @@ int main() {
         ++records;
         if (records != progress.iteration || builds != records || accepts + 1 != records)
           throw std::runtime_error("build/history ordering changed");
-        const bool expected = progress.iteration > 1 && (!use_gate || progress.iteration >= good_at);
+        const bool expected = progress.iteration > 1 && (!use_gate || progress.iteration >= certified_at);
         if (progress.converged != expected) throw std::runtime_error("wrong recorded decision");
       };
       const auto accept = [&](double current, UksLoopEvaluation,
@@ -117,11 +124,12 @@ int main() {
       const auto outcome = use_gate
           ? generativeqc::solver::run_self_consistent(0.0, policy, evaluate, accept, record, eligible)
           : generativeqc::solver::run_self_consistent(0.0, policy, evaluate, accept, record);
-      const unsigned iterations = use_gate ? std::min(good_at, policy.max_iterations) : 2U;
-      if (outcome.converged != (!use_gate || good_at <= policy.max_iterations) ||
+      const unsigned iterations = use_gate ? std::min(certified_at, policy.max_iterations) : 2U;
+      if (outcome.converged != (!use_gate || certified_at <= policy.max_iterations) ||
           outcome.progress.iteration != iterations || builds != iterations || records != iterations ||
           accepts != iterations || outcome.state != double(iterations - 1))
         throw std::runtime_error("RMS-only versus UKS eligibility/budget regression");
+     }
     }
   }
   return 0;

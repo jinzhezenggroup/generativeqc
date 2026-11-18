@@ -143,6 +143,29 @@ def test_source_path_cannot_escape_new_destination(tmp_path: Path) -> None:
     assert not (tmp_path / "source").exists()
 
 
+@pytest.mark.parametrize("field", ["keep_git_bytes", "patch_paths", "crlf_extra_paths"])
+def test_git_archive_source_refuses_patch_rules(tmp_path: Path, field: str) -> None:
+    source = {
+        "base_revision": "a" * 40,
+        "native_export": "git-archive",
+        "keep_git_bytes": [],
+        "patch_paths": [],
+        "crlf_extra_paths": [],
+    }
+    source[field] = ["src/retained.cpp"]
+    with pytest.raises(ValueError, match="git-archive"):
+        replay.reconstruct(source, tmp_path / "source")
+    assert not (tmp_path / "source").exists()
+
+
+def test_cohort_without_device_publication_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.syspath_prepend(str(replay.ROOT / "python"))
+    with pytest.raises(ValueError, match="no device publication"):
+        replay.verify(tmp_path)
+
+
 def test_publication_path_rejected_before_file_io(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unsafe"):
         replay.publication_files(tmp_path, {"files": [{"path": "../not-present.json"}]})
@@ -295,3 +318,27 @@ def test_fresh_autocrlf_checkout_preserves_real_publications(
     result = replay.verify(checked / dataset)
     assert result["rtx5090"]["wins"] == {"cold": 64, "warm": 64}
     assert len(result["h100"]["records"]) == 384
+
+
+def test_master_h100_cohort_replays_single_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The H100-only master cohort replays without an RTX publication."""
+    root = replay.ROOT
+    dataset = root / "benchmarks/results/paper-hfdft-cold3-20261118"
+    monkeypatch.syspath_prepend(str(root / "python"))
+    reference = Path("benchmarks/results/readme-refresh-20261026/oracles.json.xz")
+    (tmp_path / reference).parent.mkdir(parents=True)
+    (tmp_path / reference).write_bytes((root / reference).read_bytes())
+    provenance = replay.read_xz((dataset / "h100" / "provenance.json.xz").read_bytes())
+    path = Path(provenance["figure"]["path"])
+    (tmp_path / path).parent.mkdir(exist_ok=True)
+    (tmp_path / path).write_bytes((root / path).read_bytes().replace(b"\r\n", b"\n"))
+    monkeypatch.setattr(replay, "ROOT", tmp_path)
+    result = replay.verify(dataset)
+    assert set(result) == {"h100"}
+    cohort = result["h100"]
+    assert cohort["wins"] == {"cold": 64, "warm": 62}
+    assert len(cohort["records"]) == 384
+    assert cohort["numeric_counts"] == {"qualified": 348, "failed": 36}
+    assert cohort["plot_replay"]["range_endpoints_checked"] == 512

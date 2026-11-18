@@ -414,7 +414,12 @@ def verify(directory: Path = DEFAULT) -> dict:
         raise ValueError("independent reference changed")
     references = read_xz(oracle.read_bytes())
     result = {}
-    for device in ("h100", "rtx5090"):
+    # A cohort directory holds one or both GPU publications; each present
+    # device is authenticated completely and an empty cohort is refused.
+    devices = [d for d in ("h100", "rtx5090") if (directory / d).is_dir()]
+    if not devices:
+        raise ValueError("cohort directory has no device publication")
+    for device in devices:
         folder = directory / device
         manifest = read_json((folder / "publication.json").read_bytes())
         files = publication_files(folder, manifest)
@@ -550,6 +555,13 @@ def reconstruct(source: dict, destination: Path) -> None:
         *source["crlf_extra_paths"],
     ]:
         safe_relative(name)
+    git_archive = source.get("native_export") == "git-archive"
+    if git_archive and (
+        source["keep_git_bytes"] or source["patch_paths"] or source["crlf_extra_paths"]
+    ):
+        # The measured tree was the unmodified public commit: no line-ending
+        # export or retained patch exists, so the archive itself must match.
+        raise ValueError("git-archive source cannot carry a patch or export rule")
     raw = subprocess.check_output(
         ["git", "-c", "core.autocrlf=false", "archive", "--format=tar", base],
         cwd=ROOT,
@@ -572,6 +584,9 @@ def reconstruct(source: dict, destination: Path) -> None:
     inputs = identity._inventory(
         destination, destination / "cmake/GenerativeQCSourceIdentity.json"
     )
+    if git_archive:
+        _check_reconstructed(source, identity, destination)
+        return
     for relative in inputs:
         name = relative.as_posix()
         path = destination / relative
@@ -601,6 +616,10 @@ def reconstruct(source: dict, destination: Path) -> None:
         input=patch,
         check=True,
     )
+    _check_reconstructed(source, identity, destination)
+
+
+def _check_reconstructed(source: dict, identity: object, destination: Path) -> None:
     inputs = identity._inventory(
         destination, destination / "cmake/GenerativeQCSourceIdentity.json"
     )

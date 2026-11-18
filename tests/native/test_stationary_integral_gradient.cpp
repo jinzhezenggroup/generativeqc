@@ -242,6 +242,83 @@ void unrestricted_sources() {
               "general UKS exchange does not match independent Fock derivatives");
   }
 }
+
+/** The independent full Jet tensor includes every ordered quartet. Mixed shells
+ * on shared and distinct centers exercise all permutation stabilizers, while
+ * asymmetric signed D/W prevents a density-symmetry shortcut from passing. */
+void permutation_sources() {
+  if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return;
+  using namespace generativeqc;
+  for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    core::System system;
+    system.atoms = {{2, {0.12, -0.09, -0.71}}, {1, {-0.08, 0.13, 0.79}}, {1, {1.2, -0.6, 0.2}}};
+    system.shells = {{0, 0, {{0.8, 1.0}, {0.2, 0.3}}},
+                     {0, 1, {{0.6, 1.0}}},
+                     {1, 0, {{0.7, 1.0}}},
+                     {2, 0, {{0.9, 1.0}}}};
+    system.basis_representation = representation;
+    std::string detail;
+    require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            "permutation source fixture is invalid");
+    const auto basis = molecule::ao_count(system);
+    const auto coordinates = 3 * system.atoms.size();
+    std::vector<double> alpha(basis * basis), beta(alpha.size());
+    std::vector<double> weighted_alpha(alpha.size()), weighted_beta(alpha.size());
+    const std::vector<double> empty;
+    for (std::size_t row = 0; row < basis; ++row)
+      for (std::size_t column = 0; column < basis; ++column) {
+        const auto index = row * basis + column;
+        alpha[index] = 0.05 * std::sin(1.0 + 2 * row + 5 * column) + (row == column ? 0.6 : 0.0);
+        beta[index] = 0.03 * std::cos(2.0 + 7 * row + 3 * column) + (row == column ? 0.2 : 0.0);
+        weighted_alpha[index] = -0.2 * alpha[index] + 0.01 * std::cos(3.0 * row + column);
+        weighted_beta[index] = -0.3 * beta[index] + 0.02 * std::sin(row + 4.0 * column);
+      }
+    for (const bool unrestricted : {false, true})
+      for (const double fraction : {0.0, 0.2, 0.37}) {
+        auto spec = scf::make_hf_fock_spec(unrestricted ? scf::FockSpin::Unrestricted
+                                                        : scf::FockSpin::Restricted);
+        spec.derivative_order = 0;
+        spec.exchange.present = fraction != 0.0;
+        spec.exchange.coefficient = -(unrestricted ? 1.0 : 0.5) * fraction;
+        const scf::PreparedFockPlan target(system, nullptr,
+                                           scf::resolve_fock_build(spec, scf::FockBackend::Cpu));
+        const auto beta_panel =
+            unrestricted ? std::span<const double>(beta) : std::span<const double>{};
+        const auto beta_weighted =
+            unrestricted ? std::span<const double>(weighted_beta) : std::span<const double>{};
+        const auto actual = scf::cpu_stationary_integral_gradient(
+            target, alpha, weighted_alpha, 64ULL << 20, beta_panel, beta_weighted);
+        spec.derivative_order = 1;
+        const scf::PreparedFockPlan reference(system, nullptr,
+                                              scf::resolve_fock_build(spec, scf::FockBackend::Cpu));
+        const auto two = reference.energy_derivative_components(alpha, unrestricted ? beta : empty);
+        const auto& one = reference.one_electron();
+        for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+          double hcore = 0.0, pulay = 0.0;
+          for (std::size_t index = 0; index < alpha.size(); ++index) {
+            const auto derivative = coordinate * alpha.size() + index;
+            hcore += (alpha[index] + (unrestricted ? beta[index] : 0.0)) *
+                     one.hcore_derivative[derivative];
+            pulay -= (weighted_alpha[index] + (unrestricted ? weighted_beta[index] : 0.0)) *
+                     one.overlap_derivative[derivative];
+          }
+          const std::array<double, 4> expected{hcore, pulay, two.coulomb[coordinate],
+                                               two.exchange[coordinate]};
+          for (std::size_t source = 0; source < expected.size(); ++source)
+            require(std::abs(actual.sources[source * coordinates + coordinate] - expected[source]) <
+                        2e-10,
+                    "folded ordered weights disagree with independent full Jet derivatives");
+        }
+        for (std::size_t source = 0; source < 4; ++source)
+          for (std::size_t axis = 0; axis < 3; ++axis) {
+            double translation = 0.0;
+            for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
+              translation += actual.sources[source * coordinates + 3 * atom + axis];
+            require(std::abs(translation) < 2e-10, "folded source violates nuclear translation");
+          }
+      }
+  }
+}
 }  // namespace
 
 int main() {
@@ -250,6 +327,7 @@ int main() {
     one_atom_capacity();
     ecp_workspace_admission();
     unrestricted_sources();
+    permutation_sources();
     std::cout << "Native Direct stationary admission/capacity: PASS\n";
     return 0;
   } catch (const std::exception& error) {

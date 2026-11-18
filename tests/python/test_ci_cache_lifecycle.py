@@ -172,7 +172,7 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
     assert job_limits and test_limits
     shards = re.search(r"shard: \[([^\]]+)\]", job)
     assert shards
-    extended = {"posthf", "core-b", "compiler-heavy", "runtime-heavy"}
+    extended = {"posthf", "core-b", "core-c", "compiler-heavy", "runtime-heavy"}
     for shard in (value.strip() for value in shards[1].split(",")):
         for event in (
             "pull_request",

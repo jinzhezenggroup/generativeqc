@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "paper-hfdft-cold3-20261118",
+  "owner": "H100 three-process paper figure source data on unmodified master a6d5a3c00",
+  "reason": "The H100 SVG figure requires all 384 formal process records, all 1536 E+F calls, complete force vectors/work/settings, exact original raw SHA256s and command ownership on the current master source. The data retain all slower and numerical-failing points, use bounded XZ under the 1 MiB cap and support independent offline tables/qualification/SVG replay. This is a storage review, not global performance or numerical promotion.",
+  "review_document": "benchmarks/results/paper-hfdft-cold3-20261118/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/paper-hfdft-cold3-20261118/h100/samples.json.xz",
+      "family": "paper-hfdft-cold3-20261118",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original formal scientific/process receipts and successful-command census for the figure; exact raw-byte restoration and offline full-vector/plot replay",
+      "bytes": 973516,
+      "sha256": "4f86a3f24535fa38675c3e062b60eb3a3c8b4bea61625e287ca64bf91b68d990"
+    }
+  ]
+}
