@@ -102,9 +102,6 @@ __global__ void build_df_auxiliary_value_norms(DfShellBasisView view, std::size_
                                                       fabs(b.coefficients[p]));
   output[shell] = bound;
 }
-void check(cudaError_t status) {
-  if (status != cudaSuccess) throw CudaFailure{status};
-}
 /** Complete metric panels contract each ordered auxiliary shell pair once with
  * top-order Hermite Gaussians. 0 keeps the per-AO pair traversal; an explicit
  * dense rollback (PAIRS=0) or an invalid pair control never reaches it. */
@@ -117,6 +114,9 @@ bool metric_shells_selected(const core::System& auxiliary, double range_omega,
   const char* pairs = std::getenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS");
   return policy == "1" && (!pairs || std::string_view(pairs) == "1") && range_omega == 0.0 &&
          prepare_df_metric_hermite_table(auxiliary, table);
+}
+void check(cudaError_t status) {
+  if (status != cudaSuccess) throw CudaFailure{status};
 }
 /** Restore thread-local selection only after the arena has drained its stream. */
 struct DeviceGuard {
