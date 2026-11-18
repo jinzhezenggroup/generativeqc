@@ -223,10 +223,11 @@ __device__ D4Status cooperative_eeq2019(int n, const std::int32_t* z, const doub
   }
   if (cta_decision(shared.stop)) return D4Status::numerical_failure;
   if (responses) {
+    bool response_failed = false;
     for (int coordinate = static_cast<int>(lane); coordinate < 3 * n;
          coordinate += static_cast<int>(width))
-      if (!eeq_stage::solve_response(n, w, shared.pivots, coordinate)) shared.stop = 1;
-    if (cta_decision(shared.stop)) return D4Status::numerical_failure;
+      if (!eeq_stage::solve_response(n, w, shared.pivots, coordinate)) response_failed = true;
+    if (__syncthreads_or(response_failed)) return D4Status::numerical_failure;
   }
   // Transactional publication after every requested solve has succeeded.
   for (int i = static_cast<int>(lane); i < n; i += static_cast<int>(width))
