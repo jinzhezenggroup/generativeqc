@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_metric_shell_derivatives.cuh",
+  "reason": "Launch contract and host-prepared top-order Hermite coefficient table for the complete-panel metric derivative; declarations only.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "df_derivatives"
+}

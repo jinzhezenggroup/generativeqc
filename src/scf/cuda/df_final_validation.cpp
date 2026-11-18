@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 
 #include "generativeqc/generativeqc.hpp"
@@ -13,6 +14,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/final_validation_kernels.hpp"
+#include "scf/cuda_density_fitting_eigen.hpp"
 #include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::scf::cuda_df {
@@ -29,6 +31,17 @@ struct Workspace {
   std::optional<solver::FinalStateIdentity> physical_identity;
   const Matrix* physical_hcore{};
   bool physical_occupied{};
+  // products() leaves S, H, F and the returned D of its last checked spin in
+  // storage[0..3]. Only the immediately following fixed-point probe of that
+  // same single-spin request may borrow them; every other user clears this.
+  struct Resident {
+    solver::FinalStateIdentity identity;
+    const Matrix *overlap{}, *hcore{}, *density{};
+  };
+  std::optional<Resident> resident;
+  // The same F/D also remain valid for W after the fixed-point probe, which
+  // writes only scratch storage[5..8] and the ordinary eigensystem.
+  std::optional<Resident> weight_resident;
   ~Workspace() {
     if (device >= 0) (void)cudaSetDevice(device);
     (void)runtime::resource_cuda_free(storage);
@@ -176,6 +189,8 @@ void physical_fock(CudaDensityFittingJkPlan& plan, Workspace& w,
 std::vector<Matrix> materialize(CudaDensityFittingJkPlan& plan,
                                 const solver::PhysicalFockFrame& fock) {
   auto& w = prepare(plan);
+  w.resident.reset();
+  w.weight_resident.reset();
   if (!w.physical_hcore) throw std::runtime_error("missing physical Fock input");
   const auto n = plan.nbf, count = n * n;
   const auto h = packed(*w.physical_hcore, n);
@@ -255,6 +270,8 @@ bool products(CudaDensityFittingJkPlan& plan, const solver::FinalStateIdentity& 
       "final_state_validation", plan.stream,
       {1, plan.nbf, plan.naux, plan.integral_source != nullptr, plan.streamed});
   auto& w = prepare(plan);
+  w.resident.reset();
+  w.weight_resident.reset();
   trace::trace_counter("workspace_bytes", w.bytes);
   const auto n = plan.nbf, count = n * n;
   const double weight = current.model.spec.spin == FockSpin::Restricted ? 2 : 1;
@@ -323,6 +340,10 @@ bool products(CudaDensityFittingJkPlan& plan, const solver::FinalStateIdentity& 
     }
   }
   outer.pending = false;
+  if (density.size() == 1) {
+    w.resident = Workspace::Resident{current, &overlap, &hcore, &density[0]};
+    w.weight_resident = w.resident;
+  }
   return true;
 }
 Matrix project(CudaDensityFittingJkPlan& plan, const reference::EigenResult& orbitals,
@@ -331,6 +352,7 @@ Matrix project(CudaDensityFittingJkPlan& plan, const reference::EigenResult& orb
   if (occupied > n || (!orbitals.vectors.empty() && orbitals.values.size() != n))
     throw std::runtime_error("invalid final-state projection dimensions");
   auto& w = prepare(plan);
+  w.resident.reset();
   auto in = inputs(plan, w, nullptr, 0, weight);
   const auto c = orbitals.vectors.empty() ? Matrix{} : packed(orbitals.vectors, n);
   Matrix result(count);
@@ -367,10 +389,32 @@ std::vector<Matrix> weighted_density(CudaDensityFittingJkPlan& plan,
       fock.spins.size() != density.size())
     throw std::runtime_error("weighted density has a mismatched physical Fock identity");
   auto& w = prepare(plan);
+  w.resident.reset();
+  const auto staged = w.weight_resident;
+  w.weight_resident.reset();
+  // storage[2..3] still hold this exact validated F[D] and D: skip restaging.
+  const bool reuse = staged && density.size() == 1 && staged->identity == id &&
+                     staged->density == &density[0] && fock.identity == id;
   std::vector<Matrix> result(density.size(), Matrix(count));
   const double spin_weight = id.model.spec.spin == FockSpin::Restricted ? 2 : 1;
   Drain drain{plan.stream};
   for (std::size_t spin = 0; spin < density.size(); ++spin) {
+    if (reuse) {
+      auto* product = w.storage + 5 * count;
+      auto* output = product + count;
+      gemm(plan, w.storage + 3 * count, w.storage + 2 * count, product);
+      gemm(plan, product, w.storage + 3 * count, output, false, false, -1, 1 / spin_weight);
+      trace::trace_counter("physical_weight_gemms", 2);
+      trace::trace_counter("physical_weight_flops", 4 * n * n * n);
+      trace::trace_counter("physical_weight_staged_inputs", 1);
+      check(cudaMemcpyAsync(result[spin].data(), output, count * sizeof(double),
+                            cudaMemcpyDeviceToHost, plan.stream),
+            "read consistent physical weighted density");
+      trace::trace_counter("device_to_host_bytes", count * sizeof(double));
+      drain.finish();
+      result[spin] = packed(result[spin], n);
+      return result;
+    }
     const auto d = packed(density[spin], n);
     const auto f = fock.spins[spin].empty() ? Matrix{} : packed(fock.spins[spin], n);
     if (f.empty() && !w.physical_hcore)
@@ -400,6 +444,86 @@ std::vector<Matrix> weighted_density(CudaDensityFittingJkPlan& plan,
   }
   drain.pending = false;
   return result;
+}
+
+/** Resident physical fixed-point probe of the density products() just
+ * validated. It solves that exact staged F with the ordinary provider, applies
+ * the same eigenframe kernel and acceptance gate as the host route, forms the
+ * same occupied projector and compares it with the staged D on the device.
+ * Only a small diagnostic packet crosses the host boundary. */
+std::optional<solver::FinalFixedPointProbe> fixed_point(
+    CudaDensityFittingJkPlan& plan, const solver::FinalStateIdentity& id, const Matrix& overlap,
+    const Matrix& hcore, const Matrix& orthogonalizer, const std::vector<Matrix>& density,
+    const solver::PhysicalFockFrame& fock, double tolerance) {
+  auto& w = prepare(plan);
+  const auto resident = w.resident;
+  w.resident.reset();
+  if (!resident || density.size() != 1 || id.occupied.size() != 1 || fock.identity != id ||
+      resident->identity != id || resident->overlap != &overlap || resident->hcore != &hcore ||
+      resident->density != &density[0] || id.model.spec.spin != FockSpin::Restricted)
+    return std::nullopt;
+  trace::TraceOperation trace(
+      "final_state_resident_fixed_point", plan.stream,
+      {1, plan.nbf, plan.naux, plan.integral_source != nullptr, plan.streamed});
+  const auto n = plan.nbf, count = n * n;
+  const double weight = 2;
+  solver::FinalFixedPointProbe probe;
+  probe.eigen_solves = 1;
+  probe.eigenframes.resize(1);
+  CudaDfResidentEigenframe frame;
+  std::string detail;
+  check(solve_cuda_density_fitting_eigen_resident(&plan, w.storage + 2 * count, orthogonalizer,
+                                                  frame, detail),
+        detail);
+  auto in = inputs(plan, w, nullptr, 0, weight);
+  in.occupied = id.occupied[0];
+  in.c = frame.vectors;
+  in.values = frame.values;
+  Drain drain{plan.stream};
+  eigen_products(plan, w, in, false);
+  auto* columns = w.storage + 5 * count;
+  auto* projected = columns + count;
+  auto* scratch = projected + count;
+  launch_validation_columns(plan.stream, n, in.occupied, in.c, nullptr, weight, columns);
+  gemm(plan, columns, in.c, projected, false, true, static_cast<int>(in.occupied));
+  // Only drift/norm_density are consumed from this stage; its idempotency,
+  // trace and energy fields are not part of the fixed-point gate.
+  launch_validation_density(plan.stream, in, projected, scratch, scratch, w.partial + w.blocks);
+  check(cudaPeekAtLastError(), "launch resident fixed-point products");
+  int info = 0;
+  check(cudaMemcpyAsync(&info, frame.info, sizeof(info), cudaMemcpyDeviceToHost, plan.stream),
+        "read resident fixed-point solver status");
+  const auto raw = download(plan, w, 2);
+  drain.pending = false;
+  probe.eigenframes[0].solver_info = info;
+  probe.eigen_accepted = info == 0 && !raw.invalid &&
+                         eigen_diagnostic(raw, probe.eigenframes[0], detail) &&
+                         solver::accept_eigen_frame(probe.eigenframes[0], detail);
+  probe.maximum_density_error = raw.density;
+  probe.density_rms = raw.norm_density / static_cast<double>(n);
+  const bool fixed = std::isfinite(probe.maximum_density_error) &&
+                     std::isfinite(probe.density_rms) && probe.maximum_density_error <= tolerance &&
+                     probe.density_rms <= tolerance;
+  if (probe.eigen_accepted && !fixed) {
+    // Rare rejection: hand the correction the same row-major frame/projector
+    // the host route would have downloaded, so it promotes rather than resolves.
+    Matrix vectors(count), values(n), density_columns(count);
+    Drain download_drain{plan.stream};
+    check(cudaMemcpyAsync(vectors.data(), frame.vectors, count * sizeof(double),
+                          cudaMemcpyDeviceToHost, plan.stream),
+          "read rejected fixed-point frame");
+    check(cudaMemcpyAsync(values.data(), frame.values, n * sizeof(double), cudaMemcpyDeviceToHost,
+                          plan.stream),
+          "read rejected fixed-point eigenvalues");
+    check(cudaMemcpyAsync(density_columns.data(), projected, count * sizeof(double),
+                          cudaMemcpyDeviceToHost, plan.stream),
+          "read rejected fixed-point projector");
+    trace::trace_counter("device_to_host_bytes", (2 * count + n) * sizeof(double));
+    download_drain.finish();
+    probe.frames.push_back({std::move(values), packed(vectors, n)});
+    probe.projected.push_back(packed(density_columns, n));
+  }
+  return probe;
 }
 }  // namespace
 bool final_occupied_fock_matches(const CudaDensityFittingJkPlan& plan,
@@ -433,6 +557,8 @@ solver::PhysicalFockFrame evaluate_cuda_density_fitting_final_fock(
   if (current.model != expected_model)
     throw std::runtime_error("physical device Fock model differs from the prepared HF provider");
   auto& w = prepare(*plan);
+  w.resident.reset();
+  w.weight_resident.reset();
   w.physical_identity.reset();
   w.physical_hcore = nullptr;
   w.physical_occupied = false;
@@ -495,6 +621,10 @@ solver::FinalStateOperations cuda_density_fitting_final_state_operations(
                                auto& diagnostic, auto& detail) {
     return cuda_df::products(*plan, id, s, h, nuclear, d, f, c, limits, diagnostic, detail);
   };
+  operations.fixed_point = [plan](const auto& id, const auto& s, const auto& h, const auto& x,
+                                  const auto& d, const auto& f, double tolerance) {
+    return cuda_df::fixed_point(*plan, id, s, h, x, d, f, tolerance);
+  };
   operations.eigen = [plan](const auto& f, const auto& s, const auto& c, auto& diagnostic,
                             auto& detail) {
     return validate_cuda_density_fitting_eigen_frame(plan, f, &s, c.values, c.vectors, diagnostic,
@@ -528,6 +658,8 @@ bool validate_cuda_density_fitting_eigen_frame(CudaDensityFittingJkPlan* plan,
       "eigenframe_validation", plan->stream,
       {1, plan->nbf, plan->naux, plan->integral_source != nullptr, plan->streamed});
   auto& w = prepare(*plan);
+  w.resident.reset();
+  w.weight_resident.reset();
   const auto n = plan->nbf, count = n * n;
   Matrix identity;
   if (!overlap) {

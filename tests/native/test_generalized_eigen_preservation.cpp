@@ -90,6 +90,8 @@ void same(const std::vector<Trace>& expected, const std::vector<Trace>& actual) 
 }  // namespace orchestration
 using orchestration::trace_kernel;
 
+const char* cudaGetErrorString(cudaError_t) { return "injected CUDA failure"; }
+
 cudaError_t cudaGetLastError() {
   return orchestration::cuda_status(orchestration::record("cudaGetLastError", true));
 }

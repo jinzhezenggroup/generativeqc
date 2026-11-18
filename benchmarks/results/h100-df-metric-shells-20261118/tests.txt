@@ -1,0 +1,253 @@
+......................................................                   [100%]
+==================================== PASSES ====================================
+_ test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[False-cartesian] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_ test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[False-spherical] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_ test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[True-cartesian] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+_ test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[True-spherical] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 2 H2
+______ test_cooperative_sparse_weights_and_ragged_primitive_partitions[1] ______
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+______ test_cooperative_sparse_weights_and_ragged_primitive_partitions[7] ______
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_____ test_cooperative_sparse_weights_and_ragged_primitive_partitions[13] ______
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_ test_mixed_representations_and_permuted_auxiliary_shells[cartesian-spherical] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_ test_mixed_representations_and_permuted_auxiliary_shells[spherical-cartesian] _
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_____ test_metric_only_weight_response_moves_both_auxiliary_centers[0-0-0] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+____ test_metric_only_weight_response_moves_both_auxiliary_centers[0-0-11] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_____ test_metric_only_weight_response_moves_both_auxiliary_centers[0-1-0] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+____ test_metric_only_weight_response_moves_both_auxiliary_centers[0-1-11] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_____ test_metric_only_weight_response_moves_both_auxiliary_centers[1-0-0] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+____ test_metric_only_weight_response_moves_both_auxiliary_centers[1-0-11] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_____ test_metric_only_weight_response_moves_both_auxiliary_centers[1-1-0] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+____ test_metric_only_weight_response_moves_both_auxiliary_centers[1-1-11] _____
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+___ test_metric_pair_reuse_preserves_skew_and_one_sided_weights[0-cartesian] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+___ test_metric_pair_reuse_preserves_skew_and_one_sided_weights[0-spherical] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+___ test_metric_pair_reuse_preserves_skew_and_one_sided_weights[1-cartesian] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+___ test_metric_pair_reuse_preserves_skew_and_one_sided_weights[1-spherical] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+_______________ test_metric_pair_control_rejection_and_recovery ________________
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+__ test_metric_shell_pairs_cover_contracted_s_through_g_auxiliary[cartesian] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+__ test_metric_shell_pairs_cover_contracted_s_through_g_auxiliary[spherical] ___
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+_______________ test_metric_shell_control_rejection_and_recovery _______________
+----------------------------- Captured stderr call -----------------------------
+Warning: Basis not found for atom 2 H2
+Warning: Basis not found for atom 1 H1
+=========================== short test summary info ============================
+PASSED test_df_derivatives_cuda.py::test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[False-cartesian]
+PASSED test_df_derivatives_cuda.py::test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[False-spherical]
+PASSED test_df_derivatives_cuda.py::test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[True-cartesian]
+PASSED test_df_derivatives_cuda.py::test_arbitrary_raw_fused_and_two_budgets_with_auxiliary_motion[True-spherical]
+PASSED test_df_derivatives_cuda.py::test_cooperative_sparse_weights_and_ragged_primitive_partitions[1]
+PASSED test_df_derivatives_cuda.py::test_cooperative_sparse_weights_and_ragged_primitive_partitions[7]
+PASSED test_df_derivatives_cuda.py::test_cooperative_sparse_weights_and_ragged_primitive_partitions[13]
+PASSED test_df_derivatives_cuda.py::test_mixed_representations_and_permuted_auxiliary_shells[cartesian-spherical]
+PASSED test_df_derivatives_cuda.py::test_mixed_representations_and_permuted_auxiliary_shells[spherical-cartesian]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[0-cartesian-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[0-cartesian-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[0-spherical-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[0-spherical-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[8388608-cartesian-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[8388608-cartesian-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[8388608-spherical-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[8388608-spherical-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[16777216-cartesian-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[16777216-cartesian-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[16777216-spherical-rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_complete_hf_replay_two_budgets_and_force_components[16777216-spherical-uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_complete_force_rejects_budget_below_provider_workspace_floors[1048576]
+PASSED test_df_derivatives_cuda.py::test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps[rhf-0-1-4194304]
+PASSED test_df_derivatives_cuda.py::test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps[rhf-0-1-8388608]
+PASSED test_df_derivatives_cuda.py::test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps[uhf-1-2-8388608]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[0-0-0]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[0-0-11]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[0-1-0]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[0-1-11]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[1-0-0]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[1-0-11]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[1-1-0]
+PASSED test_df_derivatives_cuda.py::test_metric_only_weight_response_moves_both_auxiliary_centers[1-1-11]
+PASSED test_df_derivatives_cuda.py::test_metric_pair_reuse_preserves_skew_and_one_sided_weights[0-cartesian]
+PASSED test_df_derivatives_cuda.py::test_metric_pair_reuse_preserves_skew_and_one_sided_weights[0-spherical]
+PASSED test_df_derivatives_cuda.py::test_metric_pair_reuse_preserves_skew_and_one_sided_weights[1-cartesian]
+PASSED test_df_derivatives_cuda.py::test_metric_pair_reuse_preserves_skew_and_one_sided_weights[1-spherical]
+PASSED test_df_derivatives_cuda.py::test_metric_pair_control_rejection_and_recovery
+PASSED test_df_derivatives_cuda.py::test_metric_shell_pairs_cover_contracted_s_through_g_auxiliary[cartesian]
+PASSED test_df_derivatives_cuda.py::test_metric_shell_pairs_cover_contracted_s_through_g_auxiliary[spherical]
+PASSED test_df_derivatives_cuda.py::test_metric_shell_control_rejection_and_recovery
+PASSED test_df_derivatives_cuda.py::test_null_weight_channels_are_documented_zero_operators[True-False]
+PASSED test_df_derivatives_cuda.py::test_null_weight_channels_are_documented_zero_operators[False-True]
+PASSED test_df_derivatives_cuda.py::test_null_weight_channels_are_documented_zero_operators[True-True]
+PASSED test_df_derivatives_cuda.py::test_auxiliary_only_atom_hf_energy_derivative[rhf-0-1]
+PASSED test_df_derivatives_cuda.py::test_auxiliary_only_atom_hf_energy_derivative[uhf-1-2]
+PASSED test_df_derivatives_cuda.py::test_df_generated_sdf_bucket_preserves_all_geometry_phases[0-rhf-spherical]
+PASSED test_df_derivatives_cuda.py::test_df_generated_sdf_bucket_preserves_all_geometry_phases[0-uhf-cartesian]
+PASSED test_df_derivatives_cuda.py::test_df_generated_sdf_bucket_preserves_all_geometry_phases[16777216-rhf-spherical]
+PASSED test_df_derivatives_cuda.py::test_df_generated_sdf_bucket_preserves_all_geometry_phases[16777216-uhf-cartesian]
+PASSED test_df_derivatives_cuda.py::test_df_generated_failed_item_preserves_successful_neighbor[0]
+PASSED test_df_derivatives_cuda.py::test_df_generated_failed_item_preserves_successful_neighbor[16777216]
+PASSED test_df_derivatives_cuda.py::test_df_rank_crossing_is_reported_without_oracle_retry[0]
+PASSED test_df_derivatives_cuda.py::test_df_rank_crossing_is_reported_without_oracle_retry[8388608]
+54 passed in 14.34s
+EXIT 0

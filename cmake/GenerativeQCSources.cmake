@@ -170,6 +170,7 @@ function(generativeqc_add_integrals_scf_sources target)
     target_sources(${target} PRIVATE
       src/integrals/ecp_cuda.cu
       src/scf/cuda/df_derivatives.cu
+      src/scf/cuda/df_metric_shell_derivatives.cu
       src/scf/cuda/df_shell_derivatives.cu
       src/scf/cuda/df_gradient_bridge.cu
       src/scf/cuda/df_response_weights.cu

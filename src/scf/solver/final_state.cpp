@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -305,24 +306,54 @@ FinalStateSelection select_final_state(
       if (accepted && compute_weighted_density && !stationary_reuse) {
         runtime::host_trace::Region check("final_state_fixed_point", n);
         ++result.fixed_point_checks;
-        if (!solve_physical(true)) return result;
-        // Reconstructing a retained frame can give exactly zero drift even
-        // when its orbitals came from an older Fock. This projector instead
-        // tests the fixed point of the current physical F[D], before force
-        // weights or occupied-response leases are authorized.
-        for (std::size_t spin = 0; spin < density.size(); ++spin) {
-          double norm = 0;
-          for (std::size_t k = 0; k < n * n; ++k) {
-            const double delta = projected[spin][k] - density[spin][k];
-            norm = std::hypot(norm, delta);
-            diagnostic.maximum_fixed_point_density_error =
-                std::max(diagnostic.maximum_fixed_point_density_error, std::abs(delta));
-          }
-          diagnostic.fixed_point_density_rms =
-              std::max(diagnostic.fixed_point_density_rms, norm / n);
-        }
+        // A resident probe of this exact validated density avoids staging F
+        // and its frame through the host. It never accepts a frame the
+        // canonical route would reject: any failed frame gate falls through.
         const double tolerance =
             std::min(limits.stationarity_tolerance.value_or(1e-8), limits.density_tolerance);
+        std::optional<FinalFixedPointProbe> probe;
+        if (operations && operations->fixed_point)
+          probe = operations->fixed_point(current, overlap, hcore, orthogonalizer, density,
+                                          physical, tolerance);
+        if (probe) {
+          result.eigen_solves += probe->eigen_solves;
+          result.fixed_point_eigen_solves += probe->eigen_solves;
+        }
+        if (probe && probe->eigen_accepted) {
+          diagnostic.maximum_fixed_point_density_error = probe->maximum_density_error;
+          diagnostic.fixed_point_density_rms = probe->density_rms;
+          if (!probe->frames.empty()) {
+            // Promote exactly this checked frame/projector on rejection.
+            if (probe->frames.size() != density.size() ||
+                probe->projected.size() != density.size() ||
+                !std::all_of(probe->projected.begin(), probe->projected.end(),
+                             [n](const auto& d) { return symmetric(d, n); })) {
+              result.status = FinalStateStatus::ProviderFailure;
+              result.detail = "invalid resident fixed-point frame or projected density";
+              return result;
+            }
+            evaluated.emplace();
+            evaluated->spins = std::move(probe->frames);
+            projected = std::move(probe->projected);
+          }
+        } else {
+          if (!solve_physical(true)) return result;
+          // Reconstructing a retained frame can give exactly zero drift even
+          // when its orbitals came from an older Fock. This projector instead
+          // tests the fixed point of the current physical F[D], before force
+          // weights or occupied-response leases are authorized.
+          for (std::size_t spin = 0; spin < density.size(); ++spin) {
+            double norm = 0;
+            for (std::size_t k = 0; k < n * n; ++k) {
+              const double delta = projected[spin][k] - density[spin][k];
+              norm = std::hypot(norm, delta);
+              diagnostic.maximum_fixed_point_density_error =
+                  std::max(diagnostic.maximum_fixed_point_density_error, std::abs(delta));
+            }
+            diagnostic.fixed_point_density_rms =
+                std::max(diagnostic.fixed_point_density_rms, norm / n);
+          }
+        }
         accepted = std::isfinite(diagnostic.maximum_fixed_point_density_error) &&
                    std::isfinite(diagnostic.fixed_point_density_rms) &&
                    diagnostic.maximum_fixed_point_density_error <= tolerance &&

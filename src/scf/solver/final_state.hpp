@@ -102,6 +102,21 @@ bool accept_final_state_products(const FinalStateIdentity& current, std::size_t 
  * A provider may resolve empty candidate matrices from an exactly tagged
  * retained owner; it must verify the device generations and solver status.
  * Projection/W return host data for the existing density/force consumers. */
+/** One backend-resident physical fixed-point probe for the selection density.
+ * A probe that ran counts its eigensolves. Only an accepted eigenframe may
+ * supply the projector defects; otherwise the shared host route repeats the
+ * complete canonical probe, including its own frame checks and corrections. */
+struct FinalFixedPointProbe {
+  bool eigen_accepted{};
+  std::size_t eigen_solves{};
+  double maximum_density_error{}, density_rms{};
+  std::vector<EigenFrameDiagnostic> eigenframes;
+  // Present only for an accepted frame whose defects exceed the requested
+  // tolerance: the checked frame and projector the correction promotes.
+  std::vector<reference::EigenResult> frames;
+  std::vector<reference::Matrix> projected;
+};
+
 struct FinalStateOperations {
   // Materialize a borrowed physical F only for correction/export consumers.
   std::function<std::vector<reference::Matrix>(const PhysicalFockFrame&)> materialize_fock;
@@ -119,6 +134,15 @@ struct FinalStateOperations {
   std::function<std::vector<reference::Matrix>(
       const FinalStateIdentity&, const std::vector<reference::Matrix>&, const PhysicalFockFrame&)>
       weighted;
+  // Optional: solve the current physical F of the just-validated density on
+  // the backend, apply the `eigen` frame gates, project the occupied columns
+  // and return max/RMS projector defects against that density. nullopt means
+  // the resident inputs were unavailable and no work was performed.
+  std::function<std::optional<FinalFixedPointProbe>(
+      const FinalStateIdentity&, const reference::Matrix& overlap, const reference::Matrix& hcore,
+      const reference::Matrix& orthogonalizer, const std::vector<reference::Matrix>& density,
+      const PhysicalFockFrame&, double tolerance)>
+      fixed_point;
 };
 
 /** Check current F, C/epsilon and D without diagonalizing or repairing inputs.
