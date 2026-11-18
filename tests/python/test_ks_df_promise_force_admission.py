@@ -94,7 +94,9 @@ def test_df_energy_promise_rejects_force_before_work(
     constexpr int GENERATIVEQC_STATUS_OUT_OF_MEMORY=6;
     namespace dft {struct CudaKsFinalStateToken {}; using CudaStationaryResources=unsigned;}
     namespace scf {struct DirectForcePrecisionRequest {}; }
-    constexpr unsigned GENERATIVEQC_PROPERTY_FORCES=2, ENERGY=1;
+    constexpr unsigned GENERATIVEQC_PROPERTY_FORCES=2, GENERATIVEQC_PROPERTY_ENERGY=1;
+    constexpr unsigned ENERGY=GENERATIVEQC_PROPERTY_ENERGY;
+    constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=0;
     constexpr int GENERATIVEQC_BACKEND_CUDA=1, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=5;
     namespace scf { enum class FockApproximation {Exact,DensityFitted}; }
     struct Strategy {struct {struct {scf::FockApproximation approximation;} coulomb;} spec;};
@@ -105,6 +107,7 @@ def test_df_energy_promise_rejects_force_before_work(
     const char* ks_semilocal_family_name(const Execution&){return "PBE";}
     struct State {
      void* capacity_{};int backend_=1;Fock fock_{{{ {scf::FockApproximation::DensityFitted} }}};
+     struct {bool retain_ks_state=true;} options_;
      struct {unsigned supported_properties=ENERGY|GENERATIVEQC_PROPERTY_FORCES;} capabilities_;
      bool qualified=true;int port_allocations=0,port_source_work=0;
     """

@@ -159,14 +159,18 @@ int main() {
     const auto expected=reduce();
     std::fill(partial.begin(),partial.end(),987654);
     auto execute=[&] {
-      for(size_t lane=0;lane<lanes;++lane) {
-        std::barrier barrier(32);
-        std::vector<std::thread> workers;
-        for(size_t rank=0;rank<32;++rank) workers.emplace_back([&,rank] {
-          active_barrier=&barrier; invoke(true,lane,rank);
-        });
-        for(auto& worker:workers) worker.join();
-      }
+      std::barrier barrier(32);
+      std::vector<std::thread> workers;
+      // Reuse the simulated warp across blocks instead of repeatedly creating
+      // 32 OS threads per block on an oversubscribed hosted CI runner.
+      for(size_t rank=0;rank<32;++rank) workers.emplace_back([&,rank] {
+        active_barrier=&barrier;
+        for(size_t lane=0;lane<lanes;++lane) {
+          invoke(true,lane,rank);
+          barrier.arrive_and_wait();
+        }
+      });
+      for(auto& worker:workers) worker.join();
     };
     ao_evaluations=0;
     execute();

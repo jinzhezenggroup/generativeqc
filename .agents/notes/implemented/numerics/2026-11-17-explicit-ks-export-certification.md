@@ -7,6 +7,11 @@ The subsequent [energy-only consumer decision](2026-11-17-energy-only-ks-export-
 narrows which owners request certification; the export checks and measurements
 recorded here remain unchanged.
 
+The subsequent [ordinary UKS DIIS-state decision](2026-11-18-uks-certify-current-diis-state.md)
+keeps the unshifted projector certificate inside the stable primary iteration
+and avoids replacing that certified density during final physical closure.
+The consumer rule and numerical gates described here remain in force.
+
 ## Problem
 
 `ScfOptions::retain_ks_state` promises a read of the already evaluated physical

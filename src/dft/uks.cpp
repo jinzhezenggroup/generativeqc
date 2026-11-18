@@ -312,6 +312,7 @@ ScfResult run_uks_impl(
     double alpha_electrons{};
     double beta_electrons{};
     bool stabilized{};
+    bool canonical_density_converged = true;
   };
 
   unsigned used_iterations = 0;
@@ -346,6 +347,45 @@ ScfResult run_uks_impl(
           Matrix next_b = density_from_orbitals(cb.vectors, n, nb, 1.0);
           const double change_a = density_rms(next_a, state.alpha);
           const double change_b = density_rms(next_b, state.beta);
+          bool canonical_density_converged = true;
+          if (ordinary_primary && (evaluate_xc.program || options.certify_ks_export) &&
+              std::max(change_a, change_b) < options.density_tolerance &&
+              std::max(residual_a, residual_b) < residual_gate) {
+            // Certify the current DIIS state before leaving its stable iteration.
+            // A tiny physical residual need not make undamped F[D] iteration
+            // contractive, especially for kinetic-energy-density functionals.
+            const auto canonical_a = generalized_eigen(physical.fock.alpha, x, n);
+            const auto canonical_b = generalized_eigen(physical.fock.beta, x, n);
+            const Matrix projected_a = density_from_orbitals(canonical_a.vectors, n, na, 1.0);
+            const Matrix projected_b = density_from_orbitals(canonical_b.vectors, n, nb, 1.0);
+            runtime::sample_cpu_capacity(runtime::add_capacity(
+                runtime::add_capacity(
+                    runtime::add_capacity(plan.cpu_observation_capacity(),
+                                          long_range_correction
+                                              ? long_range_correction->cpu_observation_capacity()
+                                              : 0),
+                    diis.numeric_capacity()),
+                runtime::vector_capacities(
+                    basis.packed, grid.points(), grid.weights(), grid.owners(), x, state.alpha,
+                    state.beta, ca.values, ca.vectors, cb.values, cb.vectors, physical.fock.alpha,
+                    physical.fock.beta, ra, rb, effective.first, effective.second, next_a, next_b,
+                    canonical_a.values, canonical_a.vectors, canonical_b.values,
+                    canonical_b.vectors, projected_a, projected_b, diagnostic.history)));
+            double maximum_change = 0.0;
+            for (std::size_t index = 0; index < state.alpha.size(); ++index) {
+              maximum_change =
+                  std::max(maximum_change, std::abs(projected_a[index] - state.alpha[index]));
+              maximum_change =
+                  std::max(maximum_change, std::abs(projected_b[index] - state.beta[index]));
+            }
+            const double canonical_tolerance = options.certify_ks_export
+                                                   ? residual_gate
+                                                   : std::min(1.0e-8, options.density_tolerance);
+            canonical_density_converged =
+                std::max(density_rms(projected_a, state.alpha),
+                         density_rms(projected_b, state.beta)) < canonical_tolerance &&
+                maximum_change <= canonical_tolerance;
+          }
           return UksLoopEvaluation{std::move(physical.fock),
                                    std::move(ra),
                                    std::move(rb),
@@ -361,7 +401,8 @@ ScfResult run_uks_impl(
                                    std::hypot(residual_a, residual_b) / std::sqrt(2.0),
                                    dot(state.alpha, ints.overlap),
                                    dot(state.beta, ints.overlap),
-                                   stabilized};
+                                   stabilized,
+                                   canonical_density_converged};
         },
         [&](UksState& state, UksLoopEvaluation evaluation,
             const ::generativeqc::solver::SelfConsistentProgress& progress) {
@@ -423,10 +464,11 @@ ScfResult run_uks_impl(
             const UksLoopEvaluation& evaluation) {
           // Keep DIIS active until the CURRENT physical state also meets the
           // maximum-entry gate required by the bounded final closure.
-          return strategy.backend != FockBackend::Cpu ||
-                 std::max(residual_max_abs(evaluation.alpha_residual),
-                          residual_max_abs(evaluation.beta_residual)) <=
-                     std::min(1.0e-8, options.density_tolerance);
+          return evaluation.canonical_density_converged &&
+                 (strategy.backend != FockBackend::Cpu ||
+                  std::max(residual_max_abs(evaluation.alpha_residual),
+                           residual_max_abs(evaluation.beta_residual)) <=
+                      std::min(1.0e-8, options.density_tolerance));
         });
     alpha = std::move(outcome.state.alpha);
     beta = std::move(outcome.state.beta);
@@ -467,8 +509,13 @@ ScfResult run_uks_impl(
       const double change_b = density_rms(projected_b, beta);
       const double density_change = std::max(change_a, change_b);
       result.density_rms = std::hypot(change_a, change_b) / std::sqrt(2.0);
-      alpha = std::move(projected_a);
-      beta = std::move(projected_b);
+      // Ordinary exported states have already passed the unshifted projector
+      // certificate inside DIIS. Rebuild F[D] for that same density: replacing
+      // it with another undamped projector can amplify the remaining roundoff.
+      if (!ordinary_primary || !(evaluate_xc.program || options.certify_ks_export)) {
+        alpha = std::move(projected_a);
+        beta = std::move(projected_b);
+      }
 
       auto next = evaluate(plan, long_range_correction, basis, grid, alpha, beta, evaluate_xc,
                            options, nonlocal_correlation, nonlocal_domain);
