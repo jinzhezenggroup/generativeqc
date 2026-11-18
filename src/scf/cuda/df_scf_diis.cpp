@@ -7,6 +7,7 @@
 #include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_kernels.hpp"
 #include "scf/cuda/df_scf_library.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
@@ -166,8 +167,11 @@ generativeqc_status apply_scf_diis(CudaDensityFittingJkPlan& plan, PersistentScf
     runtime::cuda_trace::trace_counter(
         "diis_dot_partial_bytes", plan.batch_size * history * history * parts * sizeof(double));
   }
+  // The cooperative owner streams whole AO vectors; give it the full DF
+  // reduction CTA. The non-cooperative owner keeps its per-lane dot schedule.
   cuda_execution::launch_update_diis_kernel(
-      static_cast<unsigned>(plan.batch_size), 32, 0, plan.stream,
+      static_cast<unsigned>(plan.batch_size),
+      plan.cooperative_diis ? kDfMatrixReductionThreads : 32U, 0, plan.stream,
       static_cast<std::int32_t>(plan.batch_size), static_cast<std::int32_t>(plan.nbf), spins,
       state.diis_history, effective, state.d_diis_residual, state.d_active,
       state.d_diis_fock_history, state.d_diis_residual_history, state.d_diis_gram,

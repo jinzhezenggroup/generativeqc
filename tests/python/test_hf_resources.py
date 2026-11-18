@@ -318,6 +318,7 @@ def test_retired_df_math_control_does_not_change_cuda_resource_identity(
         ("GENERATIVEQC_DIRECT_FORCE_PAIR_SEPARABLE", ("0", "1")),
         ("GENERATIVEQC_DIRECT_LR_WEIGHTED_FORCES", ("0", "1")),
         ("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", ("0", "1")),
+        ("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS", ("0", "1")),
         ("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", ("0", "1")),
         (
             "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",

@@ -48,6 +48,16 @@ generativeqc_status read_cuda_density_fitting_final_state(CudaDensityFittingJkPl
   detail = "CUDA DF final-state snapshots are unavailable in this build";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
+generativeqc_status solve_cuda_density_fitting_eigen_resident(CudaDensityFittingJkPlan*,
+                                                              const double*,
+                                                              const std::vector<double>&,
+                                                              CudaDfResidentEigenframe& frame,
+                                                              std::string& detail) {
+  frame = {};
+  detail = "resident CUDA DF eigen operations are unavailable in this build";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status solve_cuda_density_fitting_eigen(
     CudaDensityFittingJkPlan*, const std::vector<double>& matrix,
     const std::vector<double>* overlap, const std::vector<double>* orthogonalizer,
