@@ -294,7 +294,10 @@ __global__ void update_diis_kernel(
     for (std::size_t pair = cooperative_dots ? 0 : threadIdx.x; pair < dot_count;
          pair += cooperative_dots ? 1 : blockDim.x) {
       std::uint32_t row = 0, column = 0;
-      if constexpr (CooperativeDots) {
+      if constexpr (CooperativeDots && WideVectors) {
+        // A pure decode: every lane of the CTA forms the same pair.
+        decode_symmetric_pair(static_cast<std::uint32_t>(pair), count, row, column);
+      } else if constexpr (CooperativeDots) {
         if (threadIdx.x == 0)
           decode_symmetric_pair(static_cast<std::uint32_t>(pair), count, row, column);
         row = __shfl_sync(0xffffffffU, row, 0);
@@ -334,6 +337,18 @@ __global__ void update_diis_kernel(
       if (cooperative_dots)
         for (unsigned delta = 16; delta; delta /= 2)
           dot += __shfl_down_sync(0xffffffffU, dot, delta);
+      if constexpr (CooperativeDots && WideVectors) {
+        // Fold warp sums in warp order; lane zero of the CTA owns the result.
+        __shared__ double warp_dots[32];
+        if (threadIdx.x % 32 == 0) warp_dots[threadIdx.x / 32] = dot;
+        __syncthreads();
+        if (threadIdx.x < 32) {
+          dot = threadIdx.x < blockDim.x / 32 ? warp_dots[threadIdx.x] : 0.0;
+          for (unsigned delta = 16; delta; delta /= 2)
+            dot += __shfl_down_sync(0xffffffffU, dot, delta);
+        }
+        __syncthreads();
+      }
       if (!cooperative_dots || threadIdx.x == 0) {
         matrix[static_cast<std::size_t>(row) * dimension + column] = dot;
         if (cooperative_dots && row != column)
@@ -455,8 +470,19 @@ void launch_update_diis_kernel(
   };
   if (raw_gram)
     launch.template operator()<false, true>();
+  else if (cooperative_dots && block.x > 32 && block.x % 32 == 0 && block.x <= 1024 &&
+           block.y == 1 && block.z == 1)
+    // A full CTA owns the elementwise history copy, extrapolation and every
+    // collective dot; the scalar solve stays lane-zero-only.
+    update_diis_kernel<true, false, false, true><<<grid, block, shared_bytes, stream>>>(
+        batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
+        fock_history, residual_history, linear_system, coefficients, history_count, history_head,
+        effective_fock, normalize_metric, dot_partials, parts, raw_gram);
   else if (cooperative_dots)
-    launch.template operator()<true, false>();
+    update_diis_kernel<true, false><<<grid, 32, shared_bytes, stream>>>(
+        batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
+        fock_history, residual_history, linear_system, coefficients, history_count, history_head,
+        effective_fock, normalize_metric, dot_partials, parts, raw_gram);
   else
     launch.template operator()<false, false>();
 }

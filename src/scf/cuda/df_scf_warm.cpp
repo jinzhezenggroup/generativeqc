@@ -117,9 +117,9 @@ void prepare_cuda_density_fitting_rhf_warm_state(CudaDensityFittingJkPlan* plan,
       launch_assemble_rhf_fock_kernel(blocks_for(plan->matrix_elements), kThreads, 0, plan->stream,
                                       plan->matrix_elements, state->d_hcore, plan->coulomb,
                                       plan->alpha_exchange, state->d_next_density);
-      launch_compute_device_energy_kernel(1, 32, 0, plan->stream, 1, plan->nbf, state->d_density,
-                                          state->d_hcore, state->d_next_density,
-                                          state->d_previous_energy, state->d_energy);
+      launch_compute_device_energy_kernel(
+          1, kDfMatrixReductionThreads, 0, plan->stream, 1, plan->nbf, state->d_density,
+          state->d_hcore, state->d_next_density, state->d_previous_energy, state->d_energy);
       error = cudaGetLastError();
     }
     if (error == cudaSuccess)

@@ -330,9 +330,9 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     if (iteration_error != cudaSuccess) {
       return cuda_failure(iteration_error, "assemble CUDA DF device RHF Fock", detail);
     }
-    launch_compute_device_energy_kernel(static_cast<unsigned>(batch_size), 32, 0, plan->stream,
-                                        batch_size, plan->nbf, d_density, d_hcore, d_fock,
-                                        d_nuclear, d_energy);
+    launch_compute_device_energy_kernel(static_cast<unsigned>(batch_size),
+                                        kDfMatrixReductionThreads, 0, plan->stream, batch_size,
+                                        plan->nbf, d_density, d_hcore, d_fock, d_nuclear, d_energy);
     iteration_status = apply_scf_diis(*plan, *state, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     // DIIS has consumed the physical AO residual and retained its own history.
@@ -358,10 +358,10 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
     if (occupied_exchange) store_scf_factor(*plan, *state, d_temporary, false);
     store_scf_final_frame(*plan, *state, d_temporary, false);
     launch_update_device_convergence_kernel(
-        static_cast<unsigned>(batch_size), 32, 0, plan->stream, batch_size, plan->nbf,
-        energy_tolerance, density_tolerance, d_energy, d_previous_energy, d_next_density, d_density,
-        d_active, d_converged, d_iterations, d_energy_change, d_density_rms, state->d_diis_residual,
-        qualified_standard_owner, orbital_gradient_convergence);
+        static_cast<unsigned>(batch_size), kDfMatrixReductionThreads, 0, plan->stream, batch_size,
+        plan->nbf, energy_tolerance, density_tolerance, d_energy, d_previous_energy, d_next_density,
+        d_density, d_active, d_converged, d_iterations, d_energy_change, d_density_rms,
+        state->d_diis_residual, qualified_standard_owner, orbital_gradient_convergence);
     if (tail)
       launch_tail_cuda_density_fitting_scf_graph_kernel(1, 1, 0, plan->stream,
                                                         static_cast<std::int32_t>(batch_size),

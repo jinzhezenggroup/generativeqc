@@ -165,6 +165,37 @@ __global__ void assemble_uhf_fock_kernel(std::size_t elements, const double* hco
   beta_fock[element] = hcore[element] + coulomb[element] - beta_exchange[element];
 }
 
+// Deterministic CTA reduction: every lane folds its strided partition, warps
+// fold lane order, then warp zero folds warp order. Thread zero receives the
+// result; the partition and combination order depend only on Threads.
+template <unsigned Threads, bool Maximum = false>
+__device__ double df_block_reduce(double value) {
+  static_assert(Threads % 32 == 0 && Threads <= 1024);
+  const auto combine = [](double left, double right) {
+    return Maximum ? fmax(left, right) : left + right;
+  };
+  for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1)
+    value = combine(value, __shfl_down_sync(0xffffffffU, value, delta));
+  if constexpr (Threads == 32) {
+    return value;
+  } else {
+    constexpr unsigned warps = Threads / 32;
+    __shared__ double partial[warps];
+    if (threadIdx.x % 32 == 0) partial[threadIdx.x / 32] = value;
+    __syncthreads();
+    double total = 0.0;
+    if (threadIdx.x < 32) {
+      total = threadIdx.x < warps ? partial[threadIdx.x] : 0.0;
+      for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1)
+        total = combine(total, __shfl_down_sync(0xffffffffU, total, delta));
+    }
+    // Keep partial[] stable until every warp has been folded.
+    __syncthreads();
+    return total;
+  }
+}
+
+template <unsigned Threads>
 __global__ void compute_device_energy_kernel(std::size_t batch_size, std::size_t nbf,
                                              const double* density, const double* hcore,
                                              const double* fock, const double* nuclear_repulsion,
@@ -174,12 +205,10 @@ __global__ void compute_device_energy_kernel(std::size_t batch_size, std::size_t
   const std::size_t matrix_elements = nbf * nbf;
   const std::size_t offset = system * matrix_elements;
   double value = 0.0;
-  for (std::size_t element = threadIdx.x; element < matrix_elements; element += blockDim.x) {
+  for (std::size_t element = threadIdx.x; element < matrix_elements; element += Threads) {
     value += 0.5 * density[offset + element] * (hcore[offset + element] + fock[offset + element]);
   }
-  for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
-    value += __shfl_down_sync(0xffffffffU, value, delta);
-  }
+  value = df_block_reduce<Threads>(value);
   if (threadIdx.x == 0) energy[system] = value + nuclear_repulsion[system];
 }
 
@@ -206,6 +235,7 @@ __global__ void compute_device_uhf_energy_kernel(std::size_t batch_size, std::si
   if (threadIdx.x == 0) energy[system] = value + nuclear_repulsion[system];
 }
 
+template <unsigned Threads>
 __global__ void update_device_convergence_kernel(
     std::size_t batch_size, std::size_t nbf, double energy_tolerance, double density_tolerance,
     const double* energy, double* previous_energy, const double* next_density, double* density,
@@ -216,16 +246,26 @@ __global__ void update_device_convergence_kernel(
   if (system >= batch_size || active[system] == 0) return;
   const std::size_t matrix_elements = nbf * nbf;
   const std::size_t offset = system * matrix_elements;
-  const double physical_maximum = maximum_physical_residual(
-      physical_residual ? physical_residual + offset : nullptr, matrix_elements, orbital_gradient);
+  // Same scalar policy as maximum_physical_residual(): any nonfinite entry
+  // is infinite, otherwise max |r| or, for the MO gradient, sqrt(sum r^2 / 2).
+  double physical = 0.0;
+  if (physical_residual) {
+    for (std::size_t element = threadIdx.x; element < matrix_elements; element += Threads) {
+      const double value = physical_residual[offset + element];
+      physical = !isfinite(value)   ? CUDART_INF
+                 : orbital_gradient ? physical + value * value
+                                    : fmax(physical, fabs(value));
+    }
+    physical = orbital_gradient ? df_block_reduce<Threads>(physical)
+                                : df_block_reduce<Threads, true>(physical);
+  }
+  const double physical_maximum = orbital_gradient ? sqrt(0.5 * physical) : physical;
   double square = 0.0;
-  for (std::size_t element = threadIdx.x; element < matrix_elements; element += blockDim.x) {
+  for (std::size_t element = threadIdx.x; element < matrix_elements; element += Threads) {
     const double delta = next_density[offset + element] - density[offset + element];
     square += delta * delta;
   }
-  for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
-    square += __shfl_down_sync(0xffffffffU, square, delta);
-  }
+  square = df_block_reduce<Threads>(square);
   if (threadIdx.x == 0) {
     const std::uint32_t iteration = iterations[system] + 1;
     const bool has_baseline = isfinite(previous_energy[system]);
@@ -244,11 +284,11 @@ __global__ void update_device_convergence_kernel(
       previous_energy[system] = energy[system];
     }
   }
-  __syncwarp();
   // Every iteration advances the resident density, including the converged
   // one.  This makes the final host copy the density associated with the
-  // convergence test and avoids a second device-to-device staging pass.
-  for (std::size_t element = threadIdx.x; element < matrix_elements; element += blockDim.x) {
+  // convergence test and avoids a second device-to-device staging pass. Each
+  // lane copies only the elements it alone read above.
+  for (std::size_t element = threadIdx.x; element < matrix_elements; element += Threads) {
     density[offset + element] = next_density[offset + element];
   }
 }
@@ -346,8 +386,12 @@ void launch_compute_device_energy_kernel(dim3 grid, dim3 block, std::size_t shar
                                          std::size_t nbf, const double* density,
                                          const double* hcore, const double* fock,
                                          const double* nuclear_repulsion, double* energy) {
-  compute_device_energy_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, density, hcore, fock, nuclear_repulsion, energy);
+  if (block.x == kDfMatrixReductionThreads && block.y == 1 && block.z == 1)
+    compute_device_energy_kernel<kDfMatrixReductionThreads><<<grid, block, shared_bytes, stream>>>(
+        batch_size, nbf, density, hcore, fock, nuclear_repulsion, energy);
+  else  // The original one-warp owner.
+    compute_device_energy_kernel<32><<<grid, 32, shared_bytes, stream>>>(
+        batch_size, nbf, density, hcore, fock, nuclear_repulsion, energy);
 }
 void launch_compute_device_uhf_energy_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                              cudaStream_t stream, std::size_t batch_size,
@@ -365,10 +409,16 @@ void launch_update_device_convergence_kernel(
     double* previous_energy, const double* next_density, double* density, std::uint8_t* active,
     std::uint8_t* converged, std::uint32_t* iterations, double* energy_change, double* density_rms,
     const double* physical_residual, bool qualified_owner, bool orbital_gradient) {
-  update_device_convergence_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, nbf, energy_tolerance, density_tolerance, energy, previous_energy, next_density,
-      density, active, converged, iterations, energy_change, density_rms, physical_residual,
-      qualified_owner, orbital_gradient);
+  const auto launch = [&]<unsigned Threads>() {
+    update_device_convergence_kernel<Threads><<<grid, Threads, shared_bytes, stream>>>(
+        batch_size, nbf, energy_tolerance, density_tolerance, energy, previous_energy, next_density,
+        density, active, converged, iterations, energy_change, density_rms, physical_residual,
+        qualified_owner, orbital_gradient);
+  };
+  if (block.x == kDfMatrixReductionThreads && block.y == 1 && block.z == 1)
+    launch.template operator()<kDfMatrixReductionThreads>();
+  else  // The original one-warp owner.
+    launch.template operator()<32>();
 }
 void launch_tail_cuda_density_fitting_scf_graph_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
