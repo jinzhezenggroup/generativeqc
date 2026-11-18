@@ -219,10 +219,11 @@ also retain 256. An automatically enlarged owner that cannot allocate storage
 retries preparation once at 256; other failures propagate. A positive integer
 always preserves the explicit SCF request.
 
-Nonlocal CUDA calculations retain their separate policy: large device-fused,
-density-fitted, strict-FP64 RKS with gradient-dependent XC uses 512 SCF points on
-full-rate FP64 matrix devices, requiring at least 512 AOs, 524288 grid points
-and 1 GiB free device memory. Other nonlocal owners retain 256.
+Nonlocal CUDA calculations retain their separate policy for large device-fused,
+strict-FP64 RKS with gradient-dependent XC on full-rate FP64 matrix devices,
+requiring at least 512 AOs, 524288 grid points and 1 GiB free device memory:
+density-fitted owners use 512 SCF points and Direct owners 1024. Other nonlocal
+owners, including low-rate FP64 devices, retain 256.
 
 `force_tile_points` independently bounds CUDA stationary-force batches (1..4096
 points). When omitted, an explicit SCF tile is inherited. With automatic SCF,
@@ -286,8 +287,11 @@ reuse and guarded pure-J density-first contraction in orders six/seven. The
 method authenticates the actual J/K source and resident final-density token,
 not a functional name. Pure J permits independent D4/gCP terms; nonzero
 exchange, bilinear seeds and partial AO masks retain component contraction.
-HF, UKS, fitted, ECP, RSH, nonlocal and D4-hybrid consumers keep their previous
-order-six/seven defaults. All resource and derivative-capability guards remain.
+The WB97M-V Direct owner also qualifies: its full-range J plus exact global-hybrid
+K traversal uses the same schedule while its long-range K correction keeps its own
+traversal. HF, UKS, fitted, ECP, other RSH, other nonlocal and D4-hybrid consumers
+keep their previous order-six/seven defaults. All resource and
+derivative-capability guards remain.
 
 `GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
 Explicit `=1` or `=spatial-reuse` selects the earlier spatial consumer;

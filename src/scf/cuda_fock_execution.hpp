@@ -157,7 +157,8 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
 generativeqc_status consume_prepared_cuda_direct_rsh_energy_derivatives_device(
     const PreparedFockPlan& plan, const ResolvedFockBuild& long_range_correction,
     const double* density, const double* beta, std::size_t matrix_elements,
-    const CudaDerivativeSourceConsumer& consumer, std::string& detail);
+    const CudaDerivativeSourceConsumer& consumer, std::string& detail,
+    bool allow_spatial_default = false);
 
 /** Fixed-density derivative of one independently prepared exact LongRange-K
  * correction. The coefficient and omega come exclusively from this owner's

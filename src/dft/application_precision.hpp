@@ -43,6 +43,16 @@ inline constexpr bool admit_nonlocal_rms_handoff(bool outer, bool nonlocal_model
   return outer && nonlocal_model && standard_convergence && !fitted_coulomb && !fitted_exchange;
 }
 
+/** Qualified strict Standard WB97M-V owners anchor VV10 on a native cold guess.
+ * Transported densities already skip the semilocal/RSH-only provisional solve.
+ * For native guesses that solve ends in a DIIS reset when VV10 enters and costs
+ * more Focks than it saves; fitted and Direct owners both measured faster.
+ * Mixed, budget, strict and other unqualified owners keep the seed stage. */
+inline constexpr bool skip_nonlocal_cold_seed_stage(bool nonlocal_model,
+                                                    bool standard_convergence) noexcept {
+  return nonlocal_model && standard_convergence;
+}
+
 /** Select progress of a provisional operator, never target stationarity.
  * Qualified Standard full-Direct VV10 owners use their spin RMS to avoid
  * oversolving temporary seed/frozen problems for isolated AO outliers. Strict

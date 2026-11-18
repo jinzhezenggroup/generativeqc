@@ -9,7 +9,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
-from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
+)
 from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.method.nonlocal_pair import vv10_grid_beta
 from generativeqc_compiler.method.spec import resolve_method
@@ -125,6 +128,7 @@ def generate() -> str:
             "}",
             f"inline constexpr double vv10_beta = {beta:.17g};",
             f"inline constexpr double vv10_density_threshold = {threshold:.17g};",
+            f"inline constexpr double vv10_weight_threshold = {float(MOLECULAR_VV10_WEIGHT_THRESHOLD):.17g};",
             "}",
             "",
         ]

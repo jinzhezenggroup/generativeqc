@@ -17,7 +17,10 @@ from generativeqc_compiler.common.array_execution import arrays as np
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.dft.nonlocal_policy import MOLECULAR_VV10_DENSITY_THRESHOLD
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
+)
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.method.nonlocal_pair import (
     vv10_grid_beta,
@@ -48,6 +51,15 @@ from generativeqc_compiler.xc.wb97mv_maple import (
 
 FIELD_COUNT = 9
 FIELD_LAYOUT = ("rho", "gx", "gy", "gz", "tau", "weight", "x", "y", "z")
+
+
+def _nonlocal_active(fields: np.ndarray) -> np.ndarray:
+    """Apply the molecular VV10 density and quadrature-weight domain."""
+    return (fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)) & (
+        np.abs(fields[5]) > float(MOLECULAR_VV10_WEIGHT_THRESHOLD)
+    )
+
+
 GRID_FIELD_WORKSPACE_PANELS = 32
 
 
@@ -477,9 +489,7 @@ class StationaryGridSecondOrder:
         base = np.zeros_like(fields)
         delta = np.zeros_like(fields)
         if self.nonlocal_primitive is not None:
-            count = np.count_nonzero(
-                fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)
-            )
+            count = np.count_nonzero(_nonlocal_active(fields))
             if count * count > self.max_pair_evaluations:
                 raise ValueError("VV10 second-order work exceeds max_nonlocal_pairs")
         active_indices = np.flatnonzero(
@@ -624,7 +634,7 @@ class StationaryGridSecondOrder:
         """Apply the one total-density VV10 graph for either spin convention."""
         if self.nonlocal_primitive is None:
             return 0.0, np.zeros_like(fields), np.zeros_like(fields), 0
-        indices = np.flatnonzero(fields[0] >= float(MOLECULAR_VV10_DENSITY_THRESHOLD))
+        indices = np.flatnonzero(_nonlocal_active(fields))
         count = len(indices)
         pairs = count * count
         if pairs > self.max_pair_evaluations:

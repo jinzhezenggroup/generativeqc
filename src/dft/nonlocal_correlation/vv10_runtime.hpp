@@ -119,9 +119,10 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
  * point's inputs are loaded before its thread writes any effective output.
  */
 void enqueue_vv10_molecular_domain_cuda(cudaStream_t stream, std::size_t point_count,
-                                        double density_threshold, const double* weights,
-                                        const double* density, const double* density_gradient,
-                                        double* effective_weights, double* effective_density,
+                                        double density_threshold, double weight_threshold,
+                                        const double* weights, const double* density,
+                                        const double* density_gradient, double* effective_weights,
+                                        double* effective_density,
                                         double* effective_density_gradient, int* numerical_error);
 
 /** Gather total rho and grad-rho from one resident GridTaskView tile.
