@@ -917,8 +917,20 @@ __global__ void geometry_reduce(const double* partial, size_t na, size_t geometr
   if (*error) return;
   const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= 9 * na) return;
+  const size_t stride = 9 * na;
   double sum = 0;
-  for (size_t lane = 0; lane < geometry_lanes; ++lane) sum += partial[lane * 9 * na + i];
+  size_t lane = 0;
+  // Only 9*na columns exist, so each lane is latency-bound. Issue a batch of
+  // independent loads, then add them in the original lane order: the same
+  // left-to-right FP64 sum, with sixteen loads in flight instead of one.
+  for (; lane + 16 <= geometry_lanes; lane += 16) {
+    double value[16];
+#pragma unroll
+    for (unsigned k = 0; k < 16; ++k) value[k] = partial[(lane + k) * stride + i];
+#pragma unroll
+    for (unsigned k = 0; k < 16; ++k) sum += value[k];
+  }
+  for (; lane < geometry_lanes; ++lane) sum += partial[lane * stride + i];
   output[i] = finite(output[i] + sum, error, 0);
 }
 
