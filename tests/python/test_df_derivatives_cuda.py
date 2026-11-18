@@ -348,12 +348,14 @@ def test_generated_df_hf_matches_pyscf_and_two_energy_difference_steps(
 
 @pytest.mark.parametrize("tile_elements", [0, 11])
 @pytest.mark.parametrize("pair_reuse", ["0", "1"])
+@pytest.mark.parametrize("shells", ["0", "1"])
 def test_metric_only_weight_response_moves_both_auxiliary_centers(
-    monkeypatch: typing.Any, tile_elements: int, pair_reuse: str
+    monkeypatch: typing.Any, tile_elements: int, pair_reuse: str, shells: str
 ) -> None:
     """Full and split panels preserve arbitrary, nonsymmetric metric adjoints."""
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", pair_reuse)
+    monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS", shells)
     oi, xi = fixture_inputs("spherical", False)
     o, x = calculator(oi), calculator(xi)
     atoms = [
@@ -371,12 +373,14 @@ def test_metric_only_weight_response_moves_both_auxiliary_centers(
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize("shells", ["0", "1"])
 def test_metric_pair_reuse_preserves_skew_and_one_sided_weights(
-    monkeypatch: typing.Any, representation: str
+    monkeypatch: typing.Any, representation: str, shells: str
 ) -> None:
     """No implicit weight symmetry or doubled-diagonal convention is allowed."""
     assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
     monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", "1")
+    monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS", shells)
     oi, xi = fixture_inputs(representation, False)
     orbital, auxiliary = calculator(oi), calculator(xi)
     atoms = [
@@ -407,6 +411,98 @@ def test_metric_pair_control_rejection_and_recovery(
     expected = np.einsum("axpq,pq->ax", derivative, weights)
     for selection in ("bad", "", "1", "0"):
         monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_PAIRS", selection)
+        if selection in ("bad", ""):
+            with pytest.raises(RuntimeError, match="DF gradient status"):
+                execute_df_gradient(
+                    orbital, auxiliary, atoms, np.zeros_like(a), weights
+                )
+        else:
+            actual, _ = execute_df_gradient(
+                orbital, auxiliary, atoms, np.zeros_like(a), weights
+            )
+            np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
+
+
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+def test_metric_shell_pairs_cover_contracted_s_through_g_auxiliary(
+    monkeypatch: typing.Any, representation: str
+) -> None:
+    """All 25 shell classes, several shells per atom, against libcint int2c2e_ip1.
+
+    Spherical d-g take the shell-pair route; Cartesian d and above keep the
+    per-AO route under the same control. A CPU descriptor only admits
+    auxiliary g during metadata construction; every value is computed on CUDA.
+    """
+    assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
+    oi, xi = fixture_inputs(representation, False)
+
+    def shell(atom: int, angular: int, primitives: list) -> dict:
+        return {
+            "atom_index": atom,
+            "angular_momentum": angular,
+            "primitives": primitives,
+        }
+
+    xi["shells"] = [
+        shell(2, 4, [[0.9, 1.0]]),
+        shell(0, 0, [[0.6, 0.8], [1.7, -0.1]]),
+        shell(0, 1, [[1.3, 1.0]]),
+        shell(1, 2, [[1.0, 0.8], [1.9, -0.1]]),
+        shell(2, 0, [[0.45, 1.0]]),
+        shell(1, 1, [[0.8, 0.8], [1.8, -0.1]]),
+        shell(0, 3, [[1.1, 1.0]]),
+        shell(2, 2, [[1.0, 0.8], [1.9, -0.1]]),
+        shell(1, 4, [[0.7, 0.6], [2.2, 0.3]]),
+        shell(2, 1, [[0.8, 1.0]]),
+        shell(0, 4, [[1.6, 1.0]]),
+    ]
+    orbital, auxiliary = (
+        Calculator(
+            device="cpu",
+            basis_representation=inputs["basis_representation"],
+            basis=[
+                Shell(
+                    s["atom_index"],
+                    s["angular_momentum"],
+                    tuple(Primitive(*p) for p in s["primitives"]),
+                )
+                for s in inputs["shells"]
+            ],
+        )
+        for inputs in (oi, xi)
+    )
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
+    a, metric, _, derivative = reference_df_matrices(oi, xi)
+    generator = np.random.default_rng(1118)
+    upper = np.triu(generator.normal(size=metric.shape), 1)
+    for shells in ("1", "0"):
+        monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS", shells)
+        for weights in (generator.normal(size=metric.shape), upper, upper - upper.T):
+            expected = np.einsum("axpq,pq->ax", derivative, weights)
+            actual, _ = execute_df_gradient(
+                orbital, auxiliary, atoms, np.zeros_like(a), weights, host_metadata=True
+            )
+            np.testing.assert_allclose(actual, expected, atol=2e-9, rtol=2e-11)
+            np.testing.assert_allclose(actual.sum(axis=0), 0, atol=2e-10)
+
+
+def test_metric_shell_control_rejection_and_recovery(
+    monkeypatch: typing.Any,
+) -> None:
+    """An invalid shell control rejects; a subsequent valid call remains usable."""
+    assert os.environ.get("SLURM_JOB_ID"), "GPU tests require Slurm"
+    oi, xi = fixture_inputs("spherical", False)
+    orbital, auxiliary = calculator(oi), calculator(xi)
+    atoms = [
+        (z, tuple(r)) for z, r in zip(("He", "H", "H"), oi["coordinates"], strict=True)
+    ]
+    a, metric, _, derivative = reference_df_matrices(oi, xi)
+    weights = np.random.default_rng(994).normal(size=metric.shape)
+    expected = np.einsum("axpq,pq->ax", derivative, weights)
+    for selection in ("bad", "", "1", "0"):
+        monkeypatch.setenv("GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS", selection)
         if selection in ("bad", ""):
             with pytest.raises(RuntimeError, match="DF gradient status"):
                 execute_df_gradient(

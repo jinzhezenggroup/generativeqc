@@ -39,6 +39,25 @@ other values reject. The control participates in resource/checkpoint identity.
 Component traces retain dense weight count, actual pair tasks and folded-panel
 count; reducing derivative work does not reduce the dense weight storage.
 
+When every auxiliary shell is at most g and every AO polynomial is harmonic
+(spherical shells, or Cartesian s/p), a complete metric panel instead runs one
+thread per ordered auxiliary shell pair. A harmonic degree-l polynomial S obeys
+`S(r-A) exp(-a|r-A|^2) = (2a)^-l S(d/dA) exp(-a|r-A|^2)`, so each AO is an exact
+combination of degree-l Hermite Gaussians. The thread projects the symmetric
+weight block `W[P,Q]+W[Q,P]` onto those monomials and contracts it with the
+compiler-owned DF radial recurrence raised by one order, differentiating only the
+first center; the ordered sum over both orientations is the full gradient, and
+same-atom pairs, which cancel exactly, are skipped. The host builds the
+coefficient table from the same normalized expansions as the derivative view and
+rejects any non-harmonic polynomial. Range-separated operators, auxiliary h,
+Cartesian d and above, partial panels and serial or distributed sinks keep the
+per-AO route. `GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS=0` keeps the per-AO pair
+route, unset or `1` admits the shell route, other values reject; it is reached
+only while the pair control above is unset or `1`. The control participates in
+resource/checkpoint identity, and `metric_derivative_shell_panels` counts
+admitted panels. The standalone API uses the same route when one uploaded tile
+holds the whole metric.
+
 Orbital and auxiliary systems share physical atom coordinates, but their
 shells can have different owners, orderings, and Cartesian/spherical
 representations. Both auxiliary centers move in dM. The three mathematical

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/df_metric_shell_derivatives.cu",
+  "reason": "Complete-panel auxiliary metric center derivative over ordered shell pairs. Each harmonic AO is an exact top-order Hermite Gaussian combination (Hobson), so a raised radial recurrence contracts the symmetric weight block directly. The radial R(t,u,v) recurrence and Boys seeds are the compiler-owned order-eleven DF lowering; the native Hermite prefactor, monomial addressing, weight projection and first-center scatter remain conservatively scientific. The per-AO generated traversal stays the fallback for partial panels, Cartesian d and above, auxiliary h and range separation. Qualified against libcint int2c2e_ip1 and PySCF DF-RHF auxiliary response.",
+  "regions": [],
+  "role": "scientific",
+  "subsystem": "df_derivatives"
+}

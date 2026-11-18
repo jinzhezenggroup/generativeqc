@@ -1,0 +1,23 @@
+{
+  "id": "df.metric-derivative-shell-pairs",
+  "classification": "already-default",
+  "controls": [
+    "hf-runtime:GENERATIVEQC_DF_METRIC_DERIVATIVE_SHELLS"
+  ],
+  "owner_issues": [
+    1598
+  ],
+  "sources": [
+    "python/generativeqc/resources_hf.py",
+    "src/scf/cuda/df_gradient_bridge.cu",
+    "src/scf/cuda/df_metric_shell_derivatives.cu"
+  ],
+  "rationale": "Complete contiguous metric weight panels with harmonic s-g auxiliary AOs contract each ordered auxiliary shell pair once: every harmonic AO is an exact top-order Hermite Gaussian combination, so the compiler-owned DF radial recurrence raised by one order contracts the projected symmetric weight block directly, and only the first center is differentiated. Same-atom pairs cancel exactly and are skipped. Partial/offset/strided/serial/distributed-sink panels, range separation, auxiliary h and Cartesian d and above keep the per-AO pair route. Explicit 0 rolls back to that route; PAIRS=0 still selects dense traversal; invalid controls reject.",
+  "revisit_condition": "Extend to range-separated metrics only with an erf-attenuated radial oracle and to partial panels only with bounded ownership of both orientations. Keep arbitrary nonsymmetric weights, libcint int2c2e_ip1 and PySCF auxiliary-response gates and explicit rollback.",
+  "evidence": [
+    "docs/developer/df_derivatives.md",
+    "tests/python/test_df_derivatives_cuda.py",
+    ".agents/notes/implemented/performance/2026-11-18-df-metric-shell-derivative.md",
+    "benchmarks/results/h100-df-metric-shells-20261118/README.md"
+  ]
+}
