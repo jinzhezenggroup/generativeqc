@@ -72,6 +72,19 @@ def test_shared_force_grid_control_requires_registration() -> None:
     )
 
 
+def test_native_force_dense_ablation_requires_diagnostic_registration() -> None:
+    """The same-binary opt-out must retain an owner, not imply map promotion."""
+    payload = _payload()
+    control = "dft-policy:GENERATIVEQC_CUDA_FORCE_ACTIVE_AO"
+    entry = next(entry for entry in payload["entries"] if control in entry["controls"])
+    assert entry["classification"] == "diagnostic-test-only"
+    payload["entries"].remove(entry)
+    assert any(
+        "unregistered audited controls" in error and control in error
+        for error in validate_inventory(payload, root=ROOT)
+    )
+
+
 @pytest.mark.parametrize("suffix", ["SOURCE", "BUILD"])
 def test_combined_range_source_requires_registration(suffix: str) -> None:
     """The coefficient-bound K and producer defaults retain rollback owners."""

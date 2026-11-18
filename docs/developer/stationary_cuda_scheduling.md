@@ -17,11 +17,12 @@ Changing a tile never changes the scientific grid or reduces whole-grid storage.
 
 ## Indexed AO policy
 
-Budget-admitted ordinary tiles retain the same active-AO producer selection as
+In the explicit/compatibility stationary consumer, budget-admitted ordinary
+tiles retain the same active-AO producer selection as
 explicit 256-point callers. The existing continuous dense-work crossover,
 derivative/spin domains, resident-grid requirement, integral-provider domains,
 cutoffs, cache budgets and occupancy gates still apply to direct profiles.
-Fitted ordinary forces above the same dense point-times-AO-squared crossover
+Fitted ordinary forces above their separate `2**35` dense point-times-AO-squared crossover
 instead inspect every requested AO jet with the native bitmask producer. They
 retain the existing `1e-16` force AO cutoff, a 64 MiB optional map allowance and
 an 80% average active-fraction admission gate. This is a sampled AO-jet cutoff,
@@ -36,6 +37,12 @@ The policy has no GPU product, SM-version, atom-count, AO-count or grid-size
 whitelist. Device capabilities and complete-owner resources determine admission.
 Qualification on a particular device does not establish a speedup on every CUDA
 device.
+
+Admitted public native forces instead use the native controller's own shared
+exact-jet policy across ordinary/composite and Direct/DF bindings. Its optional
+storage bound and dense-ablation control differ from this Python portfolio;
+see [native prepared force domains](preao_force_domain.md#native-prepared-forces)
+for the authoritative admission, lifecycle and executed-work contracts.
 
 ## Cooperative geometry resources
 
