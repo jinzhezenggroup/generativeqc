@@ -24,6 +24,7 @@ from generativeqc import Calculator, GridSpec, KsOptions
 
 from benchmarks._cases import BenchmarkCase
 from benchmarks._retained_basis import load_retained_comparison_basis
+from benchmarks._retention import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,8 +45,12 @@ def main() -> None:
     parser.add_argument("--warm-repeats", type=int, default=3)
     parser.add_argument("--pair", type=int, default=0)
     parser.add_argument("--device-label", default="local")
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     arguments = parser.parse_args()
+    try:
+        trace = raw_output_path(arguments.output.with_suffix(".trace.jsonl"))
+    except ValueError as error:
+        parser.error(f"trace output: {error}")
     if (
         not os.environ.get("SLURM_JOB_ID")
         or arguments.warm_repeats < 1
@@ -100,7 +105,6 @@ def main() -> None:
     auxiliary, _ = auxiliary_loader(
         ROOT / inputs["auxiliary"], fixture, role="auxiliary", compute_forces=True
     )
-    trace = arguments.output.with_suffix(".trace.jsonl")
     os.environ["GENERATIVEQC_DF_TRACE"] = str(trace)
     samples = []
     started_at = datetime.now(timezone.utc).isoformat()

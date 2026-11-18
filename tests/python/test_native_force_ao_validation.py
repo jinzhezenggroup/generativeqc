@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import runpy
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -239,3 +240,51 @@ def test_native_endpoint_pairs_reject_unmatched_identity(identity: str) -> None:
         payload["runs"][1][identity] = "foreign"
     with pytest.raises((AssertionError, TypeError)):
         validate_endpoints(payload, acceptance)
+
+
+@pytest.mark.parametrize("destination", ("output", "trace"))
+def test_native_endpoint_rejects_retained_destinations_before_reading_receipt(
+    destination: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from benchmarks import native_force_ao_endpoint as runner
+
+    retained = runner.ROOT / "benchmarks/results"
+    output = tmp_path / "native.json"
+    if destination == "output":
+        output = retained / "native.json"
+    else:
+        output.with_suffix(".trace.jsonl").symlink_to(retained / "native.trace.jsonl")
+
+    def unexpected_receipt(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("raw output must be validated before reading the receipt")
+
+    monkeypatch.setattr(runner.lzma, "open", unexpected_receipt)
+    monkeypatch.setenv("SLURM_JOB_ID", "test")
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", "unopened")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "native_force_ao_endpoint",
+            "--receipt",
+            "unused",
+            "--method",
+            "pbe",
+            "--mode",
+            "auto",
+            "--output",
+            str(output),
+        ],
+    )
+    with pytest.raises(SystemExit) as caught:
+        runner.main()
+    assert caught.value.code == 2
+    message = capsys.readouterr().err
+    if destination == "output":
+        assert "--output" in message and "error:" in message
+    else:
+        assert "trace output:" in message and ".artifacts/benchmarks/" in message
+    assert not output.exists()
