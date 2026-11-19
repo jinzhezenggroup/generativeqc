@@ -1,0 +1,67 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "cddde09a0f9a77f65d0f6776e5cc883ee67c28dd",
+    "dirty": false
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.paper_hfdft_replay",
+      "--verify-only",
+      "--directory",
+      "benchmarks/results/paper-hfdft-cold3-20261119"
+    ]
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Source-bound descriptive three-process figure observations retained; no global performance or overall numerical acceptance"
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "bytes": 971184,
+      "sha256": "1c389e05bee0666194c465c4c48c838cdcd826965820ebee3f46684fdb92fd62"
+    },
+    {
+      "path": "timings.csv",
+      "role": "samples",
+      "bytes": 41096,
+      "sha256": "eb179ccdbb0d3e2a97d683119e1b5e9df96ae0d2b40376ced8d27adb99d46dad"
+    },
+    {
+      "path": "summary.csv",
+      "role": "summary",
+      "bytes": 21763,
+      "sha256": "12522f445bf40bfff301a44c3e1a33b13a4f94968516c96c8328b4e6dcc83f04"
+    },
+    {
+      "path": "inputs.json.xz",
+      "role": "input",
+      "bytes": 3252,
+      "sha256": "0af4f6fd864abba07bb3aab529deaedf2541251844b5eb73273fd2cfdaf476c0"
+    },
+    {
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "bytes": 5080,
+      "sha256": "2fa4f145937c79195eaa5a6fd702de854724c3153eaa265f42d44b309c3dd5c9"
+    },
+    {
+      "path": "measured-source.json.xz",
+      "role": "source-patch",
+      "bytes": 456,
+      "sha256": "6f95706ad9f6d6d3ff258cf219b450df641767c2ced6dd6c7033624696e548d7"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 4706,
+      "sha256": "14da473007b8e2ddd1747f2d7a046c4affbd4f6021f3ed99c87ecb4af520320b"
+    }
+  ]
+}
