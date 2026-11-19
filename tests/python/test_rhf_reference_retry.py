@@ -164,7 +164,7 @@ std::vector<Item> run() {
   std::unique_ptr<MockResidentValues> resident_values;
   const MockHost host;
   const std::size_t nbf=2,batch_size=1,spin_count=1,spin_matrix_elements=4,matrix_size=4;
-  const unsigned threads=32,matrix_reduction_threads=32;
+  const unsigned threads=32,matrix_reduction_threads=32,kEnergyReductionThreads=512;
   double overlap[4]{1,2,3,4},hcore[4]{},fock[4]{33},coefficients[4]{},density[4]{11};
   double next_density[4]{22},eigenvalues[2]{},orthogonalizer[4]{},temporary[4]{},eigensystem[4]{};
   double energy[1]{-77},energy_change[1]{1e-14},density_rms[1]{1e-13},nuclear_repulsion[1]{};

@@ -3640,7 +3640,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                        nuclear_repulsion, active, energy);
       iteration_status = build_commutator_residual();
     } else {
-      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), kEnergyReductionThreads, 0,
                                    resources.stream_, static_cast<std::int32_t>(batch_size),
                                    static_cast<std::int32_t>(nbf), density, hcore, fock,
                                    nuclear_repulsion, active, energy);
@@ -4662,7 +4662,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
                                           total_weighted_density);
     }
   } else {
-    launch_compute_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+    launch_compute_energy_kernel(static_cast<unsigned>(batch_size), kEnergyReductionThreads, 0,
                                  resources.stream_, static_cast<std::int32_t>(batch_size),
                                  static_cast<std::int32_t>(nbf), final_density, hcore, final_fock,
                                  nuclear_repulsion, active, energy);
@@ -4742,7 +4742,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(
         fill_global_failure(outputs, status);
         return outputs;
       }
-      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), kEnergyReductionThreads, 0,
                                    resources.stream_, static_cast<std::int32_t>(batch_size),
                                    static_cast<std::int32_t>(nbf), density, hcore, fock,
                                    nuclear_repulsion, active, energy);

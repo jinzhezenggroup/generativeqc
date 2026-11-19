@@ -54,6 +54,20 @@ __global__ void compute_energy_kernel(std::int32_t batch_size, std::int32_t nbf,
   for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
     value += __shfl_down_sync(0xffffffffU, value, delta);
   }
+  // Wider blocks fold warp sums in warp order; the order depends only on the
+  // launch width, and a single warp keeps the incumbent arithmetic exactly.
+  if (blockDim.x > warpSize) {
+    __shared__ double partial[32];
+    const unsigned warps = blockDim.x / warpSize;
+    if (threadIdx.x % warpSize == 0) partial[threadIdx.x / warpSize] = value;
+    __syncthreads();
+    if (threadIdx.x < warpSize) {
+      value = threadIdx.x < warps ? partial[threadIdx.x] : 0.0;
+      for (unsigned delta = warpSize / 2; delta != 0; delta >>= 1) {
+        value += __shfl_down_sync(0xffffffffU, value, delta);
+      }
+    }
+  }
   if (threadIdx.x == 0) energy[system] = nuclear_repulsion[system] + value;
 }
 

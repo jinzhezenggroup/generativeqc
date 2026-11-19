@@ -6,6 +6,9 @@ namespace generativeqc::scf::cuda_execution {
 // from the generic capture-safe launch width so tuning other kernels cannot
 // silently drop reductions from additional warps.
 constexpr unsigned kMatrixReductionThreads = 32;
+// The RHF energy contraction streams three N^2 matrices; one warp left it
+// latency-bound. A full block folds warp sums in fixed warp order.
+constexpr unsigned kEnergyReductionThreads = 512;
 // External warm densities require an O(N^2) symmetry and metric-trace pass
 // before they can enter a captured SCF replay. One block owns each system so
 // batch-size-one production runs can spread that setup scan across the GPU.
