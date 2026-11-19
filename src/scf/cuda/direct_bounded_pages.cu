@@ -53,8 +53,8 @@ __global__ void compact_bounded_exact_class_force_wave_kernel(
       continue;
     }
     // This bound is fixed for the bra row and pair class. Pair-order
-    // segments are not Schwarz-sorted, so it may reject only the current
-    // ket; the exact predicate below still decides every survivor.
+    // segments are Schwarz-descending, so the first failing ket ends each
+    // thread's stride; the exact predicate below still decides every survivor.
     const BoundedPageDensityTails page_density_tails = bounded_page_density_tails(
         batch, topology, system, bra_pair, high_pair_class, low_pair_class);
     const std::uint32_t ket_begin =
@@ -111,15 +111,20 @@ __global__ void compact_bounded_exact_class_force_wave_kernel(
       const std::uint32_t ket_pair = topology.pair_order[ket_ordinal];
       const double quartet_bound =
           topology.shell_pair_bounds[bra_pair] * topology.shell_pair_bounds[ket_pair];
+      // Each class segment is Schwarz-descending for the current geometry, and
+      // this row tail depends only on the bra pair. Every later ket of this
+      // thread's stride therefore fails the same test: stop instead of
+      // rescanning the rest of the row. The exact predicate still decides each
+      // ket that passes.
       if constexpr (Purpose == DirectScreeningPurpose::Force) {
         const double force_tolerance =
             fmin(screening_tolerance, kForceDensityProductScreeningTolerance);
         if (has_density_bound && quartet_bound * page_density_tails.force < force_tolerance) {
-          continue;
+          break;
         }
       } else if (has_density_bound &&
                  quartet_bound * page_density_tails.fock < screening_tolerance) {
-        continue;
+        break;
       }
       if (!direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
               batch, bra_pair, ket_pair, screening_tolerance, topology.shell_pair_bounds,
