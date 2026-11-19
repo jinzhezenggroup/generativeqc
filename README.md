@@ -185,6 +185,9 @@ qualification of the current master implementation.
 A later [H100 three-process cohort on unmodified master `a6d5a3c00`](benchmarks/results/paper-hfdft-cold3-20261118/README.md)
 ([figure](assets/paper-hfdft-cold3-20261118-h100.svg)) wins 64/64 cold and
 62/64 warm medians; DF HF96 and Direct r2SCAN-3c96 warm remain slower.
+The H100 [cohort on master `cddde09a0`](benchmarks/results/paper-hfdft-cold3-20261119/README.md)
+([figure](assets/paper-hfdft-cold3-20261119-h100.svg)) wins 64/64 cold and
+63/64 warm medians; only Direct HF96 warm is slower (1.380 vs 1.353 s).
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
