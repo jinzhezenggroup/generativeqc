@@ -17,7 +17,7 @@ def _validate_profile(profile: typing.Any) -> None:
     rows = profile["kernels"]
     seen = set()
     for row in rows:
-        if not re.fullmatch(r"[0-3]{3}", row["class"]):
+        if not re.fullmatch(r"[0-3][0-3][0-4]", row["class"]):
             raise ValueError("invalid derivative class")
         angular = tuple(map(int, row["class"]))
         trial = DfDerivativeTrial(

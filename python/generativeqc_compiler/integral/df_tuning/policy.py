@@ -26,7 +26,8 @@ SCHEDULES = ("warp", "packed", "compact")
 # Availability is explicit: adding another lowering extends this registry;
 # unsupported requests never fall back to another mathematical algorithm.
 LOWERINGS = {
-    "polynomial": frozenset(product(range(4), repeat=3)),
+    # Auxiliary shells extend to g; the s/p/d/f orbital bound is unchanged.
+    "polynomial": frozenset(product(range(4), range(4), range(5))),
     "rys": frozenset(RYS_SHELL_CLASSES),
 }
 
@@ -43,9 +44,14 @@ class DfDerivativeTrial:
         if (
             not isinstance(self.angular, tuple)
             or len(self.angular) != 3
-            or any(type(x) is not int or x not in range(4) for x in self.angular)
+            or any(type(x) is not int for x in self.angular)
+            or self.angular[0] not in range(4)
+            or self.angular[1] not in range(4)
+            or self.angular[2] not in range(5)
         ):
-            raise ValueError("expected an s/p/d/f angular triple")
+            raise ValueError(
+                "expected s/p/d/f orbital and s..g auxiliary angular momenta"
+            )
         if (
             self.lowering not in LOWERINGS
             or self.angular not in LOWERINGS[self.lowering]

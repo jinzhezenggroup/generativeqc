@@ -1,0 +1,841 @@
+{
+ "schema": "generativeqc.h100-df-aux-g-rys-endpoint.v1",
+ "orbital_aos": 768,
+ "device": "NVIDIA H100 80GB HBM3, GPU-ee0365df-d4aa-39d4-2fb1-1e1b8495755a, 9.0, 595.58.03, 700.00 W, 1980 MHz",
+ "policy_control": "GENERATIVEQC_DF_SHELL_POLICY (auto = qualified portable baseline, candidate = sm_90 aux-g Rys)",
+ "same_phase_candidate_vs_auto_force_max_abs_hartree_per_bohr": {
+  "b3lyp": {
+   "cold": 3.659295089164516e-13,
+   "warm": 3.1086244689504383e-13
+  },
+  "hf": {
+   "cold": 4.0678571622265736e-13,
+   "warm": 4.3165471197426086e-13
+  },
+  "pbe0": {
+   "cold": 2.0961010704922955e-13,
+   "warm": 2.398081733190338e-13
+  }
+ },
+ "arms": [
+  {
+   "arm": "06-prewarm-b3lyp-df",
+   "policy": "auto",
+   "method": "b3lyp",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "c6ee58d3efb5912a131d452f1beccd4b02630713a2a030cf107d815e2794d4e8",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.402148574008606,
+     "energy": -2444.2195028819774,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.694618170033209,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490356923574e-05,
+      "force_rms_hartree_per_bohr": 1.1530646852548362e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490339048983e-05,
+      "force_rms_hartree_per_bohr": 1.15306468528337e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "07-prewarm-b3lyp-df-cand",
+   "policy": "candidate",
+   "method": "b3lyp",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "fed0742aeda3a6fd995194e25cda6cee187bb119854c4951704b49aee7fafe08",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.3373128570383415,
+     "energy": -2444.2195028819774,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.5939923990517855,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490360476288e-05,
+      "force_rms_hartree_per_bohr": 1.1530646852995563e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490355147217e-05,
+      "force_rms_hartree_per_bohr": 1.1530646854323989e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "08-b3lyp-df-auto-A0",
+   "policy": "auto",
+   "method": "b3lyp",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "3559cacf9757cb86a654d04bfed2c45c58163d2a7c44244275021e8945290126",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.385591450962238,
+     "energy": -2444.2195028819774,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.700969316996634,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.6948349480517209,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.7036501929396763,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490353259838e-05,
+      "force_rms_hartree_per_bohr": 1.1530646852860153e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.720649035681255e-05,
+      "force_rms_hartree_per_bohr": 1.1530646852198644e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490346931567e-05,
+      "force_rms_hartree_per_bohr": 1.1530646855200161e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490384568127e-05,
+      "force_rms_hartree_per_bohr": 1.1530646853928765e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "09-b3lyp-df-cand-B1",
+   "policy": "candidate",
+   "method": "b3lyp",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "eb90c41f4bd54b92ca4ab69c52c3cb41d787f085f90ea33bde78d77456ca44a5",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.317354472936131,
+     "energy": -2444.2195028819774,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.596835772972554,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.5995179979363456,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.6042584299575537,
+     "energy": -2444.2195028819774,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490339160005e-05,
+      "force_rms_hartree_per_bohr": 1.1530646855223715e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490363140823e-05,
+      "force_rms_hartree_per_bohr": 1.1530646852737779e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.720649034171352e-05,
+      "force_rms_hartree_per_bohr": 1.1530646851668948e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 1.354447391577196e-06,
+      "force_max_abs_hartree_per_bohr": 2.7206490374798165e-05,
+      "force_rms_hartree_per_bohr": 1.1530646855072694e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "00-prewarm-hf-df",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "ff51f66f9c12fd2c4f359ce7198d79d07061d8866f46a7a4133abe795390f94f",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.3277818330097944,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8336610370315611,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.965321296104605e-05,
+      "force_rms_hartree_per_bohr": 8.173643283207333e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201237173652e-05,
+      "force_rms_hartree_per_bohr": 8.17381584335747e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "01-prewarm-hf-df-cand",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "05058cba501f8b5d2e130bc948d89820cdb0d32165520cd36f9a216a91eb1196",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.153225351939909,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7755275560775772,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.9653212959269695e-05,
+      "force_rms_hartree_per_bohr": 8.17364328127985e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201224739154e-05,
+      "force_rms_hartree_per_bohr": 8.17381584425929e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "02-hf-df-auto-A0",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "a279f8783f120c01ade39c5b2cad01c1b5fbb9fdc7d28083e41b5cd3679ee15f",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.5202317989896983,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8556518439436331,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8450229879235849,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8468679060461,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.9653213021442184e-05,
+      "force_rms_hartree_per_bohr": 8.17364328162903e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201223850976e-05,
+      "force_rms_hartree_per_bohr": 8.17381583857328e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201222962797e-05,
+      "force_rms_hartree_per_bohr": 8.173815842674223e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.965420123895001e-05,
+      "force_rms_hartree_per_bohr": 8.17381583857979e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "03-hf-df-cand-B1",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "1eeadde569ac692737ac0df9477c2712e8dbbe18f84652944fa416d29d2969f1",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.133992522023618,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7872235779650509,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7476721819257364,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7685928639257327,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.965321300190226e-05,
+      "force_rms_hartree_per_bohr": 8.173643281237839e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201194541088e-05,
+      "force_rms_hartree_per_bohr": 8.173815843551165e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.965420123184458e-05,
+      "force_rms_hartree_per_bohr": 8.17381584123602e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.965420122118644e-05,
+      "force_rms_hartree_per_bohr": 8.173815839913912e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "04-hf-df-cand-B2",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "114a3494241c5678c512c59b571064d54b454038edf5aa6e924805ec0cfabbd7",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.0862373729469255,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7465142799774185,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.745488191023469,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7521470810752362,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.9653212959269695e-05,
+      "force_rms_hartree_per_bohr": 8.173643279157285e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201235397295e-05,
+      "force_rms_hartree_per_bohr": 8.17381584436104e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.96542012105283e-05,
+      "force_rms_hartree_per_bohr": 8.17381583880247e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.965420123273276e-05,
+      "force_rms_hartree_per_bohr": 8.173815840273657e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "05-hf-df-auto-A3",
+   "policy": "auto",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "a6ce4aa1963e3564fc0b3976961d474b286dde13b0f06f3a10c18a537fbe4707",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.176521292072721,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8369862949475646,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8458468290045857,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.8704536450095475,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.9653213010784043e-05,
+      "force_rms_hartree_per_bohr": 8.173643279259165e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201206975586e-05,
+      "force_rms_hartree_per_bohr": 8.173815839365951e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201222962797e-05,
+      "force_rms_hartree_per_bohr": 8.173815837973734e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201208751942e-05,
+      "force_rms_hartree_per_bohr": 8.173815837065381e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "12-trace-hf-df-cand",
+   "policy": "candidate",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "dd7044f3b6c0dbd6c2479f4ab3f02e971c59edbfbc333721a51be178090d28dc",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 3.1859245189698413,
+     "energy": -2431.232425270041,
+     "iterations": 11,
+     "fock_builds": 12
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7584558200323954,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7520649569341913,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.7589576770551503,
+     "energy": -2431.232425270042,
+     "iterations": 1,
+     "fock_builds": 2
+    }
+   ],
+   "qualification": {
+    "status": "failed",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935940525047e-05,
+      "force_max_abs_hartree_per_bohr": 1.9653212966375122e-05,
+      "force_rms_hartree_per_bohr": 8.17364328524982e-06,
+      "passed": false
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201199870158e-05,
+      "force_rms_hartree_per_bohr": 8.17381584418544e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.9654201219410083e-05,
+      "force_rms_hartree_per_bohr": 8.173815845466594e-06,
+      "passed": false
+     },
+     {
+      "energy_abs_per_atom_hartree": 2.1047935931051143e-05,
+      "force_max_abs_hartree_per_bohr": 1.965420122651551e-05,
+      "force_rms_hartree_per_bohr": 8.173815841623433e-06,
+      "passed": false
+     }
+    ]
+   }
+  },
+  {
+   "arm": "10-pbe0-df-cand-B0",
+   "policy": "candidate",
+   "method": "pbe0",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "c31247629574c502bfad8b798bbe6570173c767f94e4be3183905ef299f7548f",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.272446803050116,
+     "energy": -2441.5963854846495,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.592536473996006,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.592580119962804,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.5878043830161914,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.314677800674403e-05,
+      "force_rms_hartree_per_bohr": 1.0087654592239529e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.314677800685505e-05,
+      "force_rms_hartree_per_bohr": 1.0087654593445656e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.3146777998750423e-05,
+      "force_rms_hartree_per_bohr": 1.0087654592220687e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.3146778007521185e-05,
+      "force_rms_hartree_per_bohr": 1.0087654590902079e-05,
+      "passed": true
+     }
+    ]
+   }
+  },
+  {
+   "arm": "11-pbe0-df-auto-A1",
+   "policy": "auto",
+   "method": "pbe0",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "0c5dcf62711e88bb2b41a00ca46743d411a41012eaca9a31bae209ee1ebe3af5",
+   "library_sha256": "15bd0c9c29b4137d4d1f3a28824378f91fd23df85e9fef6188b70ab5d0eff997",
+   "raw_sha256": "6aeb6b40ffa4b54953848558c35a8fd9b6ff7331f19f0dacd86ede1185c0afa4",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 5.363451596931554,
+     "energy": -2441.5963854846495,
+     "iterations": 9,
+     "fock_builds": 9
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.6857197920326144,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.6759073759894818,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.6958185120020062,
+     "energy": -2441.5963854846495,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "cold": [
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.3146778012961278e-05,
+      "force_rms_hartree_per_bohr": 1.0087654590522801e-05,
+      "passed": true
+     }
+    ],
+    "warm": [
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.314677800918652e-05,
+      "force_rms_hartree_per_bohr": 1.0087654590825563e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.3146777984428546e-05,
+      "force_rms_hartree_per_bohr": 1.0087654590690707e-05,
+      "passed": true
+     },
+     {
+      "energy_abs_per_atom_hartree": 9.082166248693586e-08,
+      "force_max_abs_hartree_per_bohr": 2.3146777995419754e-05,
+      "force_rms_hartree_per_bohr": 1.0087654591726117e-05,
+      "passed": true
+     }
+    ]
+   }
+  }
+ ]
+}
