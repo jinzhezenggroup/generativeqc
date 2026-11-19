@@ -426,12 +426,14 @@ int main() {
     assert(resolve_hf_convergence_request(request, true, 1e-9, 1e-10) == Convergence::Strict);
   }
   using R = RhfBlockConvergenceRequest;
-  assert(parse_rhf_block_convergence_request(nullptr) == R::Off);
+  assert(parse_rhf_block_convergence_request(nullptr) == R::On);
   assert(parse_rhf_block_convergence_request("0") == R::Off);
   assert(parse_rhf_block_convergence_request("1") == R::On);
   for (const char* bad : {"", "01", "true", "auto", " 1", "1 ", "-1", "2"})
     assert(parse_rhf_block_convergence_request(bad) == R::Invalid);
   unsetenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE");
+  assert(rhf_block_convergence_requested() == R::On);
+  setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", "0", 1);
   assert(rhf_block_convergence_requested() == R::Off);
   setenv("GENERATIVEQC_HF_BLOCK_CONVERGENCE", "1", 1);
   assert(rhf_block_convergence_requested() == R::On);

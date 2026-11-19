@@ -1,0 +1,769 @@
+{
+ "schema": "generativeqc.h100-direct-rhf-block-reductions-endpoint.v1",
+ "orbital_aos": {
+  "hf96": 768,
+  "hf48": 384
+ },
+ "device": "NVIDIA H100 80GB HBM3, GPU-2d9ec719-f9a8-b789-45bd-4d796e5d7784, 9.0, 595.58.03, 700.00 W, 1980 MHz",
+ "policy_control": "base = parent snapshot (32-thread energy, GENERATIVEQC_HF_BLOCK_CONVERGENCE unset = off); reduced = 512-thread energy build with GENERATIVEQC_HF_BLOCK_CONVERGENCE=1 (the new default)",
+ "same_phase_reduced_vs_base_force_max_abs_hartree_per_bohr": {
+  "hf96": {
+   "cold": 5.114901557856655e-13,
+   "warm": 5.717405715532919e-13
+  },
+  "hf48": {
+   "cold": 4.2558317980834204e-13,
+   "warm": 5.688591958596945e-13
+  }
+ },
+ "arms": [
+  {
+   "label": "base",
+   "run": "hfred-A0",
+   "arm": "00-prewarm-hf96-base",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "11b03c3c65262eb7f56383cd33b053f921fb7eafdf9dbe0f9f6c0b39a2efc8cd",
+   "library_sha256": "a187a88aa7d9b058505273c3930b46da07d7230ece14e6742e5fc89b0dc1f77d",
+   "raw_sha256": "d850bfb835178fbc0cfb5c75c08510fd95bebe195da042598a25a19434804673",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.670384737662971,
+     "energy": -2431.234445871839,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4110422497615218,
+     "energy": -2431.234445871836,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "0500fb14618f6cacc7bd4c71253eed1ec1cf9e2a45f6597efbe6d14f3095756c",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.447494307494102e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104143657764e-07,
+       "force_rms_hartree_per_bohr": 1.2965176132349708e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.731711401798142e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104422184965e-07,
+       "force_rms_hartree_per_bohr": 1.2965176245137273e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "base",
+   "run": "hfred-A0",
+   "arm": "01-hf96-base",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "11b03c3c65262eb7f56383cd33b053f921fb7eafdf9dbe0f9f6c0b39a2efc8cd",
+   "library_sha256": "a187a88aa7d9b058505273c3930b46da07d7230ece14e6742e5fc89b0dc1f77d",
+   "raw_sha256": "f067662164df1c114b2bf096336920926ac0bed625b36c2464b80d4c85f88351",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.650513694621623,
+     "energy": -2431.234445871839,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4073255062103271,
+     "energy": -2431.23444587184,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4002924524247646,
+     "energy": -2431.23444587184,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4003167171031237,
+     "energy": -2431.2344458718417,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "4cd049bdb81372cd16080369ab0f985d03c2d57d8cfb953b0054d3c7281731e7",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.447494307494102e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081043574797794e-07,
+       "force_rms_hartree_per_bohr": 1.2965176445333332e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104507238457e-07,
+       "force_rms_hartree_per_bohr": 1.2965176576169813e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081044656050937e-07,
+       "force_rms_hartree_per_bohr": 1.296517650618418e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 5.163277213190062e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104541811496e-07,
+       "force_rms_hartree_per_bohr": 1.2965176522173022e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "base",
+   "run": "hfred-A0",
+   "arm": "02-hf48-base",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "11b03c3c65262eb7f56383cd33b053f921fb7eafdf9dbe0f9f6c0b39a2efc8cd",
+   "library_sha256": "a187a88aa7d9b058505273c3930b46da07d7230ece14e6742e5fc89b0dc1f77d",
+   "raw_sha256": "94f1e5d6342517bae8825f484e9b6993b72ae01399d0a764937eb2b2e29412b7",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 4.28580975998193,
+     "energy": -1215.6178506876734,
+     "iterations": 10,
+     "fock_builds": 10
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.37235811818391085,
+     "energy": -1215.6178506876734,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3704083124175668,
+     "energy": -1215.6178506876734,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.36893961019814014,
+     "energy": -1215.6178506876734,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "42843bb34a37400fef2a18bdc50cabf3b6a01a7734dd3e1ba9d8a39082b2eed1",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027950170196316e-07,
+       "force_rms_hartree_per_bohr": 8.990939583769797e-08,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027950175747431e-07,
+       "force_rms_hartree_per_bohr": 8.990939288932969e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.802794947804165e-07,
+       "force_rms_hartree_per_bohr": 8.990939181381048e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027946926089944e-07,
+       "force_rms_hartree_per_bohr": 8.990939278562812e-08,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "reduced",
+   "run": "hfred-B1",
+   "arm": "00-prewarm-hf96-reduced",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "UNTIMED_CACHE_PREWARM",
+   "native_source_identity": "f225c0e3d66eca42ae492b44760d271b984b0b6a68addbd3dba62e639e78c601",
+   "library_sha256": "b7ecb7e3daafe81b8a38b6c25a6cf9376657005a09cecf9d3bdca0c6d445b9e1",
+   "raw_sha256": "f0661ff5750837aef0db173d3e403f9232619a970b0fe0821a1d4bc36fe23f1d",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.43083634506911,
+     "energy": -2431.234445871829,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3868706533685327,
+     "energy": -2431.234445871829,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "25213d55b93731b8f94248081be06ccb8fb3c2f326d57d78dba93b7bb6802e03",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081041103163786e-07,
+       "force_rms_hartree_per_bohr": 1.296517542384556e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081043447122147e-07,
+       "force_rms_hartree_per_bohr": 1.296517579668861e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "reduced",
+   "run": "hfred-B1",
+   "arm": "01-hf96-reduced",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "f225c0e3d66eca42ae492b44760d271b984b0b6a68addbd3dba62e639e78c601",
+   "library_sha256": "b7ecb7e3daafe81b8a38b6c25a6cf9376657005a09cecf9d3bdca0c6d445b9e1",
+   "raw_sha256": "d127d3c980ed454f564f5b38734dfdb2e71b283c674d8d51321f3250cb2dbac3",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.434701964259148,
+     "energy": -2431.234445871828,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3808589084073901,
+     "energy": -2431.234445871827,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3720477754250169,
+     "energy": -2431.234445871827,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3665110068395734,
+     "energy": -2431.234445871826,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "e67036a5059bc5f552a7174d9e9d6ed97e8a501d1b11cbc277d3863b9fcc45ef",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.584362684710262e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104488815694e-07,
+       "force_rms_hartree_per_bohr": 1.2965175983922783e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.679101716144942e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104579784593e-07,
+       "force_rms_hartree_per_bohr": 1.2965176149062812e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 6.679101716144942e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104705777559e-07,
+       "force_rms_hartree_per_bohr": 1.2965176180575646e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 6.773840747579621e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104730601452e-07,
+       "force_rms_hartree_per_bohr": 1.2965176118965696e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "reduced",
+   "run": "hfred-B1",
+   "arm": "02-hf48-reduced",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "f225c0e3d66eca42ae492b44760d271b984b0b6a68addbd3dba62e639e78c601",
+   "library_sha256": "b7ecb7e3daafe81b8a38b6c25a6cf9376657005a09cecf9d3bdca0c6d445b9e1",
+   "raw_sha256": "e2bca505ad099051d42e5b5afd1129c47e718d5fe92f97c11c1015a2ad3fbb32",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 4.204063806682825,
+     "energy": -1215.6178506876715,
+     "iterations": 10,
+     "fock_builds": 10
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3668905505910516,
+     "energy": -1215.6178506876715,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3642950365319848,
+     "energy": -1215.6178506876715,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3636494493111968,
+     "energy": -1215.617850687671,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "07b6d5720124f29de2f42939f86ece71bc78ec6b5c519c104f6c7eff9d8a33ce",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 4.3579954459952813e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027951649568497e-07,
+       "force_rms_hartree_per_bohr": 8.990939278987698e-08,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 4.3579954459952813e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027950784982316e-07,
+       "force_rms_hartree_per_bohr": 8.990939470678396e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 4.3579954459952813e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027949134913346e-07,
+       "force_rms_hartree_per_bohr": 8.990939044740024e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 4.452734477429961e-13,
+       "force_max_abs_hartree_per_bohr": 1.802794989402834e-07,
+       "force_rms_hartree_per_bohr": 8.990939117997557e-08,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "reduced",
+   "run": "hfred-B2",
+   "arm": "00-hf96-reduced",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "f225c0e3d66eca42ae492b44760d271b984b0b6a68addbd3dba62e639e78c601",
+   "library_sha256": "b7ecb7e3daafe81b8a38b6c25a6cf9376657005a09cecf9d3bdca0c6d445b9e1",
+   "raw_sha256": "067688defddf9c7267b7683609b056aa540d615c707c0fa5b87281e6143ddf86",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.4165431540459394,
+     "energy": -2431.234445871829,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3829578906297684,
+     "energy": -2431.234445871829,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3772864630445838,
+     "energy": -2431.234445871829,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.377654586918652,
+     "energy": -2431.234445871829,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "dae7e73273a5d88c86154ef34589624fa8520822d12e26c9ccc807df674d7eea",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081047010244166e-07,
+       "force_rms_hartree_per_bohr": 1.2965176283804118e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104677935247e-07,
+       "force_rms_hartree_per_bohr": 1.296517641974279e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081047681929096e-07,
+       "force_rms_hartree_per_bohr": 1.2965176304949313e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 6.489623653275581e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081044766032405e-07,
+       "force_rms_hartree_per_bohr": 1.2965176324408683e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "reduced",
+   "run": "hfred-B2",
+   "arm": "01-hf48-reduced",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "f225c0e3d66eca42ae492b44760d271b984b0b6a68addbd3dba62e639e78c601",
+   "library_sha256": "b7ecb7e3daafe81b8a38b6c25a6cf9376657005a09cecf9d3bdca0c6d445b9e1",
+   "raw_sha256": "dbca3484bd5c65fd0dcc2ef8b07403ff0769b2abff2e2f1ddee8ef1c48c2fde3",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 4.182409322820604,
+     "energy": -1215.6178506876715,
+     "iterations": 10,
+     "fock_builds": 10
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3656345186755061,
+     "energy": -1215.6178506876706,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.36301813647150993,
+     "energy": -1215.6178506876706,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3629689887166023,
+     "energy": -1215.6178506876706,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "706d091a2898cbe31ff611a7b7749f08cc264003ea70a6da67c0de1168020be4",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 4.3579954459952813e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027955689392527e-07,
+       "force_rms_hartree_per_bohr": 8.990940447787763e-08,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 4.547473508864641e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027957082202006e-07,
+       "force_rms_hartree_per_bohr": 8.990940433184192e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 4.547473508864641e-13,
+       "force_max_abs_hartree_per_bohr": 1.802795350606956e-07,
+       "force_rms_hartree_per_bohr": 8.990940232015105e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 4.547473508864641e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027955120750172e-07,
+       "force_rms_hartree_per_bohr": 8.990940334140771e-08,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "base",
+   "run": "hfred-A3",
+   "arm": "00-hf96-base",
+   "method": "hf",
+   "atoms": 96,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "11b03c3c65262eb7f56383cd33b053f921fb7eafdf9dbe0f9f6c0b39a2efc8cd",
+   "library_sha256": "a187a88aa7d9b058505273c3930b46da07d7230ece14e6742e5fc89b0dc1f77d",
+   "raw_sha256": "6ffb956e5d4ceaecf4b441bffc6becaceae2a52d27c951e49dd657820e0a77c3",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 6.663583276793361,
+     "energy": -2431.23444587184,
+     "iterations": 11,
+     "fock_builds": 11
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4058368811383843,
+     "energy": -2431.23444587184,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.3981047067791224,
+     "energy": -2431.23444587184,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 1.4014125624671578,
+     "energy": -2431.23444587184,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "6a2b037cae083160cf512360e746c57cd89a387a0620d57ab8accf30856d2fe4",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104718787985e-07,
+       "force_rms_hartree_per_bohr": 1.296517480555706e-07,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.0081044545202107e-07,
+       "force_rms_hartree_per_bohr": 1.2965175004684716e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104611252477e-07,
+       "force_rms_hartree_per_bohr": 1.2965174833454293e-07,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 5.352755276059421e-13,
+       "force_max_abs_hartree_per_bohr": 3.008104497975034e-07,
+       "force_rms_hartree_per_bohr": 1.2965174972566704e-07,
+       "passed": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "label": "base",
+   "run": "hfred-A3",
+   "arm": "01-hf48-base",
+   "method": "hf",
+   "atoms": 48,
+   "purpose": "H100_README_DIAGNOSTIC",
+   "native_source_identity": "11b03c3c65262eb7f56383cd33b053f921fb7eafdf9dbe0f9f6c0b39a2efc8cd",
+   "library_sha256": "a187a88aa7d9b058505273c3930b46da07d7230ece14e6742e5fc89b0dc1f77d",
+   "raw_sha256": "5a87c038ecf75fc59aaa744887f57679c3208724560f465c23465c2458655681",
+   "samples": [
+    {
+     "phase": "cold",
+     "seconds": 4.229467284865677,
+     "energy": -1215.6178506876734,
+     "iterations": 10,
+     "fock_builds": 10
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3705518851056695,
+     "energy": -1215.6178506876724,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.36882239673286676,
+     "energy": -1215.6178506876734,
+     "iterations": 1,
+     "fock_builds": 1
+    },
+    {
+     "phase": "warm",
+     "seconds": 0.3678020294755697,
+     "energy": -1215.617850687673,
+     "iterations": 1,
+     "fock_builds": 1
+    }
+   ],
+   "qualification": {
+    "status": "qualified",
+    "reasons": [],
+    "receipt_sha256": "3d40395faff651259452542eea7e8244e0f3573ec469795f3866dac5ac91edfc",
+    "cold": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027954077314e-07,
+       "force_rms_hartree_per_bohr": 8.990938790684123e-08,
+       "passed": true
+      }
+     ]
+    },
+    "warm": {
+     "status": "qualified",
+     "errors": [
+      {
+       "energy_abs_per_atom_hartree": 4.168517383125921e-13,
+       "force_max_abs_hartree_per_bohr": 1.802795449330069e-07,
+       "force_rms_hartree_per_bohr": 8.990938735473516e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 3.979039320256561e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027954034813276e-07,
+       "force_rms_hartree_per_bohr": 8.990938656584702e-08,
+       "passed": true
+      },
+      {
+       "energy_abs_per_atom_hartree": 4.073778351691241e-13,
+       "force_max_abs_hartree_per_bohr": 1.8027953159818755e-07,
+       "force_rms_hartree_per_bohr": 8.99093882201965e-08,
+       "passed": true
+      }
+     ]
+    }
+   }
+  }
+ ]
+}
