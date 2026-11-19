@@ -38,8 +38,9 @@ HfConvergenceRequest resolve_hf_convergence_request(HfConvergenceRequest request
 }
 
 RhfBlockConvergenceRequest parse_rhf_block_convergence_request(const char* value) noexcept {
-  if (value == nullptr || std::strcmp(value, "0") == 0) return RhfBlockConvergenceRequest::Off;
-  return std::strcmp(value, "1") == 0 ? RhfBlockConvergenceRequest::On
+  // Unset admits the one-block walk in its qualified domain; 0 restores one warp.
+  if (value == nullptr || std::strcmp(value, "1") == 0) return RhfBlockConvergenceRequest::On;
+  return std::strcmp(value, "0") == 0 ? RhfBlockConvergenceRequest::Off
                                       : RhfBlockConvergenceRequest::Invalid;
 }
 

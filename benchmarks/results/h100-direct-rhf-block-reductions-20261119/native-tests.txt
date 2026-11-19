@@ -1,0 +1,23 @@
+BUILD 0 30
+ARTIFACTS_CHANGED ['libgenerativeqc.so']
+Internal ctest changing into directory: /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-cold/20261118-opt/build-a6d5a3c00
+Test project /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-cold/20261118-opt/build-a6d5a3c00
+    Start  83: generativeqc_uhf_tests
+1/2 Test  #83: generativeqc_uhf_tests ......................   Passed    1.71 sec
+    Start 181: generativeqc_cuda_force_convergence_tests
+2/2 Test #181: generativeqc_cuda_force_convergence_tests ...***Skipped   0.11 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   1.83 sec
+
+The following tests did not run:
+	181 - generativeqc_cuda_force_convergence_tests (Skipped)
+
+CTEST 0
+== generativeqc_cuda_force_convergence_tests --rhf-block-convergence
+RHF 32/256 matrix-walk and energy-refinement controls passed
+EXIT 0
+== generativeqc_uhf_tests --rhf-block-convergence-cache
+RHF convergence cached-policy bidirectional refusal passed
+EXIT 0

@@ -2,7 +2,7 @@
 
 namespace generativeqc::scf::cuda_policy {
 
-/** Private default-off matrix-walk selection, frozen before graph admission. */
+/** Private default-on matrix-walk selection, frozen before graph admission. */
 enum class RhfBlockConvergenceRequest { Off, On, Invalid };
 RhfBlockConvergenceRequest parse_rhf_block_convergence_request(const char* value) noexcept;
 RhfBlockConvergenceRequest rhf_block_convergence_requested() noexcept;

@@ -105,3 +105,10 @@ This is not the measured `013884` image. Focused host integration checks and
 offline replay do not freshly qualify the combined GPU source or relabel the
 original three H100 pairs. The control remains default-off, and normal remote
 CI and merge-queue checks remain required.
+
+## 2026-11-19 promotion
+
+H100 README Direct HF96/48 endpoints, the native 32/256 and cached-policy
+controls, and memcheck now cover the default-off candidate. It became the
+default in the same domain, together with a full-CTA RHF energy reduction. See
+`../implemented/performance/2026-11-19-direct-rhf-block-reductions.md`.
