@@ -1,0 +1,15 @@
+== generativeqc_hf_resource_layout_tests (tests/native/test_hf_resource_layout.cpp)
+The measured fpacksnap tree is a Release build with GENERATIVEQC_BUILD_TESTS=OFF.
+The test was compiled with that tree's exact topology.cpp compile command
+(source and output substituted) and linked against its libgenerativeqc.so.
+It includes check_bounded_topology_skips_resident_psss_tasks (260 shells,
+5.76e8 shell quartets: no resident task table, complete ket inventory) and
+the existing fixed-topology psss catalog checks (complete task tables).
+NATIVE_TEST_EXIT 0
+
+== host source-structure tests, branch head after merging master 7ad2f06db
+tests/python/test_codegen_production.py: 44 passed, 2 skipped, 1 failed.
+The failure, test_production_codegen_cmake_tracks_transitive_generator_inputs,
+is environmental (FileNotFoundError: no cmake on the macOS host) and fails
+identically on master 7ad2f06db.
+-k "bounded or psss or resident or page": 11 passed, 1 skipped.

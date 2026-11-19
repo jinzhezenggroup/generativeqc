@@ -807,8 +807,13 @@ def test_bounded_force_signature_mask_tracks_warp_uniform_schedules() -> None:
     assert configured_constants == expected_constants
 
 
-def test_bounded_dppp_force_uses_nonterminating_paged_screening() -> None:
-    """Keep DPPP paged without assuming Schwarz-sorted ket segments."""
+def test_bounded_dppp_force_pages_stop_only_on_sorted_stream_tails() -> None:
+    """Keep DPPP paged; stop a ket stride only on the geometry-sorted stream.
+
+    The queue plan keeps insertion order. Geometry setup sorts every bounded
+    class segment Schwarz-descending before any page uses it, which makes the
+    row-fixed density tail monotone along each thread's ket stride.
+    """
 
     source = _direct_cuda_source()
     mask_begin = source.index(
@@ -826,6 +831,13 @@ def test_bounded_dppp_force_uses_nonterminating_paged_screening() -> None:
         "std::uint64_t bounded_lower_triangle_row", order_begin
     )
     assert "std::sort" not in queue_source[order_begin:order_end]
+    setup_begin = source.index("if (geometry_changed) {")
+    sort_begin = source.index(
+        "std::stable_sort(plan.bounded_stream_shell_pair_order.begin() + segment_begin",
+        setup_begin,
+    )
+    sort_source = source[sort_begin : source.index("});", sort_begin)]
+    assert "host_shell_pair_bounds[first] >" in sort_source
 
     # Compaction now has its own owner. Bound each assertion by the next
     # function in that owner rather than by a comment in a different file.
@@ -858,9 +870,9 @@ def test_bounded_dppp_force_uses_nonterminating_paged_screening() -> None:
             page_source,
         )
         assert force_gate is not None
-        assert force_gate.group(1) == "continue"
+        assert force_gate.group(1) == "break"
         assert fock_gate is not None
-        assert fock_gate.group(1) == "continue"
+        assert fock_gate.group(1) == "break"
 
     page_begin = source.index("const auto launch_bounded_overflow_force")
     page_end = source.index("const auto launch_bounded_native_force", page_begin)

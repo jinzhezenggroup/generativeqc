@@ -399,10 +399,17 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     }
   }
   if (resident_psss == ResidentPsssPolicy::Build && !df_values) {
+    // Resident psss tasks feed only the fixed-topology quartet queue. A quartet
+    // count beyond the fixed tile grid always selects bounded streaming, whose
+    // exact psss page consumer never reads them, so do not build (or later
+    // reserve arena space for) one record per psss bra and ss-ket chunk there.
+    const bool fixed_topology_possible = !detail::direct_topology_requires_bounded_streaming(
+        static_cast<std::size_t>(host.system_shell_quartet_offsets.back()));
     std::size_t bra_primitive_pair_capacity = 0U;
     if (!make_direct_force_resident_bra_schedule(
             host, host.psss_resident_tasks, host.psss_resident_ket_pairs,
-            bra_primitive_pair_capacity, std::numeric_limits<std::size_t>::max(), !matrix_direct))
+            bra_primitive_pair_capacity, std::numeric_limits<std::size_t>::max(),
+            !matrix_direct && fixed_topology_possible))
       return false;
   }
   return true;

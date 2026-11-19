@@ -21,6 +21,7 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/diis_work.hpp"
+#include "scf/direct_task_layout.hpp"
 
 namespace {
 
@@ -215,6 +216,31 @@ void check_optional_psss_catalog(unsigned s_shells, unsigned p_shells, unsigned 
   assert(legacy.ao_to_direct_transform == source.ao_to_direct_transform);
 }
 
+void check_bounded_topology_skips_resident_psss_tasks() {
+  using namespace generativeqc::scf::cuda_execution;
+  // 260 shells give 33930 pairs and more quartets than the fixed tile grid can
+  // address, so this topology always executes through bounded streaming.
+  constexpr unsigned s_shells = 200, p_shells = 60;
+  generativeqc::core::System system;
+  system.atoms = {{2, {0.0, 0.0, 0.0}}};
+  for (unsigned i = 0; i < s_shells; ++i) system.shells.push_back({0, 0, {{1.0 + 0.01 * i, 1.0}}});
+  for (unsigned i = 0; i < p_shells; ++i) system.shells.push_back({0, 1, {{0.8 + 0.01 * i, 1.0}}});
+  system.multiplicity = 1;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  assert(generativeqc::molecule::validate_and_normalize(system, detail) ==
+         GENERATIVEQC_STATUS_SUCCESS);
+  const std::vector<const std::vector<double>*> no_warm(1, nullptr);
+  HostBatch host;
+  assert(pack_host_batch({system}, no_warm, host, false, false, true));
+  assert(generativeqc::scf::detail::direct_topology_requires_bounded_streaming(
+      static_cast<std::size_t>(host.system_shell_quartet_offsets.back())));
+  // Its psss force runs through the exact page consumer, which never reads the
+  // fixed-queue resident tasks; only the small ket inventory is retained.
+  assert(host.psss_resident_tasks.empty() && host.psss_resident_tasks.capacity() == 0);
+  assert(host.psss_resident_ket_pairs.size() == s_shells * (s_shells + 1ULL) / 2);
+}
+
 void check_df_values_pack_g_metadata_without_scf_work() {
   using namespace generativeqc::scf::cuda_execution;
   generativeqc::core::System system;
@@ -255,5 +281,6 @@ int main() {
   check_df_values_pack_g_metadata_without_scf_work();
   check_optional_psss_catalog(2, 1, 2, false);
   check_optional_psss_catalog(128, 64, 1, true);
+  check_bounded_topology_skips_resident_psss_tasks();
   return 0;
 }
