@@ -37,7 +37,7 @@ Xu, S.; Shen, L.; Zhai, W.; Zhu, T.; Zeng, J. **[GenerativeQC: A Generative, GPU
 
 ```bibtex
 @misc{xu2026generativeqc,
-  title = {GenerativeQC: A Generative, GPU-Accelerated Quantum Chemistry Program},
+  title = {{GenerativeQC}: A Generative, {GPU}-Accelerated Quantum Chemistry Program},
   author = {Xu, Shengrui and Shen, Longhan and Zhai, Wenxi and Zhu, Tong and Zeng, Jinzhe},
   year = {2026},
   eprint = {2611.24744},
@@ -46,6 +46,8 @@ Xu, S.; Shen, L.; Zhai, W.; Zhu, T.; Zeng, J. **[GenerativeQC: A Generative, GPU
   url = {https://arxiv.org/abs/2611.24744}
 }
 ```
+
+The citation is also available as a [BibTeX file](CITATION.bib).
 
 ## Highlights
 
