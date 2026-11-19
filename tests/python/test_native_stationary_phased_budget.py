@@ -35,26 +35,40 @@ def test_pair_state_accounting_tracks_executed_schedule(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
     """Reserved FP64 phase panels must not undercount bounded FP32 pair work."""
-    body = _definition(
-        (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text(),
-        "bool retains_becke_pair_state(",
+    header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    body = "\n".join(
+        _definition(header, signature)
+        for signature in (
+            "bool retains_becke_pair_state(",
+            "bool analytic_becke_active(",
+            "uint64_t becke_pair_states(",
+        )
     )
     source = tmp_path / "pair_work.cpp"
     source.write_text(
-        "#include <cassert>\n#include <cstddef>\n#include <initializer_list>\n"
+        "#include <cassert>\n#include <cstddef>\n#include <cstdint>\n"
+        "#include <initializer_list>\n"
         "constexpr size_t stationary_becke_retained_max_atoms=32;\n"
         "struct Owner { bool phased_storage; size_t atoms,becke_threads_per_point;\n"
+        "bool becke_analytic,becke_primitive;\n"
         + body
         + "\n};\n"
         + r"""
 int main() {
   for(size_t atoms:{size_t(3),size_t(32),size_t(33),size_t(48),size_t(128)})
     for(size_t threads:{size_t(1),size_t(32)})
-      for(bool phased:{false,true}) for(bool fp32:{false,true}) {
-        const Owner owner{phased,atoms,threads};
+      for(bool phased:{false,true}) for(bool fp32:{false,true})
+      for(bool analytic:{false,true}) for(bool primitive:{false,true}) {
+        const Owner owner{phased,atoms,threads,analytic,primitive};
         const size_t expected = (threads>1 && atoms<=32) || (phased && !fp32) ? 1 : 2;
         assert((owner.retains_becke_pair_state(fp32)?1U:2U)==expected);
         if(!fp32) assert(owner.retains_becke_pair_state()==owner.retains_becke_pair_state(false));
+        // Analytic product and motion lanes each evaluate every ordered pair.
+        const bool forward = phased && !fp32 && analytic && !primitive;
+        assert(owner.analytic_becke_active(fp32)==forward);
+        const uint64_t ordered = 7 * atoms * (atoms - 1);
+        const uint64_t retained = expected == 1 ? ordered / 2 : ordered;
+        assert(owner.becke_pair_states(7, fp32)==(forward ? 2 * ordered : retained));
       }
 }
 """

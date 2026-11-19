@@ -50,6 +50,41 @@ bool phases(generativeqc_grid_phased::Workspace work, const double* points,
       if (!point_motion_phase(work, point, atom, owners[point])) return false;
   return true;
 }
+template <class GeometryFor>
+bool analytic(generativeqc_grid_phased::Workspace work, const double* points,
+    const double* centers, const int64_t* owners, const double* seeds, GeometryFor geometry_for,
+    double* gradient) {
+  using namespace generativeqc_grid_phased;
+  // The distance phase is shared with the phased route.
+  for (size_t point = 0; point < work.points; ++point)
+    for (size_t atom = 0; atom < work.atoms; ++atom)
+      if (!distance_phase(work, point, atom, points, centers, counted_norm)) return false;
+  for (size_t atom = 0; atom < work.atoms; ++atom) {
+    const auto geometry = geometry_for(atom);
+    for (size_t point = 0; point < work.points; ++point)
+      if (!analytic_products_phase(work, point, atom, geometry, counted_log, counted_pair))
+        return false;
+  }
+  for (size_t point = 0; point < work.points; ++point)
+    if (!analytic_normalize_phase(work, point, owners[point], seeds[point])) return false;
+  std::vector<double> rows(3 * work.atoms * work.points);
+  for (size_t atom = 0; atom < work.atoms; ++atom) {
+    const auto geometry = geometry_for(atom);
+    for (size_t point = 0; point < work.points; ++point) {
+      const auto owner = size_t(owners[point]);
+      if (atom == owner) continue;
+      if (!analytic_motion_phase(work, point, atom, owner, seeds[point], geometry, counted_log,
+                                 counted_pair, rows.data() + 3 * (point * work.atoms + atom)))
+        return false;
+    }
+  }
+  for (size_t point = 0; point < work.points; ++point) {
+    double* row = rows.data() + 3 * point * work.atoms;
+    analytic_owner_phase(work.atoms, size_t(owners[point]), row);
+    for (size_t k = 0; k < 3 * work.atoms; ++k) gradient[k] += row[k];
+  }
+  return true;
+}
 extern "C" int run_adjusted(const double* points, size_t point_count, const double* centers,
     size_t atom_count, const int64_t* owners, const double* seeds, bool cached,
     size_t phased, double* output, size_t* counts, const double* radii) {
@@ -61,7 +96,36 @@ extern "C" int run_adjusted(const double* points, size_t point_count, const doub
   if (!prepare_center_geometry(centers, atom_count, 1e-12, cached_pairs,
                                counted_norm, local_ratio_geometry)) return -2;
   std::vector<double> gradient(3 * atom_count, 0);
-  if (phased) {
+  // Mode 16 selects the analytic route; derived harnesses own modes 2 and 3.
+  if (phased == 16) {
+    std::vector<double> fields(11 * atom_count * point_count + 2, 987654);
+    std::vector<double> maximum(point_count + 2, 987654);
+    std::vector<size_t> zeros(atom_count * point_count + 2, 987654);
+    Workspace work{atom_count, point_count, nullptr, fields.data() + 1,
+                   zeros.data() + 1, maximum.data() + 1};
+    // Cached centers take the device's per-atom adjustment table; direct
+    // centers keep the per-call adjustment.
+    std::vector<double> table(atom_count);
+    const auto lane = [&](size_t atom) {
+      if (radii)
+        for (size_t other = 0; other < atom_count; ++other)
+          table[other] = other == atom ? 0.0
+              : coordinate_adjustment(std::max(atom, other), std::min(atom, other), radii);
+      return generativeqc_grid_phased::LaneAdjustedGeometry<decltype(&local_ratio_prepared)>{
+          cached_pairs, local_ratio_prepared, radii ? table.data() : nullptr, atom};
+    };
+    const auto direct = [&](size_t) {
+      return DirectCenterGeometry<decltype(&counted_norm), decltype(&local_ratio)>{
+          centers, counted_norm, local_ratio, radii};
+    };
+    const bool valid = cached_pairs
+        ? analytic(work, points, centers, owners, seeds, lane, gradient.data())
+        : analytic(work, points, centers, owners, seeds, direct, gradient.data());
+    for (const auto* panel : {&fields, &maximum})
+      if (panel->front() != 987654 || panel->back() != 987654) return -3;
+    if (zeros.front() != 987654 || zeros.back() != 987654) return -3;
+    if (!valid) return -2;
+  } else if (phased) {
     std::vector<double> pairs(4 * geometry.size() * point_count + 2, 987654);
     std::vector<double> fields(11 * atom_count * point_count + 2, 987654);
     std::vector<double> maximum(point_count + 2, 987654);
@@ -248,3 +312,88 @@ def test_phase_admission_charges_all_live_panels_and_falls_back() -> None:
         arguments[field] = value
         with pytest.raises((TypeError, ValueError)):
             plan_phased_becke(**arguments)
+
+
+ANALYTIC_MODE = 16
+
+
+class _Analytic:
+    """Route the shared cooperative tests' phased mode to the analytic phases."""
+
+    def __init__(self, helper: ct.CDLL) -> None:
+        self.helper, self.iterations = helper, helper.iterations
+
+    def run(self, *arguments: object) -> int:
+        values = list(arguments)
+        if values[7]:
+            values[7] = ANALYTIC_MODE
+        return self.helper.run(*values)
+
+
+@pytest.mark.parametrize("atoms", [1, 2, 5, 32, 33, 96, 128])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("adjusted", [False, True])
+def test_analytic_route_matches_phased_partition_derivative(
+    helper: ct.CDLL, atoms: int, cached: bool, adjusted: bool
+) -> None:
+    """Forward-mode products/slopes reproduce the reverse phases' gradient."""
+    rng = np.random.default_rng(20500 + atoms)
+    centers = rng.normal(size=(atoms, 3)) * 2
+    points = rng.normal(size=(13, 3)) * 3
+    owners = rng.integers(atoms, size=len(points), dtype=np.int64)
+    seeds = rng.normal(size=len(points))
+    radii = rng.uniform(0.6, 2.4, size=atoms) if adjusted else None
+    moved = centers + rng.normal(size=centers.shape) * 0.1
+    pointer = lambda a: a.ctypes.data_as(ct.POINTER(ct.c_double))
+    for geometry in (centers, moved, centers):
+        results = []
+        for mode in (1, ANALYTIC_MODE):
+            output = np.full_like(geometry, 12345.0)
+            counts = (ct.c_size_t * 3)()
+            status = helper.run_adjusted(
+                pointer(points),
+                len(points),
+                pointer(geometry),
+                atoms,
+                owners.ctypes.data_as(ct.POINTER(ct.c_int64)),
+                pointer(seeds),
+                cached,
+                mode,
+                pointer(output),
+                counts,
+                pointer(radii) if radii is not None else None,
+            )
+            assert status == 0
+            results.append(output)
+        scale = max(1.0, float(np.max(np.abs(results[0]))))
+        np.testing.assert_allclose(
+            results[1], results[0], rtol=1e-11, atol=1e-12 * scale
+        )
+        np.testing.assert_allclose(results[1].sum(axis=0), 0, atol=1e-11 * scale)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "saturated",
+        "rounded_zero",
+        "positive_zero",
+        "negative_zero",
+        "coincident",
+        "collision",
+        "nonfinite",
+        "tiny",
+        "huge",
+        "empty",
+    ],
+)
+def test_analytic_route_edge_semantics(helper: ct.CDLL, case: str) -> None:
+    retained.test_cooperative_edge_semantics(_Analytic(helper), case)
+
+
+def test_analytic_route_independent_oracle_and_invariances(helper: ct.CDLL) -> None:
+    analytic = _Analytic(helper)
+    retained.test_cooperative_independent_decimal_fd_translation_and_permutation(
+        analytic
+    )
+    retained.test_single_atom_point_reuse_then_collision_is_collective(analytic)

@@ -136,6 +136,124 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
   if (!valid) atomicExch(input.error, 1);
 }
 
+// Analytic route (generativeqc_grid_phased::analytic_*_phase): forward-mode
+// partition derivatives with the same point_pair geometry and no pair panel.
+// Each (points, atom) block evaluates its atom's elemental adjustments against
+// every neighbor once; larger owners keep the per-call adjustment.
+template <bool Fallback, class Phase>
+__device__ void analytic_atom_lane(PhasedBeckeInput input, size_t atom, Phase phase) {
+  using namespace generativeqc_grid_adjoint;
+  if constexpr (Fallback) {
+    phase(PreparedCenterGeometry<decltype(&local_ratio_prepared)>{
+        input.center_pairs, local_ratio_prepared, input.atomic_radii});
+  } else {
+    __shared__ double adjustments[stationary_becke_normalize_max_atoms];
+    if (input.atomic_radii)
+      for (size_t neighbor = threadIdx.x; neighbor < input.work.atoms; neighbor += blockDim.x)
+        adjustments[neighbor] =
+            neighbor == atom ? 0.0
+                             : coordinate_adjustment(atom > neighbor ? atom : neighbor,
+                                                     atom > neighbor ? neighbor : atom,
+                                                     input.atomic_radii);
+    __syncthreads();
+    phase(generativeqc_grid_phased::LaneAdjustedGeometry<decltype(&local_ratio_prepared)>{
+        input.center_pairs, local_ratio_prepared,
+        input.atomic_radii ? adjustments : nullptr, atom});
+  }
+}
+
+// Fallback keeps the per-call adjustment when one block cannot table every
+// neighbor of its atom (radii with more than stationary_becke_normalize_max_atoms).
+template <bool Fallback>
+__global__ void analytic_becke_products(PhasedBeckeInput input) {
+  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+  const size_t atom = blockIdx.y;
+  const bool active =
+      point < input.work.points && !input.failed() && !input.zero_seed(point);
+  analytic_atom_lane<Fallback>(input, atom, [&](auto geometry) {
+    if (active && !generativeqc_grid_phased::analytic_products_phase(
+                      input.work, point, atom, geometry, local_log, local_becke))
+      atomicExch(input.error, 1);
+  });
+}
+
+// One warp per point: fixed lane-strided partial maxima/sums and xor folds.
+__global__ void analytic_becke_normalize(PhasedBeckeInput input) {
+  const size_t point = (blockIdx.x * size_t(blockDim.x) + threadIdx.x) / 32;
+  const unsigned lane = threadIdx.x % 32;
+  if (point >= input.work.points) return;  // Uniform across the warp.
+  const bool stopped = __shfl_sync(0xffffffffU,
+      lane == 0 && (input.failed() || input.zero_seed(point)), 0);
+  if (stopped) return;
+  const size_t atoms = input.work.atoms, owner = input.owner(point);
+  const auto mantissa = input.work.field(4, point), exponent = input.work.field(6, point);
+  const auto zeros = input.work.zero_counts(point);
+  double largest = -INFINITY;
+  for (size_t atom = lane; atom < atoms; atom += 32)
+    if (!zeros[atom]) largest = fmax(largest, exponent[atom]);
+  for (unsigned offset = 16; offset; offset /= 2)
+    largest = fmax(largest, __shfl_xor_sync(0xffffffffU, largest, offset));
+  if (owner >= atoms || !isfinite(input.seeds[point]) || !isfinite(largest)) {
+    if (lane == 0) atomicExch(input.error, 1);
+    return;
+  }
+  double sum = 0;
+  for (size_t atom = lane; atom < atoms; atom += 32) {
+    const double scaled = ldexp(mantissa[atom], int(exponent[atom] - largest));
+    input.work.field(7, point)[atom] = scaled;
+    const double product = zeros[atom] ? 0.0 : scaled;
+    input.work.field(5, point)[atom] = product;
+    sum += product;
+  }
+  for (unsigned offset = 16; offset; offset /= 2)
+    sum += __shfl_xor_sync(0xffffffffU, sum, offset);
+  if (lane == 0) {
+    input.work.maximum[point] = 1 / sum;
+    if (!(sum > 0) || !isfinite(sum)) atomicExch(input.error, 1);
+  }
+}
+
+// Six 128-thread blocks per SM keep a 96-atom, 1024-point tile in one wave.
+template <bool Fallback>
+__global__ void __launch_bounds__(128, 6) analytic_becke_motion(PhasedBeckeInput input) {
+  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+  const size_t atom = blockIdx.y;
+  const bool inside = point < input.work.points && !input.failed();
+  const size_t owner = inside ? input.owner(point) : 0;
+  double* output = inside ? input.partial + point * 9 * input.work.atoms +
+                                6 * input.work.atoms + 3 * atom
+                          : nullptr;
+  const bool quiet = inside && (input.zero_seed(point) || atom == owner);
+  if (quiet)
+    for (size_t axis = 0; axis < 3; ++axis) output[axis] = 0;
+  analytic_atom_lane<Fallback>(input, atom, [&](auto geometry) {
+    if (inside && !quiet &&
+        !generativeqc_grid_phased::analytic_motion_phase(input.work, point, atom, owner,
+                                                         input.seeds[point], geometry,
+                                                         local_log, local_becke, output))
+      atomicExch(input.error, 1);
+  });
+}
+
+// One warp per point: the moving owner receives minus every other atom's motion.
+__global__ void analytic_becke_owner(PhasedBeckeInput input) {
+  const size_t point = (blockIdx.x * size_t(blockDim.x) + threadIdx.x) / 32;
+  const unsigned lane = threadIdx.x % 32;
+  if (point >= input.work.points) return;  // Uniform across the warp.
+  const bool stopped = __shfl_sync(0xffffffffU, lane == 0 && input.failed(), 0);
+  const size_t atoms = input.work.atoms, owner = input.owner(point);
+  if (stopped || owner >= atoms) return;
+  double* row = input.partial + point * 9 * atoms + 6 * atoms;
+  for (size_t axis = 0; axis < 3; ++axis) {
+    double sum = 0;
+    for (size_t atom = lane; atom < atoms; atom += 32)
+      if (atom != owner) sum += row[3 * atom + axis];
+    for (unsigned offset = 16; offset; offset /= 2)
+      sum += __shfl_xor_sync(0xffffffffU, sum, offset);
+    if (lane == 0) row[3 * owner + axis] = -sum;
+  }
+}
+
 template <bool BinaryScaled = false>
 __global__ void phased_becke_normalize(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;

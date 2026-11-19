@@ -408,6 +408,7 @@ struct Owner {
   size_t launches{},point_count{},pair_visits{},becke_pair_state_evaluations{},
       center_distance_evaluations{},geometry_batches{};
   bool retains_becke_pair_state(bool = false) const { return false; }
+  size_t becke_pair_states(size_t points, bool = false) const { return points*atoms*(atoms-1); }
 };
 template<class Function>
 int guarded(Owner*,char*,size_t,Function function) {

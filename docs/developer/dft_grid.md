@@ -467,7 +467,43 @@ geometry rebinding refreshes center geometry without changing topology. Phase
 storage remains optional, with the bounded cooperative traversal as fallback.
 Adjusted partitions retain logarithmic products.
 
-Equal-radius phased CUDA first derivatives use binary-scaled Becke products by
+Owners with admitted phase storage evaluate this first derivative by default
+on the analytic route: forward mode, without the pair panel. The route reuses
+the phased distance phase and the generated `point_pair` switch and coordinate
+partials, in four lanes:
+
+1. A (point, X) lane forms P_X = prod_{Y!=X} s_XY in the phased neighbor order,
+   as a binary-scaled product of its nonzero factors plus a zero count.
+2. One warp per point normalizes by the largest nonzero exponent.
+3. A (point, G) lane, for G not the owner, sums dP_B/dG over every B with
+   `ds_BG/dG = s'(c1 u_G - c2 e)`, the same expression in both pair
+   orientations, and forms `seed * dw/dG`. The u_G and e parts are summed
+   separately, and the owner pair is evaluated once more after the loop.
+4. One warp per point gives the moving owner `-sum_G`, by translation
+   invariance.
+
+Each (points, atom) block tables its atom's elemental radius adjustments
+against every neighbor. Owners above `stationary_becke_normalize_max_atoms`
+atoms with radii use a fallback instantiation that evaluates the adjustment
+per pair.
+
+The single-zero excluded-product derivative is retained, and saturated
+switches contribute exact zeros. Each pair is evaluated by both of its atoms
+in both the product and the motion lane, so `becke_pair_state_evaluations`
+counts two switch states per ordered pair. No logarithm or pair storage is
+needed. The phased output layout and `geometry_reduce` are unchanged.
+
+`GENERATIVEQC_STATIONARY_BECKE_ROUTE=analytic|phased` is captured when the
+native stationary owner is created. An unset value selects `analytic`, and
+`phased` restores the pair phases. Primitive-adjoint selections keep the pair
+phases, and binary-scaled products apply only there. `stationary_becke_analytic_metrics_v1`
+reports the selected route and the analytic batches, points and switch states.
+The phase metrics count analytic batches without pair domains or panels, at
+five launches per batch. See the
+[decision](../../.agents/notes/implemented/performance/2026-11-19-stationary-becke-analytic-route.md).
+
+On the phased pair route (`GENERATIVEQC_STATIONARY_BECKE_ROUTE=phased`),
+equal-radius CUDA first derivatives use binary-scaled Becke products by
 default for 96–128-atom owners with center geometry, already-admitted phase
 storage, and no primitive-adjoint selection. The lowering retains
 ordered switch products as a mantissa and integer exponent instead of sums

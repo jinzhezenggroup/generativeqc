@@ -281,6 +281,197 @@ GENERATIVEQC_PHASE_HD bool point_motion_phase(Workspace work, size_t point,
   }
   return valid;
 }
+
+// Analytic route: forward-mode partition derivatives with no pair panel.
+// Lane (point, X) forms P_X = prod_{Y!=X} s_XY in the phased neighbor order as
+// a binary-scaled product of its nonzero factors plus a zero count. A point lane
+// normalizes by the largest nonzero exponent. Lane (point, G!=owner) sums
+// dP_B/dG over B with the same point_pair switch and coordinate partials; the
+// owner takes -sum_G by translation invariance of the moving grid. Fields:
+// 4 mantissa, 6 exponent, 5 normalized P (0 with a zero factor), 7 normalized
+// nonzero-factor product, maximum[point] = 1 / sum_X P_X.
+// Prepared center pairs for one lane atom whose elemental adjustments against
+// every neighbor are evaluated once (null keeps equal radii). adjustments[Y]
+// is coordinate_adjustment(max(atom, Y), min(atom, Y)), the canonical order
+// in which point_pair queries the pair.
+template <class PreparedRatio>
+struct LaneAdjustedGeometry {
+  const generativeqc_grid_adjoint::CenterPair* pairs;
+  PreparedRatio ratio;
+  const double* adjustments;
+  size_t atom;
+  GENERATIVEQC_PHASE_HD std::array<double, 4> separation(size_t a, size_t b, bool&) const {
+    return pairs[generativeqc_grid_adjoint::center_pair_index(a, b)].distance;
+  }
+  GENERATIVEQC_PHASE_HD std::array<double, 3> coordinate(double difference, size_t a, size_t b,
+                                                         double) const {
+    const auto& stored = pairs[generativeqc_grid_adjoint::center_pair_index(a, b)].ratio;
+    const double narrowed[2]{stored[0], stored[1]};
+    const auto value = ratio(difference, narrowed);
+    return adjustments ? generativeqc_grid_adjoint::adjust_coordinate_with(
+                             value, adjustments[a == atom ? b : a])
+                       : value;
+  }
+};
+
+GENERATIVEQC_PHASE_HD inline double analytic_frexp(double value, int* exponent) {
+#if defined(__CUDA_ARCH__)
+  return ::frexp(value, exponent);
+#else
+  return std::frexp(value, exponent);
+#endif
+}
+GENERATIVEQC_PHASE_HD inline double analytic_ldexp(double value, int exponent) {
+#if defined(__CUDA_ARCH__)
+  return ::ldexp(value, exponent);
+#else
+  return std::ldexp(value, exponent);
+#endif
+}
+
+template <class Geometry, class Log, class Pair>
+GENERATIVEQC_PHASE_HD bool analytic_products_phase(Workspace work, size_t point, size_t atom,
+    Geometry geometry, Log logarithm, Pair pair) {
+  const auto distance = work.field(0, point);
+  const double own = distance[atom];
+  bool valid = true;
+  double mantissa = 1;
+  int exponent = 0;
+  size_t zeros = 0;
+  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
+    if (neighbor == atom) continue;
+    const bool upper = neighbor > atom;
+    const size_t first = upper ? neighbor : atom, second = upper ? atom : neighbor;
+    const double other = distance[neighbor];
+    const auto separation = geometry.separation(first, second, valid);
+    const auto state = point_pair<false>(upper ? other - own : own - other, first, second,
+                                         separation[0], geometry, logarithm, pair);
+    valid = valid && std::isfinite(state.factor[0]);
+    const double value = upper ? 1 - state.factor[0] : state.factor[0];
+    if (value > 0) {
+      int shift;
+      mantissa = analytic_frexp(mantissa * value, &shift);
+      exponent += shift;
+    } else {
+      ++zeros;
+    }
+  }
+  work.field(4, point)[atom] = mantissa;
+  work.field(6, point)[atom] = exponent;
+  work.zero_counts(point)[atom] = zeros;
+  return valid;
+}
+
+GENERATIVEQC_PHASE_HD inline bool analytic_normalize_phase(Workspace work, size_t point,
+    size_t owner, double seed) {
+  const auto mantissa = work.field(4, point), exponent = work.field(6, point);
+  const auto zeros = work.zero_counts(point);
+  double largest = -std::numeric_limits<double>::infinity();
+  for (size_t atom = 0; atom < work.atoms; ++atom)
+    if (!zeros[atom]) largest = std::max(largest, exponent[atom]);
+  if (owner >= work.atoms || !std::isfinite(seed) || !std::isfinite(largest)) return false;
+  double sum = 0;
+  for (size_t atom = 0; atom < work.atoms; ++atom) {
+    const double scaled = analytic_ldexp(mantissa[atom], int(exponent[atom] - largest));
+    work.field(7, point)[atom] = scaled;
+    const double product = zeros[atom] ? 0.0 : scaled;
+    work.field(5, point)[atom] = product;
+    sum += product;
+  }
+  work.maximum[point] = 1 / sum;
+  return sum > 0 && std::isfinite(sum);
+}
+
+// One pair (G, B) of an analytic motion lane. d s_BG / dG = f1 (r0 u_G - r1 e)
+// in both orientations, and s_GB = 1 - s_BG has the opposite slope. Each scale
+// keeps the factor value its product lane used; a zero factor takes the
+// single-zero excluded product.
+struct AnalyticPairMotion {
+  double neighbor_scale, atom_scale, along, across;
+  std::array<double, 4> separation;
+};
+
+template <class Geometry, class Log, class Pair, class Values, class Counts>
+GENERATIVEQC_PHASE_HD bool analytic_pair_motion(size_t atom, size_t neighbor, double own,
+    double other, double atom_product, Values products, Values partial_products, Counts zeros,
+    Geometry geometry, Log logarithm, Pair pair, bool& valid, AnalyticPairMotion& result) {
+  const bool upper = neighbor > atom;
+  const size_t first = upper ? neighbor : atom, second = upper ? atom : neighbor;
+  result.separation = geometry.separation(first, second, valid);
+  const auto state = point_pair<false>(upper ? other - own : own - other, first, second,
+                                       result.separation[0], geometry, logarithm, pair);
+  if (state.factor[1] == 0) return false;  // Saturated switch: exact zero pullback.
+  const double neighbor_factor = upper ? state.factor[0] : 1 - state.factor[0];
+  const double atom_factor = upper ? 1 - state.factor[0] : state.factor[0];
+  const double joint = neighbor_factor * atom_factor;
+  if (joint >= 2.2250738585072014e-308) {
+    // Both factors are nonzero, so a zero-count product is stored as exact zero.
+    // One reciprocal serves both factors while their product stays normal.
+    const double reciprocal = 1 / joint;
+    result.neighbor_scale = products[neighbor] * atom_factor * reciprocal;
+    result.atom_scale = -atom_product * neighbor_factor * reciprocal;
+  } else {
+    result.neighbor_scale = result.atom_scale = 0;
+    if (!zeros[neighbor]) result.neighbor_scale = products[neighbor] / neighbor_factor;
+    else if (zeros[neighbor] == 1 && neighbor_factor == 0)
+      result.neighbor_scale = partial_products[neighbor];
+    if (!zeros[atom]) result.atom_scale = -atom_product / atom_factor;
+    else if (zeros[atom] == 1 && atom_factor == 0) result.atom_scale = -partial_products[atom];
+  }
+  result.along = state.factor[1] * state.ratio[0];
+  result.across = state.factor[1] * state.ratio[1];
+  return true;
+}
+
+// Writes seed * dw/dG for one atom G != owner into output[0..2]. The neighbor
+// sum keeps the u_G coefficient and the e vector apart; the owner pair is
+// evaluated once more after it.
+template <class Geometry, class Log, class Pair>
+GENERATIVEQC_PHASE_HD bool analytic_motion_phase(Workspace work, size_t point, size_t atom,
+    size_t owner, double seed, Geometry geometry, Log logarithm, Pair pair, double* output) {
+  const auto distance = work.field(0, point);
+  const auto products = work.field(5, point), partial_products = work.field(7, point);
+  const auto zeros = work.zero_counts(point);
+  const double own = distance[atom], atom_product = products[atom];
+  bool valid = true;
+  double along = 0, across[3]{};
+  AnalyticPairMotion term;
+  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
+    if (neighbor == atom ||
+        !analytic_pair_motion(atom, neighbor, own, distance[neighbor], atom_product, products,
+                              partial_products, zeros, geometry, logarithm, pair, valid, term))
+      continue;
+    const double scale = term.neighbor_scale + term.atom_scale;
+    along += scale * term.along;
+    for (size_t axis = 0; axis < 3; ++axis)
+      across[axis] += scale * term.across * term.separation[1 + axis];
+  }
+  double owner_term[3]{};
+  if (analytic_pair_motion(atom, owner, own, distance[owner], atom_product, products,
+                           partial_products, zeros, geometry, logarithm, pair, valid, term))
+    for (size_t axis = 0; axis < 3; ++axis)
+      owner_term[axis] = term.neighbor_scale * (term.along * work.field(1 + axis, point)[atom] -
+                                                term.across * term.separation[1 + axis]);
+  const double inverse = work.maximum[point];
+  const double weight = products[owner] * inverse;
+  for (size_t axis = 0; axis < 3; ++axis) {
+    const double others = along * work.field(1 + axis, point)[atom] - across[axis];
+    const double value = seed * inverse * (owner_term[axis] - weight * others);
+    valid = valid && std::isfinite(value);
+    output[axis] = value;
+  }
+  return valid;
+}
+
+// The moving owner receives minus the sum over every other atom, in atom order.
+GENERATIVEQC_PHASE_HD inline void analytic_owner_phase(size_t atoms, size_t owner, double* row) {
+  for (size_t axis = 0; axis < 3; ++axis) {
+    double sum = 0;
+    for (size_t atom = 0; atom < atoms; ++atom)
+      if (atom != owner) sum += row[3 * atom + axis];
+    row[3 * owner + axis] = -sum;
+  }
+}
 } // namespace generativeqc_grid_phased
 #undef GENERATIVEQC_PHASE_HD
 """

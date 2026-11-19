@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import ctypes as ct
 import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -14,6 +16,9 @@ from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.method.stationary_resources import (
     plan_stationary_cuda_resources,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class GridTaskView(ct.Structure):
@@ -35,6 +40,21 @@ class GridTaskView(ct.Structure):
             "error",
         )
     ]
+
+
+@contextlib.contextmanager
+def becke_route(route: str) -> Iterator[None]:
+    """The native owner captures its Becke route once, at creation."""
+    name = "GENERATIVEQC_STATIONARY_BECKE_ROUTE"
+    previous = os.environ.get(name)
+    os.environ[name] = route
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = previous
 
 
 @pytest.fixture(scope="module")
@@ -344,6 +364,7 @@ def test_restricted_point_binding_preserves_sources_and_reports_actual_selection
 @pytest.mark.parametrize("external", [False, True])
 @pytest.mark.parametrize("primitive", [False, True, 2, "2-off", "2-serial"])
 @pytest.mark.parametrize("profiled", [False, True])
+@pytest.mark.parametrize("route", ["analytic", "phased"])
 def test_shared_owner_phases_preserve_sources_and_work(
     native: SimpleNamespace,
     atoms: int,
@@ -352,6 +373,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
     external: bool,
     primitive: bool | int | str,
     profiled: bool,
+    route: str,
     adjusted: bool = False,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
@@ -434,23 +456,24 @@ def test_shared_owner_phases_preserve_sources_and_work(
             phased_becke=phased,
         )
         handle = ct.c_void_p()
-        native.call(
-            "stationary_create",
-            cuda_device.id,
-            major,
-            minor,
-            atoms,
-            4,
-            4,
-            256,
-            1,
-            1,
-            1,
-            plan.allocation_bytes,
-            plan.geometry_lanes,
-            plan.geometry_threads,
-            ct.byref(handle),
-        )
+        with becke_route(route):
+            native.call(
+                "stationary_create",
+                cuda_device.id,
+                major,
+                minor,
+                atoms,
+                4,
+                4,
+                256,
+                1,
+                1,
+                1,
+                plan.allocation_bytes,
+                plan.geometry_lanes,
+                plan.geometry_threads,
+                ct.byref(handle),
+            )
         stream = cupy.cuda.Stream(non_blocking=True)
         try:
             if profiled:
@@ -619,7 +642,30 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 == 0
             )
-            assert metrics[23] == 3 * 257 * atoms * (atoms - 1) // (2 if phased else 1)
+            # Primitive selections keep the pair route; analytic lanes evaluate
+            # every ordered pair in both their product and motion phases.
+            analytic = phased and route == "analytic" and not primitive
+            ordered = 3 * 257 * atoms * (atoms - 1)
+            assert metrics[23] == (
+                2 * ordered if analytic else ordered // (2 if phased else 1)
+            )
+            analytic_metrics = getattr(
+                native.library, "stationary_becke_analytic_metrics_v1", None
+            )
+            if analytic_metrics is not None:
+                analytic_metrics.argtypes = [
+                    ct.c_void_p,
+                    ct.POINTER(ct.c_uint64),
+                    ct.c_size_t,
+                ]
+                analytic_work = (ct.c_uint64 * 4)()
+                assert analytic_metrics(handle, analytic_work, 4) == 0
+                assert tuple(analytic_work) == (
+                    int(route == "analytic"),
+                    6 if analytic else 0,
+                    3 * 257 if analytic else 0,
+                    2 * ordered if analytic else 0,
+                )
             assert phase_metrics[0] == plan.phased_becke_bytes
             assert phase_metrics[1] == (6 if phased else 0)
             assert metrics[0] == plan.allocation_bytes
@@ -657,7 +703,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     == 0
                 )
                 points = 3 * 257 if phased else 0
-                pairs = points * atoms * (atoms - 1) // 2
+                pairs = 0 if analytic else points * atoms * (atoms - 1) // 2
                 words = 2 if primitive == 1 and phased else 4
                 profiled_batches = 6 if profiled and phased else 0
                 assert tuple(phase_work) == (
@@ -670,7 +716,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     pairs,
                     2 * pairs,
                     points * atoms,
-                    42 if phased else 0,
+                    (30 if analytic else 42) if phased else 0,
                     4 * 8 * pairs,
                     words * 8 * pairs,
                     2 * words * 8 * pairs,
@@ -680,8 +726,12 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     profiled_batches,
                 )
                 if profiled_batches:
+                    # Analytic batches have no atom-log or reverse-pair phase.
+                    empty = (2, 4) if analytic else ()
                     assert all(
-                        np.isfinite(value) and value > 0 for value in phase_times
+                        np.isfinite(value)
+                        and (value >= 0 if phase in empty else value > 0)
+                        for phase, value in enumerate(phase_times)
                     )
                 else:
                     assert tuple(phase_times) == (0.0,) * 7

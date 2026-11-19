@@ -1,0 +1,33 @@
+# compute-sanitizer 12.9.79 on the measured source and probe (analytic route, 96 atoms)
+== initcheck test_stationary_becke_phased_cuda.py::test_shared_owner_phases_preserve_sources_and_work[analytic-True-False-True-full-False-96]
+1 passed in 2.95s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0
+== memcheck test_stationary_becke_phased_cuda.py::test_shared_owner_phases_preserve_sources_and_work[analytic-True-False-True-full-False-96]
+1 passed in 3.04s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0
+== racecheck test_stationary_becke_phased_cuda.py::test_shared_owner_phases_preserve_sources_and_work[analytic-True-False-True-full-False-96]
+1 passed in 4.40s
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+SANITIZER_EXIT 0
+== synccheck test_stationary_becke_phased_cuda.py::test_shared_owner_phases_preserve_sources_and_work[analytic-True-False-True-full-False-96]
+1 passed in 1.94s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0
+== initcheck test_treutler_phased_cuda.py::test_treutler_owner_phase_sources_work_and_lifetime[analytic-False-True-96]
+1 passed in 2.98s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0
+== memcheck test_treutler_phased_cuda.py::test_treutler_owner_phase_sources_work_and_lifetime[analytic-False-True-96]
+1 passed in 3.13s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0
+== racecheck test_treutler_phased_cuda.py::test_treutler_owner_phase_sources_work_and_lifetime[analytic-False-True-96]
+1 passed in 4.53s
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+SANITIZER_EXIT 0
+== synccheck test_treutler_phased_cuda.py::test_treutler_owner_phase_sources_work_and_lifetime[analytic-False-True-96]
+1 passed in 1.98s
+========= ERROR SUMMARY: 0 errors
+SANITIZER_EXIT 0

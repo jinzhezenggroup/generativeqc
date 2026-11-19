@@ -12,8 +12,13 @@ from test_stationary_becke_phased_cuda import (
 @pytest.mark.parametrize("atoms", [48, 96, 128])
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("primitive", [False, True, 2, "2-off", "2-serial"])
+@pytest.mark.parametrize("route", ["analytic", "phased"])
 def test_treutler_owner_phase_sources_work_and_lifetime(
-    native: SimpleNamespace, atoms: int, implicit: bool, primitive: bool | int | str
+    native: SimpleNamespace,
+    atoms: int,
+    implicit: bool,
+    primitive: bool | int | str,
+    route: str,
 ) -> None:
     """Include external VV10 seeds, reused panels and transactional failures."""
     check_owner(
@@ -24,5 +29,6 @@ def test_treutler_owner_phase_sources_work_and_lifetime(
         external=True,
         primitive=primitive,
         profiled=True,
+        route=route,
         adjusted=True,
     )

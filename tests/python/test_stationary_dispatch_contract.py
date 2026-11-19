@@ -202,6 +202,7 @@ namespace generativeqc::dft { struct GridTaskView { size_t npoint; const double*
 namespace generativeqc_grid_adjoint { struct CenterPair {}; }
 struct StationaryPointValue { double words[10]; };
 constexpr size_t stationary_becke_control_bytes=16;
+constexpr size_t stationary_becke_normalize_max_atoms=4;
 constexpr bool stationary_restricted_point_capable=true;
 bool stationary_fp32_point_capable=true, restricted_capable=true;
 bool stationary_restricted_point_selected(bool requested) { return requested && restricted_capable; }
@@ -212,11 +213,13 @@ struct Owner {
   double* atomic_radii{};
   int64_t* point_atoms{};
   bool phased_storage{}, becke_primitive{}, becke_normalize_cooperative{}, profile{}, scaled{};
+  bool becke_analytic{};
   int becke_primitive_mode{}, becke_threads_per_point=32, geometry_threads=128;
   size_t becke_shared_bytes=256, launches{}, restricted_point_batches{}, restricted_point_count{};
   size_t general_point_batches{}, general_point_count{}, becke_primitive_batches{};
   size_t becke_primitive_reverse_pair_visits{}, phased_batches{}, phased_points{};
   size_t becke_binary_scaled_batches{}, becke_binary_scaled_points{}, synchronizations{}, becke_profile_batches{};
+  size_t analytic_batches{}, analytic_points{};
   int becke_events[8]{}; double becke_phase_ms[7]{};
 };
 struct PhasedBeckeInput {
@@ -230,7 +233,7 @@ double seed_storage[16];
 PhasedBeckeInput phased_input(Owner& owner,size_t) {
   PhasedBeckeInput result; result.seeds=seed_storage; result.binary_scaled_products=owner.scaled; return result;
 }
-int sticky{}, producer_error{}, consumers{}, producers{}, normalizations{};
+int sticky{}, producer_error{}, consumers{}, producers{}, normalizations{}, analytic_phases{};
 bool selected_float{}, selected_cooperative{}, selected_precomputed{}, selected_bound{};
 double* expected_scratch{};
 const double* expected_radii{};
@@ -269,6 +272,16 @@ template<int Phase,bool... Modes> void phased_becke_atom(PhasedBeckeInput input)
 template<bool... Modes> void phased_becke_pair(PhasedBeckeInput input) {
   assert(input.atomic_radii==expected_radii);
 }
+bool analytic_fallback{};
+template<bool Fallback> void analytic_becke_products(PhasedBeckeInput input) {
+  ++analytic_phases; assert(input.atomic_radii==expected_radii && !input.binary_scaled_products);
+  analytic_fallback=Fallback;
+}
+void analytic_becke_normalize(PhasedBeckeInput input) { ++analytic_phases; }
+template<bool Fallback> void analytic_becke_motion(PhasedBeckeInput input) {
+  ++analytic_phases; assert(input.atomic_radii==expected_radii && Fallback==analytic_fallback);
+}
+void analytic_becke_owner(PhasedBeckeInput input) { ++analytic_phases; }
 template<bool Scaled> void launch_phased_becke_normalize(PhasedBeckeInput input,bool,cudaStream_t) {
   ++normalizations; assert(Scaled==input.binary_scaled_products);
 }
@@ -284,13 +297,15 @@ int main() {
   for(int threads:{1,32}) for(size_t atoms:{size_t(1),size_t(3),size_t(4),size_t(48)})
   for(bool seeded:{false,true}) for(bool lanes_match:{false,true})
   for(bool pairs:{false,true}) for(bool requested:{false,true})
-  for(bool capable:{false,true}) for(bool scaled:{false,true}) for(bool adjusted:{false,true}) {
+  for(bool capable:{false,true}) for(bool scaled:{false,true}) for(bool adjusted:{false,true})
+  for(bool analytic:{false,true}) {
     Owner owner; owner.phased_storage=phased; owner.becke_threads_per_point=threads; owner.scaled=scaled;
+    owner.becke_analytic=analytic;
     owner.adjusted_partition=adjusted; owner.atomic_radii=radii;
     expected_radii=adjusted?radii:nullptr;
     restricted_capable=capable; stationary_fp32_point_capable=capable;
-    sticky=producer_error=consumers=producers=normalizations=0;
-    selected_float=selected_cooperative=selected_precomputed=selected_bound=false;
+    sticky=producer_error=consumers=producers=normalizations=analytic_phases=0;
+    selected_float=selected_cooperative=selected_precomputed=selected_bound=analytic_fallback=false;
     const bool reject=mixed ? (seeded || !capable) : (phased && (!lanes_match || !pairs || threads==1));
     bool failed=false;
     try {
@@ -303,8 +318,15 @@ int main() {
     const bool precomputed=!mixed && phased && atoms>=4;
     assert(consumers==1 && selected_float==mixed && selected_cooperative==(threads>1));
     assert(selected_precomputed==precomputed && producers==int(precomputed));
-    assert(normalizations==int(!mixed && phased));
-    assert(owner.launches==(mixed?0U:7U*phased+precomputed));
+    // The analytic route replaces the six pair/atom/normalize phases after distance.
+    const bool forward=!mixed && phased && analytic;
+    assert(normalizations==int(!mixed && phased && !analytic));
+    assert(analytic_phases==4*int(forward));
+    // Radii beyond one block's neighbor table take the per-pair adjustment.
+    assert(analytic_fallback==(forward && adjusted && atoms>4));
+    assert(owner.analytic_batches==size_t(forward) && owner.analytic_points==7*size_t(forward));
+    assert(owner.phased_batches==size_t(!mixed && phased));
+    assert(owner.launches==(mixed?0U:(analytic?5U:7U)*phased+precomputed));
     if(!mixed) assert(selected_bound==(!seeded && requested && capable));
     const bool bound=!mixed && !seeded && requested && capable;
     assert(owner.restricted_point_batches==size_t(bound));
