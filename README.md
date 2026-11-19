@@ -27,6 +27,28 @@ and compiler IRs produce execution programs and specialized CPU/CUDA kernels.
 The underlying quantum chemistry remains explicit and is checked against
 independent scientific references—not replaced by a learned surrogate.
 
+## Citation
+
+If you use GenerativeQC in your research, **please cite** the following
+preprint:
+
+Xu, S.; Shen, L.; Zhai, W.; Zhu, T.; Zeng, J. **[GenerativeQC: A Generative, GPU-Accelerated Quantum Chemistry Program](https://arxiv.org/abs/2611.24744)**.
+*arXiv* **2026**, 2611.24744.
+
+```bibtex
+@misc{xu2026generativeqc,
+  title = {{GenerativeQC}: A Generative, {GPU}-Accelerated Quantum Chemistry Program},
+  author = {Xu, Shengrui and Shen, Longhan and Zhai, Wenxi and Zhu, Tong and Zeng, Jinzhe},
+  year = {2026},
+  eprint = {2611.24744},
+  archivePrefix = {arXiv},
+  primaryClass = {physics.chem-ph},
+  url = {https://arxiv.org/abs/2611.24744}
+}
+```
+
+The citation is also available as a [BibTeX file](CITATION.bib).
+
 ## Highlights
 
 - **HF, DFT, and correlated methods.** RHF/UHF; RKS/UKS from LDA and GGA through
@@ -185,6 +207,9 @@ qualification of the current master implementation.
 A later [H100 three-process cohort on unmodified master `a6d5a3c00`](benchmarks/results/paper-hfdft-cold3-20261118/README.md)
 ([figure](assets/paper-hfdft-cold3-20261118-h100.svg)) wins 64/64 cold and
 62/64 warm medians; DF HF96 and Direct r2SCAN-3c96 warm remain slower.
+The H100 [cohort on master `cddde09a0`](benchmarks/results/paper-hfdft-cold3-20261119/README.md)
+([figure](assets/paper-hfdft-cold3-20261119-h100.svg)) wins 64/64 cold and
+63/64 warm medians; only Direct HF96 warm is slower (1.380 vs 1.353 s).
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
