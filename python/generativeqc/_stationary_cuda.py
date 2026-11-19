@@ -123,6 +123,12 @@ _BECKE_PHASE_NAMES = (
     "atom_gather",
     "point_motion_publication",
 )
+_BECKE_ANALYTIC_COUNTER_NAMES = (
+    "becke_analytic_batches",
+    "becke_analytic_points",
+    "becke_analytic_pair_states",
+)
+
 _BECKE_PHASE_COUNTER_NAMES = (
     "becke_phase_batches",
     "becke_phase_points",
@@ -2143,6 +2149,23 @@ class _CudaSources:
             if becke_counters(self.handle, becke_values, len(becke_values)):
                 raise RuntimeError("stationary Becke phase counters unavailable")
             metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values, strict=True))
+        analytic_metrics = getattr(
+            self.library, "stationary_becke_analytic_metrics_v1", None
+        )
+        if analytic_metrics is not None:
+            # Older artifacts omit the analytic route and keep phased batches.
+            analytic_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            analytic_values = (ct.c_uint64 * 4)()
+            if analytic_metrics(self.handle, analytic_values, 4):
+                raise RuntimeError("stationary analytic Becke metrics unavailable")
+            metrics["becke_analytic_requested"] = int(analytic_values[0])
+            metrics.update(
+                zip(_BECKE_ANALYTIC_COUNTER_NAMES, analytic_values[1:], strict=True)
+            )
             if zero_metrics is not None:
                 elided_pairs = (
                     metrics["becke_zero_seed_points"]
@@ -2808,6 +2831,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "fp32_geometry_batches",
         "fp32_geometry_points",
         *_BECKE_PHASE_COUNTER_NAMES,
+        *_BECKE_ANALYTIC_COUNTER_NAMES,
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]

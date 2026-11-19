@@ -412,17 +412,36 @@ int main() {
   p=static_cast<Owner*>(result);
   if(!p->becke_binary_scaled_requested || !p->becke_binary_scaled_automatic) return 31;
   delete p;
+  for(const char* setting : {"phased","analytic"}) {
+    setenv("GENERATIVEQC_STATIONARY_BECKE_ROUTE",setting,1);
+    if(create(bytes) || !result) return 33;
+    p=static_cast<Owner*>(result);
+    if(p->becke_analytic != (setting[0]=='a')) return 34;
+    delete p;
+  }
+  setenv("GENERATIVEQC_STATIONARY_BECKE_ROUTE","1",1);
+  if(!create(bytes) || result || owners || arenas) return 35;
+  // Unset selects the analytic route; phased is the explicit rollback.
+  unsetenv("GENERATIVEQC_STATIONARY_BECKE_ROUTE");
+  if(create(bytes) || !result) return 36;
+  p=static_cast<Owner*>(result);
+  if(!p->becke_analytic) return 37;
+  delete p;
   for(size_t atoms : {size_t(0),size_t(32),size_t(48),size_t(95),size_t(96),size_t(128),size_t(129)})
    for(bool phase:{false,true}) for(bool center:{false,true}) for(bool primitive:{false,true})
-    for(bool adjusted:{false,true}) for(bool requested:{false,true}) for(bool automatic:{false,true}) {
+    for(bool adjusted:{false,true}) for(bool requested:{false,true}) for(bool automatic:{false,true})
+    for(bool analytic:{false,true}) {
       Owner owner;generativeqc_grid_adjoint::CenterPair pair{};
       owner.atoms=atoms;owner.phased_storage.active=phase;
       owner.center_pairs=center?&pair:nullptr;owner.becke_primitive=primitive;
       owner.adjusted_partition=adjusted;owner.becke_binary_scaled_requested=requested;
-      owner.becke_binary_scaled_automatic=automatic;
+      owner.becke_binary_scaled_automatic=automatic;owner.becke_analytic=analytic;
+      // Analytic lanes replace the pair route that binary scaling lowers.
       const bool expected=atoms>0 && atoms<=128 && phase && center && !primitive &&
-                          !adjusted && requested && (!automatic || atoms>=96);
+                          !adjusted && requested && (!automatic || atoms>=96) && !analytic;
       if(owner.binary_scaled_becke_active()!=expected) return 32;
+      if(owner.analytic_becke_active()!=(phase && analytic && !primitive)) return 38;
+      if(owner.analytic_becke_active(true)) return 39;
     }
   {
     Owner owner;

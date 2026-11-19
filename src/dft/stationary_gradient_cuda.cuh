@@ -48,6 +48,8 @@ struct Owner {
        becke_primitive_configured = false;
   unsigned becke_primitive_mode{};
   bool becke_binary_scaled_requested = false, becke_binary_scaled_automatic = true;
+  // Forward-mode partition derivative without the phased pair panel.
+  bool becke_analytic = true;
   double geometry_tolerance{};
   unsigned long long* becke_zero_seed_points{};
   bool becke_zero_seed_requested = true, becke_zero_seed_configured = false;
@@ -71,6 +73,8 @@ struct Owner {
       becke_pair_state_evaluations{}, phased_batches{};
   uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
   uint64_t phased_points{}, becke_profile_batches{};
+  // Subset of phased batches/points executed by the analytic forward lanes.
+  uint64_t analytic_batches{}, analytic_points{};
   uint64_t becke_binary_scaled_batches{}, becke_binary_scaled_points{};
   uint64_t restricted_point_batches{}, restricted_point_count{}, general_point_batches{},
       general_point_count{};
@@ -81,9 +85,23 @@ struct Owner {
     return (bool(phased_storage) && !fp32_geometry) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
   }
+  bool analytic_becke_active(bool fp32_geometry = false) const {
+    return bool(phased_storage) && !fp32_geometry && becke_analytic && !becke_primitive;
+  }
+  // Switch states evaluated per tile by the executed schedule: the retained
+  // phase panel evaluates each unordered pair once, the bounded kernels each
+  // ordered pair once, and the analytic product and motion lanes each ordered
+  // pair once per lane (the motion owner lane is replaced by one owner pair).
+  uint64_t becke_pair_states(size_t points, bool fp32_geometry = false) const {
+    const uint64_t ordered = uint64_t(points) * atoms * (atoms - 1);
+    if (analytic_becke_active(fp32_geometry)) return 2 * ordered;
+    return ordered / (retains_becke_pair_state(fp32_geometry) ? 2 : 1);
+  }
   bool binary_scaled_becke_active() const {
     static_assert(generativeqc_grid_scaled::maximum_scaled_atoms == 128);
-    return !adjusted_partition && becke_binary_scaled_requested &&
+    // Binary scaling lowers the pair route's products; analytic lanes keep
+    // their own scaled products and never read it.
+    return !adjusted_partition && !analytic_becke_active() && becke_binary_scaled_requested &&
            (!becke_binary_scaled_automatic ||
             generativeqc::dft::binary_scaled_becke_automatic(atoms)) &&
            generativeqc::dft::binary_scaled_becke_eligible(
@@ -464,7 +482,49 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     ++owner.general_point_batches;
     owner.general_point_count += view.npoint;
   }
-  if (phased_active) {
+  if (phased_active && owner.becke_analytic && !owner.becke_primitive) {
+    // Same distance phase and output layout; products, normalization and the
+    // partition derivative are forward-mode lanes with no pair panel.
+    const dim3 atom_blocks(blocks(view.npoint, 128), na);
+    // Normalization and owner folds use one warp per point.
+    const unsigned point_blocks = blocks(32 * view.npoint, 128);
+    phased.binary_scaled_products = false;
+    // Radii adjustments are tabled per atom block unless a block cannot hold
+    // every neighbor; that fallback evaluates each adjustment per pair.
+    const bool fallback = radii && na > stationary_becke_normalize_max_atoms;
+    profile_record(owner, owner.becke_events[0], stream);
+    phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[1], stream);
+    if (fallback)
+      analytic_becke_products<true><<<atom_blocks, 128, 0, stream>>>(phased);
+    else
+      analytic_becke_products<false><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[2], stream);
+    profile_record(owner, owner.becke_events[3], stream);
+    analytic_becke_normalize<<<point_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[4], stream);
+    profile_record(owner, owner.becke_events[5], stream);
+    if (fallback)
+      analytic_becke_motion<true><<<atom_blocks, 128, 0, stream>>>(phased);
+    else
+      analytic_becke_motion<false><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[6], stream);
+    analytic_becke_owner<<<point_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[7], stream);
+    owner.launches += 5;
+    ++owner.phased_batches;
+    owner.phased_points += view.npoint;
+    ++owner.analytic_batches;
+    owner.analytic_points += view.npoint;
+    if (owner.profile) {
+      cuda_check(cudaEventSynchronize(owner.becke_events[7]));
+      ++owner.synchronizations;
+      ++owner.becke_profile_batches;
+      for (size_t phase = 0; phase < 7; ++phase)
+        profile_elapsed(owner, owner.becke_phase_ms[phase], owner.becke_events[phase],
+                        owner.becke_events[phase + 1]);
+    }
+  } else if (phased_active) {
     const dim3 atom_blocks(blocks(view.npoint, 128), na);
     const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
     // These events follow the AO/XC seed producer on its borrowed stream.
@@ -581,6 +641,11 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->becke_binary_scaled_requested = binary_scaled_requested;
     p->becke_binary_scaled_automatic =
         std::getenv("GENERATIVEQC_STATIONARY_BECKE_SCALED_PRODUCTS") == nullptr;
+    const char* route = std::getenv("GENERATIVEQC_STATIONARY_BECKE_ROUTE");
+    if (route && std::strcmp(route, "phased") != 0 && std::strcmp(route, "analytic") != 0)
+      throw std::invalid_argument(
+          "GENERATIVEQC_STATIONARY_BECKE_ROUTE requires phased or analytic");
+    p->becke_analytic = !route || std::strcmp(route, "analytic") == 0;
     p->aos = n;
     p->primitives = nprimitive;
     p->points = np;
@@ -845,32 +910,47 @@ int stationary_becke_primitive_metrics_v1(void* pointer, uint64_t* output, size_
 int stationary_becke_phase_metrics_v1(void* pointer, uint64_t* output, size_t count) {
   auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
   if (!owner || !output || count != 17) return 1;
+  // Analytic batches share the distance, normalization and motion lane domains
+  // but no pair domain or pair panel; their own work is reported separately.
   const uint64_t points = owner->phased_points;
+  const uint64_t pair_points = points - owner->analytic_points;
   const uint64_t atom_entries = points * owner->atoms;
-  const uint64_t pairs = points * owner->atoms * (owner->atoms - 1) / 2;
+  const uint64_t pairs = pair_points * owner->atoms * (owner->atoms - 1) / 2;
   const bool coefficients = owner->becke_primitive && owner->becke_primitive_mode == 1;
   const uint64_t reverse_words = coefficients ? 2 : 4;
   // Dense launched domains and logical distinct panel values, not hardware
   // transactions or completed work from a failed force. Conditional primal/log
   // reads and scalar transcendental evaluations are deliberately not inferred.
-  const uint64_t values[]{owner->phased_batches,
-                          points,
-                          atom_entries,
-                          pairs,
-                          2 * pairs,
-                          atom_entries,
-                          pairs,
-                          2 * pairs,
-                          atom_entries,
-                          7 * owner->phased_batches,
-                          4 * 8 * pairs,
-                          reverse_words * 8 * pairs,
-                          2 * reverse_words * 8 * pairs,
-                          coefficients ? 2 * 3 * 8 * pairs : 0,
-                          owner->becke_profile_batches,
-                          8 * owner->becke_profile_batches,
-                          owner->becke_profile_batches};
+  const uint64_t values[]{
+      owner->phased_batches,
+      points,
+      atom_entries,
+      pairs,
+      2 * pairs,
+      atom_entries,
+      pairs,
+      2 * pairs,
+      atom_entries,
+      7 * (owner->phased_batches - owner->analytic_batches) + 5 * owner->analytic_batches,
+      4 * 8 * pairs,
+      reverse_words * 8 * pairs,
+      2 * reverse_words * 8 * pairs,
+      coefficients ? 2 * 3 * 8 * pairs : 0,
+      owner->becke_profile_batches,
+      8 * owner->becke_profile_batches,
+      owner->becke_profile_batches};
   std::copy(values, values + 17, output);
+  return 0;
+}
+/** Route selected at creation, analytic batches/points, and the switch states
+ * their product and motion lanes evaluate. Optional ABI; read outside timing. */
+int stationary_becke_analytic_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 4) return 1;
+  output[0] = owner->becke_analytic;
+  output[1] = owner->analytic_batches;
+  output[2] = owner->analytic_points;
+  output[3] = 2 * owner->analytic_points * owner->atoms * (owner->atoms - 1);
   return 0;
 }
 int stationary_becke_phase_profile_v1(void* pointer, double* output, size_t count) {
@@ -1178,8 +1258,7 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
       p->launches += 2;
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-      p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+      p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -1243,8 +1322,7 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
       p->launches += 2;
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-      p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+      p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -1304,8 +1382,7 @@ int stationary_geometry_external_device_enqueue(
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -1350,8 +1427,7 @@ int stationary_geometry_external_device_molecular_enqueue(
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -1395,8 +1471,7 @@ static int stationary_geometry_external_device_molecular_resident_weights_to_sou
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -1454,8 +1529,7 @@ static int stationary_geometry_molecular_resident_weights_enqueue_impl(
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations += view->npoint * p->atoms * (p->atoms - 1) /
-                                       (p->retains_becke_pair_state(fp32_geometry) ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint, fp32_geometry);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -1559,8 +1633,7 @@ int stationary_geometry_molecular_enqueue(void* pointer,
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -1604,8 +1677,7 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
-    p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+    p->becke_pair_state_evaluations += p->becke_pair_states(view->npoint);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;

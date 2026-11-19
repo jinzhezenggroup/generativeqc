@@ -648,10 +648,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
         ),
         "metric_delta_sha256": (
-            "c9df420cacb6a16733a023c4de396db5d5c37cbfbecffdc8a232817c197017ec"
+            "0bd4de07bbbc45171b29cf4d305b9c2402f1f92bef581cd34bfbb75a885defdc"
         ),
         "metrics_sha256": (
-            "8bf8189b68d9da2c421efe0ec13abfb3296d5106ae2f3df73b7106edf3a0f01e"
+            "34e0159a689de7ed69b3d438297c26af40a86c448c48a6cf2c7b7c08c62c707a"
         ),
         "ordinary_tile_resources_sha256": (
             current_python_owner_identity(
@@ -734,10 +734,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
         ),
         "native_geometry_external_sha256": (
-            "7270f2f21f44baf101f9e503f9238dd972f729e431a95b3dd0212311014fe601"
+            "216e60fa0e650abcb8a4b66482538713af60870ad37f4071a1dffaca6747d0f9"
         ),
         "native_geometry_enqueue_sha256": (
-            "ff5b6e5a6790cc2a75d29906011cf863e04dac04930205d09fc36dcacdaac9e1"
+            "09dae04a3fc1f78fdc8c3b22166d9e42da57ab12ae6fad7b79c27e4905eaf9c0"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -773,7 +773,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "0b9c9d546fff87884bd0279f6a39231a5821afeb5b1664cbfea1ef54abb3550b"
         ),
         "native_becke_phase_metrics_sha256": (
-            "6357559cf08d355460465b3f374c0898a30a8a5d4829b55a587921db28269934"
+            "84c5c1a5586f7b4bce02a3582e39a2abdf1f1d85a8e9249a5a71c648a0bf5577"
         ),
         "native_becke_phase_profile_sha256": (
             "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"

@@ -555,7 +555,15 @@ def emit_grid_adjoint() -> str:
     program = grid_response_program("treutler_adjust")
     graph, primal = program.graph, program.roots[0]
     slope = graph.differentiate(primal, graph.variable("mu"))
-    functions = []
+    # The elemental adjustment depends only on the immutable radius pair, so
+    # owners that revisit a pair may evaluate it once and pass it explicitly.
+    functions = [
+        (
+            "GENERATIVEQC_GRID_HD inline double coordinate_adjustment(size_t a, size_t b, const double* radii) {\n"
+            "const double ratio = std::sqrt(radii[b] / radii[a]);\n"
+            "return std::clamp(.25 * (ratio - 1.0 / ratio), -.5, .5);}"
+        )
+    ]
     # Emit each supported arithmetic type through the existing typed lowerer;
     # no second algebra or token rewriting supplies the correction derivative.
     for scalar_type in ("double", "float"):
@@ -566,11 +574,8 @@ def emit_grid_adjoint() -> str:
         functions.append(
             "\n".join(
                 [
-                    f"GENERATIVEQC_GRID_HD std::array<{scalar_type},3> adjust_coordinate(std::array<{scalar_type},3> value, size_t a, size_t b, const double* radii) {{",
+                    f"GENERATIVEQC_GRID_HD std::array<{scalar_type},3> adjust_coordinate_with(std::array<{scalar_type},3> value, {scalar_type} adjustment) {{",
                     f"using Arithmetic = {scalar_type};",
-                    "if (!radii) return value;",
-                    "const double ratio = std::sqrt(radii[b] / radii[a]);",
-                    "const Arithmetic adjustment = Arithmetic(std::clamp(.25 * (ratio - 1.0 / ratio), -.5, .5));",
                     "const bool clipped = value[0] <= -1 || value[0] >= 1;",
                     "const Arithmetic mu = std::clamp(value[0], Arithmetic(-1), Arithmetic(1));",
                     *emitter.lines,
@@ -581,6 +586,9 @@ def emit_grid_adjoint() -> str:
                     + ", clipped ? Arithmetic(0) : value[2] * "
                     + emitter.reference(slope)
                     + "};}",
+                    f"GENERATIVEQC_GRID_HD std::array<{scalar_type},3> adjust_coordinate(std::array<{scalar_type},3> value, size_t a, size_t b, const double* radii) {{",
+                    "if (!radii) return value;",
+                    f"return adjust_coordinate_with(value, {scalar_type}(coordinate_adjustment(a, b, radii)));}}",
                 ]
             )
         )

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-stationary-becke-analytic-20261119",
+  "owner": "H100 analytic forward-mode Becke partition derivative (stationary CUDA DFT forces)",
+  "reason": "The route promotion rests on 68 complete README endpoint processes from one binary: an interleaved phased/analytic A/B for Direct r2SCAN-3c96, Direct PBE0 96 and DF B3LYP 96, and a qualification sweep of every other README DFT method/mode at 96 and 48 atoms. Every process keeps its plan identity, all cold/warm samples with full force vectors and the complete qualification record, so the same-case force agreement and route-independent SCF counts replay offline. Bounded XZ under the 1 MiB cap; a storage review, not a performance or numerical promotion.",
+  "review_document": "benchmarks/results/h100-stationary-becke-analytic-20261119/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-stationary-becke-analytic-20261119/results.json.xz",
+      "family": "h100-stationary-becke-analytic-20261119",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete original endpoint records (samples, full forces, qualification) for every phased and analytic process",
+      "bytes": 251584,
+      "sha256": "64bae7c7a46e714a72d1d11ff3d685c647c0f9015ffd80c15bbb13f2f0885552"
+    }
+  ]
+}

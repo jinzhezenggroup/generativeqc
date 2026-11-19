@@ -80,8 +80,9 @@ def test_binary_native_sources_fallback_alias_and_invalid_publication(
                 assert values[2] == values[3] == 0
 
     wrapped = SimpleNamespace(cupy=native.cupy, library=native.library, call=call)
+    # Binary scaling lowers the pair route's products, so select that route.
     retained.test_shared_owner_phases_preserve_sources_and_work(
-        wrapped, atoms, implicit, selection, external, primitive, False
+        wrapped, atoms, implicit, selection, external, primitive, False, "phased"
     )
     assert observed and any(values[4] > 0 for values in observed)
     assert any(values[4] == 0 for values in observed)

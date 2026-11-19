@@ -1,0 +1,19 @@
+# Shared-owner CUDA tests on the measured source, qz Job gqc-h100-opt-1118-qb (H100 80GB, sm_90)
+# Probe: tools/generate_stationary_force_aot.py --profile pbe0_rks; nvcc -O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_90
+# SLURM_JOB_ID was set only to satisfy the tests' scheduler guard.
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+a52c3283c0b775d41cbd925ba0e69c0977c1b6cce14cd9e13b1356b702a7c0f7  owner.cu
+3e4778961a33ce924cd7715fea7848a98e2069388234873cb0107d42a986ee90  owner.so
+$ pytest tests/python/test_stationary_becke_phased_cuda.py tests/python/test_treutler_phased_cuda.py tests/python/test_becke_scaled_native_cuda.py
+=========================== short test summary info ============================
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[False-3]
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[False-4]
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[False-48]
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[True-3]
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[True-4]
+FAILED tests/python/test_stationary_becke_phased_cuda.py::test_restricted_point_binding_preserves_sources_and_reports_actual_selection[True-48]
+6 failed, 798 passed in 88.45s (0:01:28)
+EXIT 1
+# The six failures construct an sm_120 owner (stationary_create(..., 12, 0, ...)) and stop at the
+# architecture check before any Becke work: RuntimeError: tensor plan/device architecture mismatch
