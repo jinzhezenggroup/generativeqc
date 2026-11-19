@@ -1,0 +1,176 @@
+Version 2025.2.1.0 (build 35969825) (public-release)
+== water-12, GENERATIVEQC_BOUNDED_DIRECT_STREAMING=force
+========= COMPUTE-SANITIZER
+COLD ENERGY -303.86369792705625 FORCE0 [-0.008099941211109074, -0.02278012493017938, -0.013242704151205641]
+WARM ENERGY -303.8636979270608 FORCE0 [-0.008099941211099759, -0.022780124930024178, -0.013242704151118332]
+========= ERROR SUMMARY: 0 errors
+MEMCHECK_EXIT 0
+== water-96, default (bounded topology)
+========= COMPUTE-SANITIZER
+========= Program hit cudaErrorStreamCaptureUnsupported (error 900) due to "operation not permitted when stream is capturing" on CUDA API call to cudaStreamSynchronize.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame:  [0xa8da0d] in libcusolver.so.11
+=========         Host Frame:  [0x4563eb] in libcusolver.so.11
+=========         Host Frame:  [0x42efe2] in libcusolver.so.11
+=========         Host Frame:  [0x42b5b6] in libcusolver.so.11
+=========         Host Frame: cusolverDnXsyevBatched [0x657a64] in libcusolver.so.11
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::launch_probe_solver(generativeqc::scf::(anonymous namespace)::ProbeResources&, generativeqc::scf::XsyevBatchedGraphProbeResult const&) [0x56a1beb] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::probe_xsyev_batched_device_launch_graph(int, unsigned long, unsigned long) [0x56a2583] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::execute_hf_cuda_bucket(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56bd62b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::execute_hf_cuda_bucket_driver(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56cddaa] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::run_hf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool, bool) [0x56e0fcf] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::run_rhf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool) [0x56e3ece] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::FleetPlan::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x559717b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::detail::(anonymous namespace)::HfPreparedBatch::execute_impl(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x557424d] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute_request(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool, std::optional<std::span<unsigned char const, 18446744073709551615ul> >) [0x554d2b5] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x554d60c] in libgenerativeqc.so
+=========         Host Frame: execute_batch [0x54bc85d] in libgenerativeqc.so
+=========         Host Frame: ffi_call_unix64 [0x65b051] in python
+=========         Host Frame: ffi_call_int [0x65a15e] in python
+=========         Host Frame: ffi_call [0x659ddf] in python
+=========         Host Frame: _ctypes_callproc [0x524334] in python
+=========         Host Frame: PyCFuncPtr_call [0x522ea5] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x3b683b] in python
+=========         Host Frame: _PyEval_Vector [0x38d9e5] in python
+=========         Host Frame: run_mod [0x506615] in python
+=========         Host Frame: pyrun_file [0x254e6b] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x254972] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x254385] in python
+=========         Host Frame: pymain_run_file_obj [0x25eb17] in python
+=========         Host Frame: pymain_run_file [0x25e624] in python
+=========         Host Frame: Py_RunMain [0x511ac8] in python
+=========         Host Frame: pymain_main [0x51221d] in python
+=========         Host Frame: main [0x43c58b] in python
+=========
+========= Program hit cudaErrorStreamCaptureInvalidated (error 901) due to "operation failed due to a previous error during capture" on CUDA API call to cudaLaunchKernel.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame:  [0xa8dca0] in libcusolver.so.11
+=========         Host Frame:  [0x4592ad] in libcusolver.so.11
+=========         Host Frame:  [0x42efe2] in libcusolver.so.11
+=========         Host Frame:  [0x42b5b6] in libcusolver.so.11
+=========         Host Frame: cusolverDnXsyevBatched [0x657a64] in libcusolver.so.11
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::launch_probe_solver(generativeqc::scf::(anonymous namespace)::ProbeResources&, generativeqc::scf::XsyevBatchedGraphProbeResult const&) [0x56a1beb] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::probe_xsyev_batched_device_launch_graph(int, unsigned long, unsigned long) [0x56a2583] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::execute_hf_cuda_bucket(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56bd62b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::execute_hf_cuda_bucket_driver(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56cddaa] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::run_hf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool, bool) [0x56e0fcf] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::run_rhf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool) [0x56e3ece] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::FleetPlan::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x559717b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::detail::(anonymous namespace)::HfPreparedBatch::execute_impl(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x557424d] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute_request(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool, std::optional<std::span<unsigned char const, 18446744073709551615ul> >) [0x554d2b5] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x554d60c] in libgenerativeqc.so
+=========         Host Frame: execute_batch [0x54bc85d] in libgenerativeqc.so
+=========         Host Frame: ffi_call_unix64 [0x65b051] in python
+=========         Host Frame: ffi_call_int [0x65a15e] in python
+=========         Host Frame: ffi_call [0x659ddf] in python
+=========         Host Frame: _ctypes_callproc [0x524334] in python
+=========         Host Frame: PyCFuncPtr_call [0x522ea5] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x3b683b] in python
+=========         Host Frame: _PyEval_Vector [0x38d9e5] in python
+=========         Host Frame: run_mod [0x506615] in python
+=========         Host Frame: pyrun_file [0x254e6b] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x254972] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x254385] in python
+=========         Host Frame: pymain_run_file_obj [0x25eb17] in python
+=========         Host Frame: pymain_run_file [0x25e624] in python
+=========         Host Frame: Py_RunMain [0x511ac8] in python
+=========         Host Frame: pymain_main [0x51221d] in python
+=========         Host Frame: main [0x43c58b] in python
+=========
+========= Program hit cudaErrorStreamCaptureInvalidated (error 901) due to "operation failed due to a previous error during capture" on CUDA API call to cudaGetLastError.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame:  [0xa6010d] in libcusolver.so.11
+=========         Host Frame:  [0x44ff59] in libcusolver.so.11
+=========         Host Frame:  [0x42efe2] in libcusolver.so.11
+=========         Host Frame:  [0x42b5b6] in libcusolver.so.11
+=========         Host Frame: cusolverDnXsyevBatched [0x657a64] in libcusolver.so.11
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::launch_probe_solver(generativeqc::scf::(anonymous namespace)::ProbeResources&, generativeqc::scf::XsyevBatchedGraphProbeResult const&) [0x56a1beb] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::probe_xsyev_batched_device_launch_graph(int, unsigned long, unsigned long) [0x56a2583] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::execute_hf_cuda_bucket(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56bd62b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::execute_hf_cuda_bucket_driver(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56cddaa] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::run_hf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool, bool) [0x56e0fcf] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::run_rhf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool) [0x56e3ece] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::FleetPlan::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x559717b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::detail::(anonymous namespace)::HfPreparedBatch::execute_impl(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x557424d] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute_request(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool, std::optional<std::span<unsigned char const, 18446744073709551615ul> >) [0x554d2b5] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x554d60c] in libgenerativeqc.so
+=========         Host Frame: execute_batch [0x54bc85d] in libgenerativeqc.so
+=========         Host Frame: ffi_call_unix64 [0x65b051] in python
+=========         Host Frame: ffi_call_int [0x65a15e] in python
+=========         Host Frame: ffi_call [0x659ddf] in python
+=========         Host Frame: _ctypes_callproc [0x524334] in python
+=========         Host Frame: PyCFuncPtr_call [0x522ea5] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x3b683b] in python
+=========         Host Frame: _PyEval_Vector [0x38d9e5] in python
+=========         Host Frame: run_mod [0x506615] in python
+=========         Host Frame: pyrun_file [0x254e6b] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x254972] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x254385] in python
+=========         Host Frame: pymain_run_file_obj [0x25eb17] in python
+=========         Host Frame: pymain_run_file [0x25e624] in python
+=========         Host Frame: Py_RunMain [0x511ac8] in python
+=========         Host Frame: pymain_main [0x51221d] in python
+=========         Host Frame: main [0x43c58b] in python
+=========
+========= Program hit cudaErrorStreamCaptureInvalidated (error 901) due to "operation failed due to a previous error during capture" on CUDA API call to cudaStreamEndCapture.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: generativeqc::scf::probe_xsyev_batched_device_launch_graph(int, unsigned long, unsigned long) [0x56a25a6] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::execute_hf_cuda_bucket(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56bd62b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::execute_hf_cuda_bucket_driver(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56cddaa] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::run_hf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool, bool) [0x56e0fcf] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::run_rhf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool) [0x56e3ece] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::FleetPlan::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x559717b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::detail::(anonymous namespace)::HfPreparedBatch::execute_impl(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x557424d] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute_request(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool, std::optional<std::span<unsigned char const, 18446744073709551615ul> >) [0x554d2b5] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x554d60c] in libgenerativeqc.so
+=========         Host Frame: execute_batch [0x54bc85d] in libgenerativeqc.so
+=========         Host Frame: ffi_call_unix64 [0x65b051] in python
+=========         Host Frame: ffi_call_int [0x65a15e] in python
+=========         Host Frame: ffi_call [0x659ddf] in python
+=========         Host Frame: _ctypes_callproc [0x524334] in python
+=========         Host Frame: PyCFuncPtr_call [0x522ea5] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x3b683b] in python
+=========         Host Frame: _PyEval_Vector [0x38d9e5] in python
+=========         Host Frame: run_mod [0x506615] in python
+=========         Host Frame: pyrun_file [0x254e6b] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x254972] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x254385] in python
+=========         Host Frame: pymain_run_file_obj [0x25eb17] in python
+=========         Host Frame: pymain_run_file [0x25e624] in python
+=========         Host Frame: Py_RunMain [0x511ac8] in python
+=========         Host Frame: pymain_main [0x51221d] in python
+=========         Host Frame: main [0x43c58b] in python
+=========
+========= Program hit cudaErrorStreamCaptureInvalidated (error 901) due to "operation failed due to a previous error during capture" on CUDA API call to cudaGetLastError.
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: generativeqc::scf::probe_xsyev_batched_device_launch_graph(int, unsigned long, unsigned long) [0x56a25bc] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::execute_hf_cuda_bucket(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56bd62b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::execute_hf_cuda_bucket_driver(generativeqc::scf::CudaRhfBucketPlan&, generativeqc::scf::cuda_execution::HostBatch const&, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, int, bool, bool, bool, generativeqc::runtime::CudaTargetInfo const&, std::vector<generativeqc::scf::initial_guess::PreliminaryDiagnostic, std::allocator<generativeqc::scf::initial_guess::PreliminaryDiagnostic> >*) [0x56cddaa] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::(anonymous namespace)::run_hf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool, bool) [0x56e0fcf] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::run_rhf_cuda_bucket_cached(generativeqc::scf::CudaRhfBucketPlan**, std::vector<generativeqc::core::System, std::allocator<generativeqc::core::System> > const&, generativeqc::scf::ScfOptions const&, std::vector<std::vector<double, std::allocator<double> > const*, std::allocator<std::vector<double, std::allocator<double> > const*> > const&, int, bool, bool) [0x56e3ece] in libgenerativeqc.so
+=========         Host Frame: generativeqc::scf::FleetPlan::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x559717b] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::detail::(anonymous namespace)::HfPreparedBatch::execute_impl(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x557424d] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute_request(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool, std::optional<std::span<unsigned char const, 18446744073709551615ul> >) [0x554d2b5] in libgenerativeqc.so
+=========         Host Frame: generativeqc::methods::PreparedBatch::execute(std::vector<std::optional<std::vector<double, std::allocator<double> > >, std::allocator<std::optional<std::vector<double, std::allocator<double> > > > > const&, bool) [0x554d60c] in libgenerativeqc.so
+=========         Host Frame: execute_batch [0x54bc85d] in libgenerativeqc.so
+=========         Host Frame: ffi_call_unix64 [0x65b051] in python
+=========         Host Frame: ffi_call_int [0x65a15e] in python
+=========         Host Frame: ffi_call [0x659ddf] in python
+=========         Host Frame: _ctypes_callproc [0x524334] in python
+=========         Host Frame: PyCFuncPtr_call [0x522ea5] in python
+=========         Host Frame: _PyEval_EvalFrameDefault [0x3b683b] in python
+=========         Host Frame: _PyEval_Vector [0x38d9e5] in python
+=========         Host Frame: run_mod [0x506615] in python
+=========         Host Frame: pyrun_file [0x254e6b] in python
+=========         Host Frame: _PyRun_SimpleFileObject [0x254972] in python
+=========         Host Frame: _PyRun_AnyFileObject [0x254385] in python
+=========         Host Frame: pymain_run_file_obj [0x25eb17] in python
+=========         Host Frame: pymain_run_file [0x25e624] in python
+=========         Host Frame: Py_RunMain [0x511ac8] in python
+=========         Host Frame: pymain_main [0x51221d] in python
+=========         Host Frame: main [0x43c58b] in python
+=========
+COLD ENERGY -2431.2344458718308 FORCE0 [-0.0007983274690982069, -0.018769567834857878, -0.012210005073836678]
+WARM ENERGY -2431.2344458718308 FORCE0 [-0.0007983274691211605, -0.018769567834842012, -0.012210005073828287]
+========= ERROR SUMMARY: 5 errors
+MEMCHECK_EXIT 0
