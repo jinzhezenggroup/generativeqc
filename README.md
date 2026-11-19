@@ -27,6 +27,26 @@ and compiler IRs produce execution programs and specialized CPU/CUDA kernels.
 The underlying quantum chemistry remains explicit and is checked against
 independent scientific references—not replaced by a learned surrogate.
 
+## Citation
+
+If you use GenerativeQC in your research, **please cite** the following
+preprint:
+
+Xu, S.; Shen, L.; Zhai, W.; Zhu, T.; Zeng, J. **[GenerativeQC: A Generative, GPU-Accelerated Quantum Chemistry Program](https://arxiv.org/abs/2611.24744)**.
+*arXiv* **2026**, 2611.24744.
+
+```bibtex
+@misc{xu2026generativeqc,
+  title = {GenerativeQC: A Generative, GPU-Accelerated Quantum Chemistry Program},
+  author = {Xu, Shengrui and Shen, Longhan and Zhai, Wenxi and Zhu, Tong and Zeng, Jinzhe},
+  year = {2026},
+  eprint = {2611.24744},
+  archivePrefix = {arXiv},
+  primaryClass = {physics.chem-ph},
+  url = {https://arxiv.org/abs/2611.24744}
+}
+```
+
 ## Highlights
 
 - **HF, DFT, and correlated methods.** RHF/UHF; RKS/UKS from LDA and GGA through
