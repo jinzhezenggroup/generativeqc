@@ -1,4 +1,4 @@
-"""Low-level scalar-def2-ECP RKS curvature, without public domain promotion."""
+"""Scalar-def2-ECP RKS curvature on a matched moving quadrature."""
 
 import json
 from dataclasses import replace
@@ -170,7 +170,12 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
     _, raw, record = ecp_records
     atoms = molecule_atoms("Cs")
     calculator = make_calculator(record)
-    assert not calculator.capabilities.supported_second_order
+    # Exercise the installed owner at the same geometry and grid, not merely
+    # a capability flag or a replay of the development provider's state.
+    public = calculator.hessian_vector_product(atoms, direction, solver_options=SOLVER)
+    assert public.diagnostics["public_calculator_endpoint"]
+    assert public.diagnostics["displaced_scf_evaluations"] == 0
+    assert public.diagnostics["response_residual_norm"] <= 1e-9
     started = perf_counter()
     with (
         calculator.prepare_batch([atoms], warm_start=False) as batch,
@@ -272,6 +277,8 @@ def test_low_level_def2_cs_rks_hvp_matches_independent_moving_grid_gradients(
                 assert max(errors) <= 1e-5
         finally:
             state._source.close()
+    for _, finite in independent_actions:
+        assert np.max(abs(public.value - finite)) <= 1e-5 * np.linalg.norm(direction)
     assert_independent_d3_total(
         result,
         electronic_method,

@@ -309,6 +309,19 @@ struct Busy {
   ~Busy() { flag.clear(); }
 };
 
+/** Sample only at completed canonical quartet boundaries. The interval keeps
+ * an opt-in journal bounded by source work, not by primitive records.
+ */
+struct EriProgress {
+  std::size_t initial_primitives, quartets{};
+  void completed(const HostNuclearIntegralWork& work) noexcept {
+    if (++quartets % (1u << 18) != 0) return;
+    runtime::df_progress::number("eri_quartets_at_sample", quartets);
+    runtime::df_progress::number("eri_primitives_at_sample",
+                                 work.eri_primitives - initial_primitives);
+  }
+};
+
 }  // namespace
 
 HostNuclearIntegralPlan HostKsNuclearIntegrals::plan(const AoBasis& basis, std::size_t spins,
@@ -660,6 +673,11 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
     std::fill(overlap_stage.begin(), overlap_stage.end(), 0);
     std::fill(fock_stage.begin(), fock_stage.end(), 0);
     const auto* radial = basis.packed.data() + 3 * atoms;
+    runtime::df_progress::Scope one_electron_phase("cpu_hessian_first_one_electron");
+    const auto initial_one_electron = census.one_electron_primitives;
+    const auto initial_pairs = census.ao_pairs;
+    runtime::df_progress::number("planned_ao_pairs", matrix);
+    runtime::df_progress::number("planned_primitives", resources.one_electron_primitives);
     for (std::size_t row = 0; row < aos; ++row)
       for (std::size_t column = 0; column < aos; ++column) {
         const auto& first = orbitals[row];
@@ -747,7 +765,19 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
           }
         census.ao_pairs = add(census.ao_pairs, 1);
         validate();
+        const auto completed_pairs = census.ao_pairs - initial_pairs;
+        if (one_electron_phase.enabled() && completed_pairs % 1024 == 0) {
+          runtime::df_progress::number("ao_pairs_at_sample", completed_pairs);
+          runtime::df_progress::number("primitives_at_sample",
+                                       census.one_electron_primitives - initial_one_electron);
+        }
       }
+    runtime::df_progress::number("one_electron_primitives",
+                                 census.one_electron_primitives - initial_one_electron);
+    one_electron_phase.finish();
+    runtime::df_progress::Scope eri_phase("cpu_hessian_first_eri");
+    const auto initial_eri = census.eri_primitives;
+    runtime::df_progress::number("planned_primitives", resources.eri_primitives);
     std::array<maps::Input, 6> input_bindings{};
     std::array<maps::Output, 4> output_bindings{};
     std::array<std::span<double>, 6> panels{};
@@ -770,6 +800,7 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
                                                     "exchange_left", "exchange_right"};
     // The compiler supplies every density incidence and scientific coefficient before scatter.
     std::size_t since_validation{};
+    EriProgress eri_progress{census.eri_primitives};
     integral_quartets(aos, options.eri_schedule, [&](const auto& indices) {
       std::array<const Ao*, 4> aos_in_quartet{};
       std::array<std::size_t, 4> owners{};
@@ -890,7 +921,10 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
           since_validation = 0;
         }
       });
+      eri_progress.completed(census);
     });
+    runtime::df_progress::number("eri_primitives", census.eri_primitives - initial_eri);
+    eri_phase.finish();
     for (std::size_t coordinate = 0; coordinate < columns; ++coordinate) {
       symmetric(overlap_stage.subspan(coordinate * matrix, matrix), aos);
       for (std::size_t spin = 0; spin < spins; ++spin)
@@ -1697,6 +1731,7 @@ class HostKsNuclearIntegralCurvature::Impl : public IntegralFrame {
         validate();
       }
     std::size_t since_validation{};
+    EriProgress eri_progress{census.eri_primitives};
     integral_quartets(aos, options.eri_schedule, [&](const auto& indices) {
       // Physical nuclear jets are invariant across this real-ERI orbit. Sum
       // compiler weights, including explicit D' terms, before canonical scatter.
@@ -1800,6 +1835,7 @@ class HostKsNuclearIntegralCurvature::Impl : public IntegralFrame {
         }
       };
       evaluate(evaluate, 0, 0, 1);
+      eri_progress.completed(census);
     });
     validate();
     if (column_schedule &&

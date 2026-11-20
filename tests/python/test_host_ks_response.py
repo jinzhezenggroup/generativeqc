@@ -608,6 +608,21 @@ def test_model_grid_and_frame_mismatches_are_not_admitted(
         pytest.fail("invalid model/frame must not authorize native CPKS")
 
 
+def test_unresolved_positive_beta_gap_rejects_uks_response(native: Any) -> None:
+    """A single unresolved spin channel must not authorize coupled response."""
+    with (
+        pytest.raises(RuntimeError, match="orbital gap is unresolved"),
+        _owner(native, 2, mutation=9),
+    ):
+        pytest.fail("nearly degenerate beta frame must not produce a response owner")
+
+    with _owner(native, 2) as (handle, sizes):
+        rhs = np.linspace(0.01, 0.03, sizes[3])
+        status, solution, *_ = _solve(native, handle, rhs)
+        assert status in (0, 1)
+        np.testing.assert_allclose(_apply(native, handle, solution), rhs, atol=2e-11)
+
+
 def test_missing_method_and_owned_numeric_budget_fail_before_actions(
     native: Any,
 ) -> None:

@@ -3318,6 +3318,9 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
         max_eri_primitives: int | None = None,
+        max_map_terms: int | None = None,
+        numeric_budget_bytes: int | None = None,
+        response_budget_bytes: int | None = None,
     ) -> typing.Any:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
@@ -3348,6 +3351,14 @@ class Calculator:
         100,000,000 first-plus-curvature nuclear ERI primitive visits for the
         whole request. It is a work cap, not a byte/time or induced-Fock bound,
         and is rejected for other execution paths rather than ignored.
+        ``max_map_terms`` overrides the separate native CPU contraction and
+        assembly work cap (default ``2**40``). It changes neither the chosen
+        quadrature nor the response, byte, primitive or D3 limits. Other
+        execution paths reject this control.
+        For the linked native CPU owner, ``numeric_budget_bytes`` and
+        ``response_budget_bytes`` bound aggregate derivative storage and its
+        response subreservation (defaults 512 and 128 MiB). They do not bound
+        process RSS or relax any scientific or work gate.
 
         ``direction`` must be finite real with shape ``(natoms, 3)``.
         Return a detached response record whose ``value`` has that shape;
@@ -3366,6 +3377,18 @@ class Calculator:
             raise NotImplementedError(
                 "max_eri_primitives requires the linked native CPU Hessian owner"
             )
+        if max_map_terms is not None and not getattr(
+            self, "_native_cpu_second_order", False
+        ):
+            raise NotImplementedError(
+                "max_map_terms requires the linked native CPU Hessian owner"
+            )
+        if (
+            numeric_budget_bytes is not None or response_budget_bytes is not None
+        ) and not getattr(self, "_native_cpu_second_order", False):
+            raise NotImplementedError(
+                "numeric_budget_bytes and response_budget_bytes require the linked native CPU Hessian owner"
+            )
         if getattr(self, "_native_cpu_second_order", False):
             from ._native_cpu_hessian import run_native_cpu
 
@@ -3376,6 +3399,9 @@ class Calculator:
                 multiplicity=multiplicity,
                 direction=vector,
                 max_eri_primitives=max_eri_primitives,
+                max_map_terms=max_map_terms,
+                numeric_budget_bytes=numeric_budget_bytes,
+                response_budget_bytes=response_budget_bytes,
                 integral_budget_bytes=integral_budget_bytes,
                 grid_budget_bytes=grid_budget_bytes,
                 solver_options=solver_options,
@@ -3443,6 +3469,9 @@ class Calculator:
         grid_budget_bytes: int = 128 << 20,
         max_nonlocal_pairs: int = 16_777_216,
         max_eri_primitives: int | None = None,
+        max_map_terms: int | None = None,
+        numeric_budget_bytes: int | None = None,
+        response_budget_bytes: int | None = None,
     ) -> typing.Any:
         """Assemble a bounded raw analytic semilocal or hybrid Cartesian Hessian.
 
@@ -3468,6 +3497,13 @@ class Calculator:
         100,000,000 first-plus-curvature nuclear ERI primitive visits across all
         requested columns. It bounds work, not bytes/time or induced-Fock work;
         other execution paths reject this control rather than ignoring it.
+        ``max_map_terms`` overrides the separate native CPU contraction and
+        assembly work cap (default ``2**40``), with all other limits unchanged.
+        Other execution paths reject this control.
+        For the linked native CPU owner, ``numeric_budget_bytes`` and
+        ``response_budget_bytes`` bound aggregate derivative storage and its
+        response subreservation (defaults 512 and 128 MiB). Additional space
+        can admit reusable coordinate sources without changing work limits.
 
         WB97M-V uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
@@ -3492,6 +3528,18 @@ class Calculator:
         ):
             raise NotImplementedError(
                 "max_eri_primitives requires the linked native CPU Hessian owner"
+            )
+        if max_map_terms is not None and not getattr(
+            self, "_native_cpu_second_order", False
+        ):
+            raise NotImplementedError(
+                "max_map_terms requires the linked native CPU Hessian owner"
+            )
+        if (
+            numeric_budget_bytes is not None or response_budget_bytes is not None
+        ) and not getattr(self, "_native_cpu_second_order", False):
+            raise NotImplementedError(
+                "numeric_budget_bytes and response_budget_bytes require the linked native CPU Hessian owner"
             )
         if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
             raise ValueError("output_budget_bytes must be a positive int64 byte count")
@@ -3528,6 +3576,9 @@ class Calculator:
                 output_budget_bytes=output_budget_bytes,
                 solver_options=solver_options,
                 max_eri_primitives=max_eri_primitives,
+                max_map_terms=max_map_terms,
+                numeric_budget_bytes=numeric_budget_bytes,
+                response_budget_bytes=response_budget_bytes,
             )
         if self._composite_rks_second_order and self._device_name == "cuda":
             from ._native_hessian import run_native_cuda

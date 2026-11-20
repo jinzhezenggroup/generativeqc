@@ -1,5 +1,5 @@
 {
-  "schema": "generativeqc.native-canonical-heavy-curvature/v2",
+  "schema": "generativeqc.native-canonical-heavy-curvature/v3",
   "method": "B3LYP-D3(BJ)",
   "electronic_definition": "Gaussian/VWN-RPA",
   "dispersion": "uncut two-body BJ; ATM off",
@@ -25,27 +25,27 @@
   "cases": {
     "cs-rks": {
       "atoms_bohr": [["Cs", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.4]]],
-      "charge": 0, "multiplicity": 1, "ecp_core": 46, "max_eri_primitives": 100000000,
+      "charge": 0, "multiplicity": 1, "ecp_cores": [46, 0], "max_eri_primitives": 100000000,
       "native_scf_max_iterations": 240
     },
     "cs-uks": {
       "atoms_bohr": [["Cs", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.4]]],
-      "charge": 1, "multiplicity": 2, "ecp_core": 46, "max_eri_primitives": 100000000,
+      "charge": 1, "multiplicity": 2, "ecp_cores": [46, 0], "max_eri_primitives": 100000000,
       "native_scf_max_iterations": 240
     },
     "i-rks": {
       "atoms_bohr": [["I", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.1]]],
-      "charge": 0, "multiplicity": 1, "ecp_core": 28, "max_eri_primitives": 300000000,
+      "charge": 0, "multiplicity": 1, "ecp_cores": [28, 0], "max_eri_primitives": 300000000,
       "native_scf_max_iterations": 240
     },
     "i-uks": {
       "atoms_bohr": [["I", [0.03, -0.02, 0.01]], ["H", [0.17, 0.11, 3.1]], ["H", [2.8, -0.7, -0.3]]],
-      "charge": 0, "multiplicity": 2, "ecp_core": 28, "max_eri_primitives": 300000000,
+      "charge": 0, "multiplicity": 2, "ecp_cores": [28, 0, 0], "max_eri_primitives": 300000000,
       "native_scf_max_iterations": 240
     },
     "ni-uks": {
       "atoms_bohr": [["Ni", [0.01, -0.02, 0.03]], ["H", [1.8, 0.1, 0.03]], ["H", [-0.5, 2.4, 0.3]], ["H", [-1.7, -0.8, 1.1]]],
-      "charge": 0, "multiplicity": 2, "ecp_core": 0, "max_eri_primitives": 1000000000,
+      "charge": 0, "multiplicity": 2, "ecp_cores": [0, 0, 0, 0], "max_eri_primitives": 1000000000,
       "native_scf_max_iterations": 600
     },
     "ni-i-stationary-rks": {
@@ -54,7 +54,7 @@
         ["H", [2.606514003323138, 0.0, -0.6828240964774086]],
         ["I", [0.2422408747592803, 0.0, 4.46344979762224]]
       ],
-      "charge": 0, "multiplicity": 1, "ecp_core": 28,
+      "charge": 0, "multiplicity": 1, "ecp_cores": [0, 0, 28],
       "max_eri_primitives": 1000000000,
       "native_scf_max_iterations": 600,
       "stationary": {
@@ -69,6 +69,16 @@
         "rotation_convention": "explicit supplied-H geometric projection only; raw grid rotational residuals are retained, not repaired or exact-continuum invariance certified",
         "scope": "small mixed all-electron Ni/iodine28core stationary control, not a reaction TS or complete-scale qualification"
       }
+    },
+    "cs-i-rks": {
+      "atoms_bohr": [
+        ["Cs", [0.12, -0.16, 0.08]], ["I", [0.76, 0.19, 5.72]],
+        ["H", [5.40, 0.57, 2.30]], ["H", [5.65, 1.96, 2.54]]
+      ],
+      "charge": 0, "multiplicity": 1, "ecp_cores": [46, 28, 0, 0],
+      "max_eri_primitives": 2000000000,
+      "native_scf_max_iterations": 240,
+      "mixed_ecp_cross_block_minimum": 0.0001
     }
   }
 }

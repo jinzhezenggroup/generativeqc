@@ -160,6 +160,10 @@ def _options(
     dispersion_budget_bytes: int,
     solver_options: GMRESOptions | None,
     max_eri_primitives: int | None = None,
+    max_map_terms: int | None = None,
+    *,
+    numeric_budget_bytes: int | None = None,
+    response_budget_bytes: int | None = None,
 ) -> _Options:
     """Keep fixed response admission distinct from the solver workspace limit.
 
@@ -176,13 +180,23 @@ def _options(
         raise ValueError("reorthogonalize must fit a positive uint32")
     if not (solver.rtol > 0 or solver.atol > 0):
         raise ValueError("native CPU response requires a positive residual tolerance")
+    numeric = _capacity(
+        (512 << 20) if numeric_budget_bytes is None else numeric_budget_bytes,
+        "numeric_budget_bytes",
+    )
+    response = _capacity(
+        (128 << 20) if response_budget_bytes is None else response_budget_bytes,
+        "response_budget_bytes",
+    )
+    if response > numeric:
+        raise ValueError("response_budget_bytes must fit within numeric_budget_bytes")
     return _Options(
         struct_size=ct.sizeof(_Options),
         abi_version=_native.ABI_VERSION,
-        numeric_bytes=512 << 20,
+        numeric_bytes=numeric,
         integral_bytes=_capacity(integral_budget_bytes, "integral_budget_bytes"),
         grid_bytes=_capacity(grid_budget_bytes, "grid_budget_bytes"),
-        response_bytes=128 << 20,
+        response_bytes=response,
         ecp_bytes=128 << 20,
         dispersion_bytes=_capacity(
             dispersion_budget_bytes, "dispersion_memory_budget_bytes"
@@ -192,7 +206,9 @@ def _options(
             100_000_000 if max_eri_primitives is None else max_eri_primitives,
             "max_eri_primitives",
         ),
-        max_map_terms=1 << 40,
+        max_map_terms=_capacity(
+            (1 << 40) if max_map_terms is None else max_map_terms, "max_map_terms"
+        ),
         max_grid_visits=1 << 40,
         max_d3_pairs=16_777_216,
         restart=_capacity(solver.restart, "restart"),
@@ -392,6 +408,9 @@ def execute_batch(
     output_budget_bytes: int = 64 << 20,
     solver_options: GMRESOptions | None = None,
     max_eri_primitives: int | None = None,
+    max_map_terms: int | None = None,
+    numeric_budget_bytes: int | None = None,
+    response_budget_bytes: int | None = None,
     index: int = 0,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Consume the current accepted native state without starting another SCF.
@@ -407,6 +426,9 @@ def execute_batch(
         calculator._dispersion_memory_budget_bytes,
         solver_options,
         max_eri_primitives,
+        max_map_terms,
+        numeric_budget_bytes=numeric_budget_bytes,
+        response_budget_bytes=response_budget_bytes,
     )
     _bind_batch(calculator, batch, atoms, charge, multiplicity, index, options)
     coordinates = 3 * len(atoms)
@@ -474,6 +496,9 @@ def execute_batch(
         complete_source_coverage=True,
         public_calculator_endpoint=False,
         max_eri_primitives=options.max_eri_primitives,
+        max_map_terms=options.max_map_terms,
+        numeric_budget_bytes=options.numeric_bytes,
+        response_budget_bytes=options.response_bytes,
         spin=calculator.ks_options.method_ir.spin,
         geometry_identity=canonical_hash(
             {
@@ -538,6 +563,9 @@ def run_native_cpu(
     output_budget_bytes: int = 64 << 20,
     solver_options: GMRESOptions | None = None,
     max_eri_primitives: int | None = None,
+    max_map_terms: int | None = None,
+    numeric_budget_bytes: int | None = None,
+    response_budget_bytes: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Detach one native response, retaining electronic and total primal energies.
 
@@ -557,6 +585,9 @@ def run_native_cpu(
         calculator._dispersion_memory_budget_bytes,
         solver_options,
         max_eri_primitives,
+        max_map_terms,
+        numeric_budget_bytes=numeric_budget_bytes,
+        response_budget_bytes=response_budget_bytes,
     )
     coordinates = 3 * len(atoms)
     elements = coordinates * coordinates if direction is None else coordinates
@@ -578,6 +609,9 @@ def run_native_cpu(
             output_budget_bytes=output_budget_bytes,
             solver_options=solver_options,
             max_eri_primitives=max_eri_primitives,
+            max_map_terms=max_map_terms,
+            numeric_budget_bytes=numeric_budget_bytes,
+            response_budget_bytes=response_budget_bytes,
         )
     return replace(
         result,

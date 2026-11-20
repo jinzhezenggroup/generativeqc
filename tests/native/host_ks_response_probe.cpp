@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -132,6 +133,17 @@ struct Handle {
     if (mutation == 7) ++shape.tile_points;
     if (mutation == 8) {
       state.orbitals[0].values.back() = state.orbitals[0].values.front();
+    }
+    if (mutation == 9) {
+      // Inject a positive, unresolved beta HOMO/LUMO gap without changing
+      // alpha or replacing the native solver, grid or prepared operator.
+      auto& spectrum = state.orbitals.at(1).values;
+      const auto occupied = current.determinant.occupied.at(1);
+      const double homo = spectrum.at(occupied - 1);
+      const double lumo = std::nextafter(homo, std::numeric_limits<double>::infinity());
+      if (!(lumo - homo > 0 && lumo - homo < 1e-12 && lumo < spectrum.at(occupied)))
+        throw std::logic_error("native test fixture could not inject a positive tiny gap");
+      spectrum.at(occupied) = lumo;
     }
     response = std::make_unique<dft::HostKsResponse>(
         state, system, fock, shape, method,

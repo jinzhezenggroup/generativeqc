@@ -12,9 +12,11 @@
 #include <vector>
 
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/df_progress_trace.hpp"
 
 namespace generativeqc::dft {
 namespace {
+namespace progress = runtime::df_progress;
 using runtime::size_add;
 using runtime::size_mul;
 
@@ -333,6 +335,7 @@ class HostKsNuclearHessian::Impl {
                                    std::span<double> output_values,
                                    HostKsHessianDiagnostic diagnostic) {
     if (integral_matrix_source) {
+      progress::Scope phase("cpu_hessian_curvature_integrals");
       response->integral_density_response(density_right, weighted_right, integral_response);
       integral_column[0] = frozen_integral_matrix[0];
       integral_column[1] = 0;
@@ -345,16 +348,29 @@ class HostKsNuclearHessian::Impl {
               frozen_integral_matrix[1 + dimension + row * dimension + column] * right[column];
         integral_column[2 + dimension + row] = action;
       }
-    } else
+    } else {
+      progress::Scope phase("cpu_hessian_curvature_integrals");
+      const auto before = phase.enabled() ? integral->work().eri_primitives : 0;
       integral->apply_column(right, density_right, weighted_right, integral_column);
-    xc->apply(right, density_right, xc_column);
+      if (phase.enabled())
+        progress::number("eri_primitives", integral->work().eri_primitives - before);
+    }
+    {
+      progress::Scope phase("cpu_hessian_curvature_xc");
+      const auto before = phase.enabled() ? xc->work().map_terms : 0;
+      xc->apply(right, density_right, xc_column);
+      if (phase.enabled()) progress::number("map_terms", xc->work().map_terms - before);
+    }
     for (std::size_t element = 0; element < matrix; ++element) {
       total_density_right[element] = 0;
       for (std::size_t spin = 0; spin < spins; ++spin)
         total_density_right[element] += density_right[spin * matrix + element];
     }
-    const auto ecp = integrals::checked_ecp_curvature(system, total_density, total_density_right,
-                                                      right, limits.ecp, [this] { validate(); });
+    const auto ecp = [&] {
+      progress::Scope phase("cpu_hessian_curvature_ecp");
+      return integrals::checked_ecp_curvature(system, total_density, total_density_right, right,
+                                              limits.ecp, [this] { validate(); });
+    }();
     census.ecp = ecp.work;
     diagnostic.curvature_ecp_work = ecp.work;
     std::fill(staged.begin(), staged.end(), 0);

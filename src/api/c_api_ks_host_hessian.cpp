@@ -44,6 +44,13 @@ void budget(std::size_t needed, std::size_t limit, const char* detail) {
   if (needed > limit) throw std::length_error(detail);
 }
 
+/** Report the planner's finite work estimate so an explicit retry can be sized. */
+void work_budget(std::size_t needed, std::size_t limit, const char* detail) {
+  if (needed > limit)
+    throw std::length_error(std::string(detail) + " (planned=" + std::to_string(needed) +
+                            ", cap=" + std::to_string(limit) + ')');
+}
+
 /** Compare generated programs, not display names or a duplicated B3LYP model. */
 bool linked_program(std::string_view identity) {
   if (dft::host_hessian_aot::find_method(identity)) return true;
@@ -219,11 +226,11 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
       matrix ? std::min(size_mul(columns, curvature.eri_primitives),
                         std::min(curvature_matrix.eri_primitives, projected_matrix.eri_primitives))
              : size_mul(columns, curvature.eri_primitives);
-  budget(curvature_lower, options.max_eri_primitives,
-         "CPU Hessian complete nuclear primitive-work cap exceeded");
-  budget(matrix ? std::min(size_mul(columns, curvature.map_terms), curvature_matrix.map_terms)
-                : size_mul(columns, curvature.map_terms),
-         options.max_map_terms, "CPU Hessian complete integral-map work cap exceeded");
+  work_budget(curvature_lower, options.max_eri_primitives,
+              "CPU Hessian complete nuclear primitive-work cap exceeded (lower bound)");
+  work_budget(matrix ? std::min(size_mul(columns, curvature.map_terms), curvature_matrix.map_terms)
+                     : size_mul(columns, curvature.map_terms),
+              options.max_map_terms, "CPU Hessian integral-map work cap exceeded (lower bound)");
   const auto first_ecp = integrals::ecp_direction_plan(*source.system).limits;
   const auto second_ecp = integrals::ecp_curvature_plan(*source.system).limits;
   budget(std::max(first_ecp.workspace_bytes, second_ecp.workspace_bytes), options.ecp_bytes,
@@ -272,10 +279,10 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   const auto xc_second = dft::HostGgaNuclearColumn::plan(column_geometry, spins);
   budget(size_add(geometry_bytes, size_add(xc_first.numeric_bytes, xc_second.numeric_bytes)),
          options.grid_bytes, "CPU Hessian moving-grid/XC storage cap exceeded");
-  budget(size_mul(columns, size_add(xc_first.map_terms, xc_second.map_terms)),
-         options.max_map_terms, "CPU Hessian complete XC map-work cap exceeded");
-  budget(size_mul(columns, size_add(xc_first.ao_point_visits, xc_second.ao_point_visits)),
-         options.max_grid_visits, "CPU Hessian complete moving-grid work cap exceeded");
+  work_budget(size_mul(columns, size_add(xc_first.map_terms, xc_second.map_terms)),
+              options.max_map_terms, "CPU Hessian complete XC map-work cap exceeded");
+  work_budget(size_mul(columns, size_add(xc_first.ao_point_visits, xc_second.ao_point_visits)),
+              options.max_grid_visits, "CPU Hessian complete moving-grid work cap exceeded");
   dft::VerifiedKsFinalState state;
   require(methods::detail::read_dft_final_state(*batch.plan, index, token, true, state, detail),
           detail);
@@ -352,16 +359,17 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   const auto first_passes = coordinate_sources ? 1 : columns;
   const auto curvature_visits = matrix_integrals ? selected_matrix.eri_primitives
                                                  : size_mul(columns, curvature.eri_primitives);
-  budget(size_add(size_mul(first_passes, first.eri_primitives), curvature_visits),
-         options.max_eri_primitives, "CPU Hessian complete nuclear primitive-work cap exceeded");
+  work_budget(size_add(size_mul(first_passes, first.eri_primitives), curvature_visits),
+              options.max_eri_primitives,
+              "CPU Hessian complete nuclear primitive-work cap exceeded");
   const auto curvature_terms =
       matrix_integrals
           ? size_add(selected_matrix.map_terms,
                      size_mul(columns, dft::HostKsNuclearIntegrals::density_response_terms(
                                            *source.basis, spins)))
           : size_mul(columns, curvature.map_terms);
-  budget(size_add(size_mul(first_passes, first.map_terms), curvature_terms), options.max_map_terms,
-         "CPU Hessian complete integral-map work cap exceeded");
+  work_budget(size_add(size_mul(first_passes, first.map_terms), curvature_terms),
+              options.max_map_terms, "CPU Hessian complete integral-map work cap exceeded");
   const auto response_width = matrix ? owner.admit_response_batch(solver) : 1;
   owner.admit_response_cache(solver);
   const auto resources = owner.resources(solver);
@@ -404,13 +412,27 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   const auto require_response = [](const dft::HostKsHessianDiagnostic& diagnostic,
                                    std::size_t coordinate) {
     if (!diagnostic.converged()) {
+      const auto& perturbation = diagnostic.response;
+      const auto& iterative = perturbation.response;
       std::ostringstream message;
       message.precision(17);
       message << "CPU Hessian nuclear response failed at column " << coordinate
-              << "; perturbation status=" << static_cast<int>(diagnostic.response.status)
-              << "; GMRES status=" << static_cast<int>(diagnostic.response.response.status)
-              << "; true physical residual=" << diagnostic.response.physical_residual_norm
-              << "; relative physical residual=" << diagnostic.response.relative_physical_residual;
+              << "; perturbation status=" << static_cast<int>(perturbation.status)
+              << "; GMRES status=" << response::gmres_status_name(iterative.status);
+      if (perturbation.status == dft::HostKsPerturbationStatus::physical_residual_failed) {
+        message << "; true physical residual=" << perturbation.physical_residual_norm
+                << "; relative physical residual=" << perturbation.relative_physical_residual;
+      } else {
+        // The D/W verification never runs after a failed solve. Its zero-initialized
+        // fields are not measurements; report the solver's separate residual instead.
+        message << "; final physical residual not evaluated";
+        if ((iterative.status == response::GmresStatus::max_iterations ||
+             iterative.status == response::GmresStatus::breakdown ||
+             iterative.status == response::GmresStatus::stagnation) &&
+            std::isfinite(iterative.residual_norm))
+          message << "; true GMRES residual=" << iterative.residual_norm
+                  << "; relative GMRES residual=" << iterative.relative_residual;
+      }
       throw methods::MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, message.str());
     }
   };
@@ -473,16 +495,29 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   if (matrix) {
     double maximum{};
     for (const auto value : candidate) maximum = std::max(maximum, std::abs(value));
+    std::size_t worst_row{}, worst_column{};
     for (std::size_t row = 0; row < dimension; ++row)
-      for (std::size_t coordinate = 0; coordinate < row; ++coordinate)
-        result.raw_symmetry_error =
-            std::max(result.raw_symmetry_error, std::abs(candidate[row * dimension + coordinate] -
-                                                         candidate[coordinate * dimension + row]));
-    if (result.raw_symmetry_error >
-        options.symmetry_absolute_tolerance + options.symmetry_relative_tolerance * maximum)
-      throw methods::MethodError(
-          GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-          "CPU Hessian raw symmetry gate failed; no matrix repair is applied");
+      for (std::size_t coordinate = 0; coordinate < row; ++coordinate) {
+        const auto error = std::abs(candidate[row * dimension + coordinate] -
+                                    candidate[coordinate * dimension + row]);
+        if (error > result.raw_symmetry_error) {
+          result.raw_symmetry_error = error;
+          worst_row = row;
+          worst_column = coordinate;
+        }
+      }
+    const auto tolerance =
+        options.symmetry_absolute_tolerance + options.symmetry_relative_tolerance * maximum;
+    if (result.raw_symmetry_error > tolerance) {
+      std::ostringstream message;
+      message.precision(17);
+      message << "CPU Hessian raw symmetry gate failed; no matrix repair is applied"
+              << "; max |H_ij - H_ji|=" << result.raw_symmetry_error
+              << " Eh/Bohr^2; tolerance=" << tolerance << " Eh/Bohr^2"
+              << "; worst atom-major Cartesian indices (zero-based)=" << worst_row << ','
+              << worst_column;
+      throw methods::MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, message.str());
+    }
   }
   validate();
   if (!matrix && !std::equal(right.begin(), right.end(), external.begin()))
