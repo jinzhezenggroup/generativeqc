@@ -271,7 +271,8 @@ The linked CPU execution contract and resource semantics are owned by
 The opt-in `tests/python/test_native_canonical_heavy_hessian.py` checks actual
 native RKS/UKS electronic curvature on the canonical external Ni/I/Cs/H records.
 Set `GENERATIVEQC_RUN_NATIVE_CANONICAL_HEAVY=1` and select an explicit case:
-`cs-rks`, `cs-uks`, `i-rks`, `i-uks`, `ni-uks`, or `ni-i-stationary-rks`.
+`cs-rks`, `cs-uks`, `i-rks`, `i-uks`, `ni-uks`, `ni-i-stationary-rks`,
+or `cs-i-rks`.
 Use a fresh artifact directory
 and an explicit finite outer timeout; do not overwrite a previous attempt.
 Set `GENERATIVEQC_NATIVE_CANONICAL_ENDPOINT=public` to run fresh complete
@@ -281,7 +282,10 @@ it never claims public endpoint qualification. Installed-wheel qualification
 requires a separate isolated prefix and actual installed calls, not a source
 test with a wheel's shared library.
 The manifest `tests/data/global_hybrid_ecp/native_curvature_manifest.json` owns
-the geometry, charge/multiplicity, SCF/work allowances and numerical gates.
+the geometry, per-center core counts, charge/multiplicity, SCF/work allowances
+and numerical gates. The noncollinear `cs-i-rks` fixture moves the two distinct
+ECP centers independently and requires a resolved Cs–I block in the raw matrix
+as well as full-matrix agreement with the independent stencils.
 Changing an allowance creates a new qualification attempt, not an amendment to
 a failed receipt or a relaxation of its numerical tolerances.
 The heavy harness passes that case's explicit SCF iteration allowance to the

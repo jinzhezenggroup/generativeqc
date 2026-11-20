@@ -12,11 +12,13 @@
 
 #include "dft/host_ao_prefix.hpp"
 #include "host_ks_cpks_maps.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 
 namespace generativeqc::dft {
 namespace {
 namespace maps = generativeqc_host_ks_maps;
+namespace progress = runtime::df_progress;
 using runtime::size_add;
 using runtime::size_mul;
 
@@ -192,10 +194,26 @@ class HostKsNuclearResponse::Impl {
         !maps::finite(direction.data(), direction.size()))
       throw std::invalid_argument("native nuclear response requires finite atom/xyz direction");
     census.source_attempts = size_add(census.source_attempts, 1);
-    (coordinate_source ? coordinate_source : integral_source)->apply(direction, overlap, integral);
-    xc_source->apply(direction, xc_fock);
-    const auto ecp =
-        integrals::checked_ecp_direction(system, direction, limits.ecp, [this] { validate(); });
+    {
+      progress::Scope phase("cpu_hessian_first_integrals");
+      auto& source = coordinate_source ? *coordinate_source : *integral_source;
+      const auto before = phase.enabled() ? source.work().eri_primitives : 0;
+      source.apply(direction, overlap, integral);
+      if (phase.enabled())
+        progress::number("eri_primitives", source.work().eri_primitives - before);
+    }
+    {
+      progress::Scope phase("cpu_hessian_first_xc");
+      const auto before = phase.enabled() ? xc_source->work().scheduled_map_terms : 0;
+      xc_source->apply(direction, xc_fock);
+      if (phase.enabled())
+        progress::number("map_terms", xc_source->work().scheduled_map_terms - before);
+    }
+    const auto ecp = [&] {
+      progress::Scope phase("cpu_hessian_first_ecp");
+      return integrals::checked_ecp_direction(system, direction, limits.ecp,
+                                              [this] { validate(); });
+    }();
     census.last_ecp = ecp.work;
     for (std::size_t spin = 0; spin < identity.model.spins; ++spin) {
       std::array<maps::Input, 4> inputs{};
@@ -371,8 +389,15 @@ HostKsPerturbationDiagnostic HostKsNuclearResponse::solve(
   auto bounded = options;
   bounded.max_workspace_bytes =
       std::min(options.max_workspace_bytes, impl_->limits.max_numeric_bytes - impl_->fixed_bytes);
-  auto result = impl_->perturbation->solve(impl_->overlap, impl_->frozen, impl_->moving_density,
-                                           impl_->moving_weights, bounded);
+  auto result = [&] {
+    progress::Scope phase("cpu_hessian_cpks");
+    auto solved = impl_->perturbation->solve(impl_->overlap, impl_->frozen, impl_->moving_density,
+                                             impl_->moving_weights, bounded);
+    progress::number("response_iterations", solved.response.iterations);
+    progress::number("response_operator_actions", solved.response.operator_actions);
+    phase.finish(solved.converged() ? "converged" : "not_converged");
+    return solved;
+  }();
   if (!result.converged()) return result;
   impl_->validate();
   std::copy(impl_->moving_density.begin(), impl_->moving_density.end(), density_direction.begin());
@@ -441,9 +466,20 @@ HostKsNuclearBatchResult HostKsNuclearResponse::solve_batch(
     std::copy(impl_->frozen.begin(), impl_->frozen.end(), frozen.begin());
     perturbations[index] = {overlap, frozen, density, weights};
   }
-  result.responses = impl_->perturbation->solve_batch({perturbations.data(), count}, options);
   bool converged = true;
-  for (const auto& entry : result.responses) converged &= entry.converged();
+  {
+    progress::Scope phase("cpu_hessian_cpks");
+    progress::number("response_width", count);
+    result.responses = impl_->perturbation->solve_batch({perturbations.data(), count}, options);
+    for (std::size_t index = 0; index < result.responses.size(); ++index) {
+      const auto& entry = result.responses[index];
+      converged &= entry.converged();
+      progress::number("response_index", index);
+      progress::number("response_iterations", entry.response.iterations);
+      progress::number("response_operator_actions", entry.response.operator_actions);
+    }
+    phase.finish(converged ? "converged" : "not_converged");
+  }
   impl_->validate();
   if (converged) {
     for (std::size_t index = 0; index < count; ++index) {

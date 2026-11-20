@@ -1,5 +1,6 @@
 """Public global-hybrid admission, detached results, failures and cleanup."""
 
+import re
 import typing
 from dataclasses import replace
 from fractions import Fraction
@@ -99,6 +100,12 @@ def test_public_failures_close_owners_and_do_not_poison_the_next_request(
     options = {"charge": 1, "cache": tmp_path, "solver_options": SOLVER}
     with pytest.raises(ValueError, match="output_budget_bytes"):
         calculator.hessian(ATOMS, output_budget_bytes=1, **options)
+    with pytest.raises(NotImplementedError, match="max_map_terms.*native CPU"):
+        calculator.hessian(ATOMS, max_map_terms=1, **options)
+    with pytest.raises(NotImplementedError, match="max_map_terms.*native CPU"):
+        calculator.hessian_vector_product(ATOMS, DIRECTION, max_map_terms=1, **options)
+    with pytest.raises(NotImplementedError, match="response_budget_bytes.*native CPU"):
+        calculator.hessian(ATOMS, response_budget_bytes=1 << 28, **options)
     with pytest.raises(MemoryError, match="grid_budget_bytes"):
         calculator.hessian_vector_product(
             ATOMS, DIRECTION, grid_budget_bytes=1, **options
@@ -172,8 +179,48 @@ def test_public_uks_raw_matrix_and_failure_recovery(
             cache=tmp_path,
             solver_options=GMRESOptions(max_workspace_bytes=1),
         )
-    matrix = calculator.hessian(atoms, **options)
-    action = calculator.hessian_vector_product(atoms, direction, **options)
+    # A real capped solve must report its nonzero GMRES residual without inventing
+    # a final perturbation residual or returning an HVP. The normal calls below recover.
+    with pytest.raises(
+        RuntimeError, match="nuclear response failed.*max_iterations"
+    ) as failure:
+        calculator.hessian_vector_product(
+            atoms,
+            direction,
+            **(options | {"solver_options": replace(SOLVER, max_iterations=1)}),
+        )
+    message = str(failure.value)
+    assert "final physical residual not evaluated" in message
+    residual = re.search(r"true GMRES residual=([^;]+)", message)
+    assert residual is not None and np.isfinite(float(residual[1]))
+    assert float(residual[1]) > SOLVER.atol
+    for endpoint, args in (
+        (calculator.hessian, (atoms,)),
+        (calculator.hessian_vector_product, (atoms, direction)),
+    ):
+        with pytest.raises((RuntimeError, MemoryError), match="map[- ]work cap"):
+            endpoint(*args, max_map_terms=1, **options)
+        with pytest.raises(
+            ValueError, match="response_budget_bytes.*numeric_budget_bytes"
+        ):
+            endpoint(*args, numeric_budget_bytes=32 << 20, **options)
+        with pytest.raises(ValueError, match="numeric_budget_bytes.*int64"):
+            endpoint(*args, numeric_budget_bytes=True, **options)
+        with pytest.raises(
+            (RuntimeError, MemoryError), match="aggregate numerical reservation"
+        ):
+            endpoint(*args, numeric_budget_bytes=160 << 20, **options)
+    map_cap = 1 << 39
+    matrix = calculator.hessian(
+        atoms,
+        max_map_terms=map_cap,
+        numeric_budget_bytes=768 << 20,
+        response_budget_bytes=256 << 20,
+        **options,
+    )
+    action = calculator.hessian_vector_product(
+        atoms, direction, max_map_terms=map_cap, **options
+    )
     np.testing.assert_allclose(
         matrix.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
     )
@@ -181,8 +228,13 @@ def test_public_uks_raw_matrix_and_failure_recovery(
     np.testing.assert_allclose(
         matrix.matrix @ np.tile(np.eye(3), (3, 1)), 0, atol=2e-8, rtol=0
     )
+    assert matrix.diagnostics["numeric_budget_bytes"] == 768 << 20
+    assert matrix.diagnostics["response_budget_bytes"] == 256 << 20
+    assert action.diagnostics["numeric_budget_bytes"] == 512 << 20
+    assert action.diagnostics["response_budget_bytes"] == 128 << 20
     for result in (matrix, action):
         assert result.diagnostics["public_calculator_endpoint"]
+        assert result.diagnostics["max_map_terms"] == map_cap
         assert result.diagnostics["spin"] == "polarized"
         assert result.diagnostics["displaced_scf_evaluations"] == 0
         assert result.diagnostics["scf_fock_builds"] > 0

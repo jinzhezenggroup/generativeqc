@@ -433,7 +433,8 @@ def _independent_gradient(
     reason="complete real-element native CPU qualification is opt-in",
 )
 @pytest.mark.parametrize(
-    "case", ["cs-rks", "cs-uks", "i-rks", "i-uks", "ni-uks", "ni-i-stationary-rks"]
+    "case",
+    ["cs-rks", "cs-uks", "i-rks", "i-uks", "ni-uks", "ni-i-stationary-rks", "cs-i-rks"],
 )
 def test_native_canonical_heavy_curvature(
     case: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -478,12 +479,18 @@ def test_native_canonical_heavy_curvature(
             item for item in table.elements if item.atomic_number in numbers
         ),
     )
-    assert table.elements[0].ecp_core_electrons == 0
-    assert {item.ecp_core_electrons for item in table.elements} == {
-        0,
-        specification["ecp_core"],
-    }
+    cores = specification["ecp_cores"]
+    assert [
+        table.by_element[atom.atomic_number].ecp_core_electrons for atom in native_atoms
+    ] == cores
     charge, multiplicity = specification["charge"], specification["multiplicity"]
+    electrons = (
+        sum(
+            atom.atomic_number - core
+            for atom, core in zip(native_atoms, cores, strict=True)
+        )
+        - charge
+    )
     calculator = Calculator(
         method=resolve_method(
             manifest["method"], spin="polarized" if multiplicity == 2 else "unpolarized"
@@ -679,6 +686,7 @@ def test_native_canonical_heavy_curvature(
                     atol=0,
                     rtol=0,
                 )
+                assert reference.mol.nelectron == np.sum(state.occupations) == electrons
                 central_reference = reference
                 stationary = specification.get("stationary")
                 if stationary is not None:
@@ -739,6 +747,13 @@ def test_native_canonical_heavy_curvature(
             atol=gates["translation"],
             rtol=0,
         )
+        minimum = specification.get("mixed_ecp_cross_block_minimum")
+        if minimum is not None:
+            cesium, iodine = (index for index, core in enumerate(cores) if core)
+            cross = matrix.matrix.reshape(len(atoms), 3, len(atoms), 3)
+            cross_magnitude = float(np.max(abs(cross[cesium, :, iodine, :])))
+            assert cross_magnitude > minimum
+            receipt["mixed_ecp_cross_block_magnitude"] = cross_magnitude
         for direction, action in zip(directions, actions, strict=True):
             np.testing.assert_allclose(
                 matrix.matrix @ direction.ravel(),

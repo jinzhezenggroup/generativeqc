@@ -320,7 +320,12 @@ electronic/total/D3 energies, source energy consistency, physical response
 residuals, SCF work, induced-Fock actions, nuclear integral/XC visits and
 whole-request D3/ECP work. The latter two child owners report their last source,
 so the bridge accumulates them after each accepted column. No symmetry or
-translation repair is applied. The native default response gate has
+translation repair is applied. A raw symmetry refusal gives the worst
+absolute entry difference, effective tolerance and zero-based atom-major
+Cartesian indices. If GMRES stops before the final perturbation residual
+is evaluated, the failure says so and reports the measured solver residual
+when available instead of treating unmeasured fields as zero. The native
+default response gate has
 `rtol=1e-10, atol=1e-12` to handle symmetry-zero RHS roundoff; explicit solver
 options retain their original gates, including a requested relative-only solve.
 
@@ -331,6 +336,12 @@ primitive-visit cap is 100,000,000 over the whole requested matrix or HVP.
 `optimize_saddle` accept an explicit positive-int64 `max_eri_primitives` override
 for the linked native CPU path; `None` retains that default. The saddle cap
 applies to each complete requested Hessian, not each column or the whole search.
+The two `Calculator` endpoints also accept explicit `numeric_budget_bytes`
+and `response_budget_bytes` and a separate `max_map_terms` ceiling. The
+planner checks whole-request integral-map and moving-grid XC-map workloads
+separately against the latter limit. A work refusal gives the estimate and
+cap, and labels preliminary lower bounds as such. No numerical, source or
+physical grid gate changes when callers override these limits.
 Other derivative paths refuse this override instead of silently ignoring it.
 Increasing the cap does not qualify a domain or establish practical execution.
 Diagnostics retain the selected cap alongside actual source visits. An internal

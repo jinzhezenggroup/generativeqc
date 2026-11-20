@@ -185,6 +185,50 @@ void orbital_case(NativeBatch& fixture, unsigned spins) {
           "native orbital export accepted a borrowed source alias");
 }
 
+void raw_symmetry_refusal(NativeBatch& fixture, const std::vector<double>& matrix,
+                          double raw_error) {
+  // Tighten the gate on the same converged state, not the underlying response solve.
+  const auto saved = fixture.options;
+  const auto tolerance = raw_error / 2;
+  require(tolerance > 0, "symmetry refusal fixture has no measurable raw asymmetry");
+  fixture.options.symmetry_absolute_tolerance = tolerance;
+  fixture.options.symmetry_relative_tolerance = 0;
+  std::vector<double> untouched(matrix.size(), -781.25);
+  generativeqc_ks_host_hessian_receipt_v1 receipt;
+  receipt.total_energy = -781.25;
+  unsigned char before[sizeof(receipt)];
+  std::memcpy(before, &receipt, sizeof(receipt));
+  const auto status = fixture.apply(nullptr, untouched, receipt);
+  fixture.options = saved;
+  require(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+          "strict raw symmetry gate did not report a numerical failure");
+  require(std::all_of(untouched.begin(), untouched.end(),
+                      [](double value) { return value == -781.25; }) &&
+              std::memcmp(before, &receipt, sizeof(receipt)) == 0,
+          "raw symmetry refusal published a matrix or work receipt");
+
+  const auto& detail = fixture.context->last_detail;
+  const auto value_after = [&](const std::string& label) {
+    const auto start = detail.find(label);
+    require(start != std::string::npos, "raw symmetry refusal omitted " + label + ": " + detail);
+    return detail.substr(start + label.size());
+  };
+  const auto reported_error = std::stod(value_after("max |H_ij - H_ji|="));
+  require(std::isfinite(reported_error) && reported_error > tolerance &&
+              std::stod(value_after("tolerance=")) == tolerance,
+          "raw symmetry refusal did not report the measured error and configured tolerance");
+  const auto indices = value_after("worst atom-major Cartesian indices (zero-based)=");
+  const auto separator = indices.find(',');
+  require(separator != std::string::npos, "raw symmetry refusal omitted the Cartesian pair");
+  const auto row = std::stoul(indices.substr(0, separator));
+  const auto column = std::stoul(indices.substr(separator + 1));
+  const auto dimension = fixture.dimension;
+  require(row < dimension && column < dimension && row != column &&
+              std::abs(matrix[row * dimension + column] - matrix[column * dimension + row]) ==
+                  reported_error,
+          "raw symmetry refusal did not locate the measured asymmetry in the raw matrix");
+}
+
 void endpoint_case(unsigned spins, bool bj) {
   NativeBatch fixture(spins, bj);
   const auto dimension = fixture.dimension;
@@ -226,6 +270,7 @@ void endpoint_case(unsigned spins, bool bj) {
           "native endpoint has incomplete electronic work provenance");
   require((receipt.d3_pair_visits > 0) == bj && (receipt.d3_energy < 0) == bj,
           "native endpoint omitted or invented its total-method correction");
+  if (spins == 2 && bj) raw_symmetry_refusal(fixture, matrix, receipt.raw_symmetry_error);
   std::vector<double> direction(dimension), product(dimension);
   for (std::size_t coordinate = 0; coordinate < dimension; ++coordinate)
     direction[coordinate] = .02 * std::sin(1.0 + coordinate);

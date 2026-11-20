@@ -92,12 +92,20 @@ exposing one global cap:
 | `max_nonlocal_pairs` | WB97M-V only: ordered VV10 pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |
 | `max_eri_primitives` | linked native CPU only: optional positive-int64 whole-request nuclear primitive-work cap |
+| `max_map_terms` | linked native CPU only: optional positive-int64 whole-request contraction/assembly work cap (default `2**40`) |
+| `numeric_budget_bytes` | linked native CPU only: aggregate derivative-owned numeric reservation (default 512 MiB) |
+| `response_budget_bytes` | linked native CPU only: response subreservation, including optional coordinate source panels (default 128 MiB) |
 
 The linked native CPU owner's reservations, default work allowance and separate
 induced-Fock work are described in
 [Linked native CPU B3LYP endpoint](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
 The optional nuclear work override is not a time/RSS or induced-Fock integral
 bound. Other owners reject it rather than ignoring it.
+The explicit byte limits are positive signed-int64 values; the response
+subreservation must fit in the aggregate reservation. They exclude primal
+SCF storage, BLAS scratch and process RSS. GMRES has a separate workspace
+limit. Raising a byte limit can admit reusable coordinate sources rather
+than the bounded column fallback; it does not raise either work cap.
 
 For other corrected CPU composite endpoints, `output_budget_bytes` holds three dense matrices:
 the detached electronic result, the private total, and immutable publication.
