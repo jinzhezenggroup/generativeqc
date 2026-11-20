@@ -496,6 +496,12 @@ endif()
 # Keep the public library/CLI/wheel artifact unchanged while isolating CPU-only
 # solver and basis objects behind their own incremental compile boundaries.
 generativeqc_add_cpu_component_object_targets(generativeqc)
+if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
+  # Only the core-owned integral objects link with the host first-order jet.
+  # Standalone targets that compile the same source keep the force-only leaf.
+  target_compile_definitions(generativeqc_host_integrals PRIVATE
+    GENERATIVEQC_LINKED_HOST_ERI_FIRST=1)
+endif()
 
 set_target_properties(generativeqc PROPERTIES OUTPUT_NAME generativeqc)
 if(NOT GENERATIVEQC_PYTHON_WHEEL)

@@ -107,6 +107,14 @@ void ecp_quadrature(unsigned radial, unsigned angular, std::vector<EcpRadialPoin
 EcpData ecp_integrals(const core::System& system, unsigned radial = 160, unsigned angular = 32,
                       bool derivatives = true);
 EcpData checked_ecp_integrals(const core::System& system, bool derivatives);
+/** Contract the residual ECP gradient with ordered AO weights in atom/xyz order.
+ * Analytic operators scatter weighted pair jets directly; other previously
+ * admitted operators retain the checked two-grid matrix fallback. Neither path
+ * adds the ionic Coulomb tail. The caller admits the matching owned workspace.
+ */
+std::vector<double> checked_ecp_gradient(const core::System& system,
+                                         std::span<const double> weights);
+std::size_t ecp_gradient_workspace_capacity(const core::System& system);
 /** Conservative numeric workspace for checked value/first-derivative consumers.
  * Includes both grids, public matrices, radial staging and host/device metadata;
  * callers reserve it in addition to their retained reference/correlation state. */

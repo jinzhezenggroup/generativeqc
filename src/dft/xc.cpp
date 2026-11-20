@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <new>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "dft/semilocal_family.hpp"
 #include "dft/xc_point.hpp"
 #include "runtime/resource_usage.hpp"
+#include "tensor/cpu_linalg.hpp"
 #include "xc_cpu_generated.hpp"
 
 namespace generativeqc::dft {
@@ -605,12 +607,55 @@ SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid
   for (auto& potential : result.potential) potential.assign(n * n, 0.0);
   result.points = grid.point_count();
   std::vector<double> ao;
+  std::vector<double> weighted;
+  const std::size_t max_points = std::min(tile_points, result.points);
+  constexpr std::size_t projection_budget = 8U << 20;
+  // Optional GGA workspace: two weighted AO panels, never a full grid cache.
+  // Keep the scalar path for small tiles, other ingredient sets, and builds
+  // without BLAS. Allocation failure changes only the contraction schedule.
+  if (ingredient_mask == 7U && n >= 32 && max_points >= 16 &&
+      max_points <= projection_budget / sizeof(double) / 2 / n &&
+      tensor::resolve_cpu_linalg_provider({}) == tensor::CpuLinalgProvider::openblas) {
+    try {
+      weighted.resize(2 * max_points * n);
+    } catch (const std::bad_alloc&) {
+      // No panel means the scalar quadrature remains the complete provider.
+    }
+  }
   const std::vector<double>* densities[2]{&alpha_density, &beta_density};
+  std::array<double, 2> density_norm{};
+  std::array<bool, 2> use_field_panel{};
+  if (!weighted.empty()) {
+    for (unsigned spin = 0; spin < 2; ++spin) {
+      const auto& density = *densities[spin];
+      // GGA uses grad(rho) = 2 grad(Phi) D Phi, which requires symmetry.
+      // Keep the original pair sum for matrices accepted within its tolerance
+      // but not exactly symmetric; do not discard their antisymmetric bits
+      // by evaluating only one of the two gradient products.
+      use_field_panel[spin] = true;
+      for (std::size_t mu = 0; mu < n; ++mu) {
+        double row_norm = 0.0;
+        for (std::size_t nu = 0; nu < n; ++nu) {
+          const double value = density[mu * n + nu];
+          use_field_panel[spin] &= value == density[nu * n + mu];
+          row_norm += std::abs(value);
+        }
+        density_norm[spin] = std::max(density_norm[spin], row_norm);
+      }
+      use_field_panel[spin] &= std::isfinite(density_norm[spin]);
+    }
+  }
   for (std::size_t begin = 0; begin < result.points; begin += tile_points) {
     const std::size_t count = std::min(tile_points, result.points - begin);
     ao.resize((need_first ? 4 : 1) * count * n);
     basis.evaluate(grid.points().data() + 3 * begin, count, need_first ? 1 : 0, 0, n, ao.data(),
                    ao.size());
+    // Before a point is evaluated its workspace row holds Phi D; afterward
+    // it holds the weighted AO jet for that point's potential contribution.
+    for (unsigned spin = 0; spin < 2; ++spin)
+      if (use_field_panel[spin])
+        tensor::cpu_gemm('N', 'N', count, n, n, ao.data(), densities[spin]->data(),
+                         weighted.data() + spin * count * n);
     for (std::size_t point = 0; point < count; ++point) {
       const double* phi = ao.data() + point * n;
       std::array<const double*, 3> jets{};
@@ -618,8 +663,32 @@ SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid
         for (unsigned k = 0; k < 3; ++k) jets[k] = ao.data() + ((k + 1) * count + point) * n;
       double rho[2]{}, gradient[2][3]{}, tau[2]{};
       for (unsigned spin = 0; spin < 2; ++spin) {
-        const auto features =
-            rks_features(phi, jets, n, *densities[spin], nullptr, ingredient_mask);
+        std::array<double, 5> features{};
+        bool use_field = false;
+        if (use_field_panel[spin]) {
+          const double* projected = weighted.data() + (spin * count + point) * n;
+          double phi_norm_squared = 0.0;
+          for (std::size_t mu = 0; mu < n; ++mu) {
+            features[0] += phi[mu] * projected[mu];
+            phi_norm_squared += phi[mu] * phi[mu];
+          }
+          // Near a density node, cancellation may change the sign or zero
+          // branch. Keep the established scalar tail arithmetic there, not
+          // an artificial clamp on a physical density.
+          const double roundoff = 64.0 * std::numeric_limits<double>::epsilon() * n *
+                                  density_norm[spin] * phi_norm_squared;
+          use_field = std::isfinite(roundoff) && std::isfinite(features[0]) &&
+                      features[0] > std::max(1e-100, roundoff);
+          if (use_field) {
+            for (unsigned axis = 0; axis < 3; ++axis) {
+              for (std::size_t mu = 0; mu < n; ++mu)
+                features[axis + 1] += jets[axis][mu] * projected[mu];
+              features[axis + 1] *= 2.0;
+            }
+          }
+        }
+        if (!use_field)
+          features = rks_features(phi, jets, n, *densities[spin], nullptr, ingredient_mask);
         rho[spin] = features[0];
         if (need_first)
           for (unsigned k = 0; k < 3; ++k) gradient[spin][k] = features[k + 1];
@@ -630,6 +699,18 @@ SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid
       result.energy += weight * xc.energy;
       for (unsigned spin = 0; spin < 2; ++spin) {
         result.electrons[spin] += weight * rho[spin];
+        if (!weighted.empty()) {
+          // Chain rule: V = Phi^T W + W^T Phi with half of the density
+          // term in W. Apply signed weights directly (no square roots).
+          auto* row = weighted.data() + (spin * count + point) * n;
+          const double rho_weight = 0.5 * weight * xc.rho[spin];
+          const double gx = weight * xc.gradient[spin][0];
+          const double gy = weight * xc.gradient[spin][1];
+          const double gz = weight * xc.gradient[spin][2];
+          for (std::size_t mu = 0; mu < n; ++mu)
+            row[mu] = rho_weight * phi[mu] + gx * jets[0][mu] + gy * jets[1][mu] + gz * jets[2][mu];
+          continue;
+        }
         for (std::size_t mu = 0; mu < n; ++mu)
           for (std::size_t nu = 0; nu < n; ++nu) {
             double value = xc.rho[spin] * phi[mu] * phi[nu];
@@ -642,7 +723,20 @@ SpinXcIntegral integrate_semilocal_uks(const AoBasis& basis, const MolecularGrid
           }
       }
     }
+    if (!weighted.empty())
+      for (unsigned spin = 0; spin < 2; ++spin)
+        tensor::cpu_gemm('T', 'N', n, n, count, ao.data(), weighted.data() + spin * count * n,
+                         result.potential[spin].data(), 1.0, 1.0);
+    runtime::sample_cpu_capacity(
+        runtime::vector_capacities(ao, weighted, result.potential[0], result.potential[1]));
   }
+  if (!weighted.empty())
+    for (auto& potential : result.potential)
+      for (std::size_t mu = 0; mu < n; ++mu)
+        for (std::size_t nu = mu; nu < n; ++nu) {
+          const double value = potential[mu * n + nu] + potential[nu * n + mu];
+          potential[mu * n + nu] = potential[nu * n + mu] = value;
+        }
   if (!std::isfinite(result.energy))
     throw std::runtime_error(std::string("nonfinite ") + method + " UKS semilocal energy");
   return result;

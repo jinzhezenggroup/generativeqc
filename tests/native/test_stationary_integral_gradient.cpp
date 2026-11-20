@@ -90,7 +90,7 @@ void one_atom_capacity() {
   }
 }
 
-/** Checked ECP grids are transient but coexist with the stationary weights.
+/** The ECP gradient provider is transient but coexists with the stationary weights.
  * A one-byte-short request must fail before either integral provider runs. */
 void ecp_workspace_admission() {
   if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return;
@@ -102,7 +102,7 @@ void ecp_workspace_admission() {
   require(
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "stationary ECP capacity fixture is invalid");
-  const auto workspace = generativeqc::integrals::ecp_workspace_capacity(system);
+  const auto workspace = generativeqc::integrals::ecp_gradient_workspace_capacity(system);
   for (const auto spin :
        {generativeqc::scf::FockSpin::Restricted, generativeqc::scf::FockSpin::Unrestricted}) {
     auto spec = generativeqc::scf::make_hf_fock_spec(spin);
@@ -120,7 +120,7 @@ void ecp_workspace_admission() {
     };
     const auto result = evaluate(256ULL << 20);
     require(result.numeric_capacity > workspace,
-            "stationary ECP capacity omitted the checked-grid workspace");
+            "stationary ECP capacity omitted the ECP gradient workspace");
     require(evaluate(result.numeric_capacity).sources == result.sources,
             "exact ECP budget changed the stationary derivative");
     auto& observation = generativeqc::runtime::cpu_resource_observation;

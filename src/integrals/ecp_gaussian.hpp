@@ -56,6 +56,12 @@ bool gaussian_ecp_supported(const core::System& system);
 EcpData gaussian_ecp_integrals(const core::System& system, bool derivatives,
                                EcpGaussianWork* work = nullptr, EcpGaussianLimits limits = {});
 
+/** Contract order-one pair jets directly to a nuclear gradient, without AO matrices. */
+std::vector<double> gaussian_ecp_gradient(const core::System& system,
+                                          std::span<const double> weights,
+                                          EcpGaussianLimits limits = {});
+std::size_t gaussian_ecp_gradient_workspace_capacity(const core::System& system);
+
 /** Contract second derivatives before physical-atom scatter and global storage. */
 EcpWeightedSecondOrder gaussian_ecp_weighted_second_order(const core::System& system,
                                                           std::span<const double> weights,

@@ -112,11 +112,19 @@ std::vector<Shell> shells_for(const core::System& system) {
   return shells;
 }
 
-enum class Retention { MatrixJets, WeightedSecond, Direction, WeightedMixed, Column };
+enum class Retention {
+  MatrixJets,
+  WeightedFirst,
+  WeightedSecond,
+  Direction,
+  WeightedMixed,
+  Column
+};
 
 std::size_t output_elements(const core::System& system, unsigned order, Retention retention) {
   if (retention == Retention::WeightedMixed) return 8;
   const auto coordinates = runtime::size_mul(3, system.atoms.size());
+  if (retention == Retention::WeightedFirst) return coordinates;
   if (retention == Retention::Column)
     return runtime::size_mul(2, runtime::size_add(2, runtime::size_mul(2, coordinates)));
   if (retention == Retention::WeightedSecond)
@@ -375,6 +383,42 @@ bool gaussian_ecp_supported(const core::System& system) {
 
 std::size_t gaussian_ecp_workspace_capacity(const core::System& system, bool derivatives) {
   return workspace_capacity(system, derivatives ? 1 : 0, Retention::MatrixJets);
+}
+
+std::size_t gaussian_ecp_gradient_workspace_capacity(const core::System& system) {
+  return workspace_capacity(system, 1, Retention::WeightedFirst);
+}
+
+std::vector<double> gaussian_ecp_gradient(const core::System& system,
+                                          std::span<const double> weights,
+                                          EcpGaussianLimits limits) {
+  if (!gaussian_ecp_supported(system))
+    throw std::invalid_argument("operator outside Gaussian ECP specialization");
+  const auto count = molecule::ao_count(system);
+  if (weights.size() != runtime::size_mul(count, count) ||
+      !std::all_of(weights.begin(), weights.end(),
+                   [](double value) { return std::isfinite(value); }))
+    throw std::invalid_argument("Gaussian ECP weights require a finite ordered AO matrix");
+  std::vector<Group> groups;
+  auto work = preflight(system, 1, Retention::WeightedFirst, groups, limits);
+  std::vector<Sum> gradient(runtime::size_mul(3, system.atoms.size()));
+  runtime::CpuRetainedCapacity retained(runtime::vector_bytes(gradient));
+  evaluate(system, 1, groups, work,
+           [&](const Shell& first, const Shell& second, unsigned center, std::size_t row,
+               std::size_t column, const std::array<Jet, 2>& jets) {
+             // The pair jet represents both matrix orientations off the diagonal.
+             const double weight = weights[row * count + column] +
+                                   (row == column ? 0 : weights[column * count + row]);
+             for (unsigned axis = 0; axis < 6; ++axis) {
+               const double derivative = weight * (jets[0][1 + axis] + jets[1][1 + axis]);
+               scatter_axis(first, second, center, axis, [&](std::size_t coordinate, double sign) {
+                 gradient[coordinate].add(sign * derivative);
+               });
+             }
+           });
+  auto result = publish(gradient);
+  runtime::sample_cpu_capacity(runtime::vector_bytes(result));
+  return result;
 }
 
 EcpData gaussian_ecp_integrals(const core::System& system, bool derivatives,

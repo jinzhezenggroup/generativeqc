@@ -158,6 +158,14 @@ work bounds before execution. Cartesian and real-spherical conventions are
 unchanged. This CPU specialization does not admit new public Hessian methods or
 change CUDA execution.
 
+The native CPU direct stationary force contracts the analytic ECP pair jets
+with the converged AO weights before physical-atom accumulation. Its ECP
+workspace no longer includes all coordinate-by-AO matrices; those are still
+available from the raw ECP diagnostic. For operators outside the analytic
+specialization, the same force consumer reserves the checked-grid workspace
+and retains the original coarse/refined validation. The stationary source
+budget remains separate from the resident SCF storage and total process RSS.
+
 Other supported powers/projectors retain the checked-grid fallback. It uses
 Gauss-Legendre radial nodes mapped by `r=t/(1-t)`, polar Gauss-Legendre nodes
 and uniform azimuth. Full direct RHF/UHF checks the
