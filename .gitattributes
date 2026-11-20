@@ -45,6 +45,8 @@ benchmarks/results/paper-hfdft-cold3-20261118/**/*.json text eol=lf
 benchmarks/results/paper-hfdft-cold3-20261118/**/*.csv text eol=lf
 benchmarks/results/paper-hfdft-cold3-20261119/**/*.json text eol=lf
 benchmarks/results/paper-hfdft-cold3-20261119/**/*.csv text eol=lf
+benchmarks/results/paper-hfdft-cold3-20261120/**/*.json text eol=lf
+benchmarks/results/paper-hfdft-cold3-20261120/**/*.csv text eol=lf
 
 # Scientific source-of-truth lives in upstream/manifest.json; these are derived
 # compatibility views or deterministic numerical products.

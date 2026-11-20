@@ -210,6 +210,9 @@ A later [H100 three-process cohort on unmodified master `a6d5a3c00`](benchmarks/
 The H100 [cohort on master `cddde09a0`](benchmarks/results/paper-hfdft-cold3-20261119/README.md)
 ([figure](assets/paper-hfdft-cold3-20261119-h100.svg)) wins 64/64 cold and
 63/64 warm medians; only Direct HF96 warm is slower (1.380 vs 1.353 s).
+The H100 [cohort on master `471ea1a0a`](benchmarks/results/paper-hfdft-cold3-20261120/README.md)
+([figure](assets/paper-hfdft-cold3-20261120-h100.svg)) wins all 64 cold and
+all 64 warm medians.
 
 **DF-CCSD(T)/CBS energy + analytic forces — RTX 5090**
 
