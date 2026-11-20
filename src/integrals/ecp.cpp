@@ -126,6 +126,31 @@ std::size_t ecp_workspace_capacity(const core::System& system) {
              : bytes;
 }
 
+std::size_t ecp_gradient_workspace_capacity(const core::System& system) {
+  if (system.ecp_terms.empty()) return 0;
+  if (gaussian_ecp_supported(system)) return gaussian_ecp_gradient_workspace_capacity(system);
+  return runtime::size_add(ecp_workspace_capacity(system),
+                           runtime::size_mul(3 * sizeof(double), system.atoms.size()));
+}
+
+std::vector<double> checked_ecp_gradient(const core::System& system,
+                                         std::span<const double> weights) {
+  if (gaussian_ecp_supported(system)) return gaussian_ecp_gradient(system, weights);
+  const auto count = molecule::ao_count(system);
+  const auto matrix = runtime::size_mul(count, count);
+  if (weights.size() != matrix || !std::all_of(weights.begin(), weights.end(),
+                                               [](double value) { return std::isfinite(value); }))
+    throw std::invalid_argument("ECP gradient weights require a finite ordered AO matrix");
+  std::vector<double> gradient(runtime::size_mul(3, system.atoms.size()));
+  if (system.ecp_terms.empty()) return gradient;
+  const auto ecp = checked_ecp_integrals(system, true);
+  for (std::size_t coordinate = 0; coordinate < gradient.size(); ++coordinate)
+    for (std::size_t item = 0; item < matrix; ++item)
+      gradient[coordinate] += weights[item] * (ecp.local_derivative[coordinate * matrix + item] +
+                                               ecp.nonlocal_derivative[coordinate * matrix + item]);
+  return gradient;
+}
+
 void add_ecp(const EcpData& ecp, std::vector<double>& hcore, std::vector<double>& derivative) {
   if (hcore.size() != ecp.local.size() || derivative.size() != ecp.local_derivative.size())
     throw std::invalid_argument("ECP and one-electron matrix layouts differ");

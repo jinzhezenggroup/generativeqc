@@ -51,6 +51,23 @@ compression speedup. LDA assembly uses one matrix product per spin; GGA forms
 one combined spatial panel and uses two. Reported coefficient SSA before/after
 CSE is distinct from an AO-pair expansion, which is never constructed.
 
+## Native CPU unrestricted GGA matrix schedule
+
+The CPU unrestricted semilocal GGA integrator can use two spin panels on the
+current AO tile. For symmetric density matrices it forms `Phi D_sigma` and
+reduces each point's density and gradient before evaluating the same coupled
+spin point functional. Near a density node, or for a matrix admitted within
+the symmetry tolerance but not exactly symmetric, it retains the scalar pair
+reduction. There is no density clamp or change to the quadrature branch.
+
+The integrator reuses each consumed row to hold its signed, weighted AO jet.
+`Phi^T W` is accumulated over tiles and its transpose supplies the other
+potential leg. The two optional panels share an 8 MiB bound. Small shapes,
+unavailable task-local BLAS or failed panel allocation keep the complete
+scalar schedule. This changes only the SCF fixed-grid contraction, not the
+stationary force, response or dispersion owners. The progress trace separates
+the primary J/K and semilocal XC work inside each UKS physical evaluation.
+
 ## Native CUDA matrix schedule
 
 The resident CUDA semilocal owner uses compiler-generated 16-by-16 shared-memory

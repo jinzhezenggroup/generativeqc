@@ -18,6 +18,7 @@
 #include "integrals/eri_symmetry.hpp"
 #include "integrals/generated_df_cpu.hpp"
 #include "integrals/generated_scalar_ad.hpp"
+#include "integrals/host_factorized_primitives.hpp"
 #include "integrals/range_moments.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/nuclear_gradient.hpp"
@@ -2377,6 +2378,12 @@ bool supports_packaged_cpu_eri_shell_derivatives(
 namespace {
 using PackagedEriBinding = std::array<int, 9>;
 
+#if GENERATIVEQC_LINKED_HOST_ERI_FIRST
+constexpr std::uint64_t packaged_f_passes = 1;
+#else
+constexpr std::uint64_t packaged_f_passes = 3;
+#endif
+
 const PackagedEriBinding* packaged_eri_binding(
     const std::array<molecule::CartesianComponent, 4>& components) {
   if (!generated_stationary_dispatch::available) return nullptr;
@@ -2425,6 +2432,31 @@ std::array<double, 12> packaged_eri_derivative(
   if (std::any_of(terms.begin(), terms.end(), [](const auto* term) {
         return term->component[0] + term->component[1] + term->component[2] == 3;
       })) {
+#if GENERATIVEQC_LINKED_HOST_ERI_FIRST
+    // The complete host Hessian core already links this compiler-owned leaf.
+    // It provides all Cartesian slots in one pass, excluding external weights.
+    std::array<unsigned, 4> angular{};
+    std::array<double, 16> record{};
+    unsigned component = 0;
+    for (std::size_t slot = 0; slot < terms.size(); ++slot) {
+      const auto& powers = terms[slot]->component;
+      const auto degree = powers[0] + powers[1] + powers[2];
+      angular[slot] = degree;
+      // CCA orders descending x, then ascending z for a fixed x.
+      const auto transverse = degree - powers[0];
+      const auto local = transverse * (transverse + 1) / 2 + powers[2];
+      component = component * static_cast<unsigned>(molecule::cartesian_count(degree)) + local;
+      record[slot] = primitives[slot]->exponent;
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        record[4 + 3 * slot + axis] = centers[slot][axis].value;
+    }
+    std::array<double, 13> first{};
+    if (!full_range_primitive_first_cpu(angular.data(), component, record.data(), first.data()))
+      throw std::runtime_error("factorized full-range f-shell ERI derivative failed");
+    std::array<double, 12> values{};
+    std::copy_n(first.begin() + 1, values.size(), values.begin());
+    return values;
+#else
     std::array<double, 4> exponents{};
     std::array<double, 12> positions{}, values{};
     std::array<unsigned, 12> powers{};
@@ -2439,6 +2471,7 @@ std::array<double, 12> packaged_eri_derivative(
                                                          powers.data(), values.data()) != 0)
       throw std::runtime_error("generated full-range f-shell ERI derivative failed");
     return values;
+#endif
   }
   std::array<molecule::CartesianComponent, 4> components{};
   for (std::size_t slot = 0; slot < 4; ++slot) components[slot] = terms[slot]->component;
@@ -2573,7 +2606,7 @@ std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
                                                            term->component[2] ==
                                                        3;
                                               })
-                          ? 3
+                          ? packaged_f_passes
                           : 1;
                   for (const auto& pi : shells[0]->primitives)
                     for (const auto& pj : shells[1]->primitives)
@@ -2707,12 +2740,9 @@ std::vector<double> contract_weighted_one_electron_derivative(
   // Pure overlap/Pulay calls have no ECP cotangent and need no quadrature.
   if (!system.ecp_terms.empty() &&
       std::any_of(hcore_weights.begin(), hcore_weights.end(), [](double x) { return x != 0; })) {
-    const auto ecp = checked_ecp_integrals(system, true);
+    const auto gradient = checked_ecp_gradient(system, hcore_weights);
     for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
-      for (std::size_t item = 0; item < matrix_size; ++item)
-        contracted.derivative[coordinate] +=
-            hcore_weights[item] * (ecp.local_derivative[coordinate * matrix_size + item] +
-                                   ecp.nonlocal_derivative[coordinate * matrix_size + item]);
+      contracted.derivative[coordinate] += gradient[coordinate];
   }
   if (!std::isfinite(contracted.value) ||
       !std::all_of(contracted.derivative.begin(), contracted.derivative.end(),

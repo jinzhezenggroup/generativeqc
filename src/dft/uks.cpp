@@ -132,7 +132,10 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
                         dft::nlc::Vv10DensityDomain nonlocal_domain) {
   runtime::df_progress::Scope trace("uks_physical_evaluation");
   const auto& ints = plan.one_electron();
-  const auto jk = plan.build(alpha, beta);
+  const auto jk = [&] {
+    runtime::df_progress::Scope build_trace("uks_primary_jk");
+    return plan.build(alpha, beta);
+  }();
   SpinEvaluation out;
   out.coulomb_exchange_work = jk.coulomb_exchange_work;
   out.fock = assemble_fock(plan.strategy(), ints.hcore, jk);
@@ -155,9 +158,13 @@ SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_co
     exact_exchange +=
         contract_fock_energy_components(correction_strategy, correction_jk, alpha, beta).exchange;
   }
-  const auto xc =
-      evaluate_xc(basis, grid, alpha, beta, options.xc_tile_points,
-                  options.semilocal_exchange_scale, options.semilocal_correlation_scale);
+  const auto xc = [&] {
+    runtime::df_progress::Scope xc_trace("uks_semilocal_xc");
+    xc_trace.number("grid_points", grid.point_count());
+    xc_trace.number("tile_points", options.xc_tile_points);
+    return evaluate_xc(basis, grid, alpha, beta, options.xc_tile_points,
+                       options.semilocal_exchange_scale, options.semilocal_correlation_scale);
+  }();
   dft::nlc::SpinVv10Integral nonlocal;
   if (nonlocal_correlation)
     nonlocal = dft::nlc::integrate_vv10_uks(

@@ -110,6 +110,62 @@ void stationary_pbe_xc_nuclear_finite_difference() {
     }
   }
 }
+
+/** A split-spin fixed-density control exercises AO jets and the short last
+ * tile. Check both contraction schedules and differentiate the actual energy
+ * independently of either potential assembly. */
+void tiled_b3lyp_uks_potential() {
+  auto system = h2();
+  for (unsigned center = 0; center < system.atoms.size(); ++center)
+    for (unsigned angular : {0u, 1u, 2u})
+      for (double exponent : {0.43, 1.1})
+        system.shells.push_back({center, angular, {{exponent, 1.0}}});
+  std::string detail;
+  if (generativeqc::molecule::validate_and_normalize(system, detail) != GENERATIVEQC_STATUS_SUCCESS)
+    throw std::runtime_error(detail);
+  const generativeqc::dft::AoBasis basis(system);
+  const generativeqc::dft::MolecularGrid grid(system, {1, 4, 4, 8, 3, 1e-12});
+  const auto nao = basis.nao;
+  std::vector<double> alpha(nao * nao), beta(nao * nao);
+  for (std::size_t mu = 0; mu < nao; ++mu) {
+    alpha[mu * nao + mu] = 0.19 + 0.003 * mu;
+    beta[mu * nao + mu] = 0.07 + 0.001 * mu;
+    if (mu > 0) alpha[mu * nao + mu - 1] = alpha[(mu - 1) * nao + mu] = 0.014;
+  }
+  // Match the existing tolerance-based admission for the beta density even
+  // though only the exactly symmetric alpha density can use the field panel.
+  beta[1] = 3e-13;
+  using generativeqc::dft::integrate_b3lyp_uks;
+  const auto scalar = integrate_b3lyp_uks(basis, grid, alpha, beta, 11);
+  const auto tiled = integrate_b3lyp_uks(basis, grid, alpha, beta, 63);
+  require(std::abs(tiled.energy - scalar.energy) < 5e-13,
+          "tiled UKS changed the discretized fixed-density energy");
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    require(std::abs(tiled.electrons[spin] - scalar.electrons[spin]) < 5e-13,
+            "tiled UKS changed a spin density integral");
+    for (std::size_t mu = 0; mu < nao; ++mu)
+      for (std::size_t nu = 0; nu < nao; ++nu) {
+        const auto index = mu * nao + nu;
+        require(std::abs(tiled.potential[spin][index] - scalar.potential[spin][index]) < 5e-13,
+                "tiled UKS potential differs from the point-wise scalar quadrature");
+        require(
+            std::abs(tiled.potential[spin][index] - tiled.potential[spin][nu * nao + mu]) < 5e-13,
+            "tiled UKS potential is not symmetric");
+      }
+    const auto energy = [&](double displacement) {
+      auto alpha_displaced = alpha;
+      auto beta_displaced = beta;
+      auto& density = spin == 0 ? alpha_displaced : beta_displaced;
+      density[1] += displacement;
+      density[nao] += displacement;
+      return integrate_b3lyp_uks(basis, grid, alpha_displaced, beta_displaced, 63).energy;
+    };
+    constexpr double step = 1e-5;
+    const double finite_difference = (energy(step) - energy(-step)) / (2.0 * step);
+    require(std::abs(finite_difference - 2.0 * tiled.potential[spin][1]) < 5e-8,
+            "tiled UKS potential is not the discrete spin-density derivative");
+  }
+}
 /** B3LYP reuses the exact GGA geometry pullback with its generated
  * B88/LYP point derivatives, never the PBE XC scientific expression. */
 void stationary_b3lyp_xc_nuclear_finite_difference() {
@@ -894,6 +950,7 @@ int main() {
     require(pbe_tail_rejected, "PBE tail-v1 accepted an out-of-domain density");
     stationary_pbe_xc_nuclear_finite_difference();
     stationary_b3lyp_xc_nuclear_finite_difference();
+    tiled_b3lyp_uks_potential();
     std::cout << "DFT GridSpec v1 and generated LDA fixed-density gates passed\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

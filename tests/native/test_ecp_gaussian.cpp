@@ -94,8 +94,25 @@ void check_raw(generativeqc::core::BasisRepresentation representation) {
   require(
       work.kernel_blocks && work.kernel_blocks <= work.kernel_block_bound && work.radial_frontiers,
       "Gaussian ECP must report bounded actual semantic work");
-  compare(actual, generativeqc::testing::ecp_integrals(system, 160, 32, true));
+  const auto independent = generativeqc::testing::ecp_integrals(system, 160, 32, true);
+  compare(actual, independent);
   compare(actual, integrals::checked_ecp_integrals(system, true));
+  const auto weights = weights_for(actual.nbf);
+  const auto local = contract_gradient(actual, weights, 0);
+  const auto nonlocal = contract_gradient(actual, weights, 1);
+  const auto reference_local = contract_gradient(independent, weights, 0);
+  const auto reference_nonlocal = contract_gradient(independent, weights, 1);
+  const auto capacity = integrals::ecp_gradient_workspace_capacity(system);
+  require(capacity < work.workspace_bound_bytes, "compact ECP gradient reserves matrix storage");
+  const auto contracted = integrals::gaussian_ecp_gradient(system, weights, {capacity});
+  require(contracted == integrals::checked_ecp_gradient(system, weights),
+          "checked ECP gradient selected a different operator");
+  for (std::size_t coordinate = 0; coordinate < contracted.size(); ++coordinate) {
+    near(contracted[coordinate], local[coordinate] + nonlocal[coordinate], 2e-12,
+         "contracted ECP gradient disagrees with ordered AO matrix derivatives");
+    near(contracted[coordinate], reference_local[coordinate] + reference_nonlocal[coordinate], 2e-7,
+         "contracted ECP gradient disagrees with independent projector quadrature");
+  }
   const auto primal = integrals::gaussian_ecp_integrals(system, false);
   for (std::size_t index = 0; index < primal.local.size(); ++index) {
     near(primal.local[index], actual.local[index], 2e-12,
@@ -191,8 +208,14 @@ void check_boundaries() {
     else
       other.ecp_terms[0].channel = 3;
     require(!integrals::gaussian_ecp_supported(other), "unsupported radial/projector domain");
-    compare(integrals::checked_ecp_integrals(other, true),
-            generativeqc::testing::checked_ecp_integrals(other, true));
+    const auto independent = generativeqc::testing::checked_ecp_integrals(other, true);
+    compare(integrals::checked_ecp_integrals(other, true), independent);
+    const auto local = contract_gradient(independent, weights, 0);
+    const auto nonlocal = contract_gradient(independent, weights, 1);
+    const auto gradient = integrals::checked_ecp_gradient(other, weights);
+    for (std::size_t coordinate = 0; coordinate < gradient.size(); ++coordinate)
+      near(gradient[coordinate], local[coordinate] + nonlocal[coordinate], 2e-7,
+           "weighted fallback changed the checked-grid residual operator");
   }
   compare(integrals::gaussian_ecp_integrals(system, true),
           generativeqc::testing::ecp_integrals(system, 160, 32, true));

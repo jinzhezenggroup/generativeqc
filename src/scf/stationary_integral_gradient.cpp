@@ -106,9 +106,9 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       runtime::size_add(runtime::size_add(runtime::size_mul(matrix, unrestricted ? 7 : 3),
                                           runtime::size_mul(ncoord, 6)),
                         runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
-  // The checked ECP derivative owns coarse/fine grids inside the hcore call.
-  // Admit their peak together with retained weights before that allocation.
-  const auto ecp_workspace = integrals::ecp_workspace_capacity(system);
+  // Admit the hcore ECP contraction's actual provider before allocating the
+  // stationary weights. Only the checked-grid fallback retains AO matrices.
+  const auto ecp_workspace = integrals::ecp_gradient_workspace_capacity(system);
   const auto capacity =
       runtime::size_add(runtime::size_add(runtime::size_mul(elements, sizeof(double)),
                                           runtime::vector_bytes(offsets)),
@@ -251,6 +251,12 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
         for (std::size_t axis = 0; axis < 3; ++axis)
           result.sources[(2 + channel) * ncoord + 3 * system.shells[shells[slot]].atom_index +
                          axis] += derivatives[channel][3 * slot + axis];
+    // Sample a long stream at completed shell boundaries, not in primitive kernels.
+    if (result.shell_quartets % (1u << 18) == 0) {
+      runtime::df_progress::number("eri_shell_submissions_at_sample", result.shell_quartets);
+      runtime::df_progress::number("eri_primitive_evaluations_at_sample",
+                                   result.primitive_evaluations);
+    }
   });
   if (!std::all_of(result.sources.begin(), result.sources.end(),
                    [](double value) { return std::isfinite(value); }))

@@ -1,0 +1,20 @@
+{
+  "accepted": true,
+  "scope": "installed public singlepoint energy and forces only",
+  "charge": 1,
+  "multiplicity": 3,
+  "library_sha256": "cebc82cddf4877afc6c3b397f022bea8be99f375fb435766daf7fc13460e1eb8",
+  "source_identity": "ff43ad630a495307403cd39bd1dcc13ca26513fc255fc9223946918bd4309659",
+  "method_identity": "6c14b546c9b0c912010989642adad6fcf328bce8d698dac8ee95dc1d62c3577a",
+  "wheel_sha256": "e64d3425799bc716250717bc47803c7a3b5b13ee1a8b1ba33984accaa5e96795",
+  "energy_error": 4.092726157978177e-12,
+  "maximum_force_error": 2.2883257788652855e-12,
+  "previous_matched_prepared_batch_force_error": 0.0,
+  "occupied_state_scope": "not exported by this singlepoint; earlier prepared-batch gate is separate",
+  "scf_physical_residual": 4.5270857250824676e-14,
+  "scf_iterations": 134,
+  "scf_fock_builds": 136,
+  "elapsed_seconds": 6174.799017923884,
+  "peak_rss_kib": 20491552,
+  "output_sha256": "db63fbbdca8061ccc43237b6f0221841d67851a1c583bec3e9dee19afda1e16d"
+}

@@ -402,6 +402,7 @@ macro(generativeqc_add_native_tests)
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_compile_definitions(generativeqc_dft_tests PRIVATE
     GENERATIVEQC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_link_libraries(generativeqc_dft_tests PRIVATE generativeqc)
   add_test(NAME generativeqc_dft_tests COMMAND generativeqc_dft_tests)
 
   generativeqc_native_test(generativeqc_d3_atm_reference_tests tests/native/test_d3_atm.cpp NO_GENERATIVEQC)
@@ -572,7 +573,8 @@ macro(generativeqc_add_native_tests)
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}"
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    target_link_libraries(generativeqc_dft_cuda_tests PRIVATE CUDA::cudart CUDA::cublas ${CMAKE_DL_LIBS})
+    target_link_libraries(generativeqc_dft_cuda_tests PRIVATE
+      generativeqc CUDA::cudart CUDA::cublas ${CMAKE_DL_LIBS})
     set_target_properties(generativeqc_dft_cuda_tests PROPERTIES CUDA_STANDARD 20)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_mixed_matrix_tests COMMAND generativeqc_dft_cuda_tests --mixed-matrix-contractions)

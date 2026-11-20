@@ -171,8 +171,9 @@ bool supports_packaged_cpu_eri_shell_derivatives(
  * is published only on success, including zero for all-zero channels. Explicit
  * packaged execution uses the shared generated primitive kernels, with restored
  * shell/axis slots and the same public-AO normalization and channel order.
- * The generic f-shell owner counts its three directional recurrence passes,
- * independently of the number of contracted weight channels.
+ * Work counts use the selected recurrence passes, independently of the number
+ * of channels. Without the linked factorized first-order leaf, an f-shell
+ * primitive uses three directional passes.
  */
 std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
