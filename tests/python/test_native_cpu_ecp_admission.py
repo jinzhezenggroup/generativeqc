@@ -1,5 +1,6 @@
 """Public ECP dispatch boundaries, not numerical or installed qualification."""
 
+import json
 from dataclasses import replace
 from fractions import Fraction
 from typing import Any
@@ -8,7 +9,7 @@ import numpy as np
 import pytest
 import test_global_hybrid_ecp_basis as canonical_basis
 from generativeqc import Calculator
-from generativeqc.saddle import SaddleOptions, optimize_saddle
+from generativeqc.saddle import RksColdFockDamping, SaddleOptions, optimize_saddle
 from generativeqc_compiler.method import resolve_method
 from test_integral_autodiff_second import require_native_library  # noqa: F401
 
@@ -69,6 +70,7 @@ def test_canonical_ecp_dispatches_only_to_the_native_owner(
         assert request["charge"] == 1
         assert request["multiplicity"] == multiplicity
         assert request["max_eri_primitives"] == 300_000_000
+        assert request["max_map_terms"] == 2_000_000_000_000
         if endpoint == "hvp":
             np.testing.assert_array_equal(request["direction"], direction)
         else:
@@ -82,6 +84,7 @@ def test_canonical_ecp_dispatches_only_to_the_native_owner(
         "charge": 1,
         "multiplicity": multiplicity,
         "max_eri_primitives": 300_000_000,
+        "max_map_terms": 2_000_000_000_000,
     }
     if endpoint == "hessian":
         assert calculator.hessian(atoms, **context) is published
@@ -151,11 +154,172 @@ def test_ecp_hessian_admission_does_not_promote_molecular_saddles(
         pytest.fail("ECP saddle promotion started an SCF")
 
     monkeypatch.setattr(calculator, "prepare_batch", forbidden)
-    with pytest.raises(NotImplementedError, match="all-electron"):
+    with pytest.raises(NotImplementedError, match="Cs46 def2-ECP"):
         optimize_saddle(
             calculator,
             ((53, (0, 0, 0)), (1, (0.1, 0.2, 3.1))),
             masses=(126.90447, 1.00782503223),
             multiplicity=multiplicity,
             options=SaddleOptions(project_rigid_motions=True),
+            accepted_frame_warm_start=True,
+            cold_fock_damping=RksColdFockDamping(8, 0.5, 1 << 20),
         )
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "admitted",
+        "equivalent-local-label",
+        "no-warm",
+        "no-damping",
+        "no-d3",
+        "uks",
+        "cartesian",
+        "changed-potential",
+    ),
+)
+def test_cs46_def2_ecp_saddle_gate(
+    canonical_records: tuple, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    """Admit the actual native SCF, but never treat an unconverged frame as a saddle."""
+    basis = canonical_records[2]
+    cs = basis.by_element[55]
+    if case in ("equivalent-local-label", "changed-potential"):
+        potentials = json.loads(cs.ecp_data)
+        local = max(potentials, key=lambda value: value["angular_momentum"][0])
+        if case == "equivalent-local-label":
+            local["angular_momentum"] = [4]
+            potentials.reverse()
+        else:
+            local["coefficients"][0][0] = "-28.88"
+        cs = replace(cs, ecp_data=json.dumps(potentials))
+    representation = "cartesian" if case == "cartesian" else "spherical"
+    calculator = Calculator(
+        method=resolve_method(
+            "B3LYP" if case == "no-d3" else "B3LYP-D3(BJ)",
+            spin="polarized" if case == "uks" else "unpolarized",
+        ),
+        basis=replace(
+            basis, elements=(basis.by_element[1], cs), representation=representation
+        ),
+        basis_representation=representation,
+        device="cpu",
+        initial_guess=None,
+        max_iterations=3,
+    )
+    args = (
+        calculator,
+        ((55, (0, 0, 0)), (1, (0.1, 0.2, 5.5))),
+    )
+    controls = {
+        "masses": (132.90545196, 1.00782503223),
+        "accepted_frame_warm_start": case != "no-warm",
+        "cold_fock_damping": None
+        if case == "no-damping"
+        else RksColdFockDamping(2, 0.5, 1 << 20),
+    }
+    if case in ("admitted", "equivalent-local-label"):
+        result = optimize_saddle(*args, **controls)
+        assert result.optimizer.receipt["status"] == "evaluation_failed"
+        assert not result.optimizer.receipt["has_valid_state"]
+        assert result.harmonics is None
+        assert any(
+            "SCF/forces did not converge" in str(failure)
+            for failure in result.optimizer.failures
+        )
+    else:
+
+        def forbidden(*args: Any, **kwargs: Any) -> None:
+            pytest.fail("unqualified Cs46 saddle reached native batch preparation")
+
+        monkeypatch.setattr(calculator, "prepare_batch", forbidden)
+        with pytest.raises(NotImplementedError, match="Cs46 def2-ECP"):
+            optimize_saddle(*args, **controls)
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "admitted",
+        "tighter",
+        "standard-guess",
+        "no-warm",
+        "damping",
+        "no-d3",
+        "uks",
+        "cartesian",
+        "changed-potential",
+        "wrong-core",
+        "mixed-operators",
+        "initial-radius",
+        "maximum-radius",
+        "occupied-overlap",
+    ),
+)
+def test_i28_def2_ecp_bounded_saddle_gate(
+    canonical_records: tuple, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    """Only canonical, cold-start I28 with bounded steps enters the native SCF."""
+    basis = canonical_records[2]
+    iodine = basis.by_element[53]
+    if case == "changed-potential":
+        potentials = json.loads(iodine.ecp_data)
+        local = max(potentials, key=lambda value: value["angular_momentum"][0])
+        local["coefficients"][0][0] = "-21.84"
+        iodine = replace(iodine, ecp_data=json.dumps(potentials))
+    if case == "wrong-core":
+        iodine = replace(iodine, ecp_core_electrons=30)
+    atoms = ((53, (0, 0, 0)), (1, (0.1, 0.2, 3.1)))
+    masses = (126.90447, 1.00782503223)
+    elements = (basis.by_element[1], iodine)
+    if case == "mixed-operators":
+        atoms += ((55, (3.2, 0.3, 0.5)),)
+        masses += (132.90545196,)
+        elements += (basis.by_element[55],)
+    representation = "cartesian" if case == "cartesian" else "spherical"
+    calculator = Calculator(
+        method=resolve_method(
+            "B3LYP" if case == "no-d3" else "B3LYP-D3(BJ)",
+            spin="polarized" if case == "uks" else "unpolarized",
+        ),
+        basis=replace(basis, elements=elements, representation=representation),
+        basis_representation=representation,
+        initial_guess="auto" if case == "standard-guess" else None,
+        max_iterations=3,
+        device="cpu",
+    )
+    controls = {
+        "masses": masses,
+        "charge": 1 if case == "mixed-operators" else 0,
+        "multiplicity": 1,
+        "options": SaddleOptions(
+            project_rigid_motions=True,
+            initial_radius={"initial-radius": 0.016, "tighter": 0.01}.get(case, 0.015),
+            maximum_radius={"maximum-radius": 0.031, "tighter": 0.025}.get(case, 0.03),
+        ),
+        "minimum_occupied_overlap": {"occupied-overlap": 0.989, "tighter": 0.995}.get(
+            case, 0.99
+        ),
+        "accepted_frame_warm_start": case != "no-warm",
+        "cold_fock_damping": RksColdFockDamping(2, 0.5, 1 << 20)
+        if case == "damping"
+        else None,
+    }
+    if case in ("admitted", "tighter"):
+        result = optimize_saddle(calculator, atoms, **controls)
+        assert result.optimizer.receipt["status"] == "evaluation_failed"
+        assert not result.optimizer.receipt["has_valid_state"]
+        assert result.harmonics is None
+        assert any(
+            "SCF/forces did not converge" in str(failure)
+            for failure in result.optimizer.failures
+        )
+    else:
+
+        def forbidden(*args: Any, **kwargs: Any) -> None:
+            pytest.fail("unqualified I28 saddle reached native batch preparation")
+
+        monkeypatch.setattr(calculator, "prepare_batch", forbidden)
+        with pytest.raises(NotImplementedError, match="I28 def2-ECP"):
+            optimize_saddle(calculator, atoms, **controls)

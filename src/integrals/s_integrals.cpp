@@ -995,13 +995,13 @@ void assemble_value_eri_cartesian_block(std::span<const ValueEriComponent> compo
   }
 }
 
+template <class Publish>
 void project_value_eri_shell_quartet(const std::array<std::size_t, 4>& shells,
                                      const std::vector<std::size_t>& public_offsets,
                                      const std::vector<GlobalAoExpansion>& target_aos,
                                      const std::array<std::size_t, 4>& begins,
                                      const std::array<std::size_t, 4>& extents,
-                                     const ValueEriCartesianBlock& block,
-                                     std::vector<double>& eri) {
+                                     const ValueEriCartesianBlock& block, const Publish& publish) {
   const auto [si, sj, sk, sl] = shells;
   const bool same_pair = si == sk && sj == sl;
   for (std::size_t p = public_offsets[si]; p < public_offsets[si + 1]; ++p) {
@@ -1029,18 +1029,19 @@ void project_value_eri_shell_quartet(const std::array<std::size_t, 4>& shells,
               }
             }
           }
-          store_eri_symmetry(eri, target_aos.size(), {p, q, r, s}, value);
+          publish(std::array{p, q, r, s}, value);
         }
       }
     }
   }
 }
 
+template <class Publish>
 void build_spherical_value_eri_shell_quartets(const core::System& system,
                                               const std::vector<AoView>& aos,
                                               const std::vector<GlobalAoExpansion>& target_aos,
                                               const std::vector<std::size_t>& public_offsets,
-                                              std::vector<double>& eri) {
+                                              const Publish& publish) {
   const auto offsets = cartesian_shell_offsets(system);
   ValueEriCartesianBlock block;
   const auto project = [&](const std::array<std::size_t, 4>& shells,
@@ -1052,7 +1053,7 @@ void build_spherical_value_eri_shell_quartets(const core::System& system,
     }
     assemble_value_eri_cartesian_block(components, count, begins, extents, block);
     project_value_eri_shell_quartet(shells, public_offsets, target_aos, begins, extents, block,
-                                    eri);
+                                    publish);
   };
   for_each_value_eri_shell_quartet(system, aos, offsets, project);
   for_each_f_value_eri_shell_quartet(system, aos, project);
@@ -2078,6 +2079,25 @@ IntegralData transform_integrals(const IntegralData& cartesian, const core::Syst
   return transformed;
 }
 
+PackedSphericalEri build_packed_spherical_eri(const core::System& system,
+                                              std::size_t maximum_bytes) {
+  if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL ||
+      std::any_of(system.shells.begin(), system.shells.end(),
+                  [](const core::Shell& shell) { return shell.angular_momentum > 3; }))
+    throw std::invalid_argument("packed Coulomb ERIs require a real spherical s/p/d/f basis");
+  PackedSphericalEri packed(molecule::ao_count(system), maximum_bytes);
+  const auto cartesian = expand_cartesian_aos(system);
+  std::vector<std::size_t> public_offsets;
+  const auto spherical = spherical_expansions(system, &public_offsets);
+  if (spherical.size() != packed.basis())
+    throw std::logic_error("packed Coulomb ERI basis count mismatch");
+  build_spherical_value_eri_shell_quartets(
+      system, cartesian, spherical, public_offsets, [&](const auto& orbit, double value) {
+        packed.store(orbit[0], orbit[1], orbit[2], orbit[3], value);
+      });
+  return packed;
+}
+
 IntegralData build_integrals(const core::System& system, bool include_derivatives,
                              bool include_eri) {
   IntegralData out;
@@ -2163,8 +2183,10 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   }
 
   if (shell_local_spherical) {
-    build_spherical_value_eri_shell_quartets(system, aos, target_aos, target_offsets,
-                                             spherical_eri);
+    build_spherical_value_eri_shell_quartets(
+        system, aos, target_aos, target_offsets, [&](const auto& orbit, double value) {
+          store_eri_symmetry(spherical_eri, target_aos.size(), orbit, value);
+        });
   } else if (include_eri && !include_derivatives) {
     build_value_eri_shell_quartets(system, aos, out.eri);
     build_f_value_eri_shell_quartets(system, aos, out.eri);

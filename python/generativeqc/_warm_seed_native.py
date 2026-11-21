@@ -190,6 +190,25 @@ class SeedSnapshot:
             context=batch._context,
         )
 
+    def require_geometry(self, index: int, positions: np.ndarray) -> None:
+        """Validate a present slot at its original Bohr geometry without copying a seed."""
+        if not self._handle:
+            raise RuntimeError("native seed snapshot is closed")
+        view = _SeedView(ct.sizeof(_SeedView), _native.ABI_VERSION)
+        _native.check(self._library, self._read(self._handle, index, ct.byref(view)))
+        if (
+            not view.present
+            or not view.coordinates
+            or view.coordinate_count != positions.size
+            or not np.array_equal(
+                np.ctypeslib.as_array(view.coordinates, shape=(view.coordinate_count,)),
+                positions.ravel(),
+            )
+        ):
+            raise RuntimeError(
+                "native SCF seed does not bind the completed derivative frame"
+            )
+
     def diagnostic_arrays(self) -> list[np.ndarray]:
         """Return detached read-only copies for diagnostics, never production staging."""
         if not self._handle:

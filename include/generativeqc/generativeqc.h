@@ -756,13 +756,20 @@ GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void);
  * dispersion. Strings are NUL-terminated and borrowed through preparation.
  * identity may be NULL; otherwise it must match the exact 64-character MethodIR
  * digest. A positive dispersion budget is required by corrected programs. For
- * batches it bounds the aggregate correction owners, divided equally per item. */
+ * batches it bounds the aggregate correction owners, divided equally per item.
+ * Set struct_size to sizeof this descriptor. The original size through
+ * dispersion_maximum_bytes remains accepted by the v1 entry points and
+ * implies zero packed ERI budget. Other sizes are rejected. */
 typedef struct generativeqc_named_ks_descriptor {
   uint32_t struct_size;
   uint32_t abi_version;
   const char* name;
   const char* identity;
   uint64_t dispersion_maximum_bytes;
+  /** Optional aggregate CPU exact packed ERI value storage. Zero preserves
+   * the ordinary source. A positive budget requires full-range FP64 CPU
+   * values and a real-spherical s/p/d/f basis; no dense retry on refusal. */
+  uint64_t cpu_packed_eri_maximum_bytes;
 } generativeqc_named_ks_descriptor;
 
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
@@ -3382,6 +3389,41 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
     generativeqc_batch_flags flags, generativeqc_batch** batch);
+
+/** Bounded cold B3LYP RKS orbital proposal policy. The prefix includes the
+ * first, unmixed proposal and counts against the ordinary iteration limit.
+ * Set struct_size and abi_version as for other versioned descriptors, and
+ * leave reserved zero. previous_weight is the fraction of the last proposal
+ * in each later prefix step; maximum_bytes bounds the extra FP64 AO matrix. */
+typedef struct generativeqc_rks_cold_fock_options_v1 {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint32_t prefix_iterations;
+  uint32_t reserved;
+  double previous_weight;
+  uint64_t maximum_bytes;
+} generativeqc_rks_cold_fock_options_v1;
+
+/** @native-contract generativeqc_batch_prepare_named_ks_cold_rks_v1
+ * @behavior Prepare one direct FP64 CPU B3LYP-D3(BJ) RKS item with optional
+ * warm reuse and a bounded Fock-proposal prefix on the initial cold solve.
+ * The requested physical Fock and strict final verification are not damped.
+ * @inputs Ordinary named KS preparation inputs; system_count is one. The
+ * cold options are required; reserved is zero, weight is strictly between
+ * zero and one, and the prefix is at least two and shorter than the SCF budget.
+ * @outputs Clears the output slot on entry; success publishes an owning batch.
+ * @lifetime Copies all controls and requires the context to outlive the batch.
+ * @errors A malformed size/version returns ABI mismatch; incompatible methods,
+ * invalid cold controls, seeded preliminary stages and insufficient workspace
+ * fail without publishing a batch.
+ * @execution Synchronous; restores, warm SCF and warm retry use no proposal prefix.
+ * @units Coordinates in Bohr, energies in Hartree, the workspace cap in bytes.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_rks_cold_fock_options_v1* cold, generativeqc_batch_flags flags,
+    generativeqc_batch** batch);
 
 /** @native-contract generativeqc_ks_d3_resource_query_v1
  * @behavior Query the capacities of KS's retained per-system D3 correction owners.

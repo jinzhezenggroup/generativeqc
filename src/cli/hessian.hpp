@@ -22,7 +22,8 @@ struct HessianInvocation {
   std::uint64_t max_nonlocal_pairs{16777216};
   std::uint64_t numeric_bytes{512ULL << 20}, ecp_bytes{128ULL << 20};
   std::uint64_t dispersion_bytes{64ULL << 20}, max_eri_primitives{100'000'000};
-  std::uint64_t max_d3_pairs{16'777'216};
+  std::uint64_t cpu_packed_eri_bytes{};
+  std::uint64_t max_d3_pairs{16'777'216}, max_map_terms{1ULL << 40};
   bool cpu_controls_explicit{}, cuda_controls_explicit{}, response_atol_explicit{};
   double response_rtol{1e-10};
   double response_atol{0};

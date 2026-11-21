@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <new>
 #include <optional>
 #include <stdexcept>
@@ -28,6 +29,7 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/rks_cold_fock.hpp"
 #include "scf/solver/diis.hpp"
 #include "scf/solver/proposal_control.hpp"
 #include "solver/self_consistent.hpp"
@@ -586,7 +588,8 @@ ScfResult run_rks(
     const dft::MolecularGrid& grid, const ScfOptions& options,
     const std::vector<double>* initial_density, RksXcEvaluator evaluate_xc, const char* method_name,
     dft::nlc::Vv10Plan* nonlocal_correlation,
-    dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
+    dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive,
+    const RksColdFockDamping* cold_damping = nullptr) {
   if (options.xc_density_route != dft::XcDensityRoute::DensityMatrix &&
       options.xc_density_route != dft::XcDensityRoute::OccupiedOrbitals)
     throw std::invalid_argument("unsupported RKS XC density route");
@@ -648,6 +651,9 @@ ScfResult run_rks(
     throw std::invalid_argument("RSH correction refuses a stale or incompatible source binding");
 
   const std::size_t n = ints.nbf;
+  const auto proposal_bytes =
+      cold_damping ? cold_damping->proposal_bytes(n, options.max_iterations) : 0;
+  if (initial_density) cold_damping = nullptr;
   const std::size_t occupied = static_cast<std::size_t>(system.electron_count / 2);
   if (occupied > n) throw std::runtime_error("basis has fewer orbitals than occupied pairs");
   if (options.preliminary_guess) {
@@ -855,22 +861,44 @@ ScfResult run_rks(
   const double residual_tolerance = std::min(1.0e-9, options.density_tolerance);
   const auto run_stage = [&](Matrix stage_density, bool strict_full, bool retain_current,
                              unsigned iteration_offset, unsigned iteration_budget) {
+    const auto* damping = iteration_offset == 0 ? cold_damping : nullptr;
+    auto previous_proposal = damping ? std::make_unique_for_overwrite<double[]>(n * n) : nullptr;
+    if (damping) {
+      runtime::df_progress::number("cold_fock_prefix_iterations", damping->prefix_iterations);
+      runtime::df_progress::number("cold_fock_workspace_bytes", proposal_bytes);
+    }
     const ::generativeqc::solver::SelfConsistentPolicy stage_policy{
         iteration_budget, options.energy_tolerance, options.density_tolerance, residual_tolerance,
         true};
     return ::generativeqc::solver::run_self_consistent(
         std::move(stage_density), stage_policy,
-        [&](const Matrix& current_density, unsigned) {
+        [&](const Matrix& current_density, unsigned iteration) {
+          if (previous_proposal && iteration > damping->prefix_iterations)
+            previous_proposal.reset();
+          const auto proposal_capacity = previous_proposal ? proposal_bytes : 0;
           const auto current_factor = factor;
           const auto current_identity = identity;
           ++result.fock_builds;
-          const auto physical = evaluate_current(current_density, 0, strict_full);
+          const auto physical = evaluate_current(current_density, proposal_capacity, strict_full);
           const Matrix residual =
               commutator_residual(physical.fock, current_density, ints.overlap, n);
-          const Matrix effective_fock = diis.update(physical.fock, residual);
+          Matrix effective_fock;
+          if (previous_proposal) {
+            // Only diagonalization sees the proposal. Energy and the physical
+            // commutator above still come from the undamped requested Fock.
+            effective_fock = physical.fock;
+            if (iteration > 1)
+              for (std::size_t index = 0; index < effective_fock.size(); ++index)
+                effective_fock[index] = (1 - damping->previous_weight) * effective_fock[index] +
+                                        damping->previous_weight * previous_proposal[index];
+            std::copy(effective_fock.begin(), effective_fock.end(), previous_proposal.get());
+          } else {
+            effective_fock = diis.update(physical.fock, residual);
+          }
           orbitals = generalized_eigen(effective_fock, orthogonalizer, n);
-          const auto iteration_bytes =
-              runtime::vector_capacities(physical.fock, residual, effective_fock);
+          const auto iteration_bytes = runtime::add_capacity(
+              runtime::vector_capacities(physical.fock, residual, effective_fock),
+              proposal_capacity);
           Matrix next_density = next_density_from_orbitals(current_density, iteration_bytes);
           runtime::sample_cpu_capacity(runtime::add_capacity(
               retained_capacity(current_density),
@@ -1194,7 +1222,14 @@ ScfResult run_curated_semilocal_ks(const PreparedFockPlan& plan, const dft::AoBa
 
 ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
-                        double exact_exchange, const std::vector<double>* initial_density) {
+                        double exact_exchange, const std::vector<double>* initial_density,
+                        const RksColdFockDamping* cold_damping) {
+  if (cold_damping && (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+                       options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) !=
+                           GENERATIVEQC_PRECISION_FP64 ||
+                       options.preliminary_guess || options.incremental_direct_jk ||
+                       options.incremental_direct_jk_auto))
+    throw std::invalid_argument("cold Fock damping requires direct FP64 B3LYP RKS");
   auto spec = make_global_hybrid_fock_spec(FockSpin::Restricted, exact_exchange);
   spec.exchange.present = exact_exchange != 0.0;
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
@@ -1207,7 +1242,7 @@ ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
     throw std::invalid_argument("B3LYP plan does not match the generated MethodIR composition");
   return run_rks(plan, nullptr, basis, grid, options, initial_density,
                  RksXcEvaluator(evaluate_b3lyp_xc_rks, dft::SemilocalFamily::B3lyp), "B3LYP",
-                 nullptr);
+                 nullptr, dft::nlc::Vv10DensityDomain::StrictPositive, cold_damping);
 }
 
 ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan& correction,

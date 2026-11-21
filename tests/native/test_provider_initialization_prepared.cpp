@@ -65,8 +65,10 @@ std::unique_ptr<PreparedCalculation> prepare_calculation(core::ContextState&, co
                                                          const generativeqc_method_descriptor&,
                                                          const core::System*,
                                                          const named_ks::Dispersion* dispersion,
-                                                         std::uint64_t dispersion_bytes) {
-  require(!dispersion && !dispersion_bytes, "legacy metadata factory received named dispersion");
+                                                         std::uint64_t dispersion_bytes,
+                                                         std::uint64_t packed_eri_bytes) {
+  require(!dispersion && !dispersion_bytes && !packed_eri_bytes,
+          "legacy metadata factory received named KS resources");
   return std::make_unique<MetadataPlan>();
 }
 void prepare_calculation_with_provider_initialization_intent_into(

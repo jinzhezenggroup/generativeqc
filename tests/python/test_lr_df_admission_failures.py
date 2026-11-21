@@ -108,9 +108,12 @@ struct Owner {
 """
 
 FACTORY = r"""
+struct PackedEriRequest { std::size_t maximum_bytes; };
 struct KsPreparedState : Owner {
   KsPreparedState(int,const core::System&,ExecutionPlan plan,Options,int,
-                  generativeqc_backend backend,int,const core::System*,const int*) {
+                  generativeqc_backend backend,int,const core::System*,const int*,
+                  std::optional<PackedEriRequest> packed_eri) {
+    assert(!packed_eri);  // Optional LR admission does not request packed exact ERIs.
     execution_plan_=plan;
     backend_=backend;
     if (plan.density_fitted_range_exchange && failure==Failure::primary_allocation)
@@ -125,6 +128,7 @@ namespace runtime { struct DeviceCapacityScope { explicit DeviceCapacityScope(co
 const core::System* ks_auxiliary_for_system(const core::System&,int) { return nullptr; }
 struct Batch {
   std::unique_ptr<int> capacity_;
+  std::optional<PackedEriRequest> packed_eri_;
   ExecutionPlan execution_plan_;
   Options options_;
   int capabilities_=0,grid_spec_=0,device_=0,auxiliary_=0;

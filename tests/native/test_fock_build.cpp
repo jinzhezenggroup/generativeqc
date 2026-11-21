@@ -359,6 +359,18 @@ void verify_independent_terms_and_coefficients() {
                                                    : std::array{0.30, 0.41, 0.41, -0.06};
         require_matrix(fock.alpha, expected, "J-only Fock");
         if (spin == FockSpin::Unrestricted) require_matrix(fock.beta, expected, "UHF J-only beta");
+        if (spin == FockSpin::Restricted) {
+          // A nonsymmetric ERI matrix and density distinguish the two AO-pair
+          // axes, including an accidental transposed matrix-vector product.
+          const std::array asymmetric_eri{1., 2.,  3.,  4.,  5.,  6.,  7.,  8.,
+                                          9., 10., 11., 12., 13., 14., 15., 16.};
+          const auto asymmetric =
+              build_exact_direct_jk(strategy, 2, asymmetric_eri, std::array{2., -1., 3., 4.});
+          require_matrix(asymmetric.coulomb, std::array{25., 57., 89., 121.},
+                         "restricted J-only AO-pair order");
+          require(asymmetric.exchange_alpha.empty() && asymmetric.exchange_beta.empty(),
+                  "restricted J-only requested an exchange matrix");
+        }
       } else if (requested == 2) {
         require_matrix(fock.alpha,
                        spin == FockSpin::Restricted ? std::array{-2.05, -0.115, -0.115, -1.445}

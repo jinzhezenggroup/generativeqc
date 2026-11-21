@@ -10,6 +10,10 @@
 #include "runtime/provider_registry.hpp"
 #include "scf/coulomb_exchange_work.hpp"
 
+namespace generativeqc::integrals {
+class PackedSphericalEri;
+}
+
 namespace generativeqc::scf {
 
 enum class FockSpin { Restricted, Unrestricted };
@@ -180,6 +184,15 @@ struct FockMatrices {
 DirectJkMatrices build_exact_direct_jk(const ResolvedFockBuild& strategy, std::size_t nbf,
                                        std::span<const double> eri, std::span<const double> density,
                                        std::span<const double> beta = {});
+
+/** Private alternate reduction order for the same exact packed orbit input. */
+enum class PackedEriContraction { Ordered, Streamed };
+
+/** Contract exact, value-only full-range J/K without expanding packed ERIs. */
+DirectJkMatrices build_packed_spherical_jk(
+    const ResolvedFockBuild& strategy, const integrals::PackedSphericalEri& eri,
+    std::span<const double> density, std::span<const double> beta = {},
+    PackedEriContraction contraction = PackedEriContraction::Ordered);
 FockMatrices assemble_fock(const ResolvedFockBuild& strategy, std::span<const double> hcore,
                            const DirectJkMatrices& jk);
 struct FockEnergyComponents {

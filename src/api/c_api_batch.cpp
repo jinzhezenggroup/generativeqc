@@ -19,6 +19,7 @@
 #include "methods/batch_capabilities.hpp"
 #include "methods/method.hpp"
 #include "runtime/host_component_trace.hpp"
+#include "scf/rks_cold_fock.hpp"
 
 extern "C" {
 
@@ -138,7 +139,8 @@ static generativeqc_status prepare_batch(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
     const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
-    generativeqc_batch** batch, const generativeqc_named_ks_descriptor* named) {
+    generativeqc_batch** batch, const generativeqc_named_ks_descriptor* named,
+    const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr) {
   generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
@@ -162,7 +164,7 @@ static generativeqc_status prepare_batch(
     generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
     if (named) {
-      named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
+      named_inputs.emplace(*descriptor, named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
     }
 
@@ -202,7 +204,8 @@ static generativeqc_status prepare_batch(
         generativeqc::api::native_auxiliary_basis(*descriptor),
         named_inputs && named_inputs->program->dispersion.kind ? &named_inputs->program->dispersion
                                                                : nullptr,
-        named ? named->dispersion_maximum_bytes : 0);
+        named_inputs ? named_inputs->selection.dispersion_maximum_bytes : 0,
+        named_inputs ? named_inputs->selection.cpu_packed_eri_maximum_bytes : 0, cold_damping);
     *batch = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
@@ -226,6 +229,23 @@ generativeqc_status generativeqc_batch_prepare_named_ks_v1(
   if (batch) *batch = nullptr;
   if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name);
+}
+
+generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_rks_cold_fock_options_v1* cold, generativeqc_batch_flags flags,
+    generativeqc_batch** batch) {
+  if (batch) *batch = nullptr;
+  if (!name || !cold || system_count != 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(cold)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (cold->reserved || cold->maximum_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const generativeqc::scf::RksColdFockDamping damping{
+      cold->prefix_iterations, cold->previous_weight,
+      static_cast<std::size_t>(cold->maximum_bytes)};
+  return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name,
+                       &damping);
 }
 
 generativeqc_status generativeqc_batch_prepare_with_device_resources(

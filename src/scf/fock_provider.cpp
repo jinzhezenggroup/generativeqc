@@ -17,7 +17,7 @@ std::size_t product(std::size_t a, std::size_t b) {
           "Fock provider dimensions overflow");
   return a * b;
 }
-void finite(const std::vector<double>& values) {
+void finite(std::span<const double> values) {
   for (double value : values) require(std::isfinite(value), "nonfinite Fock provider input");
 }
 FockBuildSpec selected(FockBuildSpec spec, bool j, bool k) {
@@ -29,9 +29,13 @@ FockBuildSpec selected(FockBuildSpec spec, bool j, bool k) {
 
 CpuFockProviderView::CpuFockProviderView(const integrals::IntegralData& exact,
                                          const std::vector<double>* range_eri,
-                                         FockOperator range_operator, double range_omega)
+                                         FockOperator range_operator, double range_omega,
+                                         const integrals::PackedSphericalEri* packed_eri,
+                                         PackedEriContraction packed_contraction)
     : exact_(&exact),
       range_eri_(range_eri),
+      packed_eri_(packed_eri),
+      packed_contraction_(packed_contraction),
       range_operator_(range_operator),
       range_omega_(range_omega) {}
 CpuFockProviderView::CpuFockProviderView(const DensityFittingScfData& fitted) : fitted_(&fitted) {}
@@ -52,8 +56,15 @@ void CpuFockProviderView::validate(const ResolvedFockBuild& strategy) const {
         strategy.spec.coulomb.present ||
         (strategy.spec.exchange.present && strategy.spec.exchange.op == FockOperator::FullRange);
     if (needs_full) {
-      require(exact_->eri.size() == count, "exact Fock provider ERI shape mismatch");
-      finite(exact_->eri);
+      if (packed_eri_) {
+        require(exact_->eri.empty() && packed_eri_->basis() == nbf() && !range_eri_ &&
+                    !strategy.spec.derivative_order,
+                "packed Fock provider requires a single exact values-only source");
+        finite(packed_eri_->values());
+      } else {
+        require(exact_->eri.size() == count, "exact Fock provider ERI shape mismatch");
+        finite(exact_->eri);
+      }
     }
     if (strategy.spec.exchange.present && strategy.spec.exchange.op != FockOperator::FullRange) {
       require(range_eri_ && range_operator_ == strategy.spec.exchange.op &&
@@ -108,6 +119,8 @@ DirectJkMatrices CpuFockProviderView::build(FockBuildSpec spec, const std::vecto
                                             const std::vector<double>& beta) const {
   if (exact_) {
     const auto strategy = resolve_fock_build(spec, FockBackend::Cpu);
+    if (packed_eri_)
+      return build_packed_spherical_jk(strategy, *packed_eri_, density, beta, packed_contraction_);
     if (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange)
       return build_exact_direct_jk(strategy, nbf(), exact_->eri, density, beta);
     DirectJkMatrices result;

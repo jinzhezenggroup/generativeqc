@@ -30,7 +30,7 @@ class HessianCli(unittest.TestCase):
         self.direction.write_text(json.dumps([[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]]))
 
     def call(
-        self, *arguments: str, operation: str = "hvp"
+        self, *arguments: str, operation: str = "hvp", trace: Path | None = None
     ) -> subprocess.CompletedProcess:
         command = [str(CLI), operation, str(self.xyz), "--units", "bohr", "--json"]
         if operation == "hvp":
@@ -46,6 +46,7 @@ class HessianCli(unittest.TestCase):
                 PATH="/nonexistent",
                 PYTHONHOME="/nonexistent",
                 PYTHONPATH="/nonexistent",
+                GENERATIVEQC_DF_PROGRESS_TRACE=str(trace) if trace is not None else "",
             ),
         )
 
@@ -96,6 +97,7 @@ class HessianCli(unittest.TestCase):
             ("--response-max-iterations", "-1"),
             ("--device-budget-bytes", "0"),
             ("--max-nonlocal-pairs", "18446744073709551616"),
+            ("--max-map-terms", "0"),
         ):
             with self.subTest(option=option):
                 self.rejected(self.call(option, value), option)
@@ -127,6 +129,10 @@ class HessianCli(unittest.TestCase):
         self.rejected(
             self.call("--backend", "cuda", "--density-fitting", "cpu"),
             "CPU density-fitting",
+        )
+        self.rejected(
+            self.call("--backend", "cuda", "--max-map-terms", "1"),
+            "does not use CPU",
         )
 
     def test_cpu_full_matrix_hvp_and_total_composition_without_python(self) -> None:
@@ -229,6 +235,61 @@ class HessianCli(unittest.TestCase):
             "1",
         )
         self.rejected(result, "D3 pair-work cap")
+
+    def test_cpu_map_work_cap_refusal_and_recovery(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        options = ("--backend", "cpu", "--method", "b3lyp-rks")
+        for option, detail in (
+            ("--max-map-terms", "integral-map work cap"),
+            ("--max-eri-primitives", "nuclear primitive-work cap"),
+        ):
+            with self.subTest(option=option):
+                refused = self.call(*options, option, "1")
+                self.rejected(refused, detail)
+                self.assertRegex(refused.stderr, r"planned=[1-9][0-9]+, cap=1\)")
+        map_cap = 1 << 39
+        trace = self.root / "hvp.jsonl"
+        action = self.call(*options, "--max-map-terms", str(map_cap), trace=trace)
+        self.assertEqual(action.returncode, 0, action.stderr)
+        diagnostic = json.loads(action.stdout)["diagnostics"]
+        self.assertEqual(diagnostic["max_map_terms"], map_cap)
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+
+        def observed(stage: str, key: str) -> int:
+            """Sum completed work reported by the direction's diagnostic scopes."""
+            return sum(
+                event["value"]
+                for event in events
+                if event["name"] == stage and event.get("key") == key
+            )
+
+        for phase in ("first", "curvature"):
+            self.assertGreater(observed(f"cpu_hessian_{phase}_xc", "map_terms"), 0)
+            self.assertEqual(
+                observed(f"cpu_hessian_{phase}_integrals", "eri_primitives"),
+                diagnostic[f"{phase}_eri_primitives"],
+            )
+        self.assertEqual(
+            observed("cpu_hessian_first_one_electron", "one_electron_primitives"),
+            diagnostic["first_one_electron_primitives"],
+        )
+        self.assertEqual(
+            observed("cpu_hessian_first_eri", "eri_primitives"),
+            diagnostic["first_eri_primitives"],
+        )
+        self.assertTrue(
+            any(
+                event["name"] == "cpu_hessian_cpks"
+                and event["event"] == "END"
+                and event["status"] == "converged"
+                for event in events
+            )
+        )
+        self.assertEqual(
+            observed("cpu_hessian_cpks", "response_iterations"),
+            diagnostic["response_iterations"],
+        )
 
     def test_cpu_ecp_reaches_bounded_native_owner_without_a_python_worker(self) -> None:
         """Synthetic admission/resource control, not real-element qualification."""

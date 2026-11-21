@@ -24,6 +24,35 @@
 namespace generativeqc::scf {
 namespace {
 constexpr std::size_t kDefaultDeviceBudget = 256U * 1024U * 1024U;
+
+bool has_full_range_exact_values(const FockBuildSpec& spec) {
+  return (spec.coulomb.present && spec.coulomb.approximation == FockApproximation::Exact) ||
+         (spec.exchange.present && spec.exchange.approximation == FockApproximation::Exact &&
+          spec.exchange.op == FockOperator::FullRange);
+}
+
+void validate_packed_eri_request(const ResolvedFockBuild& strategy,
+                                 CpuPackedEriPreparation request) {
+  const auto& spec = strategy.spec;
+  const auto packable = [](const FockTermSpec& term) {
+    return !term.present ||
+           (term.approximation == FockApproximation::Exact && term.op == FockOperator::FullRange);
+  };
+  if (!request.maximum_bytes ||
+      (request.contraction != PackedEriContraction::Ordered &&
+       request.contraction != PackedEriContraction::Streamed) ||
+      strategy.backend != FockBackend::Cpu || spec.derivative_order ||
+      !has_full_range_exact_values(spec) || !packable(spec.coulomb) || !packable(spec.exchange))
+    throw std::invalid_argument("packed ERI preparation requires full-range exact CPU values");
+}
+
+std::size_t packed_eri_extent(const core::System& system) {
+  if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL ||
+      std::any_of(system.shells.begin(), system.shells.end(),
+                  [](const core::Shell& shell) { return shell.angular_momentum > 3; }))
+    throw std::invalid_argument("packed Coulomb ERIs require a real spherical s/p/d/f basis");
+  return integrals::PackedSphericalEri::required_bytes(molecule::ao_count(system));
+}
 void checked(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
@@ -124,6 +153,19 @@ bool same_system(const core::System& a, const core::System& b) noexcept {
 }
 }  // namespace
 
+void preflight_packed_eri(const ResolvedFockBuild& strategy, std::span<const core::System> systems,
+                          CpuPackedEriPreparation request) {
+  validate_packed_eri_request(strategy, request);
+  auto remaining = request.maximum_bytes;
+  for (const auto& system : systems) {
+    const auto bytes = packed_eri_extent(system);
+    if (bytes > remaining)
+      throw std::length_error("packed spherical ERI capacity exceeded for retained KS batch");
+    remaining -= bytes;
+  }
+  runtime::df_progress::number("packed_eri_batch_planned_bytes", request.maximum_bytes - remaining);
+}
+
 PreparedFockDeviceCapacity prepared_fock_device_capacity(
     const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
     std::size_t device_budget_bytes, std::size_t exact_device_bytes,
@@ -171,6 +213,7 @@ struct PreparedFockPlan::Impl {
   std::size_t requested_budget;
   FockPreparationDiagnostic diagnostic;
   integrals::IntegralData exact;
+  std::optional<integrals::PackedSphericalEri> packed_eri;
   std::vector<double> range_eri;
   FockOperator range_operator{FockOperator::FullRange};
   double range_omega{};
@@ -233,13 +276,19 @@ struct PreparedFockPlan::Impl {
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
        std::size_t budget, unsigned retained_direct_derivative_order,
        unsigned retained_fitted_derivative_order_input,
-       FockOccupiedProjectionReservation projection_reservation_input)
+       FockOccupiedProjectionReservation projection_reservation_input,
+       std::optional<CpuPackedEriPreparation> packed_request)
       : orbital(system),
         device_id(strategy.backend == FockBackend::Cuda ? device : -1),
         requested_budget(strategy.backend == FockBackend::Cuda ? budget : 0),
         retained_fitted_derivative_order(retained_fitted_derivative_order_input),
         projection_reservation(projection_reservation_input) {
     validate_resolved_fock_build(strategy);
+    if (packed_request) {
+      validate_packed_eri_request(strategy, *packed_request);
+      if (retained_direct_derivative_order || retained_fitted_derivative_order)
+        throw std::invalid_argument("packed ERIs do not retain differentiated values");
+    }
     if (strategy.backend == FockBackend::Cuda &&
         needs(strategy.spec, FockApproximation::DensityFitted))
       cuda_execution::require_cuda_df_spin_domain(system, strategy.spec.spin);
@@ -280,11 +329,7 @@ struct PreparedFockPlan::Impl {
     const bool range_exact = strategy.spec.exchange.present &&
                              strategy.spec.exchange.approximation == FockApproximation::Exact &&
                              strategy.spec.exchange.op != FockOperator::FullRange;
-    const bool full_exact = (strategy.spec.coulomb.present &&
-                             strategy.spec.coulomb.approximation == FockApproximation::Exact) ||
-                            (strategy.spec.exchange.present &&
-                             strategy.spec.exchange.approximation == FockApproximation::Exact &&
-                             strategy.spec.exchange.op == FockOperator::FullRange);
+    const bool full_exact = has_full_range_exact_values(strategy.spec);
     const bool derivatives =
         strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0;
     const bool df_derivatives = derivatives;
@@ -300,7 +345,17 @@ struct PreparedFockPlan::Impl {
       }
     }
     if (strategy.backend == FockBackend::Cpu) {
-      auto ints = integrals::build_integrals(system, derivatives, full_exact);
+      const auto contraction =
+          packed_request ? packed_request->contraction : PackedEriContraction::Ordered;
+      if (packed_request) {
+        runtime::df_progress::number("packed_eri_planned_bytes", packed_eri_extent(system));
+        packed_eri.emplace(
+            integrals::build_packed_spherical_eri(system, packed_request->maximum_bytes));
+        runtime::df_progress::number("packed_eri_retained_bytes", packed_eri->capacity_bytes());
+        runtime::df_progress::number("packed_eri_streamed_reduction",
+                                     contraction == PackedEriContraction::Streamed ? 1 : 0);
+      }
+      auto ints = integrals::build_integrals(system, derivatives, full_exact && !packed_eri);
       if (range_exact) {
         range_operator = strategy.spec.exchange.op;
         range_omega = strategy.spec.exchange.omega;
@@ -333,7 +388,8 @@ struct PreparedFockPlan::Impl {
         if (!term.present) return {};
         return term.approximation == FockApproximation::Exact
                    ? CpuFockProviderView(data, range_exact ? &range_eri : nullptr, range_operator,
-                                         range_omega)
+                                         range_omega, packed_eri ? &*packed_eri : nullptr,
+                                         contraction)
                    : CpuFockProviderView(*fitted);
       };
       cpu_view.emplace(strategy, data.nbf, data.ncoord, provider(strategy.spec.coulomb),
@@ -664,10 +720,11 @@ PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::Syste
                                    ResolvedFockBuild strategy, int device, std::size_t budget,
                                    unsigned retained_direct_derivative_order,
                                    unsigned retained_fitted_derivative_order,
-                                   FockOccupiedProjectionReservation projection_reservation)
-    : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget,
-                                   retained_direct_derivative_order,
-                                   retained_fitted_derivative_order, projection_reservation)) {}
+                                   FockOccupiedProjectionReservation projection_reservation,
+                                   std::optional<CpuPackedEriPreparation> packed_eri)
+    : impl_(std::make_unique<Impl>(
+          system, auxiliary, strategy, device, budget, retained_direct_derivative_order,
+          retained_fitted_derivative_order, projection_reservation, packed_eri)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
 PreparedFockPlan::PreparedFockPlan(const core::System& system, integrals::IntegralData values,
                                    FockSpin spin, FockBackend backend, int device,
@@ -749,11 +806,13 @@ const DensityFittingScfData* PreparedFockPlan::cpu_fitted_data() const noexcept 
 std::size_t PreparedFockPlan::cpu_observation_capacity() const noexcept {
   const auto* fitted = cpu_fitted_data();
   const auto& data = fitted ? fitted->one_electron : one_electron();
-  const auto orbital = runtime::add_capacity(
+  const auto orbital_without_packed = runtime::add_capacity(
       runtime::vector_capacities(data.overlap, data.hcore, data.eri, data.overlap_derivative,
                                  data.hcore_derivative, data.eri_derivative,
                                  data.nuclear_repulsion_derivative, impl_->range_eri),
       impl_->overlap_cache.numeric_capacity_bytes());
+  const auto orbital = runtime::add_capacity(
+      orbital_without_packed, impl_->packed_eri ? impl_->packed_eri->capacity_bytes() : 0);
   return fitted ? runtime::add_capacity(
                       orbital,
                       runtime::vector_capacities(

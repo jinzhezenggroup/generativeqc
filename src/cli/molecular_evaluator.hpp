@@ -2,17 +2,20 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <chrono>
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <span>
+#include <sstream>
 #include <utility>
 
 #include "api/ks_batch_capabilities.hpp"
 #include "api/ks_host_hessian.hpp"
 #include "cli/molecular_system.hpp"
 #include "cli/saddle.hpp"
+#include "generativeqc/warm_seed.h"
 #include "solver/cpu/symmetric_eigen.hpp"
 
 namespace generativeqc::cli {
@@ -44,6 +47,8 @@ struct MolecularOrbitalSnapshot {
 class NativeMolecularEvaluator {
   using Clock = std::chrono::steady_clock;
   using Batch = std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)>;
+  using Seed = std::unique_ptr<generativeqc_warm_seed_snapshot,
+                               decltype(&generativeqc_warm_seed_snapshot_destroy)>;
 
  public:
   NativeMolecularEvaluator(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
@@ -74,6 +79,10 @@ class NativeMolecularEvaluator {
             {"source_xc_point_visits", 0},
             {"curvature_xc_point_visits", 0},
             {"response_xc_point_visits", 0},
+            {"ecp_kernel_blocks", 0},
+            {"ecp_radial_layers", 0},
+            {"ecp_ao_primitive_points", 0},
+            {"ecp_contraction_terms", 0},
             {"d3_pair_visits", 0},
             {"d3_reference_terms", 0}};
   }
@@ -87,6 +96,63 @@ class NativeMolecularEvaluator {
     return !basis_.ecp_terms.empty() ||
            std::any_of(basis_.core_electrons.begin(), basis_.core_electrons.end(),
                        [](std::int32_t core) { return core != 0; });
+  }
+
+  /** Match the qualified def2-ECP operator, not a user-supplied name or core count. */
+  bool uses_only_spherical_def2_ecp(int atomic_number) const {
+    // Pinned BSE def2-ECP (tests/data/global_hybrid_ecp/manifest.json).
+    // All rows have radial power 2; -1 denotes the local channel.
+    struct Term {
+      int channel;
+      double exponent, coefficient;
+    };
+    constexpr std::array cs46{Term{-1, 3.123269, -28.884309}, Term{0, 4.079750, 84.547730},
+                              Term{0, 2.417406, 16.654173},   Term{0, 3.123269, 28.884309},
+                              Term{1, 5.514080, 157.049059},  Term{1, 2.160316, 26.423307},
+                              Term{1, 3.123269, 28.884309},   Term{2, 1.807410, 13.172753},
+                              Term{2, 0.858182, 3.342833},    Term{2, 3.123269, 28.884309}};
+    constexpr std::array i28{Term{-1, 19.458609, -21.842040}, Term{-1, 19.349260, -28.468191},
+                             Term{-1, 4.823767, -0.243713},   Term{-1, 4.884315, -0.320804},
+                             Term{0, 40.015835, 49.994293},   Term{0, 17.429747, 281.025317},
+                             Term{0, 9.005484, 61.573326},    Term{0, 19.458609, 21.842040},
+                             Term{0, 19.349260, 28.468191},   Term{0, 4.823767, 0.243713},
+                             Term{0, 4.884315, 0.320804},     Term{1, 15.355466, 67.442841},
+                             Term{1, 14.971833, 134.881137},  Term{1, 8.960164, 14.675051},
+                             Term{1, 8.259096, 29.375666},    Term{1, 19.458609, 21.842040},
+                             Term{1, 19.349260, 28.468191},   Term{1, 4.823767, 0.243713},
+                             Term{1, 4.884315, 0.320804},     Term{2, 15.068908, 35.439529},
+                             Term{2, 14.555322, 53.176057},   Term{2, 6.718647, 9.067195},
+                             Term{2, 6.456393, 13.206937},    Term{2, 1.191779, 0.089335},
+                             Term{2, 1.291157, 0.052380},     Term{2, 19.458609, 21.842040},
+                             Term{2, 19.349260, 28.468191},   Term{2, 4.823767, 0.243713},
+                             Term{2, 4.884315, 0.320804}};
+    if (basis_.representation != GENERATIVEQC_BASIS_SPHERICAL || basis_.ecp_terms.empty() ||
+        basis_.core_electrons.size() != atoms_.size() ||
+        (atomic_number != 55 && atomic_number != 53))
+      return false;
+    const auto expected =
+        atomic_number == 55 ? std::span<const Term>{cs46} : std::span<const Term>{i28};
+    const auto expected_core = atomic_number == 55 ? 46 : 28;
+    // Basis expansion emits terms in atom order, but the radial row order is immaterial.
+    auto term = basis_.ecp_terms.begin();
+    for (std::size_t atom = 0; atom < atoms_.size(); ++atom) {
+      const auto core = basis_.core_electrons[atom];
+      if (!core) continue;
+      if (atoms_[atom].atomic_number != atomic_number || core != expected_core) return false;
+      std::bitset<i28.size()> matched;
+      for (; term != basis_.ecp_terms.end() && term->atom_index == atom; ++term) {
+        const auto row = std::find_if(expected.begin(), expected.end(), [&](const Term& value) {
+          return term->channel == value.channel && term->power == 2 &&
+                 term->exponent == value.exponent && term->coefficient == value.coefficient;
+        });
+        if (row == expected.end()) return false;
+        const auto index = static_cast<std::size_t>(row - expected.begin());
+        if (matched.test(index)) return false;
+        matched.set(index);
+      }
+      if (matched.count() != expected.size()) return false;
+    }
+    return term == basis_.ecp_terms.end();
   }
 
   /** Rejected trials cannot replace the occupied spaces of an accepted frame. */
@@ -117,6 +183,37 @@ class NativeMolecularEvaluator {
     return {frame->orbitals, frame->coefficients};
   }
 
+  /** Serialize only occupied columns from the accepted frame, without a new SCF
+   * or a detached copy of the virtual coefficients. The budget counts FP64
+   * payload bytes, not JSON representation overhead.
+   */
+  Json accepted_occupied_state(std::span<const double> positions,
+                               std::uint64_t maximum_bytes) const {
+    if (!accepted_ || !std::equal(positions.begin(), positions.end(), accepted_->positions.begin(),
+                                  accepted_->positions.end()))
+      throw std::logic_error("occupied-state export has no matching accepted frame");
+    const auto& shape = accepted_->orbitals;
+    const auto beta = shape.spins == 2 ? shape.beta_occupied : 0;
+    const auto bytes = sizeof(double) * shape.basis * (shape.alpha_occupied + beta);
+    if (bytes > maximum_bytes)
+      throw std::length_error("occupied-state export exceeds --occupied-state-budget-bytes");
+    Json channels = Json::array();
+    for (std::size_t spin = 0; spin < shape.spins; ++spin) {
+      const auto occupied = spin == 0 ? shape.alpha_occupied : beta;
+      Json coefficients = Json::array();
+      for (std::size_t ao = 0; ao < shape.basis; ++ao) {
+        const auto begin =
+            accepted_->coefficients.begin() + (spin * shape.basis + ao) * shape.basis;
+        coefficients.push_back(std::vector<double>(begin, begin + occupied));
+      }
+      channels.push_back(
+          {{"occupied_orbitals", occupied}, {"coefficients", std::move(coefficients)}});
+    }
+    return {{"basis_dimension", shape.basis},
+            {"numeric_bytes", bytes},
+            {"channels", std::move(channels)}};
+  }
+
  private:
   struct Frame {
     std::unique_ptr<System> system;
@@ -124,6 +221,8 @@ class NativeMolecularEvaluator {
     std::vector<generativeqc_atom> atoms;
     std::vector<double> positions, coefficients;
     generativeqc_ks_host_orbitals_receipt_v1 orbitals;
+    Seed seed{nullptr, generativeqc_warm_seed_snapshot_destroy};
+    std::size_t seed_bytes{};
   };
 
   void check(generativeqc_status status) const {
@@ -187,6 +286,7 @@ class NativeMolecularEvaluator {
     controls.dispersion_bytes = input.dispersion_bytes;
     controls.output_bytes = input.output_bytes;
     controls.max_eri_primitives = input.max_eri_primitives;
+    controls.max_map_terms = input.max_map_terms;
     controls.max_d3_pairs = input.max_d3_pairs;
     controls.relative_tolerance = input.response_rtol;
     controls.absolute_tolerance = input.response_atol_explicit ? input.response_atol : 1e-12;
@@ -268,9 +368,13 @@ class NativeMolecularEvaluator {
       const double smallest = spectrum.values.front();
       if (smallest < -1e-10) throw std::runtime_error("indefinite occupied-root Gram matrix");
       result[spin] = std::sqrt(std::max(0.0, smallest));
-      if (!std::isfinite(result[spin]) || result[spin] < invocation_.minimum_occupied_overlap)
-        throw std::runtime_error("occupied root continuity lost in spin channel " +
-                                 std::to_string(spin));
+      if (!std::isfinite(result[spin]) || result[spin] < invocation_.minimum_occupied_overlap) {
+        std::ostringstream message;
+        message.precision(17);
+        message << "occupied root continuity lost in spin channel " << spin << ": minimum overlap "
+                << result[spin] << ", required " << invocation_.minimum_occupied_overlap;
+        throw std::runtime_error(message.str());
+      }
     }
     return result;
   }
@@ -326,15 +430,31 @@ class NativeMolecularEvaluator {
     method.density_tolerance = options_.density_tolerance.value_or(1e-11);
     method.screening_tolerance = options_.screening_tolerance.value_or(1e-14);
     method.ks_options = &grid;
-    const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
-                                                 program_.name.data(), program_.identity.data(),
-                                                 invocation_.derivatives.dispersion_bytes};
+    const generativeqc_named_ks_descriptor named{sizeof(named),
+                                                 GENERATIVEQC_ABI_VERSION,
+                                                 program_.name.data(),
+                                                 program_.identity.data(),
+                                                 invocation_.derivatives.dispersion_bytes,
+                                                 invocation_.derivatives.cpu_packed_eri_bytes};
     const generativeqc_system* systems[]{frame->system->get()};
     generativeqc_batch* prepared{};
+    const auto* cold =
+        invocation_.cold_fock_damping && !accepted_ ? &*invocation_.cold_fock_damping : nullptr;
     run_phase("batch_prepare", positions, [&] {
-      check(generativeqc_batch_prepare_named_ks_v1(context_.get(), systems, 1, &method, &named, 0,
-                                                   &prepared));
+      const auto flags =
+          invocation_.accepted_frame_warm_start ? GENERATIVEQC_BATCH_ENABLE_WARM_STARTS : 0;
+      if (cold)
+        check(generativeqc_batch_prepare_named_ks_cold_rks_v1(context_.get(), systems, 1, &method,
+                                                              &named, cold, flags, &prepared));
+      else
+        check(generativeqc_batch_prepare_named_ks_v1(context_.get(), systems, 1, &method, &named,
+                                                     flags, &prepared));
       frame->batch.reset(prepared);
+      if (invocation_.accepted_frame_warm_start && accepted_) {
+        // Model, basis, charge and spin are immutable within this evaluator.
+        if (!accepted_->seed) throw std::logic_error("accepted derivative frame has no seed");
+        check(generativeqc_batch_restore_warm_seeds_v1(frame->batch.get(), accepted_->seed.get()));
+      }
       generativeqc_property_flags supported{};
       check(generativeqc_ks_batch_supported_properties_v1(frame->batch.get(), 0, &supported));
       if (!(supported & GENERATIVEQC_PROPERTY_FORCES))
@@ -349,9 +469,19 @@ class NativeMolecularEvaluator {
     std::uint64_t fock_builds{};
     run_phase("scf_forces", positions, [&] {
       check(generativeqc_batch_execute(frame->batch.get(), nullptr, 0, &primal, 1));
+      // A fallback may leave no complete work receipt. Report the violated
+      // seed policy before querying counters that cannot describe both solves.
+      if (invocation_.accepted_frame_warm_start) {
+        if (primal.warm_start_fallback)
+          throw std::runtime_error("accepted-frame SCF failed; cold fallback result refused");
+        if ((primal.warm_start_used != 0) != bool(accepted_))
+          throw std::runtime_error("accepted-frame SCF seed policy was not satisfied");
+      }
       add_work("scf_iterations", primal.iterations);
       check(generativeqc_batch_get_last_fock_builds(frame->batch.get(), 0, &fock_builds));
       add_work("scf_fock_builds", fock_builds);
+      if (primal.status == GENERATIVEQC_STATUS_NOT_CONVERGED && !primal.converged)
+        throw Error(primal.status, "native CPU SCF did not converge");
       check(primal.status);
       if (!primal.converged || primal.executed_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
           !std::isfinite(primal.energy) ||
@@ -364,7 +494,7 @@ class NativeMolecularEvaluator {
     check(generativeqc_ks_orbitals_cpu_v1(frame->batch.get(), 0, &controls, nullptr, 0,
                                           &frame->orbitals));
     const auto& shape = frame->orbitals;
-    const auto retained_elements = accepted_ ? accepted_->coefficients.size() : 0;
+    const auto retained_elements = retained_root_elements();
     const auto tracking_bytes = shape.numeric_reservation_bytes +
                                 sizeof(double) * retained_elements +
                                 8 * sizeof(double) * shape.basis * shape.basis;
@@ -382,6 +512,8 @@ class NativeMolecularEvaluator {
            {{"energy_hartree", primal.energy},
             {"scf_iterations", primal.iterations},
             {"scf_fock_builds", fock_builds},
+            {"accepted_frame_warm_start", primal.warm_start_used != 0},
+            {"cold_fock_prefix_iterations", cold ? cold->prefix_iterations : 0},
             {"minimum_occupied_overlaps_by_spin", overlaps},
             {"occupied_overlap_coordinate_frame", "mass-centroid-translation-registered"},
             {"root_registration_translation_bohr", registration},
@@ -417,11 +549,18 @@ class NativeMolecularEvaluator {
     add_work("source_xc_point_visits", receipt.source_xc_point_visits);
     add_work("curvature_xc_point_visits", receipt.curvature_xc_point_visits);
     add_work("response_xc_point_visits", receipt.response_xc_point_visits);
+    // These are Hessian-source counts; the separate primal force is not included.
+    add_work("ecp_kernel_blocks", receipt.ecp_kernel_blocks);
+    add_work("ecp_radial_layers", receipt.ecp_radial_layers);
+    add_work("ecp_ao_primitive_points", receipt.ecp_ao_primitive_points);
+    add_work("ecp_contraction_terms", receipt.ecp_contraction_terms);
     add_work("d3_pair_visits", receipt.d3_pair_visits);
     add_work("d3_reference_terms", receipt.d3_reference_terms);
+    if (invocation_.accepted_frame_warm_start) capture_seed(*current_, positions);
     current_->batch.reset();
     record("hessian", "complete", positions,
            {{"completed_directions", receipt.completed_directions},
+            {"root_seed_snapshot_bytes", current_->seed_bytes},
             {"response_residual_norm", receipt.response_residual_norm},
             {"raw_symmetry_error", receipt.raw_symmetry_error},
             {"numeric_reservation_bytes", receipt.numeric_reservation_bytes},
@@ -430,6 +569,36 @@ class NativeMolecularEvaluator {
   }
 
  private:
+  std::size_t retained_root_elements() const {
+    return accepted_ ? accepted_->coefficients.size() + accepted_->seed_bytes / sizeof(double) : 0;
+  }
+
+  /** Capture only a completed derivative frame. The accepted-frame pointer
+   * commits the snapshot; a rejected trial's snapshot cannot seed another SCF. */
+  void capture_seed(Frame& frame, std::span<const double> positions) const {
+    const auto limit = invocation_.root_bytes / sizeof(double);
+    const auto retained = retained_root_elements();
+    if (retained > limit || frame.coefficients.size() > limit - retained)
+      throw std::length_error("occupied tracking exceeds --root-budget-bytes");
+    const auto available = (limit - retained - frame.coefficients.size()) * sizeof(double);
+    generativeqc_warm_seed_snapshot_info_v1 info{};
+    info.struct_size = sizeof(info);
+    info.abi_version = GENERATIVEQC_ABI_VERSION;
+    generativeqc_warm_seed_snapshot* captured{};
+    check(generativeqc_batch_capture_warm_seeds_v1(frame.batch.get(), available, &info, &captured));
+    Seed candidate(captured, generativeqc_warm_seed_snapshot_destroy);
+    generativeqc_warm_seed_view_v1 view{};
+    view.struct_size = sizeof(view);
+    view.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_warm_seed_snapshot_read_v1(candidate.get(), 0, &view));
+    if (info.system_count != 1 || !view.present || !view.coordinates ||
+        view.coordinate_count != positions.size() ||
+        !std::equal(positions.begin(), positions.end(), view.coordinates))
+      throw std::runtime_error("native SCF seed does not bind the completed derivative frame");
+    frame.seed = std::move(candidate);
+    frame.seed_bytes = info.numeric_bytes;
+  }
+
   const RunOptions& options_;
   const SaddleInvocation& invocation_;
   const method_generated::Method& program_;

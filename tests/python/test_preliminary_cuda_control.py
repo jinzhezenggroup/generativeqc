@@ -50,6 +50,7 @@ HARNESS = r"""
 #include "runtime/resource_ledger.hpp"
 #include "scf/coulomb_exchange_work.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
+#include "scf/rks_cold_fock.hpp"
 #include "scf/target_fock_work.hpp"
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
@@ -281,7 +282,8 @@ struct Plan {
   // This fixture models cold preparation without a NumericCap DF reservation.
   // The production batch preflight must see that there is no energy-only promise.
   bool has_energy_only_df_capacity_promise() const noexcept { return false; }
-  scf::ScfResult run_cpu(const std::vector<double>*, bool, bool, bool) {
+  scf::ScfResult run_cpu(const std::vector<double>*, bool, bool, bool,
+                         const scf::RksColdFockDamping*) {
     throw std::logic_error("unexpected CPU execution");
   }
   std::optional<std::vector<double>> prepare_cold_initial_guess(
@@ -318,6 +320,7 @@ struct Owner : PreparedBatch, BatchWarmStarts {
   std::vector<System> systems_{1};
   std::unique_ptr<runtime::DeviceCapacityReservation> capacity_;
   std::vector<Item> items_{1};
+  std::optional<scf::RksColdFockDamping> cold_damping_;
   bool warm_enabled_{true}, warm_updates_{true};
   generativeqc_backend backend_{GENERATIVEQC_BACKEND_CUDA};
   ExecutionPlan execution_plan_;

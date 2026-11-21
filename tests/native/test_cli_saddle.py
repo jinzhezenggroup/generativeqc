@@ -97,6 +97,9 @@ class SaddleCli(unittest.TestCase):
         for text in (
             "--masses",
             "--max-attempts",
+            "--occupied-state-budget-bytes",
+            "--accepted-frame-warm-start",
+            "--cold-fock-damping",
             "unscaled",
             "no Python/JIT or preoptimization",
         ):
@@ -202,6 +205,132 @@ class SaddleCli(unittest.TestCase):
                 )
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_def2_ecp_saddle_admission(self) -> None:
+        """Check the qualified potentials and controls without a long saddle search."""
+        data = Path(__file__).resolve().parents[1] / "data" / "global_hybrid_ecp"
+        manifest = json.loads((data / "manifest.json").read_text())
+        upstream = (data / manifest["file"]).read_bytes()
+        self.assertEqual(hashlib.sha256(upstream).hexdigest(), manifest["sha256"])
+        elements = json.loads(upstream)["elements"]
+        basis = self.root / "def2-SVP with ECP.json"
+
+        def write_basis(
+            representation: str = "spherical", *, altered: bool = False, heavy: int = 55
+        ) -> None:
+            record = {
+                "schema": "generativeqc.basis",
+                "schema_version": 1,
+                "name": "def2-SVP with ECP",
+                "representation": representation,
+                "exponent_units": "bohr^-2",
+                "normalization": "normalized-primitives; native-normalized-contractions",
+                "ordering": "CCA-cartesian; libcint-real-spherical",
+                "provenance": {
+                    "source": manifest["source_repository"],
+                    "version": manifest["source_commit"],
+                    "license": manifest["license"],
+                    "checksum": manifest["sha256"],
+                },
+                "elements": [],
+            }
+            for number in (1, heavy):
+                source = elements[str(number)]
+                potentials = source.get("ecp_potentials")
+                if altered and potentials:
+                    potentials = json.loads(json.dumps(potentials))
+                    potentials[0]["coefficients"][0][0] = "-28.88"
+                record["elements"].append(
+                    {
+                        "atomic_number": number,
+                        "nuclear_charge": number,
+                        "ecp_core_electrons": source.get("ecp_electrons", 0),
+                        "ecp_data": json.dumps(potentials) if potentials else None,
+                        "shells": [
+                            {
+                                "angular_momentum": shell["angular_momentum"][0],
+                                "source_group": group,
+                                "exponents": shell["exponents"],
+                                "coefficients": shell["coefficients"],
+                            }
+                            for group, shell in enumerate(source["electron_shells"])
+                        ],
+                    }
+                )
+            payload = json.dumps(record, sort_keys=True, separators=(",", ":"))
+            record["checksum"] = hashlib.sha256(payload.encode()).hexdigest()
+            basis.write_text(json.dumps(record))
+
+        self.xyz.write_text("2\nBohr\nCs 0 0 0\nH 0.1 0.2 5.5\n")
+        self.masses.write_text("[132.90545196, 1.00782503223]")
+        base = ("--basis", str(basis), "--max-iterations", "3")
+        warm = ("--accepted-frame-warm-start",)
+        damping = ("--cold-fock-damping", "2", "0.5", "1048576")
+        d3_rks = ("--method", "b3lyp-d3(bj)-rks")
+        write_basis()
+        journal = self.root / "admitted.jsonl"
+        admitted = self.call(*base, *d3_rks, *warm, *damping, journal=journal)
+        self.assertEqual(admitted.returncode, 1, admitted.stderr)
+        panel = json.loads(admitted.stdout)
+        self.assertFalse(panel["receipt"]["has_valid_state"])
+        self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
+        self.assertIn("SCF did not converge", panel["derivative_failure"])
+        self.assertTrue(self.scf_journal(journal, "rks"))
+
+        def refused_before_scf(
+            name: str, arguments: tuple[str, ...], message: str
+        ) -> None:
+            journal = self.root / f"refused-{name}.jsonl"
+            self.rejected(self.call(*base, *arguments, journal=journal), message)
+            if journal.exists():
+                self.assertFalse(
+                    any(
+                        event["event"] == "BEGIN"
+                        and event["name"] in ("rks_scf", "uks_scf")
+                        for event in map(json.loads, journal.read_text().splitlines())
+                    )
+                )
+
+        for name, representation, altered, arguments in (
+            ("no-warm", "spherical", False, d3_rks),
+            ("no-damping", "spherical", False, (*d3_rks, *warm)),
+            ("no-d3", "spherical", False, ("--method", "b3lyp-rks", *warm)),
+            ("uks", "spherical", False, ("--method", "b3lyp-d3(bj)-uks", *warm)),
+            ("cartesian", "cartesian", False, (*d3_rks, *warm, *damping)),
+            ("changed-potential", "spherical", True, (*d3_rks, *warm, *damping)),
+        ):
+            with self.subTest(name=name):
+                write_basis(representation, altered=altered)
+                refused_before_scf(name, arguments, "Cs46 def2-ECP")
+
+        self.xyz.write_text("2\nBohr\nI 0 0 0\nH 0.1 0.2 3.1\n")
+        self.masses.write_text("[126.9044719, 1.00782503223]")
+        write_basis(heavy=53)
+        bounds = ("--initial-radius", "0.015", "--maximum-radius", "0.03")
+        continuity = ("--minimum-occupied-overlap", "0.99")
+        journal = self.root / "admitted-iodine.jsonl"
+        admitted = self.call(
+            *base, *d3_rks, *warm, *bounds, *continuity, journal=journal
+        )
+        self.assertEqual(admitted.returncode, 1, admitted.stderr)
+        panel = json.loads(admitted.stdout)
+        self.assertFalse(panel["receipt"]["has_valid_state"])
+        self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
+        self.assertIn("SCF did not converge", panel["derivative_failure"])
+        self.assertTrue(self.scf_journal(journal, "rks"))
+
+        for name, arguments in (
+            ("default-radii", (*d3_rks, *warm, *continuity)),
+            ("default-overlap", (*d3_rks, *warm, *bounds)),
+            ("damped", (*d3_rks, *warm, *bounds, *continuity, *damping)),
+        ):
+            with self.subTest(iodine=name):
+                refused_before_scf(name, arguments, "I28 def2-ECP")
+        write_basis(heavy=53, altered=True)
+        refused_before_scf(
+            "changed-iodine", (*d3_rks, *warm, *bounds, *continuity), "I28 def2-ECP"
+        )
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_direct_fp64_and_resource_admission(self) -> None:
         self.rejected(self.call("--precision", "fp32"), "--precision must be")
         self.rejected(self.call("--precision", "auto"), "requires direct FP64")
@@ -211,6 +340,58 @@ class SaddleCli(unittest.TestCase):
         )
         self.rejected(self.call("--max-coordinates", "3"), "exceeds --max-coordinates")
         self.rejected(self.call("--device-budget-bytes", "1"), "does not use CUDA")
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_bounded_cold_fock_damping(self) -> None:
+        model = ("--method", "b3lyp-d3(bj)-rks")
+        damping = ("--cold-fock-damping", "8", "0.5", "4096")
+        self.rejected(self.call(*model, *damping), "--accepted-frame-warm-start")
+        result = self.call(*model, *damping, "--accepted-frame-warm-start")
+        panel = json.loads(result.stdout)
+        self.assertTrue(panel["receipt"]["has_valid_state"], result.stderr)
+        initial = next(
+            event
+            for event in panel["evaluation_records"]
+            if event["stage"] == "energy_gradient" and event["status"] == "complete"
+        )
+        self.assertFalse(initial["accepted_frame_warm_start"])
+        self.assertEqual(initial["cold_fock_prefix_iterations"], 8)
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_packed_capacity_is_forwarded_with_cold_damping(self) -> None:
+        controls = (
+            "--method",
+            "b3lyp-d3(bj)-rks",
+            "--basis",
+            "sto-3g",
+            "--representation",
+            "spherical",
+            "--accepted-frame-warm-start",
+            "--cold-fock-damping",
+            "8",
+            "0.5",
+            "4096",
+            "--cpu-packed-eri-budget-bytes",
+        )
+        # Two spherical s orbitals give three unordered AO pairs, hence six values.
+        refused = self.call(*controls, "47")
+        self.assertEqual(refused.returncode, 1, refused.stderr)
+        panel = json.loads(refused.stdout)
+        self.assertFalse(panel["receipt"]["has_valid_state"])
+        self.assertIn(
+            "packed spherical ERI capacity exceeded", panel["derivative_failure"]
+        )
+        self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
+
+        admitted = self.call(*controls, "48")
+        panel = json.loads(admitted.stdout)
+        self.assertTrue(panel["receipt"]["has_valid_state"], admitted.stderr)
+        initial = next(
+            event
+            for event in panel["evaluation_records"]
+            if event["stage"] == "energy_gradient" and event["status"] == "complete"
+        )
+        self.assertEqual(initial["cold_fock_prefix_iterations"], 8)
 
     def test_no_preoptimization_or_worker_controls(self) -> None:
         for option in ("--stages", "--preopt-basis", "--compiler-python", "--cache"):
@@ -227,10 +408,12 @@ class SaddleCli(unittest.TestCase):
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_nonnegative_target_retains_native_state_without_frequencies(self) -> None:
         journal = self.root / "rks-scf.jsonl"
-        result = self.call("--progress-json", journal=journal)
+        result = self.call("--diis-history", "16", "--progress-json", journal=journal)
         self.assertEqual(result.returncode, 1, result.stderr)
         panel = json.loads(result.stdout)
         self.assertFalse(panel["converged"])
+        self.assertEqual(panel["controls"]["scf_diis_history"], 16)
+        self.assertNotIn("occupied_state", panel)
         receipt = panel["receipt"]
         self.assertEqual(receipt["status"], "target_not_negative")
         self.assertTrue(receipt["has_valid_state"])
@@ -270,6 +453,9 @@ class SaddleCli(unittest.TestCase):
         self.assertFalse(diagnostics["runtime_compilation"])
         self.assertEqual(diagnostics["preoptimization_stages"], 0)
         events = [json.loads(line) for line in result.stderr.splitlines()]
+        observations = [event for event in events if event["stage"] == "optimizer"]
+        self.assertTrue(observations)
+        self.assertTrue(all(event["status"] == "in_progress" for event in observations))
         for stage in ("system_prepare", "batch_prepare", "scf_forces"):
             started = next(
                 event
@@ -294,17 +480,79 @@ class SaddleCli(unittest.TestCase):
         )
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_bounded_occupied_export(self) -> None:
+        doublet = ("--method", "b3lyp-uks", "--charge", "1", "--multiplicity", "2")
+        for arguments, populations in (((), [1]), (doublet, [2, 1])):
+            with self.subTest(populations=populations):
+                if arguments == doublet:
+                    self.xyz.write_text("2\nBohr\nLi 0 0 0\nH 0 0 3.0\n")
+                    self.masses.write_text("[7.0160034366, 1.00782503223]")
+                result = self.call(*arguments, "--occupied-state-budget-bytes", "4096")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                panel = json.loads(result.stdout)
+                self.assertTrue(panel["receipt"]["has_valid_state"])
+                self.assertIsNone(panel["occupied_state_export_failure"])
+                state = panel["occupied_state"]
+                self.assertEqual(
+                    state["numeric_bytes"],
+                    8 * state["basis_dimension"] * sum(populations),
+                )
+                self.assertEqual(len(state["channels"]), len(populations))
+                for channel, occupied in zip(
+                    state["channels"], populations, strict=True
+                ):
+                    self.assertEqual(channel["occupied_orbitals"], occupied)
+                    self.assertEqual(
+                        len(channel["coefficients"]), state["basis_dimension"]
+                    )
+                    for row in channel["coefficients"]:
+                        self.assertEqual(len(row), occupied)
+                        self.assertTrue(all(map(math.isfinite, row)))
+        self.xyz.write_text("2\nBohr\nH 0 0 0\nH 0 0 1.5\n")
+        refused = json.loads(self.call("--occupied-state-budget-bytes", "1").stdout)
+        self.assertTrue(refused["receipt"]["has_valid_state"])
+        self.assertIsNone(refused["occupied_state"])
+        self.assertIn(
+            "--occupied-state-budget-bytes", refused["occupied_state_export_failure"]
+        )
+        no_state = json.loads(
+            self.call(
+                "--occupied-state-budget-bytes", "4096", "--max-map-terms", "1"
+            ).stdout
+        )
+        self.assertFalse(no_state["receipt"]["has_valid_state"])
+        self.assertIsNone(no_state["occupied_state"])
+        self.assertIsNone(no_state["occupied_state_export_failure"])
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_derivative_refusal_is_not_a_successful_state(self) -> None:
-        result = self.call("--integral-budget-bytes", "1")
-        self.assertEqual(result.returncode, 1, result.stderr)
-        panel = json.loads(result.stdout)
-        self.assertEqual(panel["receipt"]["status"], "hessian_failed")
-        self.assertFalse(panel["receipt"]["has_valid_state"])
-        self.assertFalse(panel["converged"])
-        self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
-        self.assertEqual(panel["coordinates_bohr"], [[0, 0, 0], [0, 0, 1.5]])
-        self.assertTrue(panel["derivative_failure"])
-        self.assertEqual(panel["evaluation_records"][-1]["status"], "failed")
+        """A valid SCF cannot substitute for an admitted curvature result."""
+        for option, limit in (
+            ("--integral-budget-bytes", "1"),
+            ("--max-map-terms", "1"),
+            ("--numeric-budget-bytes", str(65 << 20)),
+            ("--response-budget-bytes", "1"),
+        ):
+            with self.subTest(option=option):
+                result = self.call(option, limit)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                panel = json.loads(result.stdout)
+                self.assertEqual(panel["receipt"]["status"], "hessian_failed")
+                self.assertFalse(panel["receipt"]["has_valid_state"])
+                self.assertFalse(panel["converged"])
+                self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
+                self.assertEqual(panel["coordinates_bohr"], [[0, 0, 0], [0, 0, 1.5]])
+                self.assertTrue(panel["derivative_failure"])
+                self.assertTrue(
+                    any(
+                        event["stage"] == "energy_gradient"
+                        and event["status"] == "complete"
+                        for event in panel["evaluation_records"]
+                    )
+                )
+                self.assertEqual(panel["evaluation_records"][-1]["status"], "failed")
+                if option == "--max-map-terms":
+                    self.assertIn("integral-map work cap", panel["derivative_failure"])
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_root_and_unconverged_scf_refusals_retain_no_fake_hessian(self) -> None:
@@ -320,6 +568,7 @@ class SaddleCli(unittest.TestCase):
                 self.assertIsNone(panel["raw_hessian_hartree_per_bohr2"])
                 self.assertTrue(panel["derivative_failure"])
                 if arguments[0] == "--max-iterations":
+                    self.assertIn("SCF did not converge", panel["derivative_failure"])
                     observations = self.scf_journal(journal, "rks")
                     self.assertFalse(
                         any(row["terminal_converged"] for row in observations)
@@ -367,6 +616,13 @@ class SaddleCli(unittest.TestCase):
         "opt-in complete NH3 endpoint, not a fast CLI contract test",
     )
     def test_complete_nh3_endpoint_and_independent_mass_weighting(self) -> None:
+        for warm in (False, True):
+            with self.subTest(accepted_frame_warm_start=warm):
+                self.check_complete_nh3_endpoint_and_independent_mass_weighting(warm)
+
+    def check_complete_nh3_endpoint_and_independent_mass_weighting(
+        self, warm: bool
+    ) -> None:
         import numpy as np
         from generativeqc.vibrations import analyze_harmonic_modes
 
@@ -386,15 +642,66 @@ class SaddleCli(unittest.TestCase):
         result = self.call(
             "--representation",
             "spherical",
+            "--occupied-state-budget-bytes",
+            "4096",
             "--response-rtol",
             "1e-11",
             "--raw-symmetry-tolerance",
             str(specification["controls"]["raw_symmetry_tolerance"]),
+            *(("--accepted-frame-warm-start",) if warm else ()),
             timeout=900,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         panel = json.loads(result.stdout)
         self.assertTrue(panel["converged"])
+        self.assertIsNone(panel["occupied_state_export_failure"])
+        self.assertEqual(panel["occupied_state"]["channels"][0]["occupied_orbitals"], 5)
+        energy = [
+            entry
+            for entry in panel["evaluation_records"]
+            if entry["stage"] == "energy_gradient" and entry["status"] == "complete"
+        ]
+        hessians = [
+            entry
+            for entry in panel["evaluation_records"]
+            if entry["stage"] == "hessian" and entry["status"] == "complete"
+        ]
+        self.assertGreater(len(energy), 2)
+        self.assertEqual(
+            [entry["accepted_frame_warm_start"] for entry in energy],
+            [False] + [warm] * (len(energy) - 1),
+        )
+        self.assertTrue(hessians)
+        self.assertTrue(
+            all((entry["root_seed_snapshot_bytes"] > 0) == warm for entry in hessians)
+        )
+        if warm:
+            # Admit the initial root, but not its simultaneous retention with a trial.
+            # Derive this capacity from the actual endpoint's numeric reservations.
+            budget = energy[0]["root_numeric_reservation_bytes"]
+            self.assertLess(budget, energy[1]["root_numeric_reservation_bytes"])
+            refused = self.call(
+                "--representation",
+                "spherical",
+                "--accepted-frame-warm-start",
+                "--root-budget-bytes",
+                str(budget),
+                "--occupied-state-budget-bytes",
+                "4096",
+                "--response-rtol",
+                "1e-11",
+                timeout=900,
+            )
+            self.assertEqual(refused.returncode, 1, refused.stderr)
+            failure = json.loads(refused.stdout)
+            self.assertFalse(failure["converged"])
+            self.assertTrue(failure["receipt"]["has_valid_state"])
+            self.assertIsNone(failure["harmonics"])
+            self.assertIsNotNone(failure["occupied_state"])
+            self.assertIn(
+                "occupied-root tracking exceeds", failure["derivative_failure"]
+            )
+            self.assertEqual(failure["coordinates_bohr"], energy[0]["coordinates_bohr"])
         receipt = panel["receipt"]
         self.assertTrue(receipt["stationary_verified"])
         self.assertEqual(receipt["negative_curvatures"], 1)

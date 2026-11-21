@@ -97,10 +97,11 @@ void validate_preliminary_system(const generativeqc_method_descriptor&,const cor
 namespace detail {
 std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(const Capabilities&,
  core::ContextState&,const core::System&,const generativeqc_method_descriptor&,
- const core::System*,const named_ks::Dispersion&,std::uint64_t) {std::abort();}
+ const core::System*,const named_ks::Dispersion*,std::uint64_t,std::uint64_t) {std::abort();}
 std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(const Capabilities&,core::ContextState&,
  std::vector<core::System>,const generativeqc_method_descriptor&,generativeqc_batch_flags,
- const core::System*,const named_ks::Dispersion&,std::uint64_t) {std::abort();}
+ const core::System*,const named_ks::Dispersion*,std::uint64_t,std::uint64_t,
+ const scf::RksColdFockDamping*) {std::abort();}
 }
 """
         + definition("void validate_option_family(")

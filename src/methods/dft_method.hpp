@@ -315,12 +315,13 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
  * ports. Geometry corrections are computed and published inside its replay. */
 std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(
     const Capabilities&, core::ContextState&, const core::System&,
-    const generativeqc_method_descriptor&, const core::System*, const named_ks::Dispersion&,
-    std::uint64_t maximum_bytes);
+    const generativeqc_method_descriptor&, const core::System*, const named_ks::Dispersion*,
+    std::uint64_t maximum_bytes, std::uint64_t cpu_packed_eri_bytes);
 std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(
     const Capabilities&, core::ContextState&, std::vector<core::System>,
     const generativeqc_method_descriptor&, generativeqc_batch_flags, const core::System*,
-    const named_ks::Dispersion&, std::uint64_t maximum_bytes);
+    const named_ks::Dispersion*, std::uint64_t maximum_bytes, std::uint64_t cpu_packed_eri_bytes,
+    const scf::RksColdFockDamping* cold_damping);
 
 }  // namespace generativeqc::methods::detail
 

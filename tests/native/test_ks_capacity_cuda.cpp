@@ -89,8 +89,8 @@ void test_named_correction_admission() {
     const bool promised = std::string(selector).find("-d4(") != std::string::npos;
     method.method = entry->carrier;
     const std::string identity(entry->identity);
-    const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION, selector,
-                                                 identity.c_str(), 256ULL << 20};
+    const generativeqc_named_ks_descriptor named{
+        sizeof(named), GENERATIVEQC_ABI_VERSION, selector, identity.c_str(), 256ULL << 20, 0};
     auto r = resources(cap);
     {
       generativeqc_calculation* raw{};

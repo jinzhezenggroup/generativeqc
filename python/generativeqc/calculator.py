@@ -168,6 +168,11 @@ class Calculator:
     inspect ``capabilities`` before requesting properties. Selector discovery
     alone is not a promise that every method/basis/device combination executes.
 
+    For supported direct FP64 CPU named KS methods, a positive
+    ``cpu_packed_eri_maximum_bytes`` caps the total retained packed ERI value
+    arrays in one prepared batch. It does not cap process memory or derivative
+    scratch. An insufficient cap raises an error; zero leaves the default source.
+
     Calls are synchronous. Retained single-point workspace can be released with
     ``clear_cache``; prepared batches own separate resources. Keep configuration
     fixed during use and use independent plans for concurrent callers.
@@ -208,6 +213,7 @@ class Calculator:
         ks_options: typing.Any = None,
         initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
+        cpu_packed_eri_maximum_bytes: int = 0,
         _application_precision_budget: typing.Any = None,
         _correlation_convergence_budget: typing.Any = None,
         _correlation_preconvergence: str | None = None,
@@ -318,6 +324,14 @@ class Calculator:
                 "dispersion_memory_budget_bytes must be a positive uint64 integer"
             )
         self._dispersion_memory_budget_bytes = dispersion_memory_budget_bytes
+        if (
+            type(cpu_packed_eri_maximum_bytes) is not int
+            or not 0 <= cpu_packed_eri_maximum_bytes < 2**64
+        ):
+            raise ValueError(
+                "cpu_packed_eri_maximum_bytes must be a nonnegative uint64 integer"
+            )
+        self._cpu_packed_eri_maximum_bytes = cpu_packed_eri_maximum_bytes
         self._dispersion_method_ir = None
         if device not in {"cpu", "cuda"}:
             raise ValueError("device must be 'cpu' or 'cuda'")
@@ -883,6 +897,15 @@ class Calculator:
         self._basis = basis
         self._auxiliary_basis = auxiliary_basis
         self._density_fitting_mode = density_fitting_mode
+        if cpu_packed_eri_maximum_bytes and (
+            device != "cpu"
+            or self.method_ir is None
+            or self._precision_mode != _native.PRECISION_FP64
+            or density_fitting_mode != _native.DENSITY_FITTING_NONE
+        ):
+            raise ValueError(
+                "packed ERI storage requires a named direct FP64 CPU KS method"
+            )
         self._density_fitting_relative_threshold = float(
             density_fitting_relative_threshold
         )

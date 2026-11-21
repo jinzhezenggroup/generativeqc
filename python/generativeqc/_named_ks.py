@@ -138,6 +138,7 @@ def create_named_system(
         name,
         graph.identity.encode("ascii"),
         0,
+        0,
     )
     create = library.generativeqc_system_create_named_ks_v1
     create.argtypes = [
@@ -168,21 +169,35 @@ def prepare_named_batch(
     graph: Any,
     maximum_bytes: int,
     resources: Any = None,
+    *,
+    cpu_packed_eri_maximum_bytes: int = 0,
+    cold_rks_fock: _native.RksColdFockOptions | None = None,
 ) -> int:
     """Pass controls plus a pinned full identity to the selected library."""
-    prepare = (
-        library.generativeqc_batch_prepare_named_ks_with_device_resources_v1
-        if resources is not None
-        else library.generativeqc_batch_prepare_named_ks_v1
-    )
+    if cold_rks_fock is not None:
+        if resources is not None:
+            raise NotImplementedError(
+                "cold RKS Fock damping does not support device resources"
+            )
+        prepare = getattr(
+            library, "generativeqc_batch_prepare_named_ks_cold_rks_v1", None
+        )
+        if prepare is None:
+            raise NotImplementedError("native cold RKS Fock damping is unavailable")
+    elif resources is not None:
+        prepare = library.generativeqc_batch_prepare_named_ks_with_device_resources_v1
+    else:
+        prepare = library.generativeqc_batch_prepare_named_ks_v1
     prepare.argtypes = [
         ct.c_void_p,
         ct.POINTER(ct.c_void_p),
         ct.c_uint32,
         ct.POINTER(_native.MethodDescriptor),
         ct.POINTER(_native.NamedKsDescriptor),
-        ct.c_uint32,
     ]
+    if cold_rks_fock is not None:
+        prepare.argtypes += [ct.POINTER(_native.RksColdFockOptions)]
+    prepare.argtypes += [ct.c_uint32]
     if resources is not None:
         prepare.argtypes += [ct.c_void_p]
     prepare.argtypes += [ct.POINTER(ct.c_void_p)]
@@ -193,6 +208,7 @@ def prepare_named_batch(
         name,
         graph.identity.encode("ascii"),
         maximum_bytes,
+        cpu_packed_eri_maximum_bytes,
     )
     # The complete catalog graph owns its spin. PBE here is only the existing
     # ABI transport carrier, including when the public alias is legacy PBE-D4.
@@ -201,7 +217,10 @@ def prepare_named_batch(
         if graph.spin == "unpolarized"
         else _native.METHOD_PBE_UKS
     )
-    arguments = [context, systems, count, ct.byref(method), ct.byref(named), flags]
+    arguments = [context, systems, count, ct.byref(method), ct.byref(named)]
+    if cold_rks_fock is not None:
+        arguments.append(ct.byref(cold_rks_fock))
+    arguments.append(flags)
     if resources is not None:
         arguments.append(resources)
     return prepare(*arguments, output)

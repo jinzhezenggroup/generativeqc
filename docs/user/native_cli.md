@@ -83,8 +83,8 @@ a cheaper calculation. These examples are interface examples, not chemistry
 or grid-convergence recommendations. CPU execution requires direct FP64.
 The exact linked canonical B3LYP RKS/UKS programs also accept scalar ECPs
 within the native operator and resource bounds, with or without uncut two-body
-D3(BJ). Fitted second-order endpoints remain excluded. This does not admit
-ECPs to the separate molecular saddle command.
+D3(BJ). Fitted second-order endpoints remain excluded. The separate
+{ref}`molecular saddle command <native-saddle-cli>` has narrower ECP admission.
 The raw matrix or HVP and scalar energy/work receipt publish only after the
 complete request succeeds. Missing closure or a failed source never publishes
 an electronic-only matrix for the corrected method.
@@ -98,14 +98,25 @@ radial-layer, AO-point and contraction counters remain zero, not missing work.
 In addition to integral/grid/output/response limits, CPU controls include
 `--numeric-budget-bytes` (512 MiB), `--dispersion-budget-bytes` (64 MiB),
 `--ecp-budget-bytes` (128 MiB), `--max-eri-primitives` (100,000,000 nuclear
-primitive visits) and `--max-d3-pairs` (16,777,216 pair visits). Work ceilings
-cover the whole requested matrix or HVP. CPU response defaults are
+primitive visits), `--max-map-terms` (`2**40` contraction/assembly terms), and
+`--max-d3-pairs` (16,777,216 pair visits). Work ceilings cover the whole
+requested matrix or HVP; `saddle` applies the same limits to each complete
+Hessian request. CPU response defaults are
 `--response-rtol 1e-10` and `--response-atol 1e-12`; an explicit absolute
 tolerance is honored unchanged. CUDA device/nonlocal budget flags refuse on
 CPU, rather than being silently ignored. These derivative reservations exclude
 primal SCF/provider storage, export scratch, caller request storage and process
 RSS. Ordered nuclear integral work is still quartic; passing a small CPU
 control does not qualify heavy-element or 25--40-atom transition-state work.
+
+`--cpu-packed-eri-budget-bytes N` opts into exact packed full-range ERI values
+for supported direct FP64 CPU jobs with real-spherical s/p/d/f orbital bases.
+The same flag is available for `saddle`, and the Python equivalent is
+`Calculator(cpu_packed_eri_maximum_bytes=N)`. This is a cap on the retained
+value arrays in one prepared batch, not on derivative scratch or process RSS.
+An insufficient cap fails preparation without a dense retry. Omit the option
+to retain the ordinary value source. This does not change the method or
+derivative admission criteria.
 
 ## Native molecular transition-state task
 

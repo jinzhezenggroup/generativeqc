@@ -195,6 +195,7 @@ scf::Capture method_prepare(core::System system_, NativeKsExecutionPlan executio
   const auto backend = GENERATIVEQC_BACKEND_CUDA;
   const int device = 0;
   std::optional<core::System> auxiliary;
+  const std::optional<scf::CpuPackedEriPreparation> packed_eri;
 """
     unit += (
         method[fock_start:fock_end]

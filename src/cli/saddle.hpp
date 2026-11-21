@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "cli/hessian.hpp"
 #include "generativeqc/saddle.h"
 
@@ -14,8 +16,11 @@ struct SaddleInvocation {
   generativeqc_saddle_options_v1 controls;
   std::string masses_file, initial_mode_file;
   std::uint64_t root_bytes{128ULL << 20};
+  std::uint64_t occupied_state_bytes{};
   double minimum_occupied_overlap{0.7};
+  std::optional<generativeqc_rks_cold_fock_options_v1> cold_fock_damping;
   bool progress_json{};
+  bool accepted_frame_warm_start{};
 };
 
 SaddleInvocation parse_saddle_invocation(int argc, char** argv);

@@ -50,6 +50,7 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/rks_cold_fock.hpp"
 #include "scf/stationary_integral_gradient.hpp"
 #include "scf/types.hpp"
 
@@ -70,6 +71,15 @@ namespace {
 
 /** Initial automatic LR admission only; never escapes a prepared batch item. */
 struct AutomaticLrFitRefused final : std::exception {};
+
+/** Resolve the public capacity once. Replay keeps the same reduction and
+ * numeric capacity as the original fleet, independent of process settings. */
+std::optional<scf::CpuPackedEriPreparation> packed_eri_request(std::uint64_t bytes) {
+  if (!bytes) return {};
+  if (bytes > std::numeric_limits<std::size_t>::max())
+    throw std::invalid_argument("CPU packed ERI budget overflows host size_t");
+  return scf::CpuPackedEriPreparation{static_cast<std::size_t>(bytes)};
+}
 
 std::uint64_t next_cpu_ks_owner() {
   static std::atomic<std::uint64_t> next{1};
@@ -594,7 +604,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device,
                   const std::optional<core::System>& auxiliary,
-                  const runtime::DeviceCapacityReservation* capacity)
+                  const runtime::DeviceCapacityReservation* capacity,
+                  std::optional<scf::CpuPackedEriPreparation> packed_eri)
       : capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
@@ -616,7 +627,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   ? 0U
                   : 1U,
               ks_fitted_projection_reservation(system_, execution_plan_,
-                                               *options_.resolved_fock_build)),
+                                               *options_.resolved_fock_build),
+              packed_eri),
         basis_(system_),
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
@@ -2832,7 +2844,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
 
   /** CPU solve used by the common scheduler; CUDA is advanced there per stream. */
   scf::ScfResult run_cpu(const std::vector<double>* initial_density, bool reuse_warm,
-                         bool update_warm, bool allow_preliminary = true) {
+                         bool update_warm, bool allow_preliminary,
+                         const scf::RksColdFockDamping* cold_damping) {
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE)
       throw std::logic_error("CPU KS solve requires a CPU prepared owner");
     invalidate_final_state();
@@ -2881,7 +2894,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                    ? scf::run_b3lyp_uks(fock_, basis_, grid_, execution_options,
                                         execution_plan_.full_range_exchange, seed)
                    : scf::run_b3lyp_rks(fock_, basis_, grid_, execution_options,
-                                        execution_plan_.full_range_exchange, seed);
+                                        execution_plan_.full_range_exchange, seed, cold_damping);
     else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe && nonlocal_)
       native =
           ks_is_unrestricted(execution_plan_)
@@ -3180,7 +3193,8 @@ class KsPreparedBatch final : public PreparedBatch,
   KsPreparedBatch(Capabilities capabilities, std::vector<core::System> systems,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device, bool warm_enabled,
-                  std::optional<core::System> auxiliary)
+                  std::optional<core::System> auxiliary, std::uint64_t cpu_packed_eri_bytes,
+                  const scf::RksColdFockDamping* cold_damping)
       : PreparedBatch(backend, device),
         capabilities_(capabilities),
         systems_(std::move(systems)),
@@ -3191,7 +3205,14 @@ class KsPreparedBatch final : public PreparedBatch,
         device_(device),
         warm_enabled_(warm_enabled),
         auxiliary_(std::move(auxiliary)),
+        packed_eri_(packed_eri_request(cpu_packed_eri_bytes)),
+        cold_damping_(cold_damping ? std::optional(*cold_damping) : std::nullopt),
         items_(systems_.size()) {
+    // Prepared KS plans are retained together. Geometry replay retires its
+    // old plan first and does not alter the AO count, so preflight the entire
+    // fleet before allocating any of its packed integral values.
+    if (packed_eri_)
+      scf::preflight_packed_eri(*options_.resolved_fock_build, systems_, *packed_eri_);
     capacity_ = ks_device_capacity_reservation(systems_, execution_plan_, options_, grid_spec_,
                                                backend_, auxiliary_);
     for (std::size_t i = 0; i < size(); ++i) {
@@ -3398,8 +3419,9 @@ class KsPreparedBatch final : public PreparedBatch,
           const auto discarded_iterations = result.calculation.convergence.iterations;
           const auto discarded_fock_builds = result.calculation.fock_builds;
           const bool discarded_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
-          auto native = item.plan->run_cpu(seed, reuse && item.resident_warm,
-                                           warm_enabled_ && warm_updates_, !attempt);
+          auto native = item.plan->run_cpu(
+              seed, reuse && item.resident_warm, warm_enabled_ && warm_updates_, !attempt,
+              !attempt && !reuse && cold_damping_ ? &*cold_damping_ : nullptr);
           if (attempt && item.plan->initial_guess_policy()) {
             auto& diagnostic = native.preliminary_guess;
             diagnostic.requested_kind =
@@ -3909,7 +3931,7 @@ class KsPreparedBatch final : public PreparedBatch,
     const auto prepare = [&] {
       return std::make_unique<KsPreparedState>(
           capabilities_, system, execution_plan, options_, grid_spec_, backend_, device_,
-          ks_auxiliary_for_system(system, auxiliary_), capacity_.get());
+          ks_auxiliary_for_system(system, auxiliary_), capacity_.get(), packed_eri_);
     };
     std::unique_ptr<KsPreparedState> plan;
     try {
@@ -3956,6 +3978,8 @@ class KsPreparedBatch final : public PreparedBatch,
   int device_;
   bool warm_enabled_, warm_updates_{true};
   std::optional<core::System> auxiliary_;
+  const std::optional<scf::CpuPackedEriPreparation> packed_eri_;
+  const std::optional<scf::RksColdFockDamping> cold_damping_;
   // Declared before items: their allocations retire while the promise is open.
   std::unique_ptr<runtime::DeviceCapacityReservation> capacity_;
   std::vector<Item> items_;
@@ -4038,7 +4062,8 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
     const Capabilities& capabilities, core::ContextState& context,
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     generativeqc_batch_flags flags, const core::System* auxiliary_basis,
-    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0) {
+    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0,
+    std::uint64_t cpu_packed_eri_bytes = 0, const scf::RksColdFockDamping* cold_damping = nullptr) {
   constexpr generativeqc_batch_flags supported_flags =
       GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | GENERATIVEQC_BATCH_DISABLE_KS_EXPORT;
   if ((flags & ~supported_flags) != 0)
@@ -4050,6 +4075,22 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
 #endif
   NativeKsExecutionPlan execution_plan;
   auto options = dft_options(descriptor, context.requested_backend, execution_plan);
+  if (cold_damping) {
+    if (systems.size() != 1 || context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+        ks_is_unrestricted(execution_plan) || !execution_plan.compiler_resolved ||
+        execution_plan.semilocal_family != dft::SemilocalFamily::B3lyp ||
+        execution_plan.range_exchange || execution_plan.nonlocal_correlation ||
+        execution_plan.full_range_exchange != 0.2 || execution_plan.automatic_program ||
+        execution_plan.generated_split_hybrid || !dispersion || dispersion->kind != 1 ||
+        dispersion->s9 != 0 || dispersion->cn_cutoff != 0 || dispersion->pair_cutoff != 0 ||
+        options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+        options.precision_mode != GENERATIVEQC_PRECISION_FP64 || options.preliminary_guess ||
+        options.incremental_direct_jk || options.incremental_direct_jk_auto)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "cold Fock damping requires direct FP64 CPU B3LYP-D3(BJ) RKS");
+    // Refuse before allocating the prepared basis, integrals or grid.
+    (void)cold_damping->proposal_bytes(molecule::ao_count(systems.front()), options.max_iterations);
+  }
   const bool disable_export = (flags & GENERATIVEQC_BATCH_DISABLE_KS_EXPORT) != 0;
   if (disable_export && context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -4104,10 +4145,11 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
   const auto auxiliary = ks_auxiliary_template(descriptor, auxiliary_basis);
   if (!systems.empty()) validate_ks_auxiliary_geometry(systems.front(), auxiliary);
   auto grid = ks_grid_options(descriptor, options, execution_plan);
-  return std::make_unique<KsPreparedBatch>(
-      capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),
-      context.requested_backend, context.device_id,
-      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, auxiliary);
+  return std::make_unique<KsPreparedBatch>(capabilities, std::move(systems), execution_plan,
+                                           std::move(options), std::move(grid),
+                                           context.requested_backend, context.device_id,
+                                           (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
+                                           auxiliary, cpu_packed_eri_bytes, cold_damping);
 }
 
 /** Single-system ABI/SDK view of the same native scheduler used by Python.
@@ -4192,10 +4234,11 @@ std::unique_ptr<PreparedBatch> prepare_dft_batch(const Capabilities& capabilitie
 std::unique_ptr<PreparedCalculation> prepare_composed_dft_calculation(
     const Capabilities& capabilities, core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis,
-    const named_ks::Dispersion& dispersion, std::uint64_t maximum_bytes) {
+    const named_ks::Dispersion* dispersion, std::uint64_t maximum_bytes,
+    std::uint64_t cpu_packed_eri_bytes) {
   auto owner = prepare_ks_batch(capabilities, context, {system}, descriptor,
-                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, auxiliary_basis, &dispersion,
-                                maximum_bytes);
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, auxiliary_basis, dispersion,
+                                maximum_bytes, cpu_packed_eri_bytes);
   return std::make_unique<KsPreparedCalculation>(capabilities, system.atoms.size(),
                                                  context.requested_backend, context.device_id,
                                                  std::move(owner));
@@ -4205,9 +4248,11 @@ std::unique_ptr<PreparedBatch> prepare_composed_dft_batch(
     const Capabilities& capabilities, core::ContextState& context,
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     generativeqc_batch_flags flags, const core::System* auxiliary_basis,
-    const named_ks::Dispersion& dispersion, std::uint64_t maximum_bytes) {
+    const named_ks::Dispersion* dispersion, std::uint64_t maximum_bytes,
+    std::uint64_t cpu_packed_eri_bytes, const scf::RksColdFockDamping* cold_damping) {
   return prepare_ks_batch(capabilities, context, std::move(systems), descriptor, flags,
-                          auxiliary_basis, &dispersion, maximum_bytes);
+                          auxiliary_basis, dispersion, maximum_bytes, cpu_packed_eri_bytes,
+                          cold_damping);
 }
 
 }  // namespace generativeqc::methods::detail
