@@ -13,14 +13,17 @@ def fixtures() -> tuple[str, str, str]:
         "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA:BOOL=ON\n"
         "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT:BOOL=OFF"
     )
+    profiles = compiler_native_profiles() + (
+        "r2scan_rks_variational",
+        "r2scan_uks_variational",
+    )
     registry = "\n".join(
-        f"    &native_stationary_profile_{profile}(),"
-        for profile in compiler_native_profiles()
+        f"    &native_stationary_profile_{profile}()," for profile in profiles
     )
     symbols = (
         "\n".join(
             f"00000000 T generativeqc::dft::native_stationary_profile_{profile}()"
-            for profile in compiler_native_profiles()
+            for profile in profiles
         )
         + "\n00000000 T generativeqc::dft::cuda_stationary_bindings()"
         + "\n00000000 T generativeqc::dft::launch_native_stationary_source_transport(...)"
@@ -32,6 +35,17 @@ def fixtures() -> tuple[str, str, str]:
 class StandaloneCudaForceTests(unittest.TestCase):
     def test_compiler_graph_inventory_static_contract(self) -> None:
         verify_contract(*fixtures())
+
+    def test_variational_profile_requires_its_linked_symbol(self) -> None:
+        cache, registry, symbols = fixtures()
+        with self.assertRaisesRegex(
+            ValueError, "missing native force symbol.*variational"
+        ):
+            verify_contract(
+                cache,
+                registry,
+                symbols.replace("r2scan_rks_variational()", "missing()"),
+            )
 
     def test_disabled_native_profiles_fail(self) -> None:
         cache, registry, symbols = fixtures()

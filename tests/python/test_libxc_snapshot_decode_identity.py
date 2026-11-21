@@ -118,6 +118,8 @@ def _decode_fixture(
         metadata=metadata,
         values=values,
         backend="cpu",
+        # The real snapshot owner binds the versioned domain before decode.
+        scf_domain=options.scf_domain,
         _library=SimpleNamespace(),
         _batch=SimpleNamespace(
             _calculator=SimpleNamespace(ks_options=options, _method_name=carrier),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -82,6 +83,13 @@ def admission_probe(
         )
     )
     directory = tmp_path_factory.mktemp("ks-local-ao-admission")
+    # This host probe exercises the baseline schedule, with no compiled
+    # variational point providers. Keep the domain declarations production-owned.
+    for name in ("r2scan_cuda_domain.hpp", "split_hybrid_cuda_domain.hpp"):
+        template = (ROOT / "src/dft" / f"{name}.in").read_text()
+        (directory / name).write_text(
+            re.sub(r"#cmakedefine01 (\w+)", r"#define \1 0", template)
+        )
     # The real potential-binding header needs only an opaque stream in this
     # host admission probe; keep its production host reservation authoritative.
     (directory / "cuda_runtime_api.h").write_text(
@@ -107,6 +115,8 @@ def admission_probe(
 #include "runtime/resource_ledger.hpp"
 #include "tensor/cuda_symmetric_product.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "r2scan_cuda_domain.hpp"
+#include "split_hybrid_cuda_domain.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
 using runtime::size_add;
@@ -442,6 +452,7 @@ struct Fixture {
  std::optional<runtime::DeviceProviderAllowance> matrix_provider_allowance;
  struct{void* stream=nullptr;}range_fock_binding;void retire_phase_source(bool){}
  int basis=0,spins=1,tile=64,device=0,functional=1;void* stream=nullptr;Grid grid,nonlocal_grid;
+ int point_functional() const { return functional; }
  Fixture(bool maps,bool split):resource{(maps?96u:64u)*1024},admit_ao(maps),options{split}{}
  void prepare(){try{
 EARLY

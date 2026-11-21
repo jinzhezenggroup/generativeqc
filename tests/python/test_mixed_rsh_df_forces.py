@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import Atom, Calculator, KsOptions
+from generativeqc import Atom, Calculator, KsOptions, Primitive, Shell
 from generativeqc.ks import (
     cuda_mixed_density_fitted_force_eligible,
     cuda_range_only_force_basis_eligible,
@@ -145,6 +145,12 @@ def _assert_public_mixed_df_gate(
 
     owner = SimpleNamespace(
         _device_name="cuda",
+        # Exercise a typed electronic graph, not the legacy PBE-D4 selector.
+        _method=(
+            _native.METHOD_PBE_UKS
+            if method.spin == "polarized"
+            else _native.METHOD_PBE_RKS
+        ),
         _precision_mode=_native.PRECISION_FP64,
         _basis="sto-3g",
         _automatic_libxc_name=None,
@@ -204,13 +210,7 @@ def test_public_range_only_gate_matches_the_ordinary_geometry_domain(
     spin: str, angular_momentum: int
 ) -> None:
     """Reject f shells before preparation; do not narrow the separate NLC owner."""
-    basis = SimpleNamespace(
-        elements=(
-            SimpleNamespace(
-                shells=(SimpleNamespace(angular_momentum=angular_momentum),)
-            ),
-        )
-    )
+    basis = (Shell(0, angular_momentum, (Primitive(1.0, 1.0),)),)
     method = resolve_method(
         MethodSpec(
             "PBE-range-basis-control",
