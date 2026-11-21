@@ -67,16 +67,55 @@ struct Owner {
 };
 void host_admission() {
   std::size_t bytes{};
+  const char* detail{};
   CudaWb97mvDfOptions options;
   require(cuda_wb97mv_df_workspace({3, 5, 2}, options, bytes) == cudaSuccess && bytes,
           "ordinary host-only admission failed");
   options.max_workspace_bytes = bytes - 1;
-  require(cuda_wb97mv_df_workspace({3, 5, 2}, options, bytes) != cudaSuccess && !bytes,
+  require(cuda_wb97mv_df_workspace({3, 5, 2}, options, bytes, &detail) != cudaSuccess && !bytes &&
+              detail && std::string(detail).find("device bound") != std::string::npos,
           "byte budget ignored");
   options = {};
   options.max_affine_term_visits = 1;
-  require(cuda_wb97mv_df_workspace({3, 5, 2}, options, bytes) != cudaSuccess,
+  require(cuda_wb97mv_df_workspace({3, 5, 2}, options, bytes, &detail) != cudaSuccess && !bytes &&
+              detail && std::string(detail).find("term-visit bound") != std::string::npos,
           "work budget ignored");
+  options = {};
+  options.exchange_fraction = 0.54;
+  // Spherical HF/cc-pVTZ and O(f)-augmented cc-pVDZ H2O+ with full JKFIT.
+  for (const auto shape : {CudaWb97mvDfShape{44, 95, 1}, {31, 113, 2}})
+    require(cuda_wb97mv_df_workspace(shape, options, bytes) == cudaSuccess && bytes,
+            "full-rank orbital-f qualification shape exceeded the default bounds");
+  // The public fitted owner charges its retained raw panel before the maps.
+  options.max_workspace_bytes = (64ULL << 20) - 48 * 48 * 226 * sizeof(double);
+  for (const bool spectral : {false, true}) {
+    options.spectral_metric = spectral;
+    for (const bool coulomb : {true, false}) {
+      options.coulomb = coulomb;
+      for (const auto shape : {CudaWb97mvDfShape{48, 226, 1}, {48, 226, 2}})
+        require(cuda_wb97mv_df_workspace(shape, options, bytes) == cudaSuccess && bytes,
+                "full JKFIT water dimer exceeded the public fitted workspace budget");
+    }
+  }
+  options.max_matrix_terms = 1;
+  require(cuda_wb97mv_df_workspace({48, 226, 1}, options, bytes, &detail) != cudaSuccess &&
+              !bytes && detail && std::string(detail).find("product bound") != std::string::npos,
+          "tiled fitted response ignored its matrix work bound");
+  options = {};
+  options.exchange_fraction = 0.54;
+  require(cuda_wb97mv_df_workspace({100, 226, 2}, options, bytes, &detail) != cudaSuccess && !bytes,
+          "oversize fitted response ignored its default bounds");
+  options.exchange_fraction = 0;
+  // A cc-pVDZ water dimer with full JKFIT admits both separated metric schedules.
+  for (const bool spectral : {false, true}) {
+    options.spectral_metric = spectral;
+    for (const auto shape : {CudaWb97mvDfShape{48, 226, 1}, {48, 226, 2}})
+      require(cuda_wb97mv_df_workspace(shape, options, bytes) == cudaSuccess && bytes,
+              "water-dimer Coulomb response exceeded the default bounds");
+  }
+  require(cuda_wb97mv_df_workspace({48, 280, 2}, options, bytes, &detail) != cudaSuccess &&
+              !bytes && detail && std::string(detail).find("term-visit bound") != std::string::npos,
+          "oversize spectral Coulomb response ignored its work bound");
   for (const auto shape : {CudaWb97mvDfShape{0, 3, 1},
                            {2, 0, 1},
                            {2, 3, 3},
@@ -95,7 +134,7 @@ void host_admission() {
 }
 void run(const char* source, const char* result) {
   std::ifstream input(source, std::ios::binary);
-  const auto header = read<std::uint64_t>(input, 4);
+  const auto header = read<std::uint64_t>(input, 6);
   const CudaWb97mvDfShape shape{header[0], header[1], header[2]};
   require(shape.nao >= 2 && shape.nao <= 32 && shape.naux >= 2 && shape.naux <= 64 &&
               shape.spins >= 1 && shape.spins <= 2,
@@ -112,23 +151,35 @@ void run(const char* source, const char* result) {
   auto* delta_raw = storage.upload(read<double>(input, raw_count));
   auto* delta_metric = storage.upload(read<double>(input, metric_count));
   const auto threshold = read<double>(input, 1)[0];
+  CudaWb97mvDfOptions options;
+  options.exchange_fraction = read<double>(input, 1)[0];
+  options.coulomb = header[4] == 0;
+  options.spectral_metric = header[5] != 0;
+  auto* eigenvectors =
+      options.spectral_metric ? storage.upload(read<double>(input, metric_count)) : nullptr;
   check(cudaStreamSynchronize(storage.stream));
   int device{-1};
   check(cudaGetDevice(&device));
   Owner owner;
-  const CudaWb97mvDfReference reference{density,   raw,    whitening,      eigenvalues,
-                                        threshold, device, storage.stream, Owner::authenticate,
-                                        &owner};
+  const CudaWb97mvDfReference reference{density,   raw,         whitening,      eigenvalues,
+                                        threshold, device,      storage.stream, Owner::authenticate,
+                                        &owner,    eigenvectors};
   std::size_t bytes{};
-  check(cuda_wb97mv_df_workspace(shape, {}, bytes));
+  check(cuda_wb97mv_df_workspace(shape, options, bytes));
   auto* arena = storage.allocate(bytes);
   CudaWb97mvDfResponse response;
-  const auto prepared = response.prepare(shape, {}, reference, arena, bytes);
+  if (options.spectral_metric)
+    require(response.prepare(shape, options, reference, arena, bytes - 1) == cudaErrorInvalidValue,
+            "spectral response exceeded its arena");
+  const char* detail{};
+  const auto prepared = response.prepare(shape, options, reference, arena, bytes, &detail);
   if (header[3]) {
-    require(prepared != cudaSuccess, "malformed reference admitted");
-    std::cout << "{\"prepare_rejected\":true}\n";
+    require(prepared == cudaErrorInvalidValue && detail,
+            "malformed reference admitted or undiagnosed");
+    std::cout << "{\"prepare_rejected\":true,\"detail\":\"" << detail << "\"}\n";
     return;
   }
+  if (prepared != cudaSuccess && detail) throw std::runtime_error(detail);
   check(prepared);
   const std::array<std::size_t, 7> counts{1,         panels,      panels, raw_count, metric_count,
                                           raw_count, metric_count};
@@ -138,9 +189,12 @@ void run(const char* source, const char* result) {
   const CudaWb97mvDfOutput output{pointers[0], pointers[1], pointers[2], pointers[3],
                                   pointers[4], pointers[5], pointers[6]};
   const auto apply = [&](const CudaWb97mvDfOutput& destination) {
-    return response.apply(delta_density, delta_raw, delta_metric, destination, storage.stream);
+    return response.apply(delta_density, delta_raw, delta_metric, destination, storage.stream,
+                          &detail);
   };
-  check(apply(output));
+  const auto first_action = apply(output);
+  if (first_action != cudaSuccess && detail) throw std::runtime_error(detail);
+  check(first_action);
   std::vector<double> expected;
   for (unsigned index = 0; index < 7; ++index) {
     const auto values = download(pointers[index], counts[index]);
@@ -166,6 +220,11 @@ void run(const char* source, const char* result) {
   alias = output;
   alias.energy = static_cast<double*>(arena);
   require(apply(alias) != cudaSuccess, "arena output alias admitted");
+  if (options.spectral_metric) {
+    alias = output;
+    alias.weight_metric = eigenvectors;
+    require(apply(alias) == cudaErrorInvalidValue, "borrowed spectral frame was writable");
+  }
   require(response.apply(nullptr, delta_raw, delta_metric, output, storage.stream) != cudaSuccess,
           "null direction admitted");
   require(response.apply(static_cast<double*>(arena), delta_raw, delta_metric, output,
@@ -204,7 +263,9 @@ void run(const char* source, const char* result) {
   file.write(reinterpret_cast<const char*>(expected.data()), expected.size() * sizeof(double));
   std::cout << "{\"lifecycle\":true,\"workspace_bytes\":" << work.workspace_bytes
             << ",\"reference_terms\":" << work.reference_terms
-            << ",\"action_terms\":" << work.action_terms << "}\n";
+            << ",\"action_terms\":" << work.action_terms
+            << ",\"matrix_reference_terms\":" << work.matrix_reference_terms
+            << ",\"matrix_action_terms\":" << work.matrix_action_terms << "}\n";
 }
 }  // namespace
 int main(int argc, char** argv) {

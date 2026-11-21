@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,10 +22,7 @@ def test_phase_source_begin_failure_is_terminal_and_releases_the_lease(
     transaction = source[begin:end]
     entry = source.index("    if (is_pending) throw", source.index("  void begin("))
     invalidate = source[entry : source.index("    output.dft_diagnostic", entry)]
-    publish_begin = source.index("  void publish_diis_receipt() {")
-    publish = source[
-        publish_begin : source.index("\n  /** Domain follows", publish_begin)
-    ]
+    publish = cpp_function_definition(source, "publish_diis_receipt")
     cpp = tmp_path / "begin.cpp"
     cpp.write_text(
         r"""

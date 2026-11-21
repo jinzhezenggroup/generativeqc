@@ -14,6 +14,18 @@
 #include "scf/cuda/topology.hpp"
 #include "scf/df_source_capacity.hpp"
 
+namespace generativeqc::scf::df_source_capacity {
+
+std::size_t prepared_host_bytes(const Shape& orbital, const Shape& auxiliary) {
+  const auto source =
+      plan(orbital, auxiliary,
+           {sizeof(cuda_execution::CudaDensityFittingIntegralSourceImpl),
+            sizeof(cuda_execution::HostBatch), sizeof(cuda_execution::DfPublicAoExpansion)});
+  return source.numeric_bytes - source.device_bytes;
+}
+
+}  // namespace generativeqc::scf::df_source_capacity
+
 namespace generativeqc::scf::cuda_execution {
 
 namespace {

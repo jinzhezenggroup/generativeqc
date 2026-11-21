@@ -73,12 +73,52 @@ __global__ void reduce(int n, double* energies, int* statuses) {
   double energy = 0;
   int status = 0;
   for (int i = 0; i < n; ++i) {
-    energy += energies[i];
+    if (energies) energy += energies[i];
     if (statuses[i]) status = statuses[i];
   }
   if (!gcp_detail::finite(energy)) status = static_cast<int>(GCPStatus::numerical_failure);
-  energies[0] = energy;
+  if (energies) energies[0] = energy;
   statuses[0] = status;
+}
+
+// Each atom owns its output; canonical pair ordering makes the two legs agree.
+__global__ void pair_hessian_action(int atoms, const std::int32_t* numbers, const double* xyz,
+                                    const double* direction, const gcp_data::Element* elements,
+                                    const double* radii, GCPParameters parameters, double* output,
+                                    int* statuses) {
+  const int atom = blockIdx.x * blockDim.x + threadIdx.x;
+  if (atom >= atoms) return;
+  double action[3]{};
+  auto status = GCPStatus::success;
+  for (int neighbor = 0; neighbor < atoms; ++neighbor) {
+    if (atom == neighbor) continue;
+    const int first = atom > neighbor ? atom : neighbor;
+    const int second = atom > neighbor ? neighbor : atom;
+    double separation[3], motion[3], distance_squared = 0;
+    for (int axis = 0; axis < 3; ++axis) {
+      separation[axis] = xyz[3 * first + axis] - xyz[3 * second + axis];
+      motion[axis] = direction[3 * first + axis] - direction[3 * second + axis];
+      distance_squared += separation[axis] * separation[axis];
+    }
+    if (!(distance_squared > 0) || !gcp_detail::finite(distance_squared)) {
+      status = GCPStatus::coincident_atoms;
+      break;
+    }
+    const int number_a = numbers[first], number_b = numbers[second];
+    const int high = number_a > number_b ? number_a : number_b;
+    const int low = number_a > number_b ? number_b : number_a;
+    const double radius = radii[high * (high - 1) / 2 + low - 1] * gcp_detail::kAngstromToBohr;
+    double pair[3];
+    status = gcp_detail::pair_hvp(elements[number_a - 1], elements[number_b - 1], radius,
+                                  sqrt(distance_squared), separation, motion, parameters, pair);
+    if (status != GCPStatus::success) break;
+    for (int axis = 0; axis < 3; ++axis) action[axis] += (atom == first ? pair[axis] : -pair[axis]);
+  }
+  for (int axis = 0; axis < 3; ++axis) {
+    if (!gcp_detail::finite(action[axis])) status = GCPStatus::numerical_failure;
+    output[3 * atom + axis] = action[axis];
+  }
+  statuses[atom] = static_cast<int>(status);
 }
 }  // namespace
 
@@ -88,25 +128,25 @@ struct GcpCudaPlan::Impl {
   runtime::OwnedCudaStream stream;
   runtime::OwnedCudaBuffer<std::int32_t> numbers;
   runtime::OwnedCudaBuffer<int> statuses;
-  runtime::OwnedCudaBuffer<double> coordinates, energies, gradients, radii;
+  runtime::OwnedCudaBuffer<double> coordinates, energies, gradients, radii, direction;
   runtime::OwnedCudaBuffer<gcp_data::Element> elements;
   Impl(int selected, int count) : device(selected), atoms(count), stream(selected) {}
 };
 
-std::size_t GcpCudaPlan::numeric_bytes(std::size_t atoms) {
+std::size_t GcpCudaPlan::numeric_bytes(std::size_t atoms, bool second_order) {
   // Coordinate indices are signed ints; all molecular storage is dynamic.
+  const std::size_t per_atom = 2 * sizeof(int) + (second_order ? 10 : 7) * sizeof(double);
   if (!atoms || atoms > std::numeric_limits<int>::max() / 3 ||
       atoms > (std::numeric_limits<std::size_t>::max() - sizeof(gcp_data::kElements) -
                sizeof(gcp_data::kVdwAngstrom)) /
-                  (2 * sizeof(int) + 7 * sizeof(double)))
+                  per_atom)
     throw std::invalid_argument("CUDA gCP shape exceeds its index or byte capacity");
-  return atoms * (2 * sizeof(int) + 7 * sizeof(double)) + sizeof(gcp_data::kElements) +
-         sizeof(gcp_data::kVdwAngstrom);
+  return atoms * per_atom + sizeof(gcp_data::kElements) + sizeof(gcp_data::kVdwAngstrom);
 }
 
 GcpCudaPlan::GcpCudaPlan(int device, std::span<const std::int32_t> numbers,
-                         std::size_t maximum_bytes) {
-  if (numeric_bytes(numbers.size()) > maximum_bytes) throw std::bad_alloc();
+                         std::size_t maximum_bytes, bool second_order) {
+  if (numeric_bytes(numbers.size(), second_order) > maximum_bytes) throw std::bad_alloc();
   if (std::any_of(numbers.begin(), numbers.end(), [](int z) { return z < 1 || z > 18; }))
     throw std::invalid_argument("CUDA r2SCAN-3c gCP supports H-Ar");
   auto owner = std::make_unique<Impl>(device, static_cast<int>(numbers.size()));
@@ -117,6 +157,7 @@ GcpCudaPlan::GcpCudaPlan(int device, std::span<const std::int32_t> numbers,
   owner->coordinates.allocate(device, 3 * numbers.size(), stream);
   owner->energies.allocate(device, numbers.size(), stream);
   owner->gradients.allocate(device, 3 * numbers.size(), stream);
+  if (second_order) owner->direction.allocate(device, 3 * numbers.size(), stream);
   owner->radii.allocate(device, gcp_data::kVdwAngstrom.size(), stream);
   owner->elements.allocate(device, gcp_data::kElements.size(), stream);
   check(cudaMemcpyAsync(owner->numbers.get(), numbers.data(), numbers.size_bytes(),
@@ -162,5 +203,44 @@ void GcpCudaPlan::execute(std::span<const double> xyz, double& energy, std::span
     check(cudaStreamSynchronize(stream));
   }
   energy = candidate;
+}
+
+void GcpCudaPlan::apply_hessian(std::span<const double> xyz, std::span<const double> direction,
+                                std::span<double> output) {
+  auto& owner = *impl_;
+  const auto finite = [](double value) { return std::isfinite(value); };
+  if (!owner.direction.get() || xyz.size() != 3u * owner.atoms || direction.size() != xyz.size() ||
+      output.size() != xyz.size() || !std::all_of(xyz.begin(), xyz.end(), finite) ||
+      !std::all_of(direction.begin(), direction.end(), finite))
+    throw std::invalid_argument("invalid CUDA gCP Hessian lease, geometry or direction");
+  runtime::CudaDeviceScope guard(owner.device, check);
+  const auto stream = owner.stream.get();
+  check(cudaMemcpyAsync(owner.coordinates.get(), xyz.data(), xyz.size_bytes(),
+                        cudaMemcpyHostToDevice, stream));
+  check(cudaMemcpyAsync(owner.direction.get(), direction.data(), direction.size_bytes(),
+                        cudaMemcpyHostToDevice, stream));
+  check(launch_hessian_device(owner.coordinates.get(), owner.direction.get(), owner.gradients.get(),
+                              owner.statuses.get(), stream));
+  reduce<<<1, 1, 0, stream>>>(owner.atoms, nullptr, owner.statuses.get());
+  check(cudaGetLastError());
+  int status{};
+  check(cudaMemcpyAsync(&status, owner.statuses.get(), sizeof(status), cudaMemcpyDeviceToHost,
+                        stream));
+  check(cudaStreamSynchronize(stream));
+  if (status)
+    throw Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, "CUDA r2SCAN-3c gCP Hessian pair failed");
+  check(cudaMemcpyAsync(output.data(), owner.gradients.get(), output.size_bytes(),
+                        cudaMemcpyDeviceToHost, stream));
+  check(cudaStreamSynchronize(stream));
+}
+
+cudaError_t GcpCudaPlan::launch_hessian_device(const double* xyz, const double* direction,
+                                               double* output, int* statuses,
+                                               cudaStream_t stream) const noexcept {
+  const auto& owner = *impl_;
+  pair_hessian_action<<<(owner.atoms + 127) / 128, 128, 0, stream>>>(
+      owner.atoms, owner.numbers.get(), xyz, direction, owner.elements.get(), owner.radii.get(),
+      r2scan3c_gcp_parameters(), output, statuses);
+  return cudaGetLastError();
 }
 }  // namespace generativeqc::dft::dispersion

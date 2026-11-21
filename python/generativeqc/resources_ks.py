@@ -33,7 +33,15 @@ from .basis import BasisSet
 from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
 from .elements import electron_state
-from .ks import KsOptions, _native_semilocal_code, resolve_ks_options
+from .ks import (
+    KsOptions,
+    _native_semilocal_code,
+    composite_stationary_second_order_eligible,
+    cuda_pbe_range_stationary_second_order_eligible,
+    is_canonical_r2scan_rvv10,
+    resolve_ks_method,
+    resolve_ks_options,
+)
 from .resources_hf import (
     _basis_record,
     _cuda_library_identity,
@@ -43,6 +51,15 @@ from .resources_hf import (
 from .resources_planning import plan_resources
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
+_CUDA_FITTED_METHODS = frozenset(
+    {"pbe-rks", "pbe-uks", "pbe0-rks", "pbe0-uks", "b3lyp-rks", "b3lyp-uks"}
+)
+_CUDA_FITTED_ENERGY_METHODS = _CUDA_FITTED_METHODS | {
+    "lda-rks",
+    "lda-uks",
+    "r2scan-rks",
+    "r2scan-uks",
+}
 _CUDA_STATIONARY_INVENTORY_KEYS = (
     "grid_numeric",
     "provider_allowance",
@@ -114,14 +131,20 @@ def _cpu_host_shape(
     return tuple(checked_bytes(value, "KS host shape") for value in dimensions)
 
 
-def _cpu_host_result(values: typing.Sequence[int], model: typing.Any) -> dict[str, int]:
+def _cpu_host_result(
+    values: typing.Sequence[int],
+    model: typing.Any,
+    *,
+    check_nonlocal_budget: bool = True,
+) -> dict[str, int]:
     """Decode capacities without waiving the explicit nonlocal sub-budget."""
     inventory = {
         key: checked_bytes(value, f"KS {key}")
         for key, value in zip(_CPU_HOST_INVENTORY_KEYS, values, strict=True)
     }
     if (
-        model.has_nonlocal_correlation
+        check_nonlocal_budget
+        and model.has_nonlocal_correlation
         and inventory["nonlocal_provider"] > model.nonlocal_memory_budget_bytes
     ):
         raise ValueError(
@@ -241,7 +264,11 @@ def _native_host_fleet_inventory(
             f"native {backend.upper()} KS fleet inventory returned inconsistent peak"
         )
     host = [
-        _cpu_host_result(values[15 + 16 * index : 31 + 16 * index], options["model"])
+        _cpu_host_result(
+            values[15 + 16 * index : 31 + 16 * index],
+            options["model"],
+            check_nonlocal_budget=not cuda,
+        )
         for index in range(len(items))
     ]
     totals = dict(zip(_CPU_HOST_PERSISTENT_KEYS, aggregate[:12], strict=True))
@@ -407,7 +434,7 @@ def _item_host_inventory(
         # derivatives: six FP64 arrays. The AO bridge separately owns rho,
         # grad-rho, vrho/vsigma, one first-derivative AO tile and V_nlc.
         nonlocal_provider = byte_product(8, points, 6)
-        if nonlocal_provider > model.nonlocal_memory_budget_bytes:
+        if backend == "cpu" and nonlocal_provider > model.nonlocal_memory_budget_bytes:
             raise ValueError(
                 "KS nonlocal provider workspace exceeds nonlocal_memory_budget_bytes"
             )
@@ -467,51 +494,115 @@ def _cuda_leaf_inventory(
     functional_code: int,
     requires_tau: bool,
     tile: typing.Any,
+    rebuild_exchange: bool | None = None,
+    rebuild_range: bool = False,
+    nonlocal_limit: int | None = None,
+    wb97mv: bool = False,
 ) -> typing.Any:
     """Query the existing allocator-owned leaves without composing lifetimes."""
-    query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
-    selector = functional_code
-    if query is None:
-        if functional_code >= 0x30000 or requires_tau:
-            raise NotImplementedError(
-                "tau-dependent CUDA KS planning requires point-program allocation inventory v2"
-            )
-        query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
-        selector = int(requires_first_ao_derivatives)
-    if query is None:
-        raise NotImplementedError(
-            "native library has no KS CUDA allocation inventory v1/v2"
-        )
     orbital = item["orbital"]
-    args = (
-        orbital["nbf"],
-        item["atoms"],
-        orbital["shells"],
-        orbital["primitives"],
-        item["grid_points"],
-        diis_history,
-        item["spins"],
-        selector,
-        tile,
-    )
-    if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
-        raise ValueError("KS resource shape exceeds the host size_t ABI")
-    query.argtypes = [ctypes.c_size_t] * 9 + [
-        ctypes.POINTER(ctypes.c_uint64),
-        ctypes.c_size_t,
-    ]
-    query.restype = ctypes.c_int
-    output = (ctypes.c_uint64 * 3)()
-    if query(*args, output, len(output)):
-        if functional_code >= 0x30000:
-            raise NotImplementedError(
-                "automatic KS CUDA inventory requires a packaged static point provider; "
-                "build with GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON and use "
-                "valid launch/DIIS dimensions"
-            )
-        raise NotImplementedError(
-            "KS CUDA inventory requires a CUDA build and valid launch/DIIS dimensions"
+    nonlocal_host = extra_quadrature = 0
+    if nonlocal_limit is not None:
+        from . import _native
+
+        query = getattr(library, "generativeqc_resource_ks_cuda_nonlocal_v1", None)
+        if query is None:
+            raise NotImplementedError("native library lacks CUDA nonlocal KS inventory")
+        args = (
+            orbital["nbf"],
+            item["atoms"],
+            orbital["primitives"],
+            item["grid_points"],
+            diis_history,
+            item["spins"],
+            tile,
+            item["nonlocal_grid_points"],
+            int("nonlocal_grid_host_bytes" in item),
+            int(wb97mv),
         )
+        output = (ctypes.c_uint64 * 4)()
+        query.argtypes = [ctypes.c_size_t] * 10 + [
+            ctypes.c_uint64,
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
+            raise ValueError("KS resource shape exceeds the host size_t ABI")
+        status = query(*args, nonlocal_limit, output, len(output))
+        if status == _native.STATUS_OUT_OF_MEMORY:
+            raise MemoryError(
+                "KS nonlocal workspace exceeds nonlocal_memory_budget_bytes"
+            )
+        if status:
+            raise NotImplementedError(
+                "native CUDA nonlocal inventory rejected this shape/build"
+            )
+        extra_quadrature, nonlocal_host = output[2:]
+    elif rebuild_exchange is not None:
+        # This query counts only mutable KS state and XC/grid. Direct J/K can
+        # use it too, provided the fleet supplies its own Fock source capacity.
+        query = getattr(library, "generativeqc_resource_ks_cuda_rebuild_v1", None)
+        if query is None:
+            raise NotImplementedError(
+                "native library lacks CUDA KS rebuild state/XC inventory"
+            )
+        args = (
+            orbital["nbf"],
+            item["atoms"],
+            orbital["primitives"],
+            item["grid_points"],
+            diis_history,
+            item["spins"],
+            functional_code,
+            tile,
+            int(rebuild_exchange),
+            int(rebuild_range),
+        )
+    else:
+        query = getattr(library, "generativeqc_resource_ks_cuda_v2", None)
+        selector = functional_code
+        if query is None:
+            if functional_code >= 0x30000 or requires_tau:
+                raise NotImplementedError(
+                    "tau-dependent CUDA KS planning requires point-program allocation inventory v2"
+                )
+            query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
+            selector = int(requires_first_ao_derivatives)
+        if query is None:
+            raise NotImplementedError(
+                "native library has no KS CUDA allocation inventory v1/v2"
+            )
+        args = (
+            orbital["nbf"],
+            item["atoms"],
+            orbital["shells"],
+            orbital["primitives"],
+            item["grid_points"],
+            diis_history,
+            item["spins"],
+            selector,
+            tile,
+        )
+    if nonlocal_limit is None:
+        if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
+            raise ValueError("KS resource shape exceeds the host size_t ABI")
+        query.argtypes = [ctypes.c_size_t] * len(args) + [
+            ctypes.POINTER(ctypes.c_uint64),
+            ctypes.c_size_t,
+        ]
+        query.restype = ctypes.c_int
+        output = (ctypes.c_uint64 * (3 if rebuild_exchange is None else 2))()
+        if query(*args, output, len(output)):
+            if functional_code >= 0x30000:
+                raise NotImplementedError(
+                    "automatic KS CUDA inventory requires a packaged static point provider; "
+                    "build with GENERATIVEQC_ENABLE_AUTOMATIC_XC_CUDA_AOT=ON and use "
+                    "valid launch/DIIS dimensions"
+                )
+            raise NotImplementedError(
+                "KS CUDA inventory requires a CUDA build and valid launch/DIIS dimensions"
+            )
     quadrature_query = getattr(
         library, "generativeqc_resource_quadrature_cuda_v1", None
     )
@@ -548,8 +639,13 @@ def _cuda_leaf_inventory(
     return {
         "state": checked_bytes(int(output[0])),
         "xc": checked_bytes(int(output[1])),
-        "coulomb": checked_bytes(int(output[2])),
-        "quadrature_setup": checked_bytes(quadrature.value),
+        "coulomb": checked_bytes(int(output[2]))
+        if rebuild_exchange is None and nonlocal_limit is None
+        else 0,
+        "quadrature_setup": checked_bytes(quadrature.value + extra_quadrature),
+        "nonlocal_host": checked_bytes(
+            nonlocal_host + item.get("nonlocal_grid_host_bytes", 0)
+        ),
         "matrix_provider": checked_bytes(matrix_provider.value),
         "ecp_workspace": checked_bytes(
             _ecp_workspace(item, cuda=True, library=library)
@@ -588,12 +684,118 @@ def _cuda_item_inventory(
     }
 
 
+class _CudaFockCapacity(typing.NamedTuple):
+    retained: int
+    initial_setup: int
+    late_excess: int
+    host: int
+
+
+def _native_fitted_fock_inventory(
+    library: typing.Any, item: typing.Any, *, memory_budget: int, exchange: bool
+) -> _CudaFockCapacity:
+    """Size the full-range DF owner and its restricted determinant projection."""
+    query = getattr(library, "generativeqc_resource_prepared_df_fock_cuda_v1", None)
+    if query is None:
+        raise NotImplementedError("native library lacks CUDA fitted Fock inventory")
+    dimensions = [item["atoms"]]
+    for basis in (item["orbital"], item["auxiliary"]):
+        dimensions.extend(
+            basis[key] for key in ("nbf", "cartesian_nbf", "shells", "primitives")
+        )
+    restricted = item["spins"] == 1
+    rank = item["electrons"]["nalpha"] if exchange and restricted else 0
+    # Only restricted J-only DF promotes pair storage without an occupied rank.
+    dimensions.extend((memory_budget, 0, rank, 1, int(restricted and not exchange)))
+    shape = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    values = (ctypes.c_uint64 * 3)()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    if query(shape, len(shape), values, len(values)):
+        raise NotImplementedError(
+            "native CUDA fitted Fock inventory rejected the source"
+        )
+    retained, setup, host = (checked_bytes(value) for value in values)
+    if (
+        not 0 < retained <= setup
+        or not host
+        or (memory_budget and retained != memory_budget)
+    ):
+        raise ValueError("native CUDA fitted Fock inventory is inconsistent")
+    return _CudaFockCapacity(retained, setup, 0, host)
+
+
+def _native_radial_fock_inventory(
+    library: typing.Any, item: typing.Any, *, memory_budget: int, radial_model: int
+) -> tuple[_CudaFockCapacity, str]:
+    """Decode the complete native initial/retry envelope and its LR selection."""
+    from . import _native
+
+    query = getattr(library, "generativeqc_resource_ks_cuda_radial_fock_v1", None)
+    if query is None:
+        raise NotImplementedError("native library lacks CUDA radial Fock inventory")
+    orbital = item["orbital"]
+    auxiliary = item.get("auxiliary")
+    dimensions = [item["atoms"]]
+    for basis in (orbital, auxiliary):
+        dimensions.extend(
+            basis[key] if basis is not None else 0
+            for key in ("nbf", "cartesian_nbf", "shells", "primitives")
+        )
+    fitted = auxiliary is not None
+    rank = item["electrons"]["nalpha"] if fitted and item["spins"] == 1 else 0
+    dimensions.extend(
+        (
+            memory_budget,
+            rank,
+            int(fitted),
+            radial_model,
+            orbital.get("ecp_terms", 0),
+        )
+    )
+    shape = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    values = (ctypes.c_uint64 * 5)()
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    status = query(shape, len(shape), values, len(values))
+    if status == _native.STATUS_INVALID_ARGUMENT:
+        raise ValueError("invalid radial Fock shape or GENERATIVEQC_DF_RANGE_EXCHANGE")
+    if status == _native.STATUS_OUT_OF_MEMORY:
+        raise MemoryError("KS radial owners exceed the available DF sub-budget")
+    if status:
+        raise NotImplementedError(
+            "native CUDA radial Fock inventory rejected the source"
+        )
+    modes = ("direct", "df", "auto")
+    retained, setup, late, host, policy = (checked_bytes(value) for value in values)
+    if (
+        not retained
+        or not setup
+        or not host
+        or policy >= len(modes)
+        or (not fitted and policy)
+    ):
+        raise ValueError("native CUDA radial Fock inventory is inconsistent")
+    return _CudaFockCapacity(retained, setup, late, host), modes[policy]
+
+
 def _native_cuda_fleet_inventory(
     library: typing.Any,
     items: typing.Sequence[typing.Any],
     stationary: typing.Sequence[typing.Any],
     *,
     device_fused_xc: bool,
+    fock: typing.Sequence[_CudaFockCapacity] | None = None,
     **options: typing.Any,
 ) -> tuple[list[dict[str, int]], dict[str, int]] | None:
     """Compose native leaves without Python setup/peak/candidate arithmetic.
@@ -603,13 +805,27 @@ def _native_cuda_fleet_inventory(
     query itself is shape-only, including in CPU-only builds; leaf availability
     remains the selected CUDA library's separate contract.
     """
-    query = getattr(library, "generativeqc_resource_ks_cuda_fleet_v1", None)
+    symbol = (
+        "generativeqc_resource_ks_cuda_fleet_v2"
+        if fock is not None
+        else "generativeqc_resource_ks_cuda_fleet_v1"
+    )
+    query = getattr(library, symbol, None)
     if query is None:
+        if fock is not None:
+            raise NotImplementedError(
+                "native Fock capacity requires CUDA fleet inventory v2"
+            )
         return None
     if len(items) != len(stationary):
         raise ValueError("CUDA KS fleet and stationary inventory lengths differ")
     native_stationary = all(consumer is not None for consumer in stationary)
     leaves = [_cuda_leaf_inventory(library, item, **options) for item in items]
+    if fock is not None:
+        for leaf, owner in zip(leaves, fock, strict=True):
+            leaf["coulomb"] = owner.retained
+            leaf["fock_setup"] = owner.initial_setup
+            leaf["deferred_setup"] = owner.late_excess
     dimensions = []
     for item, leaf, consumer in zip(items, leaves, stationary, strict=True):
         orbital = item["orbital"]
@@ -629,6 +845,11 @@ def _native_cuda_fleet_inventory(
                 int(device_fused_xc),
                 consumer["minimum"] if native_stationary else 0,
                 consumer["cached"] if native_stationary else 0,
+                *(
+                    (leaf["fock_setup"], leaf["deferred_setup"])
+                    if fock is not None
+                    else ()
+                ),
             )
         )
     shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
@@ -655,12 +876,18 @@ def _native_cuda_fleet_inventory(
         for index in range(len(items))
     ]
     for inventory, leaf in zip(device, leaves, strict=True):
+        if leaf.get("nonlocal_host"):
+            inventory["nonlocal_host"] = leaf["nonlocal_host"]
+        if leaf.get("deferred_setup"):
+            inventory["deferred_setup"] = leaf["deferred_setup"]
         for key in ("state", "xc", "coulomb", "quadrature_setup", "matrix_provider"):
             expected = 0 if key == "xc" and not device_fused_xc else leaf[key]
             if inventory[key] != expected:
                 raise ValueError("native CUDA KS fleet changed allocator-owned leaves")
         if inventory["setup"] < max(
-            leaf["ecp_workspace"], leaf["coulomb"] + leaf["quadrature_setup"]
+            leaf["ecp_workspace"],
+            leaf["coulomb"] + leaf["quadrature_setup"],
+            leaf.get("fock_setup", 0),
         ):
             raise ValueError("native CUDA KS fleet omitted a declared setup owner")
     for index, key in enumerate(("state", "xc", "coulomb", "matrix_provider")):
@@ -674,6 +901,7 @@ def _native_cuda_fleet_inventory(
                 0,
                 inventory["setup"]
                 - sum(inventory[key] for key in ("state", "xc", "coulomb")),
+                inventory.get("deferred_setup", 0),
             )
             for inventory in device
         ),
@@ -920,7 +1148,9 @@ def ks_resource_request(
     name: typing.Any = "ks",
     first_phase: typing.Any = 0,
     last_phase: typing.Any = 0,
+    _fitted: tuple[typing.Any, int, float] | None = None,
     _application_precision_budget: typing.Any = None,
+    _cuda_energy_only: bool = False,
 ) -> typing.Any:
     """Resolve one complete KS request for the shared global planner."""
     if type(include_forces) is not bool:
@@ -967,7 +1197,37 @@ def ks_resource_request(
     automatic_name = _automatic_semilocal_name(model.method_ir)
     automatic = automatic_name is not None
     automatic_cuda = automatic and backend == "cuda"
-    if model.has_separate_nonlocal_grid:
+    rvv10 = (
+        backend == "cuda"
+        and model.has_nonlocal_correlation
+        and is_canonical_r2scan_rvv10(model.method_ir)
+    )
+    wb97mv = (
+        backend == "cuda"
+        and model.has_range_exchange
+        and composite_stationary_second_order_eligible(model.method_ir)
+    )
+    range_pbe = backend == "cuda" and cuda_pbe_range_stationary_second_order_eligible(
+        model.method_ir
+    )
+    cuda_nonlocal = rvv10 or wb97mv
+    from ._native_hessian import (
+        canonical_cuda_split_hybrid_domain,
+        has_cuda_r2scan_stationary_domain,
+    )
+
+    split_hybrid_energy = (
+        backend == "cuda"
+        and not include_forces
+        and library is not None
+        and precision == "fp64"
+        and model.xc_schedule == "device_fused"
+        and model.grid.partition_iterations == 3
+        and _application_precision_budget is None
+        and (_fitted is None or _fitted[0] is not None)
+        and canonical_cuda_split_hybrid_domain(library, model.method_ir) is not None
+    )
+    if model.has_separate_nonlocal_grid and not cuda_nonlocal:
         raise NotImplementedError(
             "KS resource-ledger planning does not yet support independent XC/VV10 grids"
         )
@@ -981,13 +1241,79 @@ def ks_resource_request(
         raise ValueError("KS precision must be 'fp64' or 'auto'")
     if precision == "auto" and backend != "cuda":
         raise NotImplementedError("KS automatic precision currently requires CUDA")
+    if (
+        backend == "cuda"
+        and model.has_range_exchange
+        and not wb97mv
+        and (
+            not range_pbe
+            or include_forces
+            or precision != "fp64"
+            or model.xc_schedule != "device_fused"
+            or model.grid.partition_iterations != 3
+            or _application_precision_budget is not None
+        )
+    ):
+        raise NotImplementedError(
+            "CUDA range-only KS capacity requires strict FP64 PBE with fused "
+            "order-3 grids and energy-only SCF preparation"
+        )
     if automatic_cuda and (precision != "fp64" or model.xc_schedule != "device_fused"):
         raise NotImplementedError(
             "automatic CUDA KS requires strict-FP64 device-fused execution"
         )
-    if backend == "cuda" and model.has_nonlocal_correlation:
+    if backend == "cuda" and model.has_nonlocal_correlation and not cuda_nonlocal:
         raise NotImplementedError(
-            "self-consistent nonlocal correlation currently requires CPU"
+            "CUDA KS resource planning does not yet cover self-consistent nonlocal correlation"
+        )
+    fitted_exchange = None
+    if _fitted is not None:
+        # Named corrections lower to an ingredient carrier (e.g. pbe-rks
+        # for B3LYP-D4). Match the resolved electronic graph for energy.
+        canonical_fitted = (
+            method in _CUDA_FITTED_METHODS
+            and model.method_ir.identity == resolve_ks_method(method)[0].identity
+            if include_forces
+            else any(
+                model.method_ir.identity == resolve_ks_method(name)[0].identity
+                for name in _CUDA_FITTED_ENERGY_METHODS
+            )
+        )
+        if (
+            backend != "cuda"
+            or precision != "fp64"
+            or model.xc_schedule != "device_fused"
+            or not (
+                cuda_nonlocal or canonical_fitted or split_hybrid_energy or range_pbe
+            )
+            or _application_precision_budget is not None
+            or (
+                cuda_nonlocal
+                and model.method_ir.identity != resolve_ks_method(method)[0].identity
+            )
+        ):
+            raise NotImplementedError(
+                "CUDA fitted KS resource planning requires canonical strict-FP64 "
+                "LDA, PBE, PBE0, B3LYP, r2SCAN, r2SCAN+rVV10, WB97M-V, "
+                "or linked M06-2X/MN15 with a qualified property inventory"
+            )
+        fitted_exchange = bool(model.coefficients[2])
+    if cuda_nonlocal and (
+        precision != "fp64"
+        or model.xc_schedule != "device_fused"
+        or _application_precision_budget is not None
+        or model.grid.partition_iterations != 3
+        or (
+            model.nonlocal_grid is not None
+            and model.nonlocal_grid.partition_iterations != 3
+        )
+    ):
+        raise NotImplementedError(
+            "CUDA nonlocal KS inventory requires FP64 and fused order-3 grids"
+        )
+    if cuda_nonlocal and include_forces:
+        raise NotImplementedError(
+            "CUDA nonlocal KS resource planning does not cover forces"
         )
     incremental_controls = _incremental_direct_jk_controls()
     incremental_requested = any(incremental_controls.values())
@@ -1028,6 +1354,13 @@ def ks_resource_request(
             screening_tolerance=screening_tolerance,
         )
     selected = _snapshot_basis(basis, basis_representation)
+    if _fitted is not None:
+        auxiliary_basis, fitted_budget, metric_threshold = _fitted
+        checked_bytes(fitted_budget, "DF native memory budget")
+        if auxiliary_basis is not None and len(systems) != 1:
+            raise NotImplementedError(
+                "a fitted KS plan with an explicit auxiliary basis requires one system"
+            )
     # Imported CPU tau uses the same four AO jets and dense potential matrices
     # as GGA; tau and its point differential are fixed-size stack values.
     requires_first_ao_derivatives = bool(model.ao_order)
@@ -1082,6 +1415,102 @@ def ks_resource_request(
                 "grid_points": model.grid.point_count(a.atomic_number for a in atoms),
             }
         )
+        if _fitted is not None:
+            if range_pbe and orbital.get("ecp_terms") and auxiliary_basis is None:
+                raise NotImplementedError(
+                    "CUDA range-PBE ECP density fitting requires an explicit "
+                    "ECP-free auxiliary basis"
+                )
+            auxiliary = (
+                orbital
+                if auxiliary_basis is None
+                else _basis_record(
+                    atoms,
+                    auxiliary_basis,
+                    basis_representation,
+                    backend,
+                    charge,
+                    multiplicity,
+                    "auxiliary",
+                    derivative_order=0,
+                    library=library,
+                    operator="df_three_center",
+                    consumer="wb97mv_df_values" if wb97mv else "scf_df",
+                )
+            )
+            # SCF's orbital ECP value export retires before the fitted source
+            # is built, and is already covered by the shared ECP setup leaf.
+            # A separate auxiliary basis is only a Coulomb fitting space.
+            if auxiliary_basis is not None and auxiliary.get("ecp_terms"):
+                raise NotImplementedError(
+                    "a fitted KS auxiliary basis must not carry ECPs"
+                )
+            if include_forces and orbital.get("ecp_terms"):
+                raise NotImplementedError(
+                    "fitted KS ECP resource planning does not cover forces"
+                )
+            # Hessians prepare only fitted values; the stationary package
+            # checks second-order closure independently of this SCF envelope.
+            orbital_limit, auxiliary_limit = (1, 1) if include_forces else (3, 4)
+            if (
+                orbital["maximum_angular"] > orbital_limit
+                or auxiliary["maximum_angular"] > auxiliary_limit
+            ):
+                raise NotImplementedError(
+                    "fitted KS resource planning exceeds the orbital/auxiliary angular domain"
+                )
+            items[-1]["auxiliary"] = auxiliary
+        if (
+            rvv10
+            and (orbital.get("ecp_terms") or any(orbital.get("ecp_core_electrons", ())))
+            and (
+                library is None
+                or not has_cuda_r2scan_stationary_domain(library)
+                or orbital["maximum_angular"] > 3
+            )
+        ):
+            raise NotImplementedError(
+                "r2SCAN+rVV10 ECP planning requires linked variational CUDA "
+                "and orbital shells through f"
+            )
+        if split_hybrid_energy and (
+            orbital.get("ecp_terms") or any(orbital.get("ecp_core_electrons", ()))
+        ):
+            spaces = [(orbital, 3)]
+            if _fitted is not None:
+                spaces.append((items[-1]["auxiliary"], 4))
+            if any(
+                space["maximum_angular"]
+                > (limit if space["representation"] == "spherical" else 1)
+                for space, limit in spaces
+            ):
+                raise NotImplementedError(
+                    "split-hybrid ECP planning requires orbital shells through f and "
+                    "auxiliary shells through g (spherical for d and higher)"
+                )
+        if cuda_nonlocal:
+            row = items[-1]
+            nonlocal_grid = (
+                model.nonlocal_grid if model.has_separate_nonlocal_grid else model.grid
+            )
+            points = nonlocal_grid.point_count(a.atomic_number for a in atoms)
+            row["nonlocal_grid_points"] = points
+            if model.has_separate_nonlocal_grid:
+                # The second grid deep-copies the system; its construction
+                # rules, packing copies and point buffers may overlap that copy.
+                atom_count = row["atoms"]
+                grid_rules = (
+                    2 * nonlocal_grid.radial_points + 3 * nonlocal_grid.angular_polar
+                )
+                row["nonlocal_grid_host_bytes"] = checked_bytes(
+                    116 * points
+                    + 8 * atom_count**2
+                    + 104 * atom_count
+                    + 16 * grid_rules
+                    + 8 * (2 * (512 + 256) + 1)
+                    + 512 * (atom_count + orbital["shells"] + orbital["primitives"])
+                    + 64 * orbital.get("ecp_terms", 0)
+                )
     # Preserve conservative s/p/d ECP force capacity, including all-electron
     # fragments of an ECP catalog. Only active shells determine this capacity:
     # an unused higher-angular element must not erase the force reservation.
@@ -1094,6 +1523,15 @@ def ks_resource_request(
             and all(item["orbital"]["maximum_angular"] <= 2 for item in items)
         )
     )
+    cuda_force_inventory = (
+        backend == "cuda"
+        and not cuda_nonlocal
+        and not range_pbe
+        and (
+            include_forces
+            or (not automatic_cuda and _fitted is None and not _cuda_energy_only)
+        )
+    )
     controls = {
         "diis_history": diis_history,
         "max_iterations": max_iterations,
@@ -1101,9 +1539,7 @@ def ks_resource_request(
         "density_tolerance": density_tolerance,
         "screening_tolerance": screening_tolerance,
         "ks_options": model.to_payload(),
-        "outputs": "energy+forces"
-        if (backend == "cuda" and (not automatic_cuda or include_forces)) or cpu_forces
-        else "energy",
+        "outputs": "energy+forces" if cuda_force_inventory or cpu_forces else "energy",
         "inventory_version": 1,
         "schedule": "ordinary-stream-round-robin"
         if backend == "cuda"
@@ -1117,10 +1553,11 @@ def ks_resource_request(
     # retained owners only when native model discovery finds a complete graph.
     force_caps = tuple(
         (0, 0)
-        if automatic_cuda and not automatic_cuda_force_model
+        if not cuda_force_inventory
+        or (automatic_cuda and not automatic_cuda_force_model)
         else ordinary_cuda_force_limits(
             item["atoms"],
-            density_fitted=False,
+            density_fitted=_fitted is not None,
             hamiltonian="scalar-semilocal-ecp"
             if item["orbital"].get("ecp_terms")
             else "all-electron",
@@ -1161,6 +1598,12 @@ def ks_resource_request(
         )
     if incremental_requested:
         controls["incremental_direct_jk"] = incremental_controls
+    if _fitted is not None:
+        controls["fitted_fock"] = {
+            "budget_bytes": fitted_budget,
+            "metric_threshold": metric_threshold,
+            "value_storage": os.environ.get("GENERATIVEQC_DF_VALUE_STORAGE", "auto"),
+        }
     # AUTO runs two separately bounded nonlinear stages. Reserve the native
     # owner and exported history for both stages plus strict closure corrections.
     history_iterations = max_iterations
@@ -1173,13 +1616,11 @@ def ks_resource_request(
         controls["history_iterations"] = history_iterations
     identity = ResourceIdentity(
         method,
-        "native-ks-direct-v1",
+        "native-ks-direct-v1" if _fitted is None else "native-ks-fitted-v1",
         backend,
         precision,
         json.dumps({"items": items}),
-        ("energy", "forces")
-        if (backend == "cuda" and (not automatic_cuda or include_forces)) or cpu_forces
-        else ("energy",),
+        ("energy", "forces") if cuda_force_inventory or cpu_forces else ("energy",),
         json.dumps(controls, sort_keys=True),
     )
     exclusions = (
@@ -1342,7 +1783,76 @@ def ks_resource_request(
                     raise NotImplementedError(
                         "native library lacks method precision transport"
                     )
-            if automatic_cuda and not automatic_cuda_force_model:
+            from .ks import cuda_semilocal_stationary_second_order_eligible
+
+            direct_hybrid_energy = (
+                _cuda_energy_only
+                and _fitted is None
+                and not include_forces
+                and precision == "fp64"
+                and model.xc_schedule == "device_fused"
+                and _application_precision_budget is None
+                and bool(model.coefficients[2])
+                and (
+                    split_hybrid_energy
+                    or cuda_semilocal_stationary_second_order_eligible(model.method_ir)
+                )
+            )
+            fock = None
+            radial_fock = (
+                wb97mv
+                or range_pbe
+                or (rvv10 and _fitted is None)
+                or direct_hybrid_energy
+            )
+            if radial_fock:
+                entries = [
+                    _native_radial_fock_inventory(
+                        library,
+                        item,
+                        memory_budget=fitted_budget if _fitted is not None else 0,
+                        radial_model=1 if wb97mv else 2 if range_pbe else 0,
+                    )
+                    for item in items
+                ]
+                fock, modes = zip(*entries, strict=True)
+                if len(set(modes)) != 1:
+                    raise ValueError(
+                        "inconsistent LR exchange policy across one resource request"
+                    )
+                if wb97mv:
+                    controls["wb97mv_range_exchange"] = modes[0]
+                if range_pbe:
+                    controls["pbe_range_exchange"] = modes[0]
+            elif _fitted is not None:
+                fock = [
+                    _native_fitted_fock_inventory(
+                        library,
+                        item,
+                        memory_budget=fitted_budget,
+                        exchange=fitted_exchange,
+                    )
+                    for item in items
+                ]
+            if fock is not None:
+                estimates.append(
+                    ResourceEstimate(
+                        "all KS radial Fock host envelopes"
+                        if radial_fock
+                        else "all KS fitted Fock host envelopes",
+                        checked_bytes(sum(owner.host for owner in fock)),
+                        "pageable",
+                        first_phase,
+                        last_phase,
+                        kind="persistent",
+                    )
+                )
+            if (
+                _fitted is not None
+                or range_pbe
+                or (cuda_nonlocal and not include_forces)
+                or (automatic_cuda and not automatic_cuda_force_model)
+            ):
                 stationary = [None for _ in items]
             else:
                 descriptor = _cuda_stationary_descriptor(
@@ -1370,6 +1880,7 @@ def ks_resource_request(
                 model.has_nondefault_composition
                 and not native_stationary
                 and not automatic_cuda
+                and fock is None
             ):
                 raise NotImplementedError(
                     "CUDA KS planning does not claim this scaled/global-hybrid execution"
@@ -1388,12 +1899,25 @@ def ks_resource_request(
                 "functional_code": _native_semilocal_code(model.method_ir),
                 "requires_tau": requires_tau,
                 "tile": model.tile_points or 256,
+                "rebuild_exchange": (
+                    bool(model.coefficients[2])
+                    if range_pbe
+                    else True
+                    if direct_hybrid_energy
+                    else fitted_exchange
+                ),
+                "rebuild_range": range_pbe,
+                "nonlocal_limit": model.nonlocal_memory_budget_bytes
+                if cuda_nonlocal
+                else None,
+                "wb97mv": wb97mv,
             }
             native_device = _native_cuda_fleet_inventory(
                 library,
                 items,
                 stationary,
                 device_fused_xc=model.xc_schedule != "host_unfused",
+                fock=fock,
                 **device_options,
             )
             if native_device is None:
@@ -1406,6 +1930,17 @@ def ks_resource_request(
                         item["xc"] = 0
             else:
                 device, device_totals = native_device
+            if cuda_nonlocal:
+                estimates.append(
+                    ResourceEstimate(
+                        "all KS nonlocal host envelopes",
+                        checked_bytes(sum(item["nonlocal_host"] for item in device)),
+                        "pageable",
+                        first_phase,
+                        last_phase,
+                        kind="persistent",
+                    )
+                )
             for inventory, consumer in zip(device, stationary, strict=True):
                 inventory["stationary"] = consumer
             for key in ("state", "xc", "coulomb"):
@@ -1461,7 +1996,7 @@ def ks_resource_request(
                     last_phase,
                 )
             )
-            if not native_stationary and not automatic_cuda:
+            if not native_stationary and cuda_force_inventory and not automatic_cuda:
                 estimates.append(
                     ResourceEstimate(
                         "serialized generated KS force device staging cap",

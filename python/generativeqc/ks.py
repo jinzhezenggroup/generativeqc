@@ -7,6 +7,7 @@ interior-only reference contract. Unsupported compositions fail before prepare.
 
 import math
 import typing
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, replace
 from fractions import Fraction
 
@@ -52,6 +53,9 @@ from generativeqc_compiler.xc.spec import (
     FunctionalSpec,
     functional,
 )
+
+from ._api_types import Shell
+from .basis import BasisSet
 
 SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
 B3LYP_SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[2]
@@ -347,7 +351,9 @@ class KsOptions:
                 payload["nonlocal_memory_budget_bytes"] = (
                     self.nonlocal_memory_budget_bytes
                 )
-        if self.scf_domain == WB97MV_SCF_DOMAIN:
+        if self.scf_domain == WB97MV_SCF_DOMAIN or (
+            self._method_ir is not None and is_canonical_r2scan_rvv10(self._method_ir)
+        ):
             payload["nonlocal_density_policy"] = {
                 "version": MOLECULAR_VV10_DENSITY_POLICY,
                 "threshold": str(MOLECULAR_VV10_DENSITY_THRESHOLD),
@@ -644,7 +650,20 @@ def cuda_mixed_density_fitted_force_eligible(method_ir: MethodIR) -> bool:
     return mixed_density_fitted_force_eligible(method_ir, backend="cuda")
 
 
-def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:
+def _explicit_force_basis_eligible(
+    basis: BasisSet | Sequence[Shell], maximum_angular: int
+) -> bool:
+    """Check every shell, whether indexed by element or supplied per center."""
+    if isinstance(basis, BasisSet):
+        return all(
+            shell.angular_momentum <= maximum_angular
+            for element in basis.elements
+            for shell in element.shells
+        )
+    return all(shell.angular_momentum <= maximum_angular for shell in basis)
+
+
+def cuda_nonlocal_force_basis_eligible(basis: str | BasisSet | Sequence[Shell]) -> bool:
     """Match the resident CUDA nonlocal stationary owner's through-f basis domain.
 
     Integral derivatives come from the native stationary owner, not the generic
@@ -653,14 +672,12 @@ def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:
     """
     if isinstance(basis, str):
         return basis in ("sto-3g", "def2-svp", "def2-tzvp")
-    return all(
-        shell.angular_momentum <= 3
-        for element in basis.elements
-        for shell in element.shells
-    )
+    return _explicit_force_basis_eligible(basis, 3)
 
 
-def cuda_range_only_force_basis_eligible(basis: typing.Any) -> bool:
+def cuda_range_only_force_basis_eligible(
+    basis: str | BasisSet | Sequence[Shell],
+) -> bool:
     """Admit only the ordinary CUDA geometry owner's s/p/d basis domain.
 
     Native mixed integral sources do not extend the compiled geometry layout
@@ -668,11 +685,7 @@ def cuda_range_only_force_basis_eligible(basis: typing.Any) -> bool:
     """
     if isinstance(basis, str):
         return basis in ("sto-3g", "def2-svp")
-    return all(
-        shell.angular_momentum <= 2
-        for element in basis.elements
-        for shell in element.shells
-    )
+    return _explicit_force_basis_eligible(basis, 2)
 
 
 def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
@@ -788,6 +801,64 @@ def composite_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     )
 
 
+def is_canonical_r2scan_rvv10(method_ir: MethodIR) -> bool:
+    """Recognize the matched r²SCAN+rVV10 electronic model by its resolved graph."""
+    return (
+        isinstance(method_ir, MethodIR)
+        and method_ir.semantic_payload()
+        == resolve_method("R2SCAN+RVV10", spin=method_ir.spin).semantic_payload()
+    )
+
+
+def cuda_semilocal_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Match qualified native semilocal and full-range hybrid KS graphs.
+
+    The caller must also check backend, precision, basis, and integral model.
+    Noncanonical scales and corrections are excluded even if their SCF carrier
+    happens to be admitted.
+    """
+    return isinstance(method_ir, MethodIR) and any(
+        method_ir.semantic_payload()
+        == resolve_method(name, spin=method_ir.spin).semantic_payload()
+        for name in ("LDA_XC_PW", "PBE", "PBE0", "B3LYP")
+    )
+
+
+def cuda_pbe_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Match unscaled PBE plus explicit SR/LR HF at the same positive omega.
+
+    Integral backends and strict FP64/order-3 grid admission remain contextual.
+    This is not an alias for a named functional or for WB97M-V derivatives.
+    """
+    if not isinstance(method_ir, MethodIR) or method_ir.spin not in (
+        "unpolarized",
+        "polarized",
+    ):
+        return False
+    try:
+        plan = compile_ks_execution_plan(method_ir)
+        pbe = compile_ks_execution_plan(resolve_method("PBE", spin=method_ir.spin))
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+    if (
+        len(plan.exchange) != 2
+        or plan.nonlocal_correlation is not None
+        or plan.post_scf
+        or plan.semilocal.semantic_payload() != pbe.semilocal.semantic_payload()
+    ):
+        return False
+    terms = {term.operator: term for term in plan.exchange}
+    if set(terms) != {"short-range", "long-range"}:
+        return False
+    short, long = terms["short-range"], terms["long-range"]
+    return (
+        0 < short.omega == long.omega
+        and 0 <= short.coefficient <= 1
+        and 0 <= long.coefficient <= 1
+        and short.coefficient != long.coefficient
+    )
+
+
 def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     """Recognize qualified full-range RKS and B3LYP UKS graphs by mathematics.
 
@@ -829,9 +900,11 @@ def full_range_stationary_second_order_eligible(method_ir: MethodIR) -> bool:
 
 
 def uses_molecular_nonlocal_domain(method_ir: MethodIR) -> bool:
-    """Return the generated molecular nonlocal-domain capability for one KS graph."""
+    """Return whether the composed KS graph uses the molecular nonlocal density policy."""
     try:
-        return bool(_native_semilocal_record(method_ir)["molecular_nonlocal_domain"])
+        return is_canonical_r2scan_rvv10(method_ir) or bool(
+            _native_semilocal_record(method_ir)["molecular_nonlocal_domain"]
+        )
     except (TypeError, ValueError, NotImplementedError):
         return False
 
@@ -865,8 +938,10 @@ def _curated_semilocal_record(
             )
         if plan is not None:
             policy = record["exchange_policy"]
-            if policy == "none" and (
-                plan.exchange or plan.nonlocal_correlation is not None
+            if (
+                policy == "none"
+                and (plan.exchange or plan.nonlocal_correlation is not None)
+                and not is_canonical_r2scan_rvv10(method_ir)
             ):
                 raise NotImplementedError("unsupported native KS semilocal composition")
             if policy == "canonical":

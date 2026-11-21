@@ -59,6 +59,19 @@ def _atm_power(graph: Graph) -> Expr:
     )
 
 
+_CURVATURE_VARIABLE = {
+    "smooth_switch": "distance",
+    "d3_coordination": "distance",
+    "d4_coordination": "distance",
+    "eeq_rhs": "raw_coordination",
+    "eeq_coulomb": "distance",
+    "gaussian": "coordination",
+    "bj_damping": "distance_squared",
+    "d4_charge": "qmod",
+    "zero_regular": "distance",
+}
+
+
 @cache
 def dispersion_scalar_program(name: str) -> tuple:
     """Return graph, input names and primal/response roots for a scalar contract.
@@ -67,6 +80,40 @@ def dispersion_scalar_program(name: str) -> tuple:
     (radial derivative divided by distance). Other physical responses are plain
     scalar derivatives; normalization and product responses are supplied JVPs.
     """
+    if name.endswith("_second") and name != "zero_overflow_second":
+        primal_name = name.removesuffix("_second")
+        variable = _CURVATURE_VARIABLE.get(primal_name)
+        if variable is None:
+            raise ValueError(f"unknown second-order dispersion program: {name}")
+        graph, names, roots = dispersion_scalar_program(primal_name)
+        # Differentiate the actual response coefficient. eeq_coulomb exposes
+        # (dA/dr)/r, so its JVP must include motion of the reciprocal radius.
+        return (
+            graph,
+            names,
+            (*roots, graph.differentiate(roots[1], graph.variable(variable))),
+        )
+
+    if name == "atm_direction":
+        graph, names, roots = dispersion_scalar_program("atm")
+        # Radii and damping parameters do not move. The six physical edge
+        # arguments are squared distances and their interpolated C6 values.
+        moving = names[:3] + names[4:7]
+        tangent_names = tuple(f"dot_{variable}" for variable in moving)
+        tangent = {
+            variable: graph.variable(dot)
+            for variable, dot in zip(moving, tangent_names, strict=True)
+        }
+        direction = graph.variable("direction")
+        return (
+            graph,
+            names + tangent_names,
+            (
+                *roots,
+                *(graph.differentiate(root, direction, tangent) for root in roots),
+            ),
+        )
+
     graph = Graph()
 
     def variables(*names: str) -> tuple:
@@ -249,7 +296,7 @@ def dispersion_scalar_program(name: str) -> tuple:
         inverse = graph.exponential(-power * graph.stable_unary("log", distance))
         value = inverse / (1 + 6 * ratio_power)
         roots = (value, graph.differentiate(value, distance) / distance)
-    elif name == "zero_overflow":
+    elif name in ("zero_overflow", "zero_overflow_second"):
         names = ("log_distance", "log_radius", "exponent", "power")
         distance, radius, exponent, power = variables(*names)
         logarithm = -power * distance - math.log2(6) - exponent * (radius - distance)
@@ -273,6 +320,37 @@ def dispersion_scalar_program(name: str) -> tuple:
             graph.select_le(logarithmic_slope, 0, -radial_magnitude, radial_magnitude),
         )
         roots = (value, radial)
+        if name == "zero_overflow_second":
+            # Differentiate the log of the radial coefficient, then lower the
+            # change of variables from log2(r) to r before rounding. A tiny
+            # radial coefficient can round to zero with a nonzero derivative.
+            radial_logarithm = logarithm - 2 * distance
+            radial_slope = graph.differentiate(radial_logarithm, distance)
+            slope_abs = graph.select_le(radial_slope, 0, -radial_slope, radial_slope)
+            curvature_magnitude = graph.exponential(
+                math.log(2)
+                * (
+                    radial_logarithm
+                    - distance
+                    + graph.stable_unary("log", magnitude) / math.log(2)
+                    + graph.stable_unary("log", slope_abs) / math.log(2)
+                )
+            )
+            signed = graph.select_le(
+                radial_slope, 0, -curvature_magnitude, curvature_magnitude
+            )
+            curvature = graph.select_le(
+                magnitude,
+                0,
+                0,
+                graph.select_le(
+                    slope_abs,
+                    0,
+                    0,
+                    graph.select_le(logarithmic_slope, 0, -signed, signed),
+                ),
+            )
+            roots = (*roots, curvature)
     elif name == "eeq_rhs":
         names = ("raw_coordination", "chi", "kcnchi")
         raw, chi, kcnchi = variables(*names)
@@ -307,8 +385,11 @@ SCALAR_PROGRAMS = (
     "atm_switch",
     "zero_regular",
     "zero_overflow",
+    "zero_overflow_second",
     "eeq_rhs",
     "eeq_coulomb",
+    *(f"{name}_second" for name in _CURVATURE_VARIABLE),
+    "atm_direction",
 )
 
 
@@ -351,7 +432,7 @@ def emit_dispersion_scalar_header() -> str:
             selected = roots if derivative else roots[:1]
             emission_graph = graph
             prelude = []
-            if name in ("atm", "atm_absolute"):
+            if name in ("atm", "atm_absolute", "atm_direction"):
                 dynamic_power = _atm_power(graph)
                 prelude.append(
                     "    const double atm_power = pow(radius_product / sqrt("
@@ -372,7 +453,7 @@ def emit_dispersion_scalar_header() -> str:
                         and graph.nodes[identifier].payload == -0.5
                     },
                 )
-            elif name == "zero_regular":
+            elif name in ("zero_regular", "zero_regular_second"):
                 distance, radius, exponent, power = (
                     graph.variable(field) for field in names[:4]
                 )
@@ -408,7 +489,12 @@ def emit_dispersion_scalar_header() -> str:
                         inverse: graph.variable("inverse"),
                     },
                 )
-            if name not in ("zero_overflow", "radial_projection", "radial_scatter"):
+            if name not in (
+                "zero_overflow",
+                "zero_overflow_second",
+                "radial_projection",
+                "radial_scatter",
+            ):
                 selected = graph.replace_subexpressions(
                     selected,
                     {
@@ -431,7 +517,7 @@ def emit_dispersion_scalar_header() -> str:
                         and graph.nodes[identifier].payload == -0.5
                     },
                 )
-                if name == "bj_damping":
+                if name in ("bj_damping", "bj_damping_second"):
                     # Preserve the final addition-chain schedule: flattening
                     # after power lowering recreates long serial products.
                     emission_graph, selected = graph.canonicalize_associative(
@@ -453,7 +539,7 @@ def emit_dispersion_scalar_header() -> str:
                 _ProjectionEmitter
                 if name in ("radial_projection", "radial_scatter")
                 else _Log2Emitter
-                if name == "zero_overflow"
+                if name in ("zero_overflow", "zero_overflow_second")
                 else ScalarCEmitter
             )
             emitter = emitter_type(
@@ -486,6 +572,16 @@ def emit_dispersion_scalar_header() -> str:
             "    zero_regular(distance, scaled_radius, exponent, power, ratio_power, output);",
             "  } else {",
             "    zero_overflow(log2(distance), log2(scaled_radius), exponent, power, output);",
+            "  }",
+            "}",
+            "// Last lane is the distance derivative of (dE/dr)/r.",
+            "GENERATIVEQC_DISPERSION_HD inline void zero_damping_second(double distance, double scaled_radius,",
+            "    double exponent, double power, double* output) {",
+            "  const double ratio_power = pow(scaled_radius / distance, exponent);",
+            "  if (ratio_power <= DBL_MAX / 6.0) {",
+            "    zero_regular_second(distance, scaled_radius, exponent, power, ratio_power, output);",
+            "  } else {",
+            "    zero_overflow_second(log2(distance), log2(scaled_radius), exponent, power, output);",
             "  }",
             "}",
             "}",

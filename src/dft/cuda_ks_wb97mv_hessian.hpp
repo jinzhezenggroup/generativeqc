@@ -34,7 +34,7 @@ struct CudaKsWb97mvHessianOptions {
   double symmetry_relative_tolerance{2e-7};
   response::CudaCpksOptions cpks{};
   CudaKsWb97mvResponseOptions induced{};
-  CudaGridGeometryOptions geometry{};
+  CudaGridGeometryOptions geometry{.max_ao_replay_terms = 1ULL << 33};
   CudaWb97mvGridOptions grid{};
   integrals::CudaOneElectronOptions one_electron{};
   CudaWb97mvJkOptions exact{};
@@ -43,12 +43,16 @@ struct CudaKsWb97mvHessianOptions {
   integrals::CudaEcpNuclearOptions ecp{};
 };
 
+/** Select the storage contract at preparation, before any workspace is admitted. */
+enum class CudaKsWb97mvHessianMode { action_only, dense_and_action };
+
 enum class CudaKsWb97mvHessianStatus { failed, response_not_converged, converged };
 
 struct CudaKsWb97mvHessianResult {
   CudaKsWb97mvHessianStatus status{CudaKsWb97mvHessianStatus::failed};
   std::size_t completed_directions{};
   response::CudaCpksResult response{};
+  const char* failure_check{};  // Static diagnostic; never part of the public ABI.
   bool converged() const noexcept { return status == CudaKsWb97mvHessianStatus::converged; }
 };
 
@@ -56,25 +60,32 @@ struct CudaKsWb97mvHessianWork {
   std::size_t device_bytes{}, assembly_terms_per_direction{}, nuclear_pairs{};
   std::size_t cpks_operator_bytes{}, cpks_operator_columns{}, cpks_cached_actions{},
       cpks_physical_checks{};
+  std::size_t cpks_proposal_iterations{}, cpks_proposal_seeds{}, cpks_strict_iterations{};
   std::size_t frozen_exact_bytes{}, frozen_exact_columns{}, frozen_exact_contractions{};
   std::uint64_t attempted_directions{}, completed_directions{}, published_hvps{},
-      published_hessians{};
+      published_hessians{}, correction_directions{};
   CudaKsWb97mvResponseWork induced{};
-  CudaGridGeometryWork geometry{};
-  CudaWb97mvGridWork grid{};
+  CudaGridGeometryWork geometry{}, vv10_geometry{};
+  CudaWb97mvGridWork grid{}, separate_vv10{};
   CudaKsOneElectronWork one_electron{};
   CudaWb97mvJkWork exact{};
   CudaWb97mvDfWork fitted{};
   integrals::CudaDfNuclearWork raw_df{};
+  CudaWb97mvDfWork fitted_range{};
+  integrals::CudaDfNuclearWork raw_df_range{};
   integrals::CudaEcpNuclearWork ecp{};
 };
 
-/** Stationary compiler-AD WB97M-V nuclear HVP/Hessian on a live accepted KS state.
- * RKS/UKS, exact/DF primary J/K, residual ECP and public basis representations
- * follow the actual producer bindings. Linked derivative closure is mandatory:
+/** Stationary compiler-AD nuclear HVP/Hessian on a live accepted KS state.
+ * Canonical LDA/PBE/PBE0/B3LYP and WB97M-V can use qualified Direct, full-rank
+ * fitted and residual ECP sources. WB97M-V retains the accepted exact or fitted
+ * LR operator. RKS/UKS and basis representation follow the producer bindings.
+ * Linked closure is mandatory:
  * no Python, runtime compilation, finite differences or exact-for-DF fallback.
  * Preparation allocates explicitly charged independent arenas. Actions allocate
  * nothing and never overwrite ordinary SCF/DF/occupied-projection scratch.
+ * Action-only owners omit dense staging and repeated-RHS caches; they reject
+ * hessian() without attempting a response or modifying caller storage.
  *
  * Retain the batch and exclude concurrent access for this nonmovable owner's
  * entire lifetime. All calls use the producer device and ordinary stream. HVP
@@ -95,7 +106,7 @@ class CudaKsWb97mvHessian {
   CudaKsWb97mvHessian& operator=(CudaKsWb97mvHessian&&) = delete;
 
   generativeqc_status prepare(methods::PreparedBatch& batch, std::size_t item,
-                              const CudaKsFinalStateToken& expected,
+                              const CudaKsFinalStateToken& expected, CudaKsWb97mvHessianMode mode,
                               const CudaKsWb97mvHessianOptions& options, std::string& detail);
   cudaError_t apply(const double* direction, double* output, cudaStream_t stream,
                     CudaKsWb97mvHessianResult& result) noexcept;

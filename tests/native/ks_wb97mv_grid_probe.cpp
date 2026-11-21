@@ -742,7 +742,9 @@ void run(bool unrestricted, const std::string& mode) {
               << ",\"affine_reference_terms\":" << work.affine_reference_terms
               << ",\"affine_action_terms\":" << work.affine_action_terms
               << ",\"reference_eris\":" << work.reference_eris
-              << ",\"response_eris\":" << work.response_eris;
+              << ",\"response_eris\":" << work.response_eris
+              << ",\"resident_source_evaluations\":" << work.resident_source_evaluations
+              << ",\"resident_integral_bytes\":" << work.resident_integral_bytes;
   }
   solve();
   if (ecp) {

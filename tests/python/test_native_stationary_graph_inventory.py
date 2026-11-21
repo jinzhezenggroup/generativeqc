@@ -101,15 +101,18 @@ def test_prepared_admission_retains_graph_and_capacity(
     from generativeqc_compiler.method.stationary_native_cuda import (
         emit_native_stationary_registry_cpp,
     )
+    from test_ks_point_batch_resources import _configure_stationary_domains
 
     production = (ROOT / "src/methods/dft_method.cpp").read_text()
     admission = cpp_function_definition(production, "native_cuda_stationary_binding")
+    _configure_stationary_domains(tmp_path)
     source = tmp_path / "graph_admission.cpp"
     source.write_text(
         '#include "scf/types.hpp"\n'
         '#include "scf/fock_precision.hpp"\n'
         '#include "dft/grid.hpp"\n'
         '#include "dft/application_precision.hpp"\n'
+        '#include "dft/r2scan_cuda_selection.hpp"\n'
         '#include "dft/semilocal_family.hpp"\n'
         '#include "dft/cuda_stationary_capacity.hpp"\n'
         + emit_native_stationary_registry_cpp(("pbe_rks", "pbe_uks", "m06_2x_rks"))
@@ -303,7 +306,12 @@ int main() {
     executable = native_cxx.build_executable(
         [source],
         tmp_path / "graph_admission",
-        compile_args=("-std=c++20", f"-I{ROOT / 'src'}", f"-I{ROOT / 'include'}"),
+        compile_args=(
+            "-std=c++20",
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ),
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

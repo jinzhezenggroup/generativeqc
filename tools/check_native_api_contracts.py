@@ -25,6 +25,7 @@ HEADERS = (
     "include/generativeqc/provider_initialization.h",
     "include/generativeqc/generativeqc.hpp",
     "include/generativeqc/ks.hpp",
+    "include/generativeqc/ks_hessian.h",
     "include/generativeqc/precision_admission.h",
     "include/generativeqc/scf_defaults.h",
     "include/generativeqc/warm_seed.h",

@@ -8,7 +8,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from generativeqc import ResourceBudget, _native, resources_ks
+from generativeqc import Primitive, ResourceBudget, Shell, _native, resources_ks
+from generativeqc.ks import _native_semilocal_code, resolve_ks_options
 from generativeqc.resources_planning import plan_resources
 
 
@@ -76,6 +77,272 @@ def leaves(item: dict[str, Any], *, ecp: bool = False) -> dict[str, int]:
         "matrix_provider": atoms * 500,
         "ecp_workspace": (1 << 20) if ecp else 0,
     }
+
+
+def test_fitted_fock_capacity_keeps_source_metric_in_setup(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A large source metric can dominate construction without staying live."""
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "auto")
+    query = library.generativeqc_resource_prepared_df_fock_v1
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    requested, exact, auxiliary_aos = 1 << 20, 64 << 10, 2048
+    orbital_shape = (2, 2, 2, 6)
+    auxiliary_shape = (auxiliary_aos,) * 4
+    row = (ctypes.c_uint64 * 14)(
+        2, *orbital_shape, *auxiliary_shape, requested, exact, 1, 1, 0
+    )
+    values = (ctypes.c_uint64 * 2)()
+    assert query(row, len(row), values, len(values)) == 0
+    retained, setup = values
+    assert retained == requested
+    assert setup >= exact + 8 * auxiliary_aos**2 > retained
+
+    row[10] = 0
+    assert query(row, len(row), values, len(values)) == 0
+    assert tuple(values) == (retained, setup - exact)
+    row[9] = 0
+    assert query(row, len(row), values, len(values)) == 0
+    assert values[0] > retained and values[1] >= setup - exact
+
+    saved = tuple(values)
+    row[11] = 3
+    assert query(row, len(row), values, len(values)) != 0
+    assert tuple(values) == saved
+    row[11] = 1
+    monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", "invalid")
+    assert query(row, len(row), values, len(values)) != 0
+    assert tuple(values) == saved
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_rebuild_state_inventory_counts_radial_exchange_without_changing_xc(
+    library: Any, spins: int
+) -> None:
+    """The shape query adds each mutable K panel independently of its source."""
+    query = library.generativeqc_resource_ks_cuda_rebuild_v1
+    query.argtypes = [ctypes.c_size_t] * 10 + [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    method = "pbe0-rks" if spins == 1 else "pbe0-uks"
+    functional = _native_semilocal_code(resolve_ks_options(method).method_ir)
+    shape = (12, 4, 30, 768, 8, spins, functional, 256)
+    values = (ctypes.c_uint64 * 2)(123, 456)
+    status = query(*shape, 0, 0, values, len(values))
+    if status == 2:
+        assert tuple(values) == (123, 456)
+        pytest.skip("native library has no CUDA state allocator")
+    assert status == 0
+    j_state, xc = values
+    assert j_state > 0 and xc > 0
+    assert query(*shape, 1, 0, values, len(values)) == 0
+    hybrid_state, hybrid_xc = values
+    assert hybrid_state > j_state
+    assert hybrid_xc == xc
+    assert query(*shape, 0, 1, values, len(values)) == 0
+    range_state, range_xc = values
+    assert range_state > j_state
+    assert range_xc == xc
+    assert query(*shape, 1, 1, values, len(values)) == 0
+    assert tuple(values) == (hybrid_state + range_state - j_state, xc)
+    assert query(*shape, 1, 2, values, len(values)) != 0
+    assert tuple(values) == (hybrid_state + range_state - j_state, xc)
+
+
+def test_fitted_rvv10_accounts_for_distinct_equal_size_grid(library: Any) -> None:
+    """Different quadratures can have the same shape but own separate buffers."""
+    query = library.generativeqc_resource_ks_cuda_nonlocal_v1
+    query.argtypes = [ctypes.c_size_t] * 10 + [
+        ctypes.c_uint64,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    shape = (12, 4, 30, 768, 8, 1, 256, 768)
+    values = (ctypes.c_uint64 * 4)(123, 456, 789, 1011)
+    status = query(*shape, 0, 0, 1 << 22, values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        assert tuple(values) == (123, 456, 789, 1011)
+        pytest.skip("native library has no CUDA variational r2SCAN owner")
+    assert status == 0
+    shared_state, shared_xc, shared_quadrature, shared_host = values
+    assert shared_quadrature == 0
+    assert query(*shape, 1, 0, 1 << 22, values, len(values)) == 0
+    state, xc, quadrature, host = values
+    assert xc > shared_xc and quadrature > 0
+    assert state == shared_state and host == shared_host
+    assert query(*shape, 1, 0, 1, values, len(values)) == _native.STATUS_OUT_OF_MEMORY
+    assert tuple(values) == (state, xc, quadrature, host)
+
+
+@pytest.mark.parametrize(
+    ("model", "default"), ((1, 2), (2, 0)), ids=("wb97mv", "range-pbe")
+)
+def test_radial_auto_envelopes_split_fit_and_exact_retry(
+    library: Any, monkeypatch: pytest.MonkeyPatch, model: int, default: int
+) -> None:
+    """Auto quotes either transaction, and a large second metric is late scratch."""
+    query = library.generativeqc_resource_ks_cuda_radial_fock_v1
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    budget = (1 << 20) + 1
+    shape = (ctypes.c_uint64 * 14)(2, 2, 2, 2, 6, *([2048] * 4), budget, 1, 1, model, 0)
+    values = (ctypes.c_uint64 * 5)(1, 2, 3, 4, 5)
+    candidates = []
+    for mode, expected in (("direct", 0), ("df", 1), ("auto", 2)):
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", mode)
+        status = query(shape, len(shape), values, len(values))
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            assert tuple(values) == (1, 2, 3, 4, 5)
+            pytest.skip("native library has no CUDA Fock inventory")
+        assert status == 0 and values[4] == expected
+        candidates.append(tuple(values[:4]))
+    exact, fitted, automatic = candidates
+    assert exact[0] > fitted[0] == budget
+    assert fitted[2] > 0
+    assert automatic == tuple(map(max, zip(exact, fitted, strict=True)))
+    monkeypatch.delenv("GENERATIVEQC_DF_RANGE_EXCHANGE", raising=False)
+    assert query(shape, len(shape), values, len(values)) == 0
+    assert tuple(values) == (*candidates[default], default)
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    shape[9] = 1
+    saved = tuple(values)
+    assert query(shape, len(shape), values, len(values)) == _native.STATUS_OUT_OF_MEMORY
+    assert tuple(values) == saved
+
+
+def test_direct_nonlocal_fock_rejects_large_topology_without_publication(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An LR-free model ignores the range policy but still bounds Direct packing."""
+    monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
+    query = library.generativeqc_resource_ks_cuda_radial_fock_v1
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    shape = (ctypes.c_uint64 * 14)(2, 2, 2, 2, 6)
+    values = (ctypes.c_uint64 * 5)(1, 2, 3, 4, 5)
+    status = query(shape, len(shape), values, len(values))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        assert tuple(values) == (1, 2, 3, 4, 5)
+        pytest.skip("native library has no CUDA Fock inventory")
+    assert status == 0
+    retained, initial_setup, late_setup, host, range_policy = saved = tuple(values)
+    assert initial_setup >= retained > 0 and host > 0
+    assert late_setup == range_policy == 0
+    # Valid signed inputs, but the host shell-quartet envelope cannot fit.
+    shape[1:5] = [1 << 18] * 4
+    assert query(shape, len(shape), values, len(values)) != 0
+    assert tuple(values) == saved
+
+
+def test_radial_ecp_setup_is_late_only_for_separate_range_owner(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ECP scratch retires, but late setup cannot borrow earlier owners' space."""
+    query = library.generativeqc_resource_ks_cuda_radial_fock_v1
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    values = (ctypes.c_uint64 * 5)()
+    for fitted, policy in ((False, "direct"), (True, "direct"), (True, "df")):
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", policy)
+        auxiliary = (2, 2, 2, 6) if fitted else (0, 0, 0, 0)
+        shape = (ctypes.c_uint64 * 14)(2, 2, 2, 2, 6, *auxiliary, 0, 0, fitted, 1, 0)
+        status = query(shape, len(shape), values, len(values))
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            pytest.skip("native library has no CUDA Fock inventory")
+        assert status == 0
+        retained, setup, late, host, mode = values
+        shape[13] = 1 << 21
+        assert query(shape, len(shape), values, len(values)) == 0
+        assert values[0] == retained and values[4] == mode
+        assert values[1] > setup and values[3] > host
+        if fitted:
+            assert values[2] > late
+        else:
+            assert late == values[2] == 0
+
+
+@pytest.mark.parametrize("method", ("r2scan+rvv10-rks", "wb97m-v-rks"))
+def test_cuda_nonlocal_resource_plan_rejects_force_request(method: str) -> None:
+    """The Hessian SCF inventory does not certify a force consumer's lifetime."""
+    atoms = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]
+    with pytest.raises(NotImplementedError, match="does not cover forces"):
+        resources_ks.estimate_ks_resources(
+            [atoms], backend="cuda", method=method, include_forces=True
+        )
+
+
+@pytest.mark.parametrize(
+    "auxiliary_angular,include_forces",
+    ((4, True), (5, False)),
+    ids=("forces", "auxiliary-h"),
+)
+def test_fitted_ks_resource_plans_reject_unqualified_shape_or_property(
+    auxiliary_angular: int, include_forces: bool
+) -> None:
+    """The f/g energy inventory neither widens forces nor implies h response."""
+    atoms = [(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]
+    auxiliary = (
+        Shell(0, 0, (Primitive(0.8, 1.0),)),
+        Shell(1, auxiliary_angular, (Primitive(0.6, 1.0),)),
+    )
+    with pytest.raises(NotImplementedError, match="orbital/auxiliary angular domain"):
+        resources_ks.ks_resource_request(
+            [atoms],
+            backend="cuda",
+            method="pbe-rks",
+            basis_representation="spherical",
+            include_forces=include_forces,
+            _fitted=(auxiliary, 0, 1e-10),
+        )
+
+
+@pytest.mark.parametrize("late_setup", (0, 8192))
+def test_fleet_v2_composes_fitted_setup_and_deferred_replay(
+    library: Any, late_setup: int
+) -> None:
+    """Setup peaks retire per item; deferred scratch overlaps all owners."""
+    query = library.generativeqc_resource_ks_cuda_fleet_v2
+    query.argtypes = [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    query.restype = ctypes.c_int
+    first = (2, 2, 2, 6, 100, 200, 300, 400, 500, 0, 1, 0, 0, 4096, late_setup)
+    second = (1, 1, 1, 3, 10, 20, 30, 40, 50, 0, 1, 0, 0, 2048, 0)
+    rows = (ctypes.c_uint64 * 30)(*first, *second)
+    values = (ctypes.c_uint64 * 21)()
+    assert query(rows, len(rows), values, len(values)) == 0
+    retained = (110, 220, 330, 550)
+    setup_extra = max(4096 - 600, 2048 - 60, late_setup)
+    assert tuple(values[:5]) == (*retained, setup_extra)
+    assert values[7] == values[8] == sum(retained) + setup_extra
+    assert values[12] == 4096 and values[18] == 2048
 
 
 @pytest.mark.parametrize("fused", (False, True))

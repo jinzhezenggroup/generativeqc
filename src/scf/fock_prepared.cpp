@@ -66,27 +66,6 @@ std::size_t add_size(std::size_t a, std::size_t b) {
   if (b > std::numeric_limits<std::size_t>::max() - a) throw std::bad_alloc();
   return a + b;
 }
-std::size_t multiply_size(std::size_t a, std::size_t b) {
-  if (b && a > std::numeric_limits<std::size_t>::max() / b) throw std::bad_alloc();
-  return a * b;
-}
-/** Size the same combined orbital/auxiliary/dummy source as the shared
- * packer before it allocates GPU metadata. Keep the byte formula centralized
- * in the existing DF source resource model. */
-std::size_t df_source_bytes(const core::System& orbital, const core::System& auxiliary) {
-  const auto orbital_cartesian = molecule::cartesian_ao_count(orbital);
-  const auto auxiliary_cartesian = molecule::cartesian_ao_count(auxiliary);
-  std::size_t primitives = 1;  // The DF source's constant dummy function.
-  for (const auto* system : {&orbital, &auxiliary})
-    for (const auto& shell : system->shells)
-      primitives = add_size(primitives, shell.primitives.size());
-  return density_fitting_source_metadata_bytes(
-      1, orbital.atoms.size(),
-      add_size(add_size(orbital.shells.size(), auxiliary.shells.size()), 1),
-      add_size(add_size(orbital_cartesian, auxiliary_cartesian), 1), primitives,
-      add_size(multiply_size(orbital_cartesian, molecule::ao_count(orbital)),
-               multiply_size(auxiliary_cartesian, molecule::ao_count(auxiliary))));
-}
 FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
                                        bool retain_df_derivatives = false) {
 #if GENERATIVEQC_HAS_CUDA
@@ -187,21 +166,15 @@ PreparedFockDeviceCapacity prepared_fock_device_capacity(
     return {bytes, bytes};
   }
   const auto& aux = auxiliary ? *auxiliary : orbital;
-  const DfBudgetWorkload workload{
-      molecule::ao_count(orbital),
-      molecule::ao_count(aux),
-      orbital.atoms.size(),
-      1,
-      0,
-      strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0};
   const bool coulomb_only_packing =
       strategy.spec.spin == FockSpin::Restricted && strategy.spec.coulomb.present &&
       strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
       !strategy.spec.exchange.present;
-  const auto capacity = df_fock_device_capacity(
-      workload, device_budget_bytes, exact_device_bytes, df_source_bytes(orbital, aux),
-      projection_reservation.restricted_rank, coulomb_only_packing,
-      requested_df_pair_storage_request() == DfPairStorageRequest::Automatic);
+  const auto capacity = prepared_df_fock_device_capacity(
+      df_source_capacity::shape(orbital), df_source_capacity::shape(aux), device_budget_bytes,
+      exact_device_bytes, projection_reservation.restricted_rank,
+      strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0,
+      coulomb_only_packing, requested_df_pair_storage_request() == DfPairStorageRequest::Automatic);
   return {capacity.retained_response_bytes,
           std::max(capacity.retained_response_bytes, capacity.source_setup_bytes)};
 }
@@ -530,7 +503,8 @@ struct PreparedFockPlan::Impl {
       };
       // Reuse the existing tile planner before and after source metadata is
       // known. Value/response ownership comes from the shared DF resource policy.
-      const auto source_bytes = df_source_bytes(system, *auxiliary);
+      const auto source_bytes = df_fock_source_metadata_bytes(
+          df_source_capacity::shape(system), df_source_capacity::shape(*auxiliary));
       (void)plan_values(data.raw.nbf, data.raw.naux, source_bytes);
       CudaDensityFittingIntegralSource* raw_source{};
       std::vector<double> metrics;

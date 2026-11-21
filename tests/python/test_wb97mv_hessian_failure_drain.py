@@ -7,21 +7,25 @@ not native numerical or GPU qualification. No source hashes stand in for behavio
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 _ROOT = Path(__file__).resolve().parents[2]
 
 _RUNTIME = r"""
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 using cudaStream_t = void*;
@@ -38,7 +42,6 @@ calls=fail=fences=launches=fail_launch=late_staging=0;
 throw_compute=reject=false;converge=true;}
 void require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 }
-int cudaMalloc(void** p,std::size_t){*p=nullptr;return 0;}
 int cudaMemsetAsync(void* p,int v,std::size_t n,cudaStream_t){
 if(++q::calls==q::fail)return 17;
 q::pending.push_back({nullptr,[=]{std::memset(p,v,n);}});return 0;}
@@ -64,16 +67,36 @@ q::pending.push_back({p,[=]{for(std::size_t j=0;j<n;++j)out[j*n+i]=p[j];}});}
 void symmetric(const double*,std::size_t,double,double,int*){
 q::pending.push_back({nullptr,[]{}});}
 enum class CudaKsWb97mvHessianStatus{failed,response_not_converged,converged};
+enum class CudaKsWb97mvHessianMode{dense_and_action};
 struct CudaKsWb97mvHessianResult{
 CudaKsWb97mvHessianStatus status=CudaKsWb97mvHessianStatus::failed;
+const char* failure_check{};
 bool converged()const{return status==CudaKsWb97mvHessianStatus::converged;}};
-struct Atom{double ionic_charge()const{return 1;}};
+struct Atom{int atomic_number{1};std::array<double,3> position{};double ionic_charge()const{return 1;}};
 struct Primary{struct System{std::vector<Atom> atoms{Atom{},Atom{}};} value;
 const System& system(){return value;}};
+enum class Correction {none, d3, d4};
+struct D4Correction {int profile()const{return 0;}};
+namespace dispersion {
+inline const double table[]{1};
+struct D4Tables {
+const double *elements{table}, *references{table}, *reference_c6{table};
+std::size_t element_count{1}, reference_count{1}, reference_c6_count{1};};
+struct ChargeTables {const double *elements{table}, *charge_elements{table};std::size_t element_count{1};};
+D4Tables eeq_d4_host_tables(int){return {};}
+ChargeTables eeq2019_host_tables(){return {};}
+}
 struct Owner{
 cudaStream_t stream=nullptr;double storage[32]{};void* arena=storage;
 std::size_t bytes=sizeof(storage),direction=0,candidate=2,complete=4,status_offset=10,
-coordinates=2,charges=12,pair_atoms=14,pairs=1;
+coordinates=2,charges=12,pair_atoms=14,pairs=1,correction_geometry=16,
+d4_numbers=22,d4_elements=24,d4_references=25,d4_c6=26,eeq_parameters=27;
+CudaKsWb97mvHessianMode mode{CudaKsWb97mvHessianMode::dense_and_action};
+struct{struct{struct{bool nonlocal_grid{};}model;}identity;}expected;
+struct Geometry{int admit_actions(std::size_t){return 0;}}geometry,vv10_geometry;
+struct{bool d3{};std::optional<D4Correction> d4;}corrections;
+dispersion::D4Tables d4_tables;
+dispersion::ChargeTables eeq_tables;
 struct{Primary* primary;}fock;Primary primary;
 struct{double symmetry_absolute_tolerance=1e-7,symmetry_relative_tolerance=1e-7;}options;
 struct{unsigned published_hvps=0,published_hessians=0;}receipt;
@@ -126,11 +149,15 @@ q::require(q::pending.empty(),"child failure retained work");
 q::require(std::all_of(output,output+4,[](double x){return x==27;}),"rejected output changed");++controls;}
 q::reset();q::reject=true;q::require(run()==23&&q::fences==0&&q::calls==0,"admission queued work");++controls;
 }
-for(int failure=0;failure<=4;++failure){q::reset();q::fail=failure;
-const auto e=prepare_upload(stream);
-q::require((e!=0)==(failure!=0),"upload error changed");
-q::require(q::pending.empty()&&q::late_staging==0,"staging died before drain");
-if(!failure)q::require(q::fences==1,"extra successful upload fence");++controls;}
+for(auto correction:{Correction::none,Correction::d3,Correction::d4}){
+q::reset();q::require(prepare_upload(stream,correction)==0,"valid upload");
+q::require(q::pending.empty()&&q::late_staging==0,"successful upload retained work");
+q::require(q::fences==(correction==Correction::none?1:2),"extra successful upload fence");
+const int uploads=q::calls;
+for(int failure=1;failure<=uploads;++failure){q::reset();q::fail=failure;
+q::require(prepare_upload(stream,correction)!=0,"upload error was hidden");
+q::require(q::pending.empty()&&q::late_staging==0,"staging died before drain");++controls;}
+}
 }
 std::cout<<"PASS queued lifetime controls="<<controls<<"\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}}
@@ -146,16 +173,17 @@ def _translation_unit(source: str) -> str:
     methods = source[start : source.index("CudaKsWb97mvHessianWork ", start)]
     # Only CUDA launch syntax is removed; integer arguments and method bodies stay.
     methods = re.sub(r"<<<.*?>>>", "", methods, flags=re.DOTALL)
-    start = source.index("    check(cudaMalloc(&owner->arena, owner->bytes));")
+    start = source.index("    std::vector<double> charges;")
     uploads = source[start : source.index("    check(owner->geometry.prepare", start)]
     uploads = uploads.replace("std::vector<double>", "TrackedVector<double>")
     uploads = uploads.replace("std::vector<std::size_t>", "TrackedVector<std::size_t>")
-    # The upload test borrows a fixed arena; cudaMalloc's stub must not replace it.
     uploads = uploads.replace(
-        "check(cudaMalloc(&owner->arena, owner->bytes));", "/* preallocated arena */"
+        "std::vector<std::int32_t>", "TrackedVector<std::int32_t>"
     )
     prepare = (
-        "int prepare_upload(cudaStream_t stream){Owner value;auto* owner=&value;"
+        "int prepare_upload(cudaStream_t stream,Correction correction){Owner value;auto* owner=&value;"
+        "owner->corrections.d3=correction==Correction::d3;"
+        "if(correction==Correction::d4)owner->corrections.d4.emplace();"
         "owner->stream=stream;struct{std::size_t atoms=2;}shape;try{"
         + uploads
         + "return 0;}catch(...){return 17;}}\n"
@@ -163,22 +191,15 @@ def _translation_unit(source: str) -> str:
     return _RUNTIME + guard + methods + prepare + _MAIN
 
 
-def test_stationary_failure_paths_drain_borrows(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++20 compiler for the host lifetime fixture")
+def test_stationary_failure_paths_drain_borrows(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     source = (_ROOT / "src/dft/cuda_ks_wb97mv_hessian.cu").read_text()
     fixture = tmp_path / "stationary_lifetime.cpp"
     fixture.write_text(_translation_unit(source))
-    executable = tmp_path / "stationary_lifetime"
-    build = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(fixture), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=120,
+    executable = native_cxx.build_executable(
+        [fixture], tmp_path / "stationary_lifetime", compile_args=("-std=c++20", "-O0")
     )
-    assert build.returncode == 0, build.stderr
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, check=False, timeout=30
     )

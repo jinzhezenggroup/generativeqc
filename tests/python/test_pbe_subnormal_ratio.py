@@ -322,6 +322,52 @@ def test_signed_interior_finite_difference(
     np.testing.assert_array_equal(response(point, q, -dq, weights), -actual)
 
 
+@pytest.mark.parametrize("restricted", (False, True), ids=("uks", "rks"))
+@pytest.mark.parametrize("weights", ((1.0, 0.0), (0.0, 1.0), (0.75, 1.0)))
+def test_subnormal_spin_density_response(
+    point: ct.CDLL, restricted: bool, weights: tuple[float, float]
+) -> None:
+    """The H3 PBE0 tail has finite response even when 1/rho overflows."""
+    rho = (3.8269701416017906e-316, 4.3434042143059829e-317)
+    drho = (6.5333535491436999e-315, 7.415002923516325e-316)
+    grad_alpha = (
+        -6.5333535491436999e-315,
+        -7.4959728718850177e-317,
+        9.9980680992097826e-315,
+    )
+    grad_beta = (
+        -7.415002923516325e-316,
+        -8.5075238633116776e-318,
+        1.1347266556923477e-315,
+    )
+    dgrad_alpha = (
+        -1.1127807880578812e-313,
+        -1.279702788717148e-315,
+        1.7068571616911037e-313,
+    )
+    dgrad_beta = (
+        -1.2629460147950195e-314,
+        -1.4523935143827873e-316,
+        1.9371905717110805e-314,
+    )
+    if restricted:
+        rho, drho = (rho[0],) * 2, (drho[0],) * 2
+        grad_beta, dgrad_beta = grad_alpha, dgrad_alpha
+    inputs = (*rho, *grad_alpha, *grad_beta)
+    direction = (*drho, *dgrad_alpha, *dgrad_beta)
+    expected = oracle(inputs, weights, direction, digits=550)
+    actual = response(point, inputs, direction, weights, restricted=restricted)
+    np.testing.assert_allclose(actual[:2], expected[:2], rtol=3e-9, atol=0)
+    # In the high-reduced-gradient branch, the exchange gradient numerator
+    # is already subnormal before division by (mu + kappa*t**2)**2. Budget
+    # four denormal quanta at that stage for the directional product rule.
+    mu = 0.06672455060314922 * np.pi**2 / (12 * (6 * np.pi**2) ** (2 / 3))
+    quantum = np.nextafter(0.0, 1.0)
+    np.testing.assert_allclose(
+        actual[2:], expected[2:], rtol=3e-9, atol=(8 + 4 * weights[0] / mu**2) * quantum
+    )
+
+
 def test_interior_empty_minority_and_extreme_finite_controls(point: ct.CDLL) -> None:
     tiny = np.nextafter(0.0, 1.0)
     maximum = np.finfo(float).max

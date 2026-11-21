@@ -7,6 +7,7 @@ enum cudaError_t {
   cudaSuccess = 0,
   cudaErrorInvalidValue = 1,
   cudaErrorMemoryAllocation = 2,
+  cudaErrorInvalidDevice = 101,
   cudaErrorUnknown = 999,
   cudaErrorNotSupported = 801,
   cudaErrorInvalidResourceHandle = 400
@@ -40,6 +41,11 @@ inline cudaError_t cudaFree(void* p) {
   }
   return cudaSuccess;
 }
+// The host double has no stream queue. Async ownership uses the same census.
+inline cudaError_t cudaMallocAsync(void** p, std::size_t bytes, cudaStream_t) {
+  return cudaMalloc(p, bytes);
+}
+inline cudaError_t cudaFreeAsync(void* p, cudaStream_t) { return cudaFree(p); }
 inline cudaError_t cudaMemcpyAsync(void* dst, const void* src, std::size_t bytes, int,
                                    cudaStream_t) {
   std::memcpy(dst, src, bytes);

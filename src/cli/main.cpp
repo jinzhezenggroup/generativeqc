@@ -273,6 +273,7 @@ void print_usage(std::ostream& out) {
          "  --plan-only              Print selected stages; do not initialize a device\n"
          "  --output FILE.xyz        Write final Angstrom XYZ, refusing to overwrite\n";
   out << "Native compiler AD Hessian/HVP options (linked CPU/CUDA AOT; no Python/JIT):\n"
+         "  --method-ir FILE.json  Range-separated PBE MethodIR payload (instead of --method)\n"
          "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
          "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
@@ -280,7 +281,11 @@ void print_usage(std::ostream& out) {
          "  CPU: --numeric-budget-bytes N --ecp-budget-bytes N --dispersion-budget-bytes N\n"
          "       --cpu-packed-eri-budget-bytes N\n"
          "  CPU: --max-eri-primitives N --max-map-terms N --max-d3-pairs N (work caps)\n"
-         "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
+         "  --nonlocal-grid-level N  Treutler/Lebedev level 0..9 for WB97M-V VV10\n"
+         "  --nonlocal-grid-radial-points N --nonlocal-grid-polar-points N\n"
+         "  --nonlocal-grid-azimuth-points N (specify all three for a separate WB97M-V grid)\n"
+         "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n"
+         "  --response-cache-precision fp64|fp32-proposal (dense hessian only)\n";
   out << "Native saddle options (CPU B3LYP RKS/UKS; no Python/JIT or preoptimization):\n"
          "  --masses FILE.json       Required ordered positive masses in dalton\n"
          "  --initial-mode FILE.json Optional natoms-by-3 target direction\n"
@@ -788,11 +793,12 @@ RunOptions parse_run(int argc, char** argv) {
       options.method = compiled->carrier;
     }
   }
-  if ((options.grid_explicit || options.nonlocal_grid) && !options.composition)
+  if ((options.grid_explicit || options.nonlocal_grid) && !options.composition &&
+      !(compiler_second_order && is_dft(options)))
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
   if (options.nonlocal_grid && std::string_view(argv[1]) != "run")
     throw UsageError("--nonlocal-grid-level currently requires the run command");
-  if (is_dft(options) && !options.composition) {
+  if (is_dft(options) && !options.composition && !options.grid_explicit) {
     // Registered methods leave ks_options null, so native preparation owns
     // their grid defaults. Keep the metadata-only inventory on that same grid.
     const auto native_grid = generativeqc::dft::default_grid_spec();

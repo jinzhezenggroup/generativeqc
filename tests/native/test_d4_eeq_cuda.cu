@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "d4_eeq_oracle_fixtures.hpp"
+#include "dft/dispersion/d4_eeq_response.hpp"
+#include "dft/dispersion/d4_second_order.hpp"
 
 using namespace d4_eeq_tests;
 
@@ -47,6 +49,36 @@ __global__ void complete_kernel(int n, const std::int32_t* z, const double* xyz,
   *status = evaluate_complete_d4_eeq_with_tables(
       n, z, xyz, charge, p, profile, d4_tables, eeq_tables, workspace,
       complete_d4_eeq_workspace_elements(n), energy, gradient, charges);
+}
+
+struct QuadraticChargeSeeds {
+  int atoms;
+  __host__ __device__ D4Status operator()(const double* charge, const double* response,
+                                          double* cotangent, double* tangent) const {
+    for (int atom = 0; atom < atoms; ++atom) {
+      const double weight = 1 + 0.25 * atom;
+      cotangent[atom] = weight * charge[atom];
+      tangent[atom] = weight * response[atom];
+    }
+    return D4Status::success;
+  }
+};
+
+__global__ void pullback_kernel(int atoms, const std::int32_t* numbers, const double* xyz,
+                                double charge, EEQTables tables, const double* direction,
+                                double* scratch, double* gradient, double* action,
+                                D4Status* status) {
+  *status = eeq_directional_pullback(atoms, numbers, xyz, charge, tables, direction, scratch,
+                                     eeq_direction_workspace_elements(atoms),
+                                     QuadraticChargeSeeds{atoms}, gradient, action);
+}
+
+__global__ void d4_hessian_kernel(int atoms, const std::int32_t* numbers, const double* xyz,
+                                  const double* direction, double charge, D4Parameters parameters,
+                                  D4Tables tables, EEQTables eeq_tables, double* scratch,
+                                  double* gradient, double* action, D4Status* status) {
+  *status = d4_eeq_direction(atoms, numbers, xyz, direction, charge, parameters, tables, eeq_tables,
+                             scratch, d4_eeq_direction_workspace_elements(atoms), gradient, action);
 }
 
 __global__ void ragged_kernel(const std::int32_t* z, const double* xyz, const double* total_charge,
@@ -103,6 +135,81 @@ struct GpuEval {
             c6_count,
             profile == D4EEQProfile::r2scan3c ? 2.0 : 3.0,
             profile == D4EEQProfile::r2scan3c ? 1.0 : 2.0};
+  }
+
+  int directional_cases() {
+    Buffer<double> direction_device(3 * kMaxAtoms), action_device(3 * kMaxAtoms);
+    for (const auto& fixture : kEEQOracleFixtures) {
+      const auto count = 3 * fixture.atoms;
+      std::vector<double> direction(count), actual_gradient(count), actual_action(count),
+          reference_gradient(count), reference_action(count);
+      for (int coordinate = 0; coordinate < count; ++coordinate)
+        direction[coordinate] = 0.3 * std::sin(0.23 + 0.65 * coordinate);
+      std::vector<double> scratch(eeq_direction_workspace_elements(fixture.atoms));
+      if (eeq_directional_pullback(fixture.atoms, fixture.z.data(), fixture.xyz.data(),
+                                   fixture.total_charge, eeq2019_host_tables(), direction.data(),
+                                   scratch.data(), scratch.size(),
+                                   QuadraticChargeSeeds{fixture.atoms}, reference_gradient.data(),
+                                   reference_action.data()) != D4Status::success)
+        return 11;
+      z.upload(fixture.z.data(), fixture.atoms);
+      xyz.upload(fixture.xyz.data(), count);
+      direction_device.upload(direction.data(), count);
+      pullback_kernel<<<1, 1>>>(fixture.atoms, z.ptr, xyz.ptr, fixture.total_charge, eeq_tables(),
+                                direction_device.ptr, workspace.ptr, gradient.ptr,
+                                action_device.ptr, status.ptr);
+      checked(cudaGetLastError());
+      D4Status result{};
+      status.download(&result, 1);
+      if (result != D4Status::success) return 12;
+      gradient.download(actual_gradient.data(), count);
+      action_device.download(actual_action.data(), count);
+      for (int coordinate = 0; coordinate < count; ++coordinate)
+        if (!near(actual_gradient[coordinate], reference_gradient[coordinate], 2e-12) ||
+            !near(actual_action[coordinate], reference_action[coordinate], 2e-12))
+          return 13;
+    }
+    std::puts("CUDA EEQ directional charge pullback tests passed");
+    return 0;
+  }
+
+  int complete_hessian_cases() {
+    Buffer<double> direction_device(3 * kMaxAtoms), action_device(3 * kMaxAtoms);
+    Buffer<double> scratch_device(d4_eeq_direction_workspace_elements(kMaxAtoms));
+    for (const auto& fixture : kEEQOracleFixtures) {
+      const auto coordinates = 3 * fixture.atoms;
+      std::vector<double> direction(coordinates), actual_gradient(coordinates),
+          actual_action(coordinates), reference_gradient(coordinates),
+          reference_action(coordinates);
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+        direction[coordinate] = 0.37 * std::sin(0.13 + 0.71 * coordinate);
+      std::vector<double> scratch(d4_eeq_direction_workspace_elements(fixture.atoms));
+      if (d4_eeq_direction(fixture.atoms, fixture.z.data(), fixture.xyz.data(), direction.data(),
+                           fixture.total_charge, fixture.parameters,
+                           eeq_d4_host_tables(fixture.profile), eeq2019_host_tables(),
+                           scratch.data(), scratch.size(), reference_gradient.data(),
+                           reference_action.data()) != D4Status::success)
+        return 14;
+      z.upload(fixture.z.data(), fixture.atoms);
+      xyz.upload(fixture.xyz.data(), coordinates);
+      direction_device.upload(direction.data(), coordinates);
+      d4_hessian_kernel<<<1, 1>>>(fixture.atoms, z.ptr, xyz.ptr, direction_device.ptr,
+                                  fixture.total_charge, fixture.parameters,
+                                  d4_tables(fixture.profile), eeq_tables(), scratch_device.ptr,
+                                  gradient.ptr, action_device.ptr, status.ptr);
+      checked(cudaGetLastError());
+      D4Status result{};
+      status.download(&result, 1);
+      if (result != D4Status::success) return 15;
+      gradient.download(actual_gradient.data(), coordinates);
+      action_device.download(actual_action.data(), coordinates);
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+        if (!near(actual_gradient[coordinate], fixture.gradient[coordinate], 2e-12) ||
+            !near(actual_action[coordinate], reference_action[coordinate], 2e-12))
+          return 16;
+    }
+    std::puts("CUDA complete D4-BJ/ATM/EEQ Hessian action tests passed");
+    return 0;
   }
 
   int individual_cases() {
@@ -225,6 +332,8 @@ int main() {
     checked(error);
     GpuEval evaluate;
     if (const int rc = evaluate.individual_cases()) return rc;
+    if (const int rc = evaluate.directional_cases()) return rc;
+    if (const int rc = evaluate.complete_hessian_cases()) return rc;
     return evaluate.ragged_cases();
   } catch (const std::exception& error) {
     std::fprintf(stderr, "CUDA D4 EEQ test: %s\n", error.what());

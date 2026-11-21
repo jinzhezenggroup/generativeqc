@@ -44,6 +44,7 @@ from .dispersion import (
 )
 from .gcp import GCPSpec, GeometricCounterpoisePrimitive, r2scan3c_gcp
 from .nonlocal_correlation import (
+    R2SCAN_RVV10,
     NonlocalCorrelationPrimitive,
     NonlocalCorrelationSpec,
 )
@@ -730,6 +731,11 @@ METHOD_CATALOG = MappingProxyType(
         "R2SCAN": MethodSpec(
             "R2SCAN",
             (("MGGA_X_R2SCAN", Fraction(1)), ("MGGA_C_R2SCAN", Fraction(1))),
+        ),
+        "R2SCAN+RVV10": MethodSpec(
+            "R2SCAN+RVV10",
+            (("MGGA_X_R2SCAN", Fraction(1)), ("MGGA_C_R2SCAN", Fraction(1))),
+            nonlocal_correlation=R2SCAN_RVV10,
         ),
         "RSCAN": MethodSpec(
             "RSCAN",

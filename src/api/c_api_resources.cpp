@@ -14,6 +14,8 @@
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
 #include "methods/dft_method.hpp"
+#include "methods/dft_method_preparation.hpp"
+#include "methods/method.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/residency_boundaries.hpp"
@@ -23,6 +25,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/df_fock_capacity.hpp"
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
@@ -34,7 +37,9 @@
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
+#include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
+#include "r2scan_cuda_domain.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #endif
@@ -482,6 +487,20 @@ int generativeqc_ks_resource_inventory_version_v1() {
  * CUDA context. XC includes the borrowed-grid arena and retained MolecularGrid;
  * J/K uses the existing allocator-owned first-order provider storage.
  * The legacy v1 boolean selector remains a compatible adapter. */
+#if GENERATIVEQC_HAS_CUDA
+static std::size_t ks_cuda_xc_and_grid_bytes(std::size_t nao, std::size_t atoms,
+                                             std::size_t primitives, std::size_t points,
+                                             std::size_t spins, std::uint32_t functional,
+                                             std::size_t tile_points) {
+  const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+      atoms, primitives, nao, points, functional, spins == 2, tile_points, false,
+      generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+  // The borrowed grid owns a fifth array (atomic weights) for derivatives.
+  return generativeqc::runtime::size_add(
+      xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
+}
+#endif
+
 int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
                                      std::size_t diis_history, std::size_t spins,
@@ -493,14 +512,8 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
 #if GENERATIVEQC_HAS_CUDA
   try {
     const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
-    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
-        atoms, primitives, nao, points, static_cast<std::uint32_t>(functional), spins == 2,
-        tile_points, false, generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
-    // The shared grid retains xyz, partition weights and atomic measures.
-    // A nonborrowed XC arena owns only the first four arrays and cannot stand
-    // in for this five-array lifetime, even when XC reads only points/weights.
-    const auto xc_and_grid = generativeqc::runtime::size_add(
-        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points, atoms));
+    const auto xc_and_grid = ks_cuda_xc_and_grid_bytes(
+        nao, atoms, primitives, points, spins, static_cast<std::uint32_t>(functional), tile_points);
     // Match preparation exactly, including an explicitly bounded automatic
     // force package. Missing force artifacts retain the energy-only storage.
     const auto* automatic = generativeqc::dft::generated::automatic_cuda_point_entry(
@@ -520,6 +533,194 @@ int generativeqc_resource_ks_cuda_v2(std::size_t nao, std::size_t atoms, std::si
   }
 #else
   return 2;
+#endif
+}
+
+/** Mutable rebuild state and shared-grid XC storage. Radial source capacity
+ * is queried separately; neither K matrix implies how its integrals are built. */
+int generativeqc_resource_ks_cuda_rebuild_v1(std::size_t nao, std::size_t atoms,
+                                             std::size_t primitives, std::size_t points,
+                                             std::size_t diis_history, std::size_t spins,
+                                             std::size_t functional, std::size_t tile_points,
+                                             std::size_t exchange, std::size_t range_correction,
+                                             std::uint64_t* output, std::size_t count) {
+  if (!output || count != 2 || diis_history > 64 || (spins != 1 && spins != 2) || exchange > 1 ||
+      range_correction > 1 || functional > std::numeric_limits<std::uint32_t>::max())
+    return 1;
+#if GENERATIVEQC_HAS_CUDA
+  try {
+    const auto state = generativeqc::dft::cuda_ks_rebuild_state_bytes(
+        nao, spins, diis_history, exchange != 0, range_correction != 0);
+    const auto xc = ks_cuda_xc_and_grid_bytes(nao, atoms, primitives, points, spins,
+                                              static_cast<std::uint32_t>(functional), tile_points);
+    output[0] = state;
+    output[1] = xc;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+#else
+  return 2;
+#endif
+}
+
+/** Canonical r2SCAN+rVV10 or WB97M-V with an optional second grid. The VV10
+ * provider bound covers the KS resident pair arena, not the grid/XC lease.
+ * The optional extra quadrature peak includes the second retained grid. */
+generativeqc_status generativeqc_resource_ks_cuda_nonlocal_v1(
+    std::size_t nao, std::size_t atoms, std::size_t primitives, std::size_t points,
+    std::size_t diis_history, std::size_t spins, std::size_t tile_points,
+    std::size_t nonlocal_points, std::size_t separate_grid, std::size_t wb97mv,
+    std::uint64_t nonlocal_limit, std::uint64_t* output, std::size_t count) {
+  if (!output || count != 4 || diis_history > 64 || (spins != 1 && spins != 2) || !tile_points ||
+      tile_points > std::numeric_limits<std::uint32_t>::max() || !nonlocal_points ||
+      nonlocal_points > std::numeric_limits<std::uint32_t>::max() / 3u || separate_grid > 1 ||
+      wb97mv > 1 || (!separate_grid && points != nonlocal_points) || !nonlocal_limit)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  using namespace generativeqc;
+  if (!wb97mv && !dft::kCudaR2scanVariational) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  try {
+    const auto vv10 = dft::nlc::Vv10Plan::resource_usage(GENERATIVEQC_BACKEND_CUDA, nonlocal_points,
+                                                         tile_points, nonlocal_limit);
+    if (vv10.workspace_bytes > nonlocal_limit) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    const auto state = runtime::size_add(
+        dft::cuda_ks_rebuild_state_bytes(nao, spins, diis_history, wb97mv != 0, wb97mv != 0),
+        vv10.device_workspace_bytes);
+    const auto functional = wb97mv ? dft::semilocal_family_code(dft::SemilocalFamily::Wb97mv)
+                                   : dft::kCudaR2scanVariationalDomain;
+    const auto xc =
+        ks_cuda_xc_and_grid_bytes(nao, atoms, primitives, points, spins, functional, tile_points);
+    const auto separate_xc =
+        separate_grid ? ks_cuda_xc_and_grid_bytes(
+                            nao, atoms, primitives, nonlocal_points, spins,
+                            dft::semilocal_family_code(dft::SemilocalFamily::Pbe), tile_points)
+                      : 0;
+    const auto combined_xc = runtime::size_add(xc, separate_xc);
+    const auto quadrature = separate_grid ? dft::cuda_quadrature_bytes(atoms, nonlocal_points) : 0;
+    output[0] = state;
+    output[1] = combined_xc;
+    output[2] = quadrature;
+    output[3] = vv10.host_workspace_bytes;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+/** Allocation-free radial Fock inventory for canonical nonlocal KS. Initial
+ * Fock setup precedes both grids; late setup overlaps retained KS capacity.
+ * Auto and its exact retry are exclusive transactions, not coexisting owners.
+ * The final shape field is the orbital ECP term count for one-electron setup.
+ * Returns [retained, initial setup, late excess, host envelope, LR policy]. */
+generativeqc_status generativeqc_resource_ks_cuda_radial_fock_v1(const std::uint64_t* shape,
+                                                                 std::size_t shape_count,
+                                                                 std::uint64_t* values,
+                                                                 std::size_t value_count) {
+  constexpr std::size_t fields = 14, outputs = 5;
+  if (!shape || shape_count != fields || !values || value_count != outputs ||
+      generativeqc::runtime::ranges_overlap(shape, fields * sizeof(*shape), values,
+                                            outputs * sizeof(*values)))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  using namespace generativeqc;
+  using namespace methods::detail;
+  using scf::cuda_ks_capacity::product;
+  using scf::cuda_ks_capacity::sum;
+  using Capacity = std::array<std::uint64_t, 4>;
+  try {
+    for (std::size_t index = 0; index < fields; ++index)
+      if (shape[index] > std::numeric_limits<std::size_t>::max() ||
+          shape[index] > std::numeric_limits<std::int64_t>::max())
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    if (shape[11] > 1 || shape[12] > 2 || shape[10] > shape[1] ||
+        (!shape[11] && (shape[9] || shape[10])) || (shape[11] && !shape[12]))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto basis = [&](std::size_t offset) {
+      return scf::df_source_capacity::shape(shape[0], shape[offset + 2], shape[offset + 3],
+                                            shape[offset], shape[offset + 1]);
+    };
+    const auto orbital = basis(1);
+    const auto auxiliary = basis(5);
+    const bool fitted = shape[11] != 0;
+    // Model defaults match preparation: no LR (0), WB97M-V (1), range-PBE (2).
+    const auto policy = shape[12] ? ks_range_exchange_policy(
+                                        fitted, shape[12] == 1 ? KsRangeExchangePolicy::Automatic
+                                                               : KsRangeExchangePolicy::Exact)
+                                  : KsRangeExchangePolicy::Exact;
+    const auto bare_one_electron = scf::cuda_ks_one_electron_capacity(
+        orbital.cartesian_aos, orbital.atoms, orbital.shells, orbital.primitives);
+    std::uint64_t ecp_device{}, ecp_host{};
+    if (generativeqc_resource_ecp_workspace_v1(orbital.public_aos, orbital.cartesian_aos,
+                                               orbital.atoms, orbital.primitives, shape[13], 1,
+                                               &ecp_device) ||
+        generativeqc_resource_ecp_workspace_v1(orbital.public_aos, orbital.cartesian_aos,
+                                               orbital.atoms, orbital.primitives, shape[13], 0,
+                                               &ecp_host))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    // Each radial owner retires the S/T/V CUDA workspace before ECP, and
+    // retires both before constructing its retained J/K source.
+    const auto one_electron = std::max(bare_one_electron, ecp_device);
+    const auto full_df = [&](std::size_t cap) {
+      const auto device = scf::prepared_df_fock_device_capacity(
+          orbital, auxiliary, cap, 0, shape[10], true, false,
+          scf::requested_df_pair_storage_request() == scf::DfPairStorageRequest::Automatic);
+      const auto host =
+          scf::prepared_df_fock_host_capacity(orbital, auxiliary, device.retained_response_bytes);
+      return std::array<std::uint64_t, 3>{
+          device.retained_response_bytes,
+          std::max({static_cast<std::uint64_t>(device.source_setup_bytes),
+                    static_cast<std::uint64_t>(device.retained_response_bytes), one_electron}),
+          sum({host, ecp_host})};
+    };
+    const auto exact = [&]() {
+      const auto device = scf::cuda_direct_coulomb_device_bytes(
+          1, orbital.public_aos, orbital.atoms, orbital.shells, orbital.primitives, 1, true);
+      // Bound setup and retained packing, including the optional direct J
+      // source and Cartesian/public one-electron copies of this Fock owner.
+      const auto pairs = product(orbital.shells, sum({orbital.shells, 1})) / 2;
+      const auto host =
+          sum({product(4, device), product(4, orbital.system_bytes),
+               product(2048, sum({1, pairs, product(pairs, pairs)})), bare_one_electron, ecp_host});
+      return std::array<std::uint64_t, 3>{device, std::max<std::uint64_t>(device, one_electron),
+                                          host};
+    };
+    const auto combine = [](auto primary, auto range) -> Capacity {
+      return {sum({primary[0], range[0]}), primary[1], range[1] - range[0],
+              sum({primary[2], range[2]})};
+    };
+    Capacity envelope{};
+    if (!fitted) {
+      // Range-separated Direct SCF reuses its full-range Fock plan for erf-K. The Hessian
+      // separately charges its own generated full/LR derivative workspace.
+      envelope = combine(exact(), std::array<std::uint64_t, 3>{});
+    } else {
+      const auto bytes = static_cast<std::size_t>(shape[9]);
+      if (policy != KsRangeExchangePolicy::Fitted) envelope = combine(full_df(bytes), exact());
+      // A one-byte explicit cap cannot be split but may take auto's retry.
+      if (policy == KsRangeExchangePolicy::Fitted ||
+          (policy == KsRangeExchangePolicy::Automatic && bytes != 1)) {
+        const auto first = ks_fitted_radial_budget(bytes, true, false);
+        const auto second = ks_fitted_radial_budget(bytes, true, true);
+        const auto split = combine(full_df(first), full_df(second));
+        for (std::size_t index = 0; index != envelope.size(); ++index)
+          envelope[index] = std::max(envelope[index], split[index]);
+      }
+    }
+    for (const auto capacity : envelope) (void)sum({capacity});
+    std::copy(envelope.begin(), envelope.end(), values);
+    values[4] = static_cast<unsigned>(policy);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const methods::MethodError& error) {
+    return error.status();
+  } catch (...) {
+    return api::map_exception(nullptr);
+  }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
 }
 
@@ -615,10 +816,12 @@ int generativeqc_resource_quadrature_cuda_v1(std::size_t atoms, std::size_t poin
  * Both passes use scalar/stack storage; aliasing, malformed later records and
  * overflow leave the complete output untouched. No device/provider is probed.
  */
-int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
-                                           std::uint64_t* values, std::size_t value_count) {
-  if (!shapes || !shape_count || shape_count % 13 || !values) return -1;
-  const auto item_count = shape_count / 13;
+static int resource_ks_cuda_fleet(const std::uint64_t* shapes, std::size_t shape_count,
+                                  std::uint64_t* values, std::size_t value_count,
+                                  bool include_fock_setup) {
+  const std::size_t stride = include_fock_setup ? 15 : 13;
+  if (!shapes || !shape_count || shape_count % stride || !values) return -1;
+  const auto item_count = shape_count / stride;
   if (item_count > (std::numeric_limits<std::size_t>::max() - 9) / 6 ||
       value_count != 9 + 6 * item_count)
     return -1;
@@ -628,11 +831,23 @@ int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::siz
                                 runtime::size_mul(value_count, sizeof(*values))))
       return -1;
     const auto item_at = [&](std::size_t index) {
-      const auto* shape = shapes + 13 * index;
+      const auto* shape = shapes + stride * index;
       if (shape[10] > 1) throw std::invalid_argument("CUDA KS fleet requires a canonical boolean");
-      return scf::CudaKsDeviceResourceItem{shape[0],       shape[1],  shape[2], shape[3], shape[4],
-                                           shape[5],       shape[6],  shape[7], shape[8], shape[9],
-                                           shape[10] != 0, shape[11], shape[12]};
+      return scf::CudaKsDeviceResourceItem{shape[0],
+                                           shape[1],
+                                           shape[2],
+                                           shape[3],
+                                           shape[4],
+                                           shape[5],
+                                           shape[6],
+                                           shape[7],
+                                           shape[8],
+                                           shape[9],
+                                           shape[10] != 0,
+                                           shape[11],
+                                           shape[12],
+                                           include_fock_setup ? shape[13] : 0,
+                                           include_fock_setup ? shape[14] : 0};
     };
     scf::CudaKsDeviceFleetResources fleet;
     for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
@@ -646,6 +861,19 @@ int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::siz
   } catch (...) {
     return -1;
   }
+}
+
+int generativeqc_resource_ks_cuda_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  return resource_ks_cuda_fleet(shapes, shape_count, values, value_count, false);
+}
+
+/** CUDA KS fleet v2 appends the initial Fock construction peak and the late
+ * setup allowance to each v1 item row. Retained Fock bytes stay in the Coulomb
+ * slot; DF source temporaries and deferred replay must not be charged there. */
+int generativeqc_resource_ks_cuda_fleet_v2(const std::uint64_t* shapes, std::size_t shape_count,
+                                           std::uint64_t* values, std::size_t value_count) {
+  return resource_ks_cuda_fleet(shapes, shape_count, values, value_count, true);
 }
 
 /** Private execution-scope bridge. The selected CPU plan can explicitly cap
@@ -915,6 +1143,74 @@ int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atom
   } catch (const std::overflow_error&) {
     return 1;
   }
+}
+
+/** Private prepared DF Fock capacity query. The row contains atom count,
+ * (public AOs, Cartesian AOs, shells, primitives) for each of orbital and
+ * auxiliary bases, then requested budget, exact-provider bound, restricted
+ * projection rank, derivative retention, and rank-zero packed J permission.
+ * Returns the retained Fock envelope and complete construction peak. A row
+ * represents one radial owner and does not select a scientific strategy. */
+int generativeqc_resource_prepared_df_fock_v1(const std::uint64_t* shape, std::size_t shape_count,
+                                              std::uint64_t* values, std::size_t value_count) {
+  constexpr std::size_t fields = 14;
+  if (!shape || shape_count != fields || !values || value_count != 2) return 1;
+  try {
+    using namespace generativeqc::scf;
+    if (generativeqc::runtime::ranges_overlap(shape, fields * sizeof(*shape), values,
+                                              2 * sizeof(*values)))
+      return 1;
+    for (std::size_t index = 0; index < fields; ++index)
+      if (shape[index] > std::numeric_limits<std::size_t>::max() ||
+          shape[index] > std::numeric_limits<std::int64_t>::max())
+        return 1;
+    if (shape[12] > 1 || shape[13] > 1 || (shape[11] && shape[13])) return 1;
+    const auto basis = [&](std::size_t offset) {
+      return df_source_capacity::Shape{
+          static_cast<std::size_t>(shape[0]), static_cast<std::size_t>(shape[offset + 2]),
+          static_cast<std::size_t>(shape[offset + 3]), static_cast<std::size_t>(shape[offset]),
+          static_cast<std::size_t>(shape[offset + 1])};
+    };
+    const auto capacity = prepared_df_fock_device_capacity(
+        basis(1), basis(5), shape[9], shape[10], shape[11], shape[12] != 0, shape[13] != 0,
+        requested_df_pair_storage_request() == DfPairStorageRequest::Automatic);
+    const auto setup = std::max(capacity.retained_response_bytes, capacity.source_setup_bytes);
+    if (setup > std::numeric_limits<std::int64_t>::max()) return 1;
+    values[0] = capacity.retained_response_bytes;
+    values[1] = setup;
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+}
+
+/** Same singleton topology row as the device query. The additional result
+ * includes the conservative pageable Fock envelope (not the outer KS host
+ * inventory or an opaque library/driver allocation). */
+int generativeqc_resource_prepared_df_fock_cuda_v1(const std::uint64_t* shape,
+                                                   std::size_t shape_count, std::uint64_t* values,
+                                                   std::size_t value_count) {
+#if GENERATIVEQC_HAS_CUDA
+  if (!shape || shape_count != 14 || !values || value_count != 3 ||
+      generativeqc::runtime::ranges_overlap(shape, shape_count * sizeof(*shape), values,
+                                            value_count * sizeof(*values)))
+    return 1;
+  std::array<std::uint64_t, 3> staged{};
+  if (generativeqc_resource_prepared_df_fock_v1(shape, shape_count, staged.data(), 2)) return 1;
+  try {
+    const auto basis = [&](std::size_t offset) {
+      return generativeqc::scf::df_source_capacity::shape(
+          shape[0], shape[offset + 2], shape[offset + 3], shape[offset], shape[offset + 1]);
+    };
+    staged[2] = generativeqc::scf::prepared_df_fock_host_capacity(basis(1), basis(5), staged[0]);
+    std::copy(staged.begin(), staged.end(), values);
+    return 0;
+  } catch (...) {
+    return 1;
+  }
+#else
+  return 2;
+#endif
 }
 
 /** Private additive shape query for the exact native MINAO preparation bound.

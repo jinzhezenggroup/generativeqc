@@ -202,6 +202,40 @@ def test_missing_inventory_retains_the_existing_standalone_route(library: Any) -
         )
 
 
+def test_cuda_d3_hessian_refuses_standalone_capacity(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A standalone D3 budget cannot safely publish a native KS Hessian."""
+    from generativeqc._native_hessian import cuda_hessian_bridge
+
+    try:
+        cuda_hessian_bridge(library)
+    except NotImplementedError:
+        pytest.skip("requires a linked CUDA Hessian package, but no GPU")
+
+    class NoNativeCorrectionInventory:
+        def __getattr__(self, name: str) -> Any:
+            if name == "generativeqc_ks_d3_resource_query_v1":
+                raise AttributeError(name)
+            return getattr(library, name)
+
+    calculator = Calculator(
+        method=resolve_method("PBE-D3(BJ)"),
+        device="cuda",
+        resource_budget=ResourceBudget(),
+        initial_guess=None,
+    )
+    assert calculator.second_order_capabilities == {"hvp", "hessian"}
+    calculator._library = NoNativeCorrectionInventory()
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("an unowned correction reached CUDA batch preparation")
+
+    monkeypatch.setattr(calculator, "prepare_batch", forbidden)
+    with pytest.raises(NotImplementedError, match="dispersion capacity owned"):
+        calculator.hessian(_systems()[0])
+
+
 def test_selected_preparation_failure_never_retries_external_corrections(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

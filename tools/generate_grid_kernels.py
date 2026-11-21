@@ -17,6 +17,10 @@ def main() -> None:
     """Use the shared emitter's native composition and preserve unchanged mtimes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    macros = {"M06-2X": "M062X", "MN15": "MN15"}
+    parser.add_argument(
+        "--stationary-split-hybrid", choices=macros, action="append", default=[]
+    )
     parser.add_argument(
         "--xc-matrix-tile",
         type=int,
@@ -34,6 +38,13 @@ def main() -> None:
         native_ks=True,
         ao_radial_reuse=args.ao_radial_reuse,
         xc_matrix_schedule=XcMatrixSchedule(args.xc_matrix_tile),
+    )
+    source = (
+        "".join(
+            f"#define GENERATIVEQC_{macros[method]}_VARIATIONAL_VALUE 1\n"
+            for method in sorted(set(args.stationary_split_hybrid))
+        )
+        + source
     )
     write_if_changed(args.output, source)
 

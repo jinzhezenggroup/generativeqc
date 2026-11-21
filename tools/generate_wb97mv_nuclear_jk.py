@@ -43,6 +43,7 @@ def generate() -> str:
             "integrals": ("value",),
             "d_integrals": ("motion",),
             "bar_energy": ("1.0",),
+            "exchange_fraction": ("exchange_fraction",),
         }
         for name, (first, second) in zip(SLOTS, positions, strict=True):
             for prefix, pointer in (("", "density"), ("d_", "delta_density")):
@@ -52,10 +53,15 @@ def generate() -> str:
                 )
         for part in PARTS:
             program = quartet_program(spins, part)
+            extra = (
+                "double exchange_fraction, "
+                if part in ("full_hybrid", "range_hybrid")
+                else ""
+            )
             text.extend(
                 [
                     f"__device__ __forceinline__ bool {part}_{spins}(const double* density, const double* delta_density,",
-                    " std::size_t nao, const std::size_t* ao, double value, double motion, Result& output) {",
+                    f" std::size_t nao, const std::size_t* ao, double value, double motion, {extra}Result& output) {{",
                     " output = {};",
                 ]
             )
@@ -79,14 +85,18 @@ def generate() -> str:
     text.extend(
         [
             "__device__ __forceinline__ bool evaluate(Kernel kernel, unsigned spins, const double* density,",
-            " const double* delta_density, std::size_t nao, const std::size_t* ao, double value, double motion, Result& output) {",
+            " const double* delta_density, std::size_t nao, const std::size_t* ao, double value, double motion,",
+            " Result& output, double exchange_fraction) {",
             " if (spins != 1 && spins != 2) return false;",
+            " if (kernel == Kernel::k_full_hybrid && !(exchange_fraction > 0.0 && exchange_fraction <= 1.0)) return false;",
+            " if (kernel == Kernel::k_range_hybrid && !(exchange_fraction >= -1.0 && exchange_fraction <= 1.0)) return false;",
             " switch (kernel) {",
         ]
     )
     for part in PARTS:
+        extra = "exchange_fraction," if part in ("full_hybrid", "range_hybrid") else ""
         text.append(
-            f" case Kernel::k_{part}: return spins == 1 ? {part}_1(density,delta_density,nao,ao,value,motion,output) : {part}_2(density,delta_density,nao,ao,value,motion,output);"
+            f" case Kernel::k_{part}: return spins == 1 ? {part}_1(density,delta_density,nao,ao,value,motion,{extra}output) : {part}_2(density,delta_density,nao,ao,value,motion,{extra}output);"
         )
     return "\n".join([*text, " } return false;", "}", "}", ""])
 

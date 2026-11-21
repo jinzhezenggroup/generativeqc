@@ -328,7 +328,8 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
     ``primitive`` retains every physical center and returns value, gradient and
     gradient-JVP. Record scaling and ordered radial contraction remain outside
     this primitive. Family codes are ERI=0, three-center=1 and metric=2; radial
-    codes are full=0, long=1 and short=2 (fixed WB97M-V omega 0.3).
+    codes are full=0, long=1 and short=2. CUDA obtains the positive range
+    parameter from the authenticated launch metadata.
     CPU callers may borrow a full-range four-center geometry bound from the
     same immutable record for one component page. Omitting that binding retains
     the original canonical binder; CUDA emission has no borrowed-geometry API.
@@ -369,13 +370,17 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         + _coulomb_source(output)
         + _prefactor_source(output)
         + "\nGQC_FACTOR_FUNCTION bool primitive(unsigned family, unsigned radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
-        + (", const Geometry* prepared_geometry=nullptr" if backend == "cpu" else "")
+        + (
+            ", const Geometry* prepared_geometry=nullptr"
+            if backend == "cpu"
+            else ", double omega"
+        )
         + ") {\n"
         + "  constexpr unsigned powers[5][15][3]={"
         + ",".join(components)
         + "};\n"
         + r"""
-  if (family>2 || radial>2 || (family && radial) || !angular || !record || !direction || !output) return false;
+  if (family>2 || radial>2 || (family && radial==2) || !angular || !record || !direction || !output) return false;
   const unsigned centers=family==0 ? 4 : family==1 ? 3 : 2;
   unsigned orders[4]{}, incidence[4]{};
   if (family==0) {
@@ -410,9 +415,9 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
   for (unsigned center=0; center<4; ++center) maximum_order+=orders[center];
   Geometry geometry{};
   const auto range=radial==0 ? generativeqc::integrals::CoulombRange::Full : radial==1 ? generativeqc::integrals::CoulombRange::Long : generativeqc::integrals::CoulombRange::Short;
-  const double omega=radial==0 ? 0 : 0.3;
   bool valid=false;
 """
+        + ("  const double omega=radial==0 ? 0 : 0.3;\n" if backend == "cpu" else "")
         + (
             """  if (prepared_geometry) {
     if (family!=0 || radial!=0) return false;
@@ -521,6 +526,7 @@ namespace generativeqc::dft::hessian_aot {
 namespace {
 struct FactorizedSelection {
   unsigned family, radial, angular[4], components[16], component_count, centers, stride;
+  double omega;
 };
 __global__ void factorized_integral_kernel(FactorizedSelection selection, const double* records,
     size_t count, const long long* atoms, const double* molecular_direction,
@@ -555,7 +561,7 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
       }
       double values[25]{};
       valid=generativeqc::scf::factorized_second::primitive(selection.family,selection.radial,
-          selection.angular,selection.components[packed],record,direction,values);
+          selection.angular,selection.components[packed],record,direction,values,selection.omega);
       for (unsigned index=0; index<outputs; ++index) terms[index][threadIdx.x]=record[selection.stride-1]*values[index];
     }
     if (__syncthreads_or(!valid)) {
@@ -577,16 +583,17 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
   }
 }
 }  // namespace
-int launch_factorized_integral(unsigned family, unsigned radial, const unsigned* angular,
+int launch_factorized_integral(unsigned family, unsigned radial, double omega, const unsigned* angular,
     const std::uint32_t* components, size_t component_count, const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status,
     cudaStream_t stream, const FactorizedIntegralBatch* batches, size_t batch_count) noexcept {
-  if (family>2 || radial>2 || (family && radial) || !angular || !components ||
+  if (family>2 || radial>2 || (family && radial==2) || !angular || !components ||
+      (radial==0 ? omega!=0 : !std::isfinite(omega) || omega<=0) ||
       !component_count || component_count>16 || !batch_count || batch_count>65535 ||
       (!batches && (!records || !count || !atoms || !output || batch_count!=1)) ||
       !direction || !status) return static_cast<int>(cudaErrorInvalidValue);
   FactorizedSelection selection{};
-  selection.family=family; selection.radial=radial;
+  selection.family=family; selection.radial=radial; selection.omega=omega;
   selection.centers=family==0 ? 4 : family==1 ? 3 : 2;
   selection.stride=4*selection.centers+1;
   selection.component_count=static_cast<unsigned>(component_count);

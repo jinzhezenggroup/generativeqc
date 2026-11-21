@@ -10,6 +10,7 @@ outputs remain on the caller's stream.
 from typing import Any
 
 from .df_second import emit_df_second
+from .range_separation import CoulombKernel
 from .second_derivatives import build_second_derivative_kernel
 from .second_derivatives_native import emit_second_derivative_primitive
 
@@ -40,9 +41,11 @@ def emit_resident_second(integral: Any, indices: tuple[int, ...]) -> str:
     return _runtime("\n".join(sources), evaluate, exponents, centers, len(indices))
 
 
-def emit_resident_df_second(family: str, angular: tuple, indices: tuple) -> str:
+def emit_resident_df_second(
+    family: str, angular: tuple, indices: tuple, *, radial: CoulombKernel
+) -> str:
     """Use the same physical DF Hermite/Boys gradient-JVP graph as CPU."""
-    source = emit_df_second(family, angular, indices, backend="cuda")
+    source = emit_df_second(family, angular, indices, backend="cuda", radial=radial)
     centers = len(angular)
     cases = "".join(
         f"case {component}: return component_{component}(input, output);"

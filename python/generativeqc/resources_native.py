@@ -96,7 +96,11 @@ def observe_method_call(
 
 
 def check_resource_status(
-    library: typing.Any, status: typing.Any, diagnostics: typing.Any
+    library: typing.Any,
+    status: typing.Any,
+    diagnostics: typing.Any,
+    *,
+    context: typing.Any = None,
 ) -> None:
     """Keep resource evidence on failed native calls without guessing OOM space.
 
@@ -107,7 +111,10 @@ def check_resource_status(
     from . import _native
 
     try:
-        _native.check(library, status)
+        if context is None:
+            _native.check(library, status)
+        else:
+            _native.check(library, status, context=context)
     except RuntimeError as error:
         failure = error
         if status == _native.STATUS_OUT_OF_MEMORY:
@@ -182,7 +189,9 @@ class NativeDeviceLedger:
             dict(candidate.decisions).get("native_d4_complete_cap") == "1"
         )
         if self._native_complete_cap and (
-            owner != "ks" or component_owners != ("d4",) or prepared_kind != "batch"
+            owner != "ks"
+            or component_owners not in (("d4",), ("d4", "ks-hessian"))
+            or prepared_kind != "batch"
         ):
             raise ValueError("native D4 capacity requires its complete prepared owner")
         # A complete native program owns its corrections in the same lifetime
@@ -302,9 +311,9 @@ class NativeDeviceLedger:
             )
         )
         if self._native_complete_cap:
-            # The validated candidate owns exactly KS and D4. Its private cap
-            # includes provider allowances because native promises convert those
-            # into leases; no other global request's bytes enter this handle.
+            # This cap covers the validated KS and D4 components and any
+            # explicitly composed Hessian. Provider allowances convert into
+            # native leases; unrelated requests cannot enter this handle.
             devices = {row.device for row in rows if row.space == 4}
             if len(devices) != 1:
                 raise ValueError("native D4 capacity requires one visible device")

@@ -25,6 +25,12 @@
 
 namespace generativeqc::dft::dispersion {
 
+/** Host staging charged to the named composite correction, including its
+ * coordinate and gradient vectors even for energy-only preparation. */
+inline constexpr std::size_t r2scan3c_gcp_host_bytes(std::size_t atoms) {
+  return atoms * (sizeof(std::int32_t) + 6 * sizeof(double));
+}
+
 enum class GCPStatus : std::int32_t {
   success = 0,
   invalid_argument = 1,
@@ -94,6 +100,49 @@ GENERATIVEQC_GCP_HD inline GCPStatus pair(const gcp_data::Element& ei, const gcp
   if (derivative) {
     if (!finite(output[1])) return GCPStatus::numerical_failure;
     *derivative = output[1];
+  }
+  return GCPStatus::success;
+}
+
+/** Action of the Cartesian pair Hessian on relative displacement (bohr).
+ * The atom on the positive leg receives output; the other receives its negative. */
+GENERATIVEQC_GCP_HD inline GCPStatus pair_hvp(const gcp_data::Element& first,
+                                              const gcp_data::Element& second, double radius,
+                                              double distance, const double* separation,
+                                              const double* relative_motion,
+                                              const GCPParameters& parameters, double* output) {
+  const bool swapped = first.shell > second.shell;
+  const double exponent_a = swapped ? second.slater : first.slater;
+  const double exponent_b = swapped ? first.slater : second.slater;
+  double overlap_jet[3];
+  if (!::generativeqc::generated::dispersion::gcp_overlap_second(
+          first.shell * second.shell, std::abs(exponent_a - exponent_b) < 0.1, distance, exponent_a,
+          exponent_b, overlap_jet) ||
+      !(overlap_jet[0] > 0) || !finite(overlap_jet[0]))
+    return GCPStatus::numerical_failure;
+  const double inverse_first = first.xv >= 0.5 ? 1.0 / std::sqrt(first.xv) : 0.0;
+  const double inverse_second = second.xv >= 0.5 ? 1.0 / std::sqrt(second.xv) : 0.0;
+  const double prefactor =
+      parameters.sigma * (first.emiss * inverse_second + second.emiss * inverse_first);
+  double energy_jet[3];
+  ::generativeqc::generated::dispersion::gcp_pair_second(
+      distance, radius, parameters.alpha, parameters.beta, parameters.damping_scale,
+      parameters.damping_exponent, prefactor, overlap_jet[0], overlap_jet[1], overlap_jet[2],
+      energy_jet);
+  if (!finite(energy_jet[0]) || !finite(energy_jet[1]) || !finite(energy_jet[2]))
+    return GCPStatus::numerical_failure;
+
+  double unit[3], radial_motion = 0;
+  for (int axis = 0; axis < 3; ++axis) {
+    unit[axis] = separation[axis] / distance;
+    radial_motion += unit[axis] * relative_motion[axis];
+  }
+  // Gradient response includes rotation of the unit vector as well as d²E/dr².
+  const double transverse = energy_jet[1] / distance;
+  for (int axis = 0; axis < 3; ++axis) {
+    const double parallel = radial_motion * unit[axis];
+    output[axis] = energy_jet[2] * parallel + transverse * (relative_motion[axis] - parallel);
+    if (!finite(output[axis])) return GCPStatus::numerical_failure;
   }
   return GCPStatus::success;
 }

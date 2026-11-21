@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "dft/cuda_wb97mv_grid.hpp"
+#include "dft/split_hybrid_cuda_domain.hpp"
+#include "generated_split_hybrid_registry.cuh"
 
 namespace {
 namespace response = generativeqc::dft;
@@ -107,6 +109,32 @@ void contract() {
   check(response::cuda_wb97mv_grid_workspace(shape, settings, bytes));
   settings.max_nuclear_affine_terms = 1;
   reject(shape, settings);
+  settings = options;
+  settings.functional_code = response::semilocal_family_code(response::SemilocalFamily::Pbe);
+  settings.nuclear_response = true;
+  settings.max_pair_evaluations = settings.pair_tile_points = 0;
+  std::size_t semilocal_bytes{};
+  check(response::cuda_wb97mv_grid_workspace(shape, settings, semilocal_bytes));
+  require(semilocal_bytes < bytes, "semilocal workspace reserves nonlocal pairs");
+  settings.exchange_scale = -1;
+  reject(shape, settings);
+  settings.exchange_scale = 1;
+  settings.correlation_scale = std::numeric_limits<double>::quiet_NaN();
+  reject(shape, settings);
+  settings.correlation_scale = 1;
+  settings.functional_code = response::semilocal_family_code(response::SemilocalFamily::B3lyp);
+  check(response::cuda_wb97mv_grid_workspace(shape, settings, semilocal_bytes));
+  settings.exchange_scale = 0.8;
+  reject(shape, settings);
+  settings.exchange_scale = 1;
+  settings.functional_code = response::semilocal_family_code(response::SemilocalFamily::R2scan);
+  check(response::cuda_wb97mv_grid_workspace(shape, settings, semilocal_bytes));
+  settings.correlation_scale = 0.8;
+  reject(shape, settings);
+  settings.functional_code = response::generated::kM062XFunctionalCode;
+  reject(shape, settings);
+  settings.correlation_scale = 1;
+  check(response::cuda_wb97mv_grid_workspace(shape, settings, semilocal_bytes));
   response::CudaWb97mvGridResponse grid;
   const double* potential = reinterpret_cast<const double*>(8);
   if (grid.reference_potential(potential) != cudaErrorInvalidResourceHandle || potential)
@@ -124,9 +152,32 @@ void evaluate(const std::string& mode) {
     throw std::runtime_error("probe shape exceeds finite limits");
   response::CudaWb97mvGridOptions options;
   const bool nuclear = mode.rfind("nuclear", 0) == 0;
+  const bool scaled = mode == "nuclear-lda" || mode == "nuclear-pbe" || mode == "nuclear-b3lyp" ||
+                      mode == "nuclear-r2scan" || mode == "nuclear-m06-2x";
   options.nuclear_response = nuclear;
   options.replay_nuclear_maps = mode != "nuclear-serial";
+  if (mode == "nuclear-split-semilocal" || mode == "fixed-split-semilocal")
+    options.component = response::CudaWb97mvGridComponent::semilocal_only;
+  if (mode == "nuclear-split-vv10" || mode == "fixed-split-vv10")
+    options.component = response::CudaWb97mvGridComponent::vv10_only;
   std::cin >> options.pair_tile_points >> options.max_pair_evaluations;
+  if (mode == "nuclear-rvv10" || mode == "fixed-rvv10") {
+    response::nlc::Vv10Parameters revised{response::nlc::Vv10Variant::rvv10};
+    std::cin >> revised.b >> revised.c >> revised.coefficient;
+    options.revised_nonlocal = revised;
+    options.functional_code = response::semilocal_family_code(response::SemilocalFamily::Pbe);
+    options.component = response::CudaWb97mvGridComponent::vv10_only;
+  }
+  if (scaled) {
+    options.functional_code = response::semilocal_family_code(
+        mode == "nuclear-lda"      ? response::SemilocalFamily::Lda
+        : mode == "nuclear-pbe"    ? response::SemilocalFamily::Pbe
+        : mode == "nuclear-r2scan" ? response::SemilocalFamily::R2scan
+                                   : response::SemilocalFamily::B3lyp);
+    std::cin >> options.exchange_scale >> options.correlation_scale;
+  }
+  if (mode == "fixed-m06-2x" || mode == "nuclear-m06-2x")
+    options.functional_code = response::generated::kM062XFunctionalCode;
   if (mode == "nuclear-tight") {
     auto serial = options;
     serial.replay_nuclear_maps = false;
@@ -187,6 +238,8 @@ void evaluate(const std::string& mode) {
     auto* scalar = storage.upload({91.25});
     const double* energy{};
     check(grid.reference_energy(energy));
+    auto* fixed = scaled ? storage.allocate(matrices) : nullptr;
+    if (fixed) check(grid.apply(moving, fixed, stream));
     const auto mixed = [&] {
       return grid.nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights, left_points, scalar,
                                 stream);
@@ -204,6 +257,10 @@ void evaluate(const std::string& mode) {
     array(potential, matrices);
     std::cout << ",\"response\":";
     array(output, matrices);
+    if (fixed) {
+      std::cout << ",\"fixed_response\":";
+      array(fixed, matrices);
+    }
     std::cout << ",\"mixed\":";
     array(scalar, 1);
     const auto pair_work = grid.work().nuclear_response_pairs;
@@ -296,6 +353,8 @@ void evaluate(const std::string& mode) {
     const auto& work = grid.work();
     std::cout << ",\"nuclear_reference_pairs\":" << work.nuclear_reference_pairs
               << ",\"nuclear_response_pairs\":" << work.nuclear_response_pairs
+              << ",\"active_nonlocal_points\":" << work.active_nonlocal_points
+              << ",\"fixed_response_pairs\":" << work.response_pairs
               << ",\"nuclear_affine_terms\":" << work.nuclear_affine_terms
               << ",\"nuclear_contractions\":" << work.nuclear_contractions
               << ",\"nuclear_graph_replays\":" << work.nuclear_graph_replays
@@ -337,7 +396,9 @@ void evaluate(const std::string& mode) {
 int main(int argc, char** argv) {
   try {
     const std::string mode = argc > 1 ? argv[1] : "normal";
-    if (mode == "contract")
+    if (mode == "has-m06-2x")
+      std::cout << (response::kCudaM062XVariational ? "yes\n" : "no\n");
+    else if (mode == "contract")
       contract();
     else
       evaluate(mode);

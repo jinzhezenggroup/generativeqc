@@ -13,6 +13,13 @@ namespace generativeqc::dft {
 struct CudaKsFinalStateToken {
   std::uint32_t version{1};
   KsFinalStateIdentity identity;
+  /** Evidence from the accepted CUDA generation, not the requested policy or
+   * configured precision of its integral provider. A mixed proposal is not
+   * a reference for strict stationary derivatives. */
+  bool strict_physical_fock{};
+  /** A force-error allowance may relax convergence even after FP64 handoff.
+   * It does not certify the stationary point for second derivatives. */
+  bool relaxed_stationarity{};
   bool operator==(const CudaKsFinalStateToken&) const = default;
 };
 

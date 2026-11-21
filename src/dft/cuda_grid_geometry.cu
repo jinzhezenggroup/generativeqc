@@ -14,7 +14,7 @@ namespace ad = generativeqc_grid_geometry_ad;
 struct Layout {
   std::size_t bytes{}, spatial{}, candidate_ao{}, candidate_weights{}, pairs{}, distances{},
       products{}, exponents{}, zero{}, status{}, panel{}, basis_elements{}, point_pairs{},
-      ao_primitive_terms{}, point_directions{};
+      ao_primitive_terms{}, replay_terms{}, point_directions{}, resident_points{}, replay_points{};
 };
 bool product(std::size_t first, std::size_t second, std::size_t& result) {
   if (second && first > SIZE_MAX / second) return false;
@@ -31,7 +31,7 @@ bool append(Layout& plan, std::size_t count, std::size_t& offset) {
   return true;
 }
 bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& options,
-            Layout& plan) {
+            Layout& plan, std::size_t* minimum = nullptr) {
   if (!shape.atoms || !shape.primitives || !shape.nao || !shape.points || !options.point_tile ||
       !options.max_workspace_bytes || options.partition_iterations < 1 ||
       options.partition_iterations > 5 || !std::isfinite(options.coincident_tolerance) ||
@@ -64,13 +64,39 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
   plan.basis_elements = atomic + primitive + records;
   if (plan.basis_elements > SIZE_MAX / sizeof(double)) return false;
   std::size_t count{};
-  return append(plan, spatial, plan.spatial) && append(plan, moving, plan.candidate_ao) &&
-         product(3, shape.points, count) && append(plan, count, plan.candidate_weights) &&
-         product(4, matrix, count) && append(plan, count, plan.pairs) && product(4, tile, count) &&
-         append(plan, count, plan.distances) && append(plan, count, plan.products) &&
-         append(plan, tile, plan.exponents) && append(plan, atomic, plan.zero) &&
-         product(6, shape.points, count) && append(plan, count, plan.point_directions) &&
-         append(plan, 1, plan.status) && plan.bytes <= options.max_workspace_bytes;
+  if (!append(plan, moving, plan.candidate_ao) || !product(3, shape.points, count) ||
+      !append(plan, count, plan.candidate_weights) || !product(4, matrix, count) ||
+      !append(plan, count, plan.pairs) || !product(4, tile, count) ||
+      !append(plan, count, plan.distances) || !append(plan, count, plan.products) ||
+      !append(plan, tile, plan.exponents) || !append(plan, atomic, plan.zero) ||
+      !product(6, shape.points, count) || !append(plan, count, plan.point_directions) ||
+      !append(plan, 1, plan.status) || plan.bytes > options.max_workspace_bytes)
+    return false;
+  // Keep the largest immutable prefix after reserving one replay tile. The
+  // mixed output keeps its full layout regardless of how its jets are supplied.
+  plan.resident_points = shape.points;
+  const auto terms_per_point = plan.ao_primitive_terms / shape.points;
+  const auto replayable =
+      options.retain_partial_jets
+          ? std::min<std::uint64_t>(shape.points, options.max_ao_replay_terms / terms_per_point)
+          : (plan.ao_primitive_terms <= options.max_ao_replay_terms ? shape.points : 0);
+  const auto required_resident = shape.points - replayable;
+  if (minimum) {
+    auto smallest = plan;
+    const auto values = 20 * (required_resident + (replayable != 0)) * shape.nao;
+    if (!append(smallest, values, smallest.spatial)) return false;
+    *minimum = smallest.bytes;
+  }
+  const auto available_values = (options.max_workspace_bytes - plan.bytes) / 256 * 32;
+  if (spatial > available_values) {
+    const auto capacity = available_values / (20 * shape.nao);
+    if (capacity <= required_resident) return false;
+    plan.replay_points = std::min<std::uint64_t>(options.point_tile, capacity - required_resident);
+    plan.resident_points = options.retain_partial_jets ? capacity - plan.replay_points : 0;
+    plan.replay_terms = terms_per_point * (shape.points - plan.resident_points);
+    spatial = 20 * (plan.resident_points + plan.replay_points) * shape.nao;
+  }
+  return append(plan, spatial, plan.spatial) && plan.bytes <= options.max_workspace_bytes;
 }
 unsigned blocks(std::size_t count) {
   return static_cast<unsigned>(std::min<std::size_t>((count + 127) / 128, 65535));
@@ -349,13 +375,15 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
   }
 }
 __global__ void ao_geometry(CudaGridGeometryShape shape, const double* basis, const double* spatial,
-                            const std::uint64_t* offsets, const double* left, const double* right,
-                            double* output, double* point_directions, int* status) {
+                            std::size_t begin, std::size_t count, const std::uint64_t* offsets,
+                            const double* left, const double* right, double* output,
+                            double* point_directions, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto panel = shape.points * shape.nao;
-  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < panel;
+  const auto tile_panel = count * shape.nao;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < tile_panel;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
-    const auto orbital = index % shape.nao, point = index / shape.nao;
+    const auto orbital = index % shape.nao, point = begin + index / shape.nao;
     const auto atom =
         static_cast<std::size_t>(basis[3 * shape.atoms + 2 * shape.primitives + 16 * orbital]);
     const auto owner = grid_owner(shape, offsets, point);
@@ -368,24 +396,27 @@ __global__ void ao_geometry(CudaGridGeometryShape shape, const double* basis, co
         point_directions[3 * (shape.points + point) + axis] = right[3 * owner + axis];
       }
     }
-    ad::ao_motion(spatial + index, panel, left_motion, right_motion, values);
+    ad::ao_motion(spatial + index, tile_panel, left_motion, right_motion, values);
     for (unsigned jet = 0; jet < 4; ++jet)
       for (unsigned direction = 0; direction < 3; ++direction) {
         const auto value = values[3 * jet + direction];
         if (!isfinite(value)) atomicExch(status, 1);
-        output[(4 * direction + jet) * panel + index] = value;
+        output[(4 * direction + jet) * panel + begin * shape.nao + index] = value;
       }
   }
 }
 }  // namespace
 
 cudaError_t cuda_grid_geometry_workspace(const CudaGridGeometryShape& shape,
-                                         const CudaGridGeometryOptions& options,
-                                         std::size_t& bytes) noexcept {
+                                         const CudaGridGeometryOptions& options, std::size_t& bytes,
+                                         std::size_t* minimum) noexcept {
   bytes = 0;
   Layout plan;
-  if (!layout(shape, options, plan)) return cudaErrorInvalidValue;
+  std::size_t least{};
+  if (minimum) *minimum = 0;
+  if (!layout(shape, options, plan, minimum ? &least : nullptr)) return cudaErrorInvalidValue;
   bytes = plan.bytes;
+  if (minimum) *minimum = least;
   return cudaSuccess;
 }
 
@@ -497,13 +528,15 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
     error = cudaGetLastError();
   }
   if (error == cudaSuccess) error = gate(status, reference.stream);
-  if (error == cudaSuccess)
-    error = hessian_aot::launch_ao(
-        reference.basis, shape.atoms, shape.primitives, shape.nao, reference.points, shape.points,
-        20, reinterpret_cast<double*>(base + plan.spatial), status, reference.stream);
-  if (error == cudaSuccess) {
-    finite_values<<<blocks(20 * plan.panel), 128, 0, reference.stream>>>(
-        reinterpret_cast<double*>(base + plan.spatial), 20 * plan.panel, status);
+  const auto resident_values = 20 * plan.resident_points * shape.nao;
+  if (error == cudaSuccess && resident_values)
+    error = hessian_aot::launch_ao(reference.basis, shape.atoms, shape.primitives, shape.nao,
+                                   reference.points, plan.resident_points, 20,
+                                   reinterpret_cast<double*>(base + plan.spatial), status,
+                                   reference.stream);
+  if (error == cudaSuccess && resident_values) {
+    finite_values<<<blocks(resident_values), 128, 0, reference.stream>>>(
+        reinterpret_cast<double*>(base + plan.spatial), resident_values, status);
     error = cudaGetLastError();
   }
   if (error == cudaSuccess) error = partition(zero, zero);
@@ -516,8 +549,8 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
     ready_ = false;
     return error;
   }
-  work_ = {plan.bytes, 20 * plan.panel, plan.point_pairs};
-  work_.prepared_ao_primitive_term_bound = plan.ao_primitive_terms;
+  work_ = {plan.bytes, resident_values, plan.point_pairs};
+  work_.prepared_ao_primitive_term_bound = plan.ao_primitive_terms - plan.replay_terms;
   return cudaSuccess;
 }
 
@@ -528,11 +561,7 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   Layout plan;
-  if (!layout(shape_, options_, plan) || work_.attempted_actions == UINT64_MAX ||
-      work_.action_partition_pairs > UINT64_MAX - plan.point_pairs ||
-      work_.action_point_values > UINT64_MAX - 6 * shape_.points ||
-      work_.action_ao_jet_values > UINT64_MAX - 12 * plan.panel)
-    return cudaErrorInvalidValue;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   const void* inputs[] = {reference_.basis,
                           reference_.points,
                           reference_.weights,
@@ -556,12 +585,47 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
         return cudaErrorInvalidValue;
     }
   }
-  if (!disjoint(ao_output, 12 * plan.panel, weight_output, 3 * shape_.points) ||
+  if (!disjoint(ao_output, 12 * plan.panel, weight_output, 3 * shape_.points))
+    return cudaErrorInvalidValue;
+  for (const auto* pointer : {ao_output, weight_output})
+    if ((error = device_buffer(pointer, reference_.device_id)) != cudaSuccess) return error;
+  if ((error = evaluate_mixed(left, right, stream)) != cudaSuccess) return error;
+  auto* base = static_cast<char*>(workspace_);
+  error = cudaMemcpyAsync(ao_output, base + plan.candidate_ao, 12 * plan.panel * sizeof(double),
+                          cudaMemcpyDeviceToDevice, stream);
+  if (error == cudaSuccess)
+    error = cudaMemcpyAsync(weight_output, base + plan.candidate_weights,
+                            3 * shape_.points * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+  error = drain(error, stream);
+  if (error == cudaSuccess) finish_mixed();
+  return error;
+}
+
+cudaError_t CudaGridGeometryResponse::admit_actions(std::size_t actions) noexcept {
+  auto error = authenticate(reference_.stream);
+  if (error != cudaSuccess) return error;
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  if (plan.replay_terms &&
+      (actions > options_.max_ao_replay_terms / plan.replay_terms ||
+       actions > (UINT64_MAX - work_.replayed_ao_primitive_term_bound) / plan.replay_terms))
+    return cudaErrorInvalidValue;
+  return cudaSuccess;
+}
+
+cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const double* right,
+                                                     cudaStream_t stream) noexcept {
+  auto error = admit_actions(1);
+  if (error != cudaSuccess) return error;
+  Layout plan;
+  if (!layout(shape_, options_, plan) || work_.attempted_actions == UINT64_MAX ||
+      work_.action_partition_pairs > UINT64_MAX - plan.point_pairs ||
+      work_.action_point_values > UINT64_MAX - 6 * shape_.points ||
+      work_.action_ao_jet_values > UINT64_MAX - 12 * plan.panel ||
       !disjoint(left, 3 * shape_.atoms, workspace_, plan.bytes / sizeof(double)) ||
       !disjoint(right, 3 * shape_.atoms, workspace_, plan.bytes / sizeof(double)))
     return cudaErrorInvalidValue;
-  for (const auto* pointer : {left, right, static_cast<const double*>(ao_output),
-                              static_cast<const double*>(weight_output)})
+  for (const auto* pointer : {left, right})
     if ((error = device_buffer(pointer, reference_.device_id)) != cudaSuccess) return error;
   auto* base = static_cast<char*>(workspace_);
   auto* status = reinterpret_cast<int*>(base + plan.status);
@@ -572,27 +636,57 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
                                                                   status);
   if ((error = cudaGetLastError()) == cudaSuccess) error = partition(left, right);
   if (error != cudaSuccess) return drain(error, stream);
-  ao_geometry<<<blocks(plan.panel), 128, 0, stream>>>(
-      shape_, reference_.basis, reinterpret_cast<double*>(base + plan.spatial),
-      reference_.atom_offsets, left, right, reinterpret_cast<double*>(base + plan.candidate_ao),
-      reinterpret_cast<double*>(base + plan.point_directions), status);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  if ((error = gate(status, stream)) != cudaSuccess) return error;
-  if ((error = authenticate(stream)) != cudaSuccess) return error;
-  error = cudaMemcpyAsync(ao_output, base + plan.candidate_ao, 12 * plan.panel * sizeof(double),
-                          cudaMemcpyDeviceToDevice, stream);
-  if (error == cudaSuccess)
-    error = cudaMemcpyAsync(weight_output, base + plan.candidate_weights,
-                            3 * shape_.points * sizeof(double), cudaMemcpyDeviceToDevice, stream);
-  error = drain(error, stream);
-  if (error == cudaSuccess) {
-    ++work_.completed_actions;
-    work_.action_partition_pairs += plan.point_pairs;
-    work_.action_ao_jet_values += 12 * plan.panel;
-    work_.action_point_values += 6 * shape_.points;
-    motion_ready_ = true;
+  auto* resident = reinterpret_cast<double*>(base + plan.spatial);
+  auto* replay = resident + 20 * plan.resident_points * shape_.nao;
+  for (std::size_t begin = 0; begin < shape_.points;) {
+    const bool cached = begin < plan.resident_points;
+    const auto count =
+        cached ? plan.resident_points : std::min(plan.replay_points, shape_.points - begin);
+    auto* spatial = cached ? resident : replay;
+    if (!cached) {
+      error =
+          hessian_aot::launch_ao(reference_.basis, shape_.atoms, shape_.primitives, shape_.nao,
+                                 reference_.points + 3 * begin, count, 20, spatial, status, stream);
+      if (error != cudaSuccess) return drain(error, stream);
+    }
+    ao_geometry<<<blocks(count * shape_.nao), 128, 0, stream>>>(
+        shape_, reference_.basis, spatial, begin, count, reference_.atom_offsets, left, right,
+        reinterpret_cast<double*>(base + plan.candidate_ao),
+        reinterpret_cast<double*>(base + plan.point_directions), status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+    begin += count;
   }
-  return error;
+  if ((error = gate(status, stream)) != cudaSuccess) return error;
+  return authenticate(stream);
+}
+
+void CudaGridGeometryResponse::finish_mixed() noexcept {
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return;
+  ++work_.completed_actions;
+  work_.action_partition_pairs += plan.point_pairs;
+  work_.action_ao_jet_values += 12 * plan.panel;
+  work_.action_point_values += 6 * shape_.points;
+  work_.replayed_ao_primitive_term_bound += plan.replay_terms;
+  motion_ready_ = true;
+}
+
+cudaError_t CudaGridGeometryResponse::mixed_view(const double* left, const double* right,
+                                                 CudaGridGeometryMixedView& view,
+                                                 cudaStream_t stream) noexcept {
+  view = {};
+  motion_ready_ = false;
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  if ((error = evaluate_mixed(left, right, stream)) != cudaSuccess) return error;
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  const auto* base = static_cast<const char*>(workspace_);
+  view = {reinterpret_cast<const double*>(base + plan.candidate_ao),
+          reinterpret_cast<const double*>(base + plan.candidate_weights),
+          reinterpret_cast<const double*>(base + plan.point_directions)};
+  finish_mixed();
+  return cudaSuccess;
 }
 
 cudaError_t CudaGridGeometryResponse::spatial_jets(const double*& jets) noexcept {
@@ -601,6 +695,7 @@ cudaError_t CudaGridGeometryResponse::spatial_jets(const double*& jets) noexcept
   if (error != cudaSuccess) return error;
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  if (plan.resident_points != shape_.points) return cudaErrorNotSupported;
   jets = reinterpret_cast<double*>(static_cast<char*>(workspace_) + plan.spatial);
   return cudaSuccess;
 }

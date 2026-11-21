@@ -29,6 +29,8 @@ struct CudaDfNuclearOptions {
   std::uint64_t max_component_evaluations{67'108'864}, max_projection_terms{268'435'456},
       max_reduction_terms_bound{1'073'741'824};
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
+  /** Must match the live basis source and a complete linked AOT radial closure. */
+  double range_omega{};
 };
 
 /** The actual immutable DF basis and its enclosing original-stream capability.

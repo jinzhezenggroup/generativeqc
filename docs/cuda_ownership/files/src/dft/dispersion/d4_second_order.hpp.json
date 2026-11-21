@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/d4_second_order.hpp",
+  "role": "scientific",
+  "subsystem": "d4_dispersion",
+  "reason": "Composes the EEQ and fixed-charge actions through compiler-generated charge chain rules with bounded directional workspace and status-gated publication.",
+  "regions": []
+}

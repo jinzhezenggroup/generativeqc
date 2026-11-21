@@ -1,4 +1,4 @@
-"""Build-only constants for the incumbent residual-ECP two-grid rule.
+"""Build-only constants for checked residual-ECP nuclear response.
 
 Integral quadrature stays in the integral compiler; the method layer consumes
 only fixed-measure AO bilinears and does not import integral policy.
@@ -29,6 +29,8 @@ def ecp_fixed_quadratures() -> tuple[dict[str, np.ndarray], ...]:
     for radial, polar in (
         (COARSE_RADIAL_POINTS, COARSE_POLAR_POINTS),
         (REFINED_RADIAL_POINTS, REFINED_POLAR_POINTS),
+        # A CUDA-only confirmation grid, not a new published quadrature.
+        (320, 60),
     ):
         nodes, weights = np.polynomial.legendre.leggauss(radial)
         graph, roots = radial_map_roots()

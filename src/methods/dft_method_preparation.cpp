@@ -14,6 +14,7 @@
 #include "core/types.hpp"
 #include "dft/application_precision.hpp"
 #include "dft/global_hybrid_fock.hpp"
+#include "dft/r2scan_rvv10_model.hpp"
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
@@ -189,6 +190,13 @@ bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept {
   return plan.spin_channels == 2;
 }
 
+bool ks_is_range_pbe(const NativeKsExecutionPlan& plan, const scf::ScfOptions& options) noexcept {
+  return plan.range_exchange && plan.semilocal_family == dft::SemilocalFamily::Pbe &&
+         !plan.nonlocal_correlation && options.semilocal_exchange_scale == 1 &&
+         options.semilocal_correlation_scale == 1 && plan.range_omega > 0 &&
+         plan.short_range_exchange != plan.long_range_exchange;
+}
+
 std::uint32_t ks_scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
   if (!ks_is_unrestricted(plan) && plan.automatic_restricted_program)
     return plan.automatic_restricted_program->domain_version;
@@ -205,6 +213,28 @@ const char* ks_semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept
   if (plan.automatic_program) return plan.automatic_program->identifier;
   return plan.generated_split_hybrid ? "generated split global hybrid"
                                      : dft::semilocal_family_name(plan.semilocal_family);
+}
+
+KsRangeExchangePolicy ks_range_exchange_policy(bool fitted_primary,
+                                               KsRangeExchangePolicy default_policy) {
+  const char* value = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
+  if (!value) return fitted_primary ? default_policy : KsRangeExchangePolicy::Exact;
+  const std::string_view selection = value;
+  if (selection != "auto" && selection != "df" && selection != "direct")
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "GENERATIVEQC_DF_RANGE_EXCHANGE must be auto, df or direct");
+  if (!fitted_primary && selection == "df")
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "GENERATIVEQC_DF_RANGE_EXCHANGE=df requires density fitting");
+  if (!fitted_primary || selection == "direct") return KsRangeExchangePolicy::Exact;
+  return selection == "auto" ? KsRangeExchangePolicy::Automatic : KsRangeExchangePolicy::Fitted;
+}
+
+std::size_t ks_fitted_radial_budget(std::size_t bytes, bool split, bool long_range) {
+  if (!split || !bytes) return bytes;
+  if (bytes < 2U) throw std::bad_alloc();
+  const auto primary = bytes / 2U;
+  return long_range ? bytes - primary : primary;
 }
 
 scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
@@ -415,9 +445,16 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   }
 
   const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
-  const bool complete_cuda_nonlocal = semilocal_metadata.cuda_nonlocal_correlation &&
-                                      execution_plan.range_exchange &&
-                                      execution_plan.nonlocal_correlation;
+  const bool r2scan_rvv10 =
+      execution_plan.nonlocal_correlation &&
+      dft::r2scan_rvv10_model_matches(
+          execution_plan.semilocal_family, execution_plan.nonlocal_parameters,
+          options.semilocal_exchange_scale, options.semilocal_correlation_scale,
+          fock.exchange.present || execution_plan.range_exchange);
+  const bool complete_cuda_nonlocal =
+      execution_plan.nonlocal_correlation &&
+      ((semilocal_metadata.cuda_nonlocal_correlation && execution_plan.range_exchange) ||
+       (r2scan_rvv10 && options.precision_mode == GENERATIVEQC_PRECISION_FP64));
   const bool cuda_nonlocal = backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
@@ -444,7 +481,8 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       !cuda_matched_global_hybrid && !cuda_nonlocal)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
-  if (execution_plan.nonlocal_correlation && !semilocal_metadata.native_nonlocal_correlation)
+  if (execution_plan.nonlocal_correlation && !semilocal_metadata.native_nonlocal_correlation &&
+      !(r2scan_rvv10 && cuda_nonlocal))
     throw MethodError(
         GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
         "self-consistent nonlocal correlation has no lowerer for this semilocal graph");
@@ -460,14 +498,18 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     // AUTO DF has a separate pure-J proposal capability. The fitted provider
     // stays strict; actual grid/shape admission and final FP64 closure belong
     // to CudaKsPlan, which alone chooses the executed XC schedule.
+    const bool local_rks = backend == GENERATIVEQC_BACKEND_CUDA &&
+                           execution_plan.spin_channels == 1 && !execution_plan.range_exchange &&
+                           !execution_plan.nonlocal_correlation && !scaled_or_hybrid;
+    const bool pbe = functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe);
+    const bool ordinary_auto =
+        local_rks && pbe && options.application_precision_budget[0] == 0.0 &&
+        (!ks_input || ks_input->xc_execution_schedule == GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED);
     const bool df_xc_budget = dft::admit_application_df_xc_budget(
         options.application_precision_budget,
-        backend == GENERATIVEQC_BACKEND_CUDA && execution_plan.spin_channels == 1 &&
-            !fock.exchange.present && !execution_plan.range_exchange &&
-            !execution_plan.nonlocal_correlation && !scaled_or_hybrid &&
-            (functional == dft::semilocal_family_code(dft::SemilocalFamily::Pbe) ||
-             functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan)));
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && !df_xc_budget)
+        local_rks &&
+            (pbe || functional == dft::semilocal_family_code(dft::SemilocalFamily::R2scan)));
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && !df_xc_budget && !ordinary_auto)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
@@ -532,40 +574,35 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
         options.screening_tolerance == 1e-12 &&
         scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
   }
-  if (semilocal_metadata.molecular_nonlocal_domain) {
-    if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
+  const bool wb97mv = execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv;
+  const bool range_pbe =
+      backend == GENERATIVEQC_BACKEND_CUDA && ks_is_range_pbe(execution_plan, options);
+  if (wb97mv || range_pbe) {
+    if (wb97mv && (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation))
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
-    const auto correction_backend =
-        backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    const char* range_mode = std::getenv("GENERATIVEQC_DF_RANGE_EXCHANGE");
-    const std::string_view range_selection = range_mode ? range_mode : "auto";
-    if (range_selection != "auto" && range_selection != "df" && range_selection != "direct")
-      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                        "GENERATIVEQC_DF_RANGE_EXCHANGE must be auto, df or direct");
-    if (range_selection == "df" &&
-        fock.coulomb.approximation != scf::FockApproximation::DensityFitted)
-      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                        "GENERATIVEQC_DF_RANGE_EXCHANGE=df requires density fitting");
-    // Default LR fitting is admitted from the native prepared metric before
-    // the first energy, independently of properties. Explicit df never grants
-    // permission to replace its Hamiltonian when a response is unavailable.
+    const auto range_policy = ks_range_exchange_policy(
+        fock.coulomb.approximation == scf::FockApproximation::DensityFitted,
+        wb97mv ? KsRangeExchangePolicy::Automatic : KsRangeExchangePolicy::Exact);
+    // Select the Hamiltonian before the first energy, independently of the
+    // requested property. Existing range-PBE calculations default to exact LR.
     execution_plan.automatic_density_fitted_range_exchange =
-        fock.coulomb.approximation == scf::FockApproximation::DensityFitted &&
-        range_selection == "auto";
-    execution_plan.density_fitted_range_exchange =
-        fock.coulomb.approximation == scf::FockApproximation::DensityFitted &&
-        range_selection != "direct";
-    const auto correction = scf::resolve_fock_build(
-        scf::make_rsh_correction_fock_spec(
-            fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,
-            execution_plan.range_omega,
-            execution_plan.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
-                                                         : scf::FockApproximation::Exact),
-        correction_backend, options.screening_tolerance,
-        options.density_fitting_relative_threshold);
-    scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
-                                    execution_plan.nonlocal_parameters);
+        range_policy == KsRangeExchangePolicy::Automatic;
+    execution_plan.density_fitted_range_exchange = range_policy != KsRangeExchangePolicy::Exact;
+    if (wb97mv) {
+      const auto correction_backend =
+          backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+      const auto correction = scf::resolve_fock_build(
+          scf::make_rsh_correction_fock_spec(
+              fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,
+              execution_plan.range_omega,
+              execution_plan.density_fitted_range_exchange ? scf::FockApproximation::DensityFitted
+                                                           : scf::FockApproximation::Exact),
+          correction_backend, options.screening_tolerance,
+          options.density_fitting_relative_threshold);
+      scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
+                                      execution_plan.nonlocal_parameters);
+    }
   }
   options.compute_forces = false;
   return options;
@@ -648,11 +685,6 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
 
 void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan, const core::System& system,
                             generativeqc_backend backend) {
-  if (execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv &&
-      dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
-      !system.ecp_terms.empty())
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "molecular-nonlocal KS ECP execution is not qualified");
   if (!ks_is_unrestricted(execution_plan)) {
     if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
       throw std::invalid_argument(

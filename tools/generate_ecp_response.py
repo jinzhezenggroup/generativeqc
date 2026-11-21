@@ -1,4 +1,4 @@
-"""Emit native residual ECP response maps and fixed two-grid constants."""
+"""Emit native residual ECP response maps and fixed quadrature constants."""
 
 from __future__ import annotations
 

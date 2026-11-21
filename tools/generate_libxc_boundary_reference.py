@@ -55,8 +55,14 @@ def evaluate_reference(
     spin: str,
     feature_names: tuple[str, ...],
     values: tuple[float, ...],
+    *,
+    sigma_threshold: float | None = None,
 ) -> dict[str, Any]:
-    """Evaluate energy per volume plus first physical feature derivatives."""
+    """Evaluate energy per volume plus first physical feature derivatives.
+
+    A positive optional sigma threshold allows a caller to probe the formulas
+    without retaining the default Libxc gradient floor.
+    """
     mapping = dict(zip(feature_names, values, strict=True))
     inputs = _groups(record["family"], spin, mapping)
     sizes = [len(value) for value in inputs]
@@ -71,6 +77,11 @@ def evaluate_reference(
         ):
             raise ValueError(f"Libxc cannot initialize {record['name']}")
         initialized = True
+        if sigma_threshold is not None:
+            set_sigma_threshold = library.xc_func_set_sigma_threshold
+            set_sigma_threshold.argtypes = [ctypes.c_void_p, ctypes.c_double]
+            set_sigma_threshold.restype = None
+            set_sigma_threshold(function, sigma_threshold)
         getattr(library, f"xc_{record['family']}_exc_vxc")(
             function,
             1,

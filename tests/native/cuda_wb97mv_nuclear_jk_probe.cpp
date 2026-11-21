@@ -70,7 +70,7 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   std::ifstream input(source, std::ios::binary);
   const auto header = read<std::uint64_t>(input, 7);
   require(header[0] > 0 && header[0] <= 8 && header[1] > 0 && header[1] <= 8 && header[2] <= 1 &&
-              header[3] >= 1 && header[3] <= 2 && header[4] <= 5 && header[6] <= 6,
+              header[3] >= 1 && header[3] <= 2 && header[4] <= 6 && header[6] <= 6,
           "invalid fixture header");
   core::System system;
   system.basis_representation = header[2] ? core::kSphericalBasis : core::kCartesianBasis;
@@ -109,11 +109,24 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   const auto densities = read<double>(input, 2 * panels);
   CudaWb97mvJkOptions options;
   options.part = static_cast<CudaWb97mvJkPart>(header[4]);
+  if (options.part == CudaWb97mvJkPart::full_hybrid)
+    options.full_exchange_fraction = read<double>(input, 1)[0];
+  if (options.part == CudaWb97mvJkPart::exact &&
+      input.peek() != std::ifstream::traits_type::eof()) {
+    const auto radial = read<double>(input, 3);
+    options.range_exchange = CudaWb97mvJkOptions::RangeExchange{radial[0], radial[1], radial[2]};
+  }
   options.radial_tile = header[5];
   if (cache_mode == "tiled") {
     options.max_groups = 16;
     options.source_tile = 1;
   }
+  if (cache_mode == "resident-cap-tiled" || cache_mode == "resident-cap-fallback") {
+    options.max_resident_integral_bytes = 1;
+    options.source_tile = 2;
+    if (cache_mode == "resident-cap-fallback") options.max_source_groups = 1;
+  }
+  if (cache_mode == "streamed") options.source_tile = 0;
   if (cache_mode == "batch-chunked") options.max_batch_projection_bytes = 32ULL << 10;
   if (cache_mode == "projection-budgeted") options.max_batch_projection_bytes = 1;
   if (cache_mode == "streamed" || cache_mode == "budgeted") {
@@ -361,12 +374,12 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
 }  // namespace
 int main(int argc, char** argv) {
   try {
-    require(argc == 3 || argc == 4,
-            "usage: jk-probe source.bin output.bin [resident|streamed|budgeted]");
+    require(argc == 3 || argc == 4, "usage: jk-probe source.bin output.bin [cache-mode]");
     const std::string mode = argc == 4 ? argv[3] : "resident";
     require(mode == "resident" || mode == "streamed" || mode == "budgeted" || mode == "unbatched" ||
                 mode == "batch-budgeted" || mode == "batch-chunked" ||
-                mode == "projection-budgeted" || mode == "tiled",
+                mode == "projection-budgeted" || mode == "tiled" || mode == "resident-cap-tiled" ||
+                mode == "resident-cap-fallback",
             "invalid cache mode");
     run(argv[1], argv[2], mode);
     return 0;

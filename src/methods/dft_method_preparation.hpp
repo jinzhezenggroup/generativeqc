@@ -51,6 +51,17 @@ struct NativeKsExecutionPlan {
 };
 
 bool ks_is_unrestricted(const NativeKsExecutionPlan& plan) noexcept;
+/** The unscaled PBE graph with a nonzero LR-minus-SR correction. */
+bool ks_is_range_pbe(const NativeKsExecutionPlan& plan, const scf::ScfOptions& options) noexcept;
+/** Initial WB97M-V LR transaction; geometry replay freezes the admitted branch. */
+enum class KsRangeExchangePolicy : unsigned { Exact = 0, Fitted = 1, Automatic = 2 };
+/** Resolve the explicit selector against the model's established SCF default. */
+KsRangeExchangePolicy ks_range_exchange_policy(bool fitted_primary,
+                                               KsRangeExchangePolicy default_policy);
+
+/** Zero is the native automatic budget, not a zero-sized explicit radial lease. */
+std::size_t ks_fitted_radial_budget(std::size_t bytes, bool split, bool long_range);
+
 std::uint32_t ks_scf_domain_version(const NativeKsExecutionPlan& plan) noexcept;
 std::uint32_t ks_xc_functional_code(const NativeKsExecutionPlan& plan) noexcept;
 const char* ks_semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept;

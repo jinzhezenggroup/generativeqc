@@ -30,6 +30,14 @@ struct D3CudaOwner {
   double* reference_c6{};
 };
 
+D3CudaDirectionSource D3Plan::cuda_direction_source() const noexcept {
+  if (!cuda_ || cuda_->systems != 1) return {};
+  return {cuda_->device_id,
+          static_cast<std::size_t>(cuda_->atoms),
+          cuda_->atomic_numbers,
+          {cuda_->elements, cuda_->pairs, cuda_->reference_cn, cuda_->reference_c6}};
+}
+
 namespace {
 
 inline constexpr unsigned kD3CooperativeThreads = 128;

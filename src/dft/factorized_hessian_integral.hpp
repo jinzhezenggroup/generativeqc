@@ -27,11 +27,11 @@ struct FactorizedIntegralBatch {
  * by queued device work. Every selected component remains explicit in Program.
  * The enclosing owner retains all numerical buffers and gates device status.
  */
-int launch_factorized_integral(unsigned family, unsigned radial, const unsigned* angular,
-                               const std::uint32_t* components, std::size_t component_count,
-                               const double* records, std::size_t count, const long long* atoms,
-                               const double* direction, double* output, int* status,
-                               cudaStream_t stream,
+int launch_factorized_integral(unsigned family, unsigned radial, double omega,
+                               const unsigned* angular, const std::uint32_t* components,
+                               std::size_t component_count, const double* records,
+                               std::size_t count, const long long* atoms, const double* direction,
+                               double* output, int* status, cudaStream_t stream,
                                const FactorizedIntegralBatch* batches = nullptr,
                                std::size_t batch_count = 1) noexcept;
 
@@ -41,25 +41,36 @@ int launch_factorized_integral(unsigned family, unsigned radial, const unsigned*
  */
 template <unsigned Family, unsigned Radial, unsigned First, unsigned Second, unsigned Third,
           unsigned Fourth, unsigned... Components>
+int factorized_range_integral_callback(double omega, const double* records, std::size_t count,
+                                       const long long* atoms, const double* direction,
+                                       double* output, int* status, cudaStream_t stream) {
+  static constexpr std::array<unsigned, 4> angular{First, Second, Third, Fourth};
+  static constexpr std::array<std::uint32_t, sizeof...(Components)> components{Components...};
+  return launch_factorized_integral(Family, Radial, omega, angular.data(), components.data(),
+                                    components.size(), records, count, atoms, direction, output,
+                                    status, stream);
+}
+
+template <unsigned Family, unsigned Radial, unsigned First, unsigned Second, unsigned Third,
+          unsigned Fourth, unsigned... Components>
 int factorized_integral_callback(const double* records, std::size_t count, const long long* atoms,
                                  const double* direction, double* output, int* status,
                                  cudaStream_t stream) {
-  static constexpr std::array<unsigned, 4> angular{First, Second, Third, Fourth};
-  static constexpr std::array<std::uint32_t, sizeof...(Components)> components{Components...};
-  return launch_factorized_integral(Family, Radial, angular.data(), components.data(),
-                                    components.size(), records, count, atoms, direction, output,
-                                    status, stream);
+  return factorized_range_integral_callback<Family, Radial, First, Second, Third, Fourth,
+                                            Components...>(
+      Radial == 0 ? 0.0 : 0.3, records, count, atoms, direction, output, status, stream);
 }
 
 /** Optional batching keeps the same selectors and compiler primitive as the
  * scalar callback. Inventories without this binding retain scalar execution. */
 template <unsigned Family, unsigned Radial, unsigned First, unsigned Second, unsigned Third,
           unsigned Fourth, unsigned... Components>
-int factorized_integral_batch_callback(const FactorizedIntegralBatch* batches, std::size_t count,
-                                       const double* direction, int* status, cudaStream_t stream) {
+int factorized_integral_batch_callback(double omega, const FactorizedIntegralBatch* batches,
+                                       std::size_t count, const double* direction, int* status,
+                                       cudaStream_t stream) {
   static constexpr std::array<unsigned, 4> angular{First, Second, Third, Fourth};
   static constexpr std::array<std::uint32_t, sizeof...(Components)> components{Components...};
-  return launch_factorized_integral(Family, Radial, angular.data(), components.data(),
+  return launch_factorized_integral(Family, Radial, omega, angular.data(), components.data(),
                                     components.size(), nullptr, 0, nullptr, direction, nullptr,
                                     status, stream, batches, count);
 }

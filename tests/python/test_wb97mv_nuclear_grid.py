@@ -11,12 +11,18 @@ import json
 import os
 import subprocess
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
-from generativeqc_compiler.dft.nonlocal_reference import nonlocal_energy_reference
+from generativeqc_compiler.common.nonlocal_correlation import NonlocalCorrelationSpec
+from generativeqc_compiler.dft.nonlocal_reference import (
+    assemble_nonlocal_potential_reference,
+    nonlocal_energy_reference,
+    nonlocal_feature_derivatives_reference,
+)
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import (
     StationaryGridSecondOrder,
@@ -32,6 +38,8 @@ from test_wb97mv_native_grid import (
     _fields,
     _fixture,
     _independent_potential,
+    _molecular_vv10_active,
+    _native,
     _signed_density_libxc,
 )
 
@@ -224,28 +232,31 @@ def _partials(fixture: dict, fields: np.ndarray, direction: np.ndarray) -> tuple
     """Execute generated scalar mathematics; independent values gate it below."""
     spins = fixture["spins"]
     count = 5 * spins + 1
-    graph, roots = point_field_partials(spins)
-    values = np.array(
-        evaluate_array_graph(
-            graph,
-            roots,
-            {
-                **{
-                    f"f{index}": value
-                    for index, value in enumerate(fields[: 5 * spins])
-                },
-                **{
-                    f"d{index}": value
-                    for index, value in enumerate(direction[: 5 * spins])
-                },
-                "weight": fields[5 * spins],
-                "dweight": direction[5 * spins],
-            },
-        )
-    )
-    energy = values[0].sum()
     base, moving = np.zeros_like(fields), np.zeros_like(fields)
-    base[:count], moving[:count] = values[1 : 1 + count], values[1 + count :]
+    revised = fixture.get("revised_nonlocal")
+    energy = 0.0
+    if revised is None:
+        graph, roots = point_field_partials(spins)
+        values = np.array(
+            evaluate_array_graph(
+                graph,
+                roots,
+                {
+                    **{
+                        f"f{index}": value
+                        for index, value in enumerate(fields[: 5 * spins])
+                    },
+                    **{
+                        f"d{index}": value
+                        for index, value in enumerate(direction[: 5 * spins])
+                    },
+                    "weight": fields[5 * spins],
+                    "dweight": direction[5 * spins],
+                },
+            )
+        )
+        energy = values[0].sum()
+        base[:count], moving[:count] = values[1 : 1 + count], values[1 + count :]
     total = (
         fields if spins == 1 else np.vstack((fields[:5] + fields[5:10], fields[10:]))
     )
@@ -257,8 +268,15 @@ def _partials(fixture: dict, fields: np.ndarray, direction: np.ndarray) -> tuple
     active = np.flatnonzero((total[0] >= 1e-10) & (np.abs(total[5]) > 1e-14))
     nonlocal_base, nonlocal_moving = np.zeros_like(total), np.zeros_like(total)
     for kind in ("pair", "local"):
-        graph, roots = nonlocal_field_program(kind)
+        graph, roots = nonlocal_field_program(kind, runtime_rvv10=revised is not None)
         feeds = {}
+        if revised is not None:
+            damping, gradient_scale, _ = revised
+            feeds = (
+                {"damping": damping, "gradient_scale": gradient_scale}
+                if kind == "pair"
+                else {"beta": (3 / damping**2) ** 0.75 / 32}
+            )
         for prefix, matrix in (("", total), ("d", delta)):
             for index in range(9):
                 values = matrix[index, active]
@@ -274,7 +292,11 @@ def _partials(fixture: dict, fields: np.ndarray, direction: np.ndarray) -> tuple
                 for value in evaluate_array_graph(graph, roots, feeds)
             ]
         )
-        factor = float(resolve_method("WB97M-V").primitives[-1].coefficient)
+        factor = (
+            revised[2]
+            if revised is not None
+            else float(resolve_method("WB97M-V").primitives[-1].coefficient)
+        )
         energy += factor * (0.5 if kind == "pair" else 1) * evaluated[0].sum()
         if kind == "pair":
             evaluated = evaluated.sum(axis=2)
@@ -434,11 +456,22 @@ def _compiler_action(fixture: dict) -> tuple:
     return energy, potential, np.array(fock), contraction
 
 
-def _native_action(fixture: dict, tile: int = 3, *, mode: str = "nuclear") -> dict:
+def _native_action(
+    fixture: dict,
+    tile: int = 3,
+    *,
+    mode: str = "nuclear",
+    scales: tuple[float, float] | None = None,
+) -> dict:
     path = os.environ.get("GENERATIVEQC_CUDA_WB97MV_GRID_PROBE")
     if not path:
         pytest.skip("requires optional native CUDA WB97M-V grid probe")
     assert os.environ.get("SLURM_JOB_ID"), "real-GPU tests require finite srun"
+    if mode in ("fixed-m06-2x", "nuclear-m06-2x"):
+        capability = subprocess.check_output([path, "has-m06-2x"], text=True).strip()
+        assert capability in ("yes", "no")
+        if capability == "no":
+            pytest.skip("probe was built without the development M06-2X point")
     values = np.concatenate(
         [
             fixture[name].ravel()
@@ -459,7 +492,12 @@ def _native_action(fixture: dict, tile: int = 3, *, mode: str = "nuclear") -> di
             )
         ]
     )
-    header = f"{len(fixture['centers'])} {len(fixture['primitives'])} {fixture['nao']} {len(fixture['points'])} {fixture['spins']} {tile} 16777216\n"
+    pairs = 16777216 if scales is None and mode != "nuclear-split-semilocal" else 0
+    header = f"{len(fixture['centers'])} {len(fixture['primitives'])} {fixture['nao']} {len(fixture['points'])} {fixture['spins']} {tile} {pairs}\n"
+    if scales is not None:
+        header += f"{scales[0]} {scales[1]}\n"
+    if mode == "nuclear-rvv10":
+        header += " ".join(map(str, fixture["revised_nonlocal"])) + "\n"
     process = subprocess.run(
         [path, mode],
         input=header + " ".join(map(repr, values.tolist())),
@@ -480,6 +518,158 @@ def _native_action(fixture: dict, tile: int = 3, *, mode: str = "nuclear") -> di
     np.testing.assert_array_equal(result["retained_mixed"], result["mixed"])
     assert result["nuclear_contractions"] == 2
     return result
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("screened", (False, True))
+def test_wb97mv_nuclear_grid_components(spins: int, screened: bool) -> None:
+    """Moving AO, weight and coordinate derivatives compose, even with no pairs."""
+    fixture = _data(spins)
+    if screened:
+        fixture["density"] *= 1e-12
+    together = _native_action(fixture)
+    semilocal = _native_action(fixture, tile=0, mode="nuclear-split-semilocal")
+    vv10 = _native_action(fixture, mode="nuclear-split-vv10")
+    assert (
+        semilocal["nuclear_reference_pairs"] == semilocal["nuclear_response_pairs"] == 0
+    )
+    assert vv10["nuclear_response_pairs"] == together["nuclear_response_pairs"]
+    for field in ("energy", "potential", "response", "mixed"):
+        if screened:
+            np.testing.assert_array_equal(vv10[field], 0)
+        np.testing.assert_allclose(
+            np.asarray(semilocal[field]) + vv10[field], together[field], atol=2e-12
+        )
+
+
+def _scaled_libxc_grid(
+    grid: dict,
+    density: np.ndarray,
+    family: str,
+    scales: tuple[float, float] = (1.0, 1.0),
+) -> tuple[float, np.ndarray]:
+    """Independent semilocal energy and AO potential for a supplied quadrature."""
+    libxc = pytest.importorskip("pyscf.dft.libxc")
+    spins = len(density)
+    exchange, correlation = (
+        ("LDA_X", "LDA_C_PW") if family == "lda" else ("GGA_X_PBE", "GGA_C_PBE")
+    )
+    code = f"{scales[0]}*{exchange}+{scales[1]}*{correlation}"
+    if family == "b3lyp":
+        code = "0.08*LDA_X+0.72*GGA_X_B88,0.19*LDA_C_VWN_RPA+0.81*GGA_C_LYP"
+    fields = _fields(grid["jets"], density)
+    mgga = family in {"r2scan", "m06-2x"}
+    if mgga:
+        code = family.upper()
+        # This oracle is the common interior of both work policies; the
+        # dedicated r2SCAN point tests qualify the different continuation.
+        assert np.min(fields[:, 0]) > 4e-11 and np.min(fields[:, 4]) > 3e-20
+    inputs = fields if mgga else fields[:, 0] if family == "lda" else fields[:, :4]
+    exc, potential, *_ = libxc.eval_xc(
+        code, inputs[0] if spins == 1 else inputs, spin=spins - 1, deriv=1
+    )
+    coefficients = np.zeros_like(fields)
+    coefficients[:, 0] = np.atleast_2d(potential[0]) if spins == 1 else potential[0].T
+    if mgga:
+        coefficients[:, 4] = (
+            np.atleast_2d(potential[3]) if spins == 1 else potential[3].T
+        )
+    if family != "lda":
+        if spins == 1:
+            coefficients[0, 1:4] = 2 * potential[1] * fields[0, 1:4]
+        else:
+            same_alpha, cross, same_beta = potential[1].T
+            coefficients[0, 1:4] = (
+                2 * same_alpha * fields[0, 1:4] + cross * fields[1, 1:4]
+            )
+            coefficients[1, 1:4] = (
+                2 * same_beta * fields[1, 1:4] + cross * fields[0, 1:4]
+            )
+    return (
+        float(np.dot(grid["weights"], exc * fields[:, 0].sum(axis=0))),
+        _assemble(grid["jets"], coefficients * grid["weights"]),
+    )
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize(
+    ("family", "scales"),
+    (
+        ("lda", (1.0, 1.0)),
+        ("pbe", (1.0, 1.0)),
+        ("pbe", (0.75, 0.81)),
+        ("b3lyp", (1.0, 1.0)),
+        ("r2scan", (1.0, 1.0)),
+        ("m06-2x", (1.0, 1.0)),
+    ),
+)
+def test_scaled_native_semilocal_grid_against_libxc(
+    spins: int, family: str, scales: tuple[float, float]
+) -> None:
+    """Audit both density and geometry actions without the native point model."""
+    fixture = _data(spins)
+    actual = _native_action(fixture, tile=0, mode=f"nuclear-{family}", scales=scales)
+
+    def oracle(grid: dict, density: np.ndarray) -> tuple[float, np.ndarray]:
+        return _scaled_libxc_grid(grid, density, family, scales)
+
+    for count in (
+        "active_nonlocal_points",
+        "fixed_response_pairs",
+        "nuclear_reference_pairs",
+        "nuclear_response_pairs",
+    ):
+        assert actual[count] == 0
+    energy, potential = oracle(fixture, fixture["density"])
+    np.testing.assert_allclose(actual["energy"], energy, atol=3e-12, rtol=3e-10)
+    np.testing.assert_allclose(
+        actual["potential"], potential.ravel(), atol=3e-12, rtol=3e-10
+    )
+    for step in (0.002, 0.001):
+        fixed = (
+            oracle(fixture, fixture["density"] + step * fixture["direction"])[1]
+            - oracle(fixture, fixture["density"] - step * fixture["direction"])[1]
+        ) / (2 * step)
+        moving = (
+            oracle(*_displaced(fixture, 0, step))[1]
+            - oracle(*_displaced(fixture, 0, -step))[1]
+        ) / (2 * step)
+        mixed = sum(
+            left * right * oracle(*_displaced(fixture, left * step, right * step))[0]
+            for left in (1, -1)
+            for right in (1, -1)
+        ) / (4 * step**2)
+        np.testing.assert_allclose(
+            actual["fixed_response"], fixed.ravel(), atol=2e-8, rtol=2e-6
+        )
+        np.testing.assert_allclose(
+            actual["response"], moving.ravel(), atol=2e-8, rtol=2e-6
+        )
+        np.testing.assert_allclose(actual["mixed"], mixed, atol=1e-7, rtol=2e-5)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("family", ("b3lyp", "r2scan", "m06-2x"))
+def test_native_weight_action_uses_physical_feature_direction(
+    spins: int, family: str
+) -> None:
+    """Isolate d(E_xc density) contracted with the left quadrature-weight motion."""
+    fixture = _data(spins)
+    for name in ("right_ao", "left_ao", "mixed_ao", "weight_right", "weight_mixed"):
+        fixture[name].fill(0)
+    scales = (1.0, 1.0)
+    actual = _native_action(fixture, tile=0, mode=f"nuclear-{family}", scales=scales)
+    _, weighted_fock = _scaled_libxc_grid(
+        {**fixture, "weights": fixture["weight_left"]},
+        fixture["density"],
+        family,
+        scales,
+    )
+    expected = np.sum(weighted_fock * fixture["direction"])
+    assert (
+        abs(expected) > 1e-7
+    )  # A vanishing weight contraction cannot detect an extra half.
+    np.testing.assert_allclose(actual["mixed"], expected, atol=3e-12, rtol=3e-10)
 
 
 @pytest.mark.parametrize("spins", [1, 2])
@@ -544,6 +734,115 @@ def test_moving_fock_and_stationary_mixed_contraction_against_independent_values
         atol=1e-7,
         rtol=2e-5,
     )
+
+
+def _revised_reference(fixture: dict, density: np.ndarray) -> tuple[float, np.ndarray]:
+    """Values and first potentials from the independent real-space rVV10 oracle."""
+    damping, gradient_scale, coefficient = fixture["revised_nonlocal"]
+    spec = NonlocalCorrelationSpec(
+        "rvv10", Fraction(str(damping)), Fraction(str(gradient_scale))
+    )
+    total = _fields(fixture["jets"], density).sum(axis=0)
+    active = fixture["nonlocal_active"]
+    weights = fixture["weights"][active]
+    gradients = total[1:4, active].T
+    inputs = fixture["points"][active], weights, total[0, active], gradients, spec
+    energy = coefficient * nonlocal_energy_reference(*inputs)
+    vrho, vsigma = nonlocal_feature_derivatives_reference(*inputs)
+    potential = coefficient * assemble_nonlocal_potential_reference(
+        fixture["jets"][:, active], weights, gradients, vrho, vsigma
+    )
+    return energy, np.repeat(potential[None], fixture["spins"], axis=0)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+@pytest.mark.parametrize("implementation", ("compiler", "native"))
+def test_rvv10_bilateral_moving_grid(spins: int, implementation: str) -> None:
+    fixture = _data(spins)
+    # Use noncanonical parameters so a compiled-in b, c, or coefficient fails.
+    fixture["revised_nonlocal"] = (
+        (11.95, 0.0071, 0.7) if spins == 1 else (6.3, 0.0093, 1.2)
+    )
+    fixture["nonlocal_active"] = _molecular_vv10_active(
+        _fields(fixture["jets"], fixture["density"]).sum(axis=0)[0], fixture["weights"]
+    )
+    shape = fixture["density"].shape
+    if implementation == "native":
+        result = _native_action(fixture, mode="nuclear-rvv10")
+        energy, potential, fock, contraction = (
+            result["energy"][0],
+            np.asarray(result["potential"]).reshape(shape),
+            np.asarray(result["response"]).reshape(shape),
+            result["mixed"][0],
+        )
+        assert (
+            result["nuclear_reference_pairs"]
+            == np.count_nonzero(fixture["nonlocal_active"]) ** 2
+        )
+    else:
+        energy, potential, fock, contraction = _compiler_action(fixture)
+    expected_energy, expected_potential = _revised_reference(
+        fixture, fixture["density"]
+    )
+    np.testing.assert_allclose(energy, expected_energy, atol=3e-13, rtol=1e-11)
+    np.testing.assert_allclose(potential, expected_potential, atol=3e-13, rtol=1e-11)
+
+    fock_estimates, mixed_estimates, fixed_estimates = [], [], []
+    for step in (0.002, 0.001):
+        fock_estimates.append(
+            sum(
+                sign * _revised_reference(*_displaced(fixture, 0, sign * step))[1]
+                for sign in (1, -1)
+            )
+            / (2 * step)
+        )
+        mixed_estimates.append(
+            sum(
+                first
+                * second
+                * _revised_reference(*_displaced(fixture, first * step, second * step))[
+                    0
+                ]
+                for first in (1, -1)
+                for second in (1, -1)
+            )
+            / (4 * step**2)
+        )
+        fixed_estimates.append(
+            sum(
+                sign
+                * _revised_reference(
+                    fixture, fixture["density"] + sign * step * fixture["direction"]
+                )[1]
+                for sign in (1, -1)
+            )
+            / (2 * step)
+        )
+    np.testing.assert_allclose(
+        fock, (4 * fock_estimates[1] - fock_estimates[0]) / 3, atol=2e-10
+    )
+    np.testing.assert_allclose(
+        contraction, (4 * mixed_estimates[1] - mixed_estimates[0]) / 3, atol=2e-9
+    )
+    if implementation == "native":
+        path = Path(os.environ["GENERATIVEQC_CUDA_WB97MV_GRID_PROBE"])
+        fixed = _native(path, fixture, mode="fixed-rvv10")
+        assert fixed["prepared"] == fixed["applied"] == 0
+        np.testing.assert_allclose(
+            fixed["potential"], expected_potential.ravel(), atol=3e-13
+        )
+        np.testing.assert_allclose(
+            fixed["response"],
+            ((4 * fixed_estimates[1] - fixed_estimates[0]) / 3).ravel(),
+            atol=2e-10,
+        )
+        refused = _native(
+            path, fixture, mode="fixed-rvv10", pairs=fixed["reference_pairs"] - 1
+        )
+        assert refused["prepared"] != 0 and refused["reference_pairs"] == 0
+        np.testing.assert_array_equal(
+            refused["response"], np.full(fixture["density"].size, 91.25)
+        )
 
 
 @pytest.mark.parametrize("spins", [1, 2])

@@ -6,5 +6,5 @@
     "generated/response/ecp_quadrature.hpp"
   ],
   "owner": "python/generativeqc_compiler/method/ecp_response.py",
-  "scope": "Build-only fixed-measure AO energy bilinear VJP/JVP, order-two AO Taylor AD and physical spin-density sums. The integral compiler ecp_fixed_grid.py freezes incumbent two-grid Legendre constants through existing radial/harmonic graphs; incumbent generated ECP helpers own potentials, projections and convergence. Runtime receives linked CUDA and verbatim constants, never a compiler/Python numerical dependency. Coarse/fine admission remains mandatory. This does not register a stationary molecular Hessian."
+  "scope": "Build-only fixed-measure AO energy bilinear VJP/JVP, order-two AO Taylor AD and physical spin-density sums. The integral compiler ecp_fixed_grid.py freezes the incumbent pair and the optional confirmation grid through existing radial/harmonic graphs; generated ECP helpers own potentials, projections and convergence. Runtime receives linked CUDA and verbatim constants, never a compiler/Python numerical dependency. The incumbent pair remains mandatory; confirmation does not change the published quadrature. This does not register a stationary molecular Hessian."
 }

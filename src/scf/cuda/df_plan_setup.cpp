@@ -27,9 +27,37 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "scf/df_exchange_policy.hpp"
+#include "scf/df_fock_capacity.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
+
+namespace generativeqc::scf {
+
+std::size_t prepared_df_fock_host_capacity(const df_source_capacity::Shape& orbital,
+                                           const df_source_capacity::Shape& auxiliary,
+                                           std::size_t fitted_device_cap) {
+  using df_source_capacity::add;
+  using df_source_capacity::mul;
+  const auto source_host = df_source_capacity::prepared_host_bytes(orbital, auxiliary);
+  // Include the setup arena and the independently retained Fock/derivative
+  // basis snapshots. Keep the complete source packing envelope live instead
+  // of guessing which parts survive source construction or late rebuilds.
+  const auto basis = mul(4, add(orbital.system_bytes, auxiliary.system_bytes));
+  const auto naux = auxiliary.public_aos;
+  const auto metric = mul(sizeof(double), mul(naux, naux));
+  const auto eigensolvers =
+      add(df_eigen_workspace_allowance(orbital.public_aos), df_eigen_workspace_allowance(naux));
+  const auto values = add(mul(2, metric), mul(naux, 4 * sizeof(double)));
+  const auto owner = sizeof(CudaDensityFittingJkPlan) + 8 * sizeof(tensor::CudaVectorContraction) +
+                     2 * sizeof(CudaDensityFittingMetricDiagnostic) + 4096;
+  // The raw Hermite source, MD Coulomb install and streamed host panels each
+  // get at most the value cap, which the complete fitted device cap bounds.
+  const auto optional = mul(3, fitted_device_cap);
+  return add(add(add(source_host, basis), add(eigensolvers, values)), add(owner, optional));
+}
+
+}  // namespace generativeqc::scf
 
 namespace generativeqc::scf::cuda_df {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -729,10 +757,12 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   }
   const auto solver_device_workspace_bytes = prepared.required().device_bytes;
   const auto solver_host_workspace_bytes = prepared.required().host_bytes;
-  eigen_provider::EigenWorkspaceLimits limits;
-  limits.device_bytes = df_eigen_workspace_allowance(naux);
-  if (prepared.admit(limits) != eigen_provider::EigenWorkspaceAdmission::accepted) {
-    detail = "CUDA DF metric eigensolver query exceeds its planned workspace";
+  // The metric workspace is shared across the serial solves. Size both of
+  // its caller-owned buffers before committing either allocation.
+  const auto solver_allowance = df_eigen_workspace_allowance(naux);
+  if (prepared.admit({solver_allowance, solver_allowance}) !=
+      eigen_provider::EigenWorkspaceAdmission::accepted) {
+    detail = "CUDA DF metric eigensolver exceeds its host/device workspace allowance";
     return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
   if (solver_device_workspace_bytes != 0) {

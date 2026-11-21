@@ -97,6 +97,28 @@ def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
     assert not cuda_nonlocal_force_basis_eligible(higher)
 
 
+@pytest.mark.parametrize(
+    "angular,nonlocal_eligible,range_only_eligible",
+    [(2, True, True), (3, True, False), (4, False, False)],
+)
+def test_cuda_force_basis_checks_shells_on_each_center(
+    angular: int, nonlocal_eligible: bool, range_only_eligible: bool
+) -> None:
+    """Per-center snapshots preserve the distinct limits of the CUDA owners."""
+    from generativeqc import Primitive, Shell
+    from generativeqc.ks import (
+        cuda_nonlocal_force_basis_eligible,
+        cuda_range_only_force_basis_eligible,
+    )
+
+    basis = (
+        Shell(0, 0, (Primitive(0.7, 1.0),)),
+        Shell(1, angular, (Primitive(0.9, 1.0),)),
+    )
+    assert cuda_nonlocal_force_basis_eligible(basis) is nonlocal_eligible
+    assert cuda_range_only_force_basis_eligible(basis) is range_only_eligible
+
+
 def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
     """AUTO changes SCF components, not the strict stationary derivative owner."""
     source = (

@@ -13,6 +13,7 @@
 #include "scf/reference/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
+#include "dft/split_hybrid_cuda_domain.hpp"
 #include "libxc_semilocal_cuda/generated_libxc_semilocal_cuda_registry.hpp"
 #endif
 
@@ -364,6 +365,18 @@ void cuda_range_exchange_identity() {
                     retained.weighted_density.size() == state.id.model.spins,
                 "CUDA RSH proof lost its provider identities or spin weights");
 
+        auto fitted = state;
+        const auto fitted_lr = make_rsh_correction_fock_spec(spin, short_range, 1.0, 0.33,
+                                                             FockApproximation::DensityFitted);
+        fitted.id.model.range_correction = resolve_fock_build(fitted_lr, FockBackend::Cuda, 1e-12);
+        fitted.sync();
+        require(fitted.validate() == (primary == FockApproximation::DensityFitted),
+                "fitted CUDA PBE LR requires a matched fitted primary");
+        fitted.id.model.range_correction =
+            resolve_fock_build(fitted_lr, FockBackend::Cuda, 1e-12, 1e-8);
+        fitted.sync();
+        require(!fitted.validate(), "fitted CUDA PBE LR accepted a different metric cutoff");
+
         const std::vector<std::function<void(Fixture&)>> invalid = {
             [](auto& a) { a.id.model.range_correction->backend = FockBackend::Cpu; },
             [](auto& a) {
@@ -555,12 +568,13 @@ void cuda_split_hybrid_identity() {
   struct Method {
     std::uint32_t code;
     double fraction;
-    bool fitted;
+    std::uint32_t linked_variational_domain;
   };
   // Stable Libxc-encoded M06-2X/MN15 identities, with independent expectations.
   for (const bool unrestricted : {false, true}) {
     for (const auto method :
-         {Method{0x201c2U, 27.0 / 50.0, true}, Method{0x2010cU, 11.0 / 25.0, false}}) {
+         {Method{0x201c2U, 27.0 / 50.0, kCudaM062XVariational ? kCudaM062XVariationalDomain : 0},
+          Method{0x2010cU, 11.0 / 25.0, kCudaMN15Variational ? kCudaMN15VariationalDomain : 0}}) {
       Fixture original;
       original.id.determinant.model = cuda_global_hybrid_fock(
           unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted, method.fraction);
@@ -582,10 +596,21 @@ void cuda_split_hybrid_identity() {
           spec.exchange.approximation = k;
           state.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
           state.sync();
-          const bool admitted = j == k && (j == FockApproximation::Exact || method.fitted);
+          const bool admitted = j == k;
           VerifiedKsFinalState verified;
           require(state.validate(true, &verified) == admitted,
                   "split-hybrid final-state admission disagrees with its physical J/K model");
+          if (method.linked_variational_domain) {
+            auto variational = state;
+            variational.id.model.scf_domain_version = method.linked_variational_domain;
+            variational.sync();
+            require(variational.validate(true) == admitted,
+                    "split-hybrid Hessian state requires the same matched physical J/K model");
+            variational.id.model.grid.partition_iterations = 2;
+            variational.sync();
+            require(!variational.validate(true),
+                    "split-hybrid Hessian state accepted the wrong partition order");
+          }
           if (!admitted) continue;
           require(verified.identity == state.id &&
                       verified.weighted_density.size() == state.id.model.spins,

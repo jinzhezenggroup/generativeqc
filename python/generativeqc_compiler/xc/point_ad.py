@@ -114,6 +114,15 @@ def _program(name: str, exponent: Fraction | None = None) -> tuple:
         response = graph.differentiate(
             residual, direction, leaves
         ) / -graph.differentiate(residual, value)
+    elif name == "cube_root":
+        # Differentiate y^3=left using the lowered cbrt value. Its 3*y^2
+        # denominator is representable for all finite nonzero FP32/FP64
+        # inputs, unlike 1/left in the derivative of exp(log(left)/3).
+        value = graph.variable("value")
+        residual = left - value * value * value
+        response = graph.differentiate(
+            residual, direction, leaves
+        ) / -graph.differentiate(residual, value)
     else:
         response = graph.differentiate(primal, direction, leaves)
     lowered, roots = graph.canonicalize_associative(

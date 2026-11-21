@@ -76,6 +76,10 @@ option(GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA
        ${GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT})
 option(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES
        "Build opt-in native compiler-AD Hessians with full f/g closure by default" OFF)
+option(GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
+       "Enable the development energy-derived M06-2X CUDA molecular model" OFF)
+option(GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT
+       "Enable the development energy-derived MN15 CUDA molecular model" OFF)
 set(GENERATIVEQC_HESSIAN_AOT_INVENTORY
     "" CACHE FILEPATH
     "Optional explicit Hessian AOT inventory; empty selects complete factorized orbital-f/auxiliary-g closure")
@@ -344,6 +348,17 @@ endif()
 if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES AND NOT GENERATIVEQC_ENABLE_CUDA)
   message(FATAL_ERROR "Hessian AOT leaves require CUDA")
 endif()
+set(GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN OFF)
+if(GENERATIVEQC_ENABLE_CUDA AND GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA AND
+   GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+  set(GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN ON)
+endif()
+configure_file(src/dft/r2scan_cuda_domain.hpp.in generated/r2scan_cuda_domain.hpp @ONLY)
+if((GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT OR GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT) AND
+   (NOT GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN OR NOT GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES))
+  message(FATAL_ERROR "The variational split hybrids require NVIDIA CUDA with native force and Hessian AOT")
+endif()
+configure_file(src/dft/split_hybrid_cuda_domain.hpp.in generated/dft/split_hybrid_cuda_domain.hpp @ONLY)
 
 if(NOT GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS STREQUAL "" AND
    NOT GENERATIVEQC_ENABLE_CUDA)
@@ -543,6 +558,11 @@ if(GENERATIVEQC_BUILD_CLI)
   if(GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES)
     target_link_libraries(generativeqc_cli PRIVATE generativeqc_hessian_aot)
     target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=1)
+    if(GENERATIVEQC_PYTHON_WHEEL)
+      # The CLI Hessian also owns CUDA stream and device-buffer operations.
+      # Hidden imports in the core DSO cannot resolve the executable's calls.
+      generativeqc_attach_cuda_implib(generativeqc_cli)
+    endif()
   else()
     target_compile_definitions(generativeqc_cli PRIVATE GENERATIVEQC_CLI_NATIVE_HESSIAN=0)
   endif()
@@ -559,9 +579,8 @@ if(GENERATIVEQC_BUILD_CLI)
   set_target_properties(generativeqc_cli PROPERTIES OUTPUT_NAME generativeqc)
   if(GENERATIVEQC_PYTHON_WHEEL)
     # A native PATH launcher finds the full CLI in the adjacent wheel package.
-    # The full binary stays beside its shared library for relocatable RPATH;
-    # Normal native commands never invoke Python. The explicitly selected
-    # hessian/hvp compiler-runtime extension has its own interpreter contract.
+    # The full binary stays beside its shared library for relocatable RPATH.
+    # Native commands, including Hessian replay, never invoke Python.
     add_executable(generativeqc_wheel_launcher src/cli/wheel_launcher.cpp)
     set_target_properties(generativeqc_wheel_launcher PROPERTIES
       OUTPUT_NAME generativeqc

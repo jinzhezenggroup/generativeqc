@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -15,13 +16,26 @@ namespace generativeqc::dft {
 /** Full+LR is the exact WB97M-V operator. Fitted primary J/K is NOT supplied
  * here: a DF owner may consume only the LR correction beside its fitted source.
  * Separate radial parts are exposed for independent scientific qualification. */
-enum class CudaWb97mvJkPart { exact, primary, correction, coulomb, short_range, long_range };
+enum class CudaWb97mvJkPart {
+  exact,
+  primary,
+  correction,
+  coulomb,
+  short_range,
+  long_range,
+  full_hybrid
+};
 
 struct CudaWb97mvJkShape {
   std::size_t atoms{}, primitives{}, nao{}, spins{};
 };
 
 struct CudaWb97mvJkOptions {
+  /** Immutable physical exchange weights, independent of spin density convention. */
+  struct RangeExchange {
+    double short_fraction{}, long_minus_short{}, omega{};
+    bool operator==(const RangeExchange&) const = default;
+  };
   CudaWb97mvJkPart part{CudaWb97mvJkPart::exact};
   std::size_t max_workspace_bytes{512ULL << 20};
   /** Optional source/projection batching, charged in the same workspace arena.
@@ -31,8 +45,9 @@ struct CudaWb97mvJkOptions {
    * tiles retain group/incidence sum order; zero disables optional batching. */
   std::size_t max_batch_projection_bytes{16ULL << 20};
   std::size_t max_groups{100'000};
-  /** Bounded canonical-source replay when the complete ordered schedule does
-   * not fit. The global source/work bounds still apply across every tile.
+  /** Bounded canonical-source replay when the ordered schedule or its requested
+   * resident jet cache does not fit. Source/work bounds still apply across all
+   * tiles, which reuse transient storage in the same arena.
    * Zero disables this fallback; it never enlarges the caller's arena. */
   std::size_t source_tile{1024};
   std::size_t max_source_groups{100'000};
@@ -42,8 +57,13 @@ struct CudaWb97mvJkOptions {
   std::uint64_t max_reduction_terms{1'073'741'824};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
-  /// Optional last-direction jets; zero or insufficient arena keeps streaming.
+  /// Cap on persistent last-direction jets, not transient streamed tiles.
   std::size_t max_resident_integral_bytes{64ULL << 20};
+  /** Physical fraction of same-spin exchange for full_hybrid; zero otherwise. */
+  double full_exchange_fraction{};
+  /** Bind both radial sources from the accepted KS state. Unbound leaf probes
+   * retain the canonical WB97M-V component selectors. */
+  std::optional<RangeExchange> range_exchange;
 };
 
 /** Borrow the actual normalized AoBasis and an immutable live owner. Geometry,

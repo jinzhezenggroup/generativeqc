@@ -80,8 +80,10 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
       !options.max_reduction_terms_bound || !std::isfinite(options.symmetry_absolute_tolerance) ||
       options.symmetry_absolute_tolerance < 0 ||
       !std::isfinite(options.symmetry_relative_tolerance) ||
-      options.symmetry_relative_tolerance < 0)
+      options.symmetry_relative_tolerance < 0 || !std::isfinite(options.range_omega) ||
+      options.range_omega < 0)
     return cudaErrorInvalidValue;
+  const auto radial = options.range_omega == 0 ? "full_range" : "long_range";
   auto& plan = result.layout;
   std::size_t primitives{};
   const auto topology = [&](std::span<const Shell> shells, std::size_t angular_bound,
@@ -137,14 +139,14 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
         const auto& signature = program.signature;
         if (program.kind != aot::Kind::integral ||
             signature.family != (third ? "three_center_eri" : "coulomb_metric") ||
-            signature.angular.size() != group.device.centers)
+            signature.angular.size() != group.device.centers || signature.radial != radial ||
+            !program.accepts_omega(options.range_omega))
           continue;
         bool matches = true;
         for (unsigned slot = 0; slot < group.device.centers; ++slot)
           matches &= signature.angular[slot] == group.device.shells[slot].angular;
         if (!matches) continue;
-        if (signature.radial != "full_range" || signature.omega != 0 || !program.integral ||
-            program.centers != group.device.centers ||
+        if (!program.integral || program.centers != group.device.centers ||
             program.record_stride != 4 * group.device.centers + 1 ||
             program.outputs != 1 + 6 * group.device.centers || program.components.empty() ||
             program.components.size() > 16)
@@ -577,8 +579,9 @@ struct CudaDfNuclearResponse::Impl {
           error = cudaGetLastError();
           if (error == cudaSuccess) {
             receipt.radial_records += count;
-            error = static_cast<cudaError_t>(tile.program->integral(
-                records, count, groups[index].atoms, direction, raw, status, stream));
+            error =
+                aot::launch_integral_at_omega(*tile.program, options.range_omega, records, count,
+                                              groups[index].atoms, direction, raw, status, stream);
           }
           if (error == cudaSuccess) {
             receipt.component_evaluations += count * tile.device.count;
@@ -681,9 +684,10 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
     const auto& plan = state->schedule.layout;
     if (!basis || !reference.stream || !reference.authenticate || !reference.owner || !workspace ||
         reinterpret_cast<std::uintptr_t>(workspace) % alignof(double) ||
-        workspace_bytes < plan.bytes || basis.atoms != shape.atoms ||
-        basis.primitives != shape.primitives || basis.nao != shape.nao ||
-        basis.naux != shape.naux || basis.cartesian_nao != shape.cartesian_nao ||
+        workspace_bytes < plan.bytes || basis.range_omega != options.range_omega ||
+        basis.atoms != shape.atoms || basis.primitives != shape.primitives ||
+        basis.nao != shape.nao || basis.naux != shape.naux ||
+        basis.cartesian_nao != shape.cartesian_nao ||
         basis.cartesian_naux != shape.cartesian_naux || basis.orbital_shells != orbital.size() ||
         basis.auxiliary_shells != auxiliary.size())
       return cudaErrorInvalidValue;

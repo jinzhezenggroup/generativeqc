@@ -108,6 +108,83 @@ def polarized_feature_count(spec: typing.Any) -> int:
     )
 
 
+def emit_polarized_semilocal_direction(
+    spec: FunctionalSpec,
+    *,
+    value_type: str,
+    function_name: str,
+    function_qualifier: str,
+    frozen_feature_sets: tuple[tuple[int, ...], ...] = (),
+) -> str:
+    """Emit a directional vxc action over the production energy's active branch.
+
+    Both input vectors follow the polarized feature order. The emitted return
+    value carries the primal needed by moving quadrature, and H_xc times the
+    input direction without exposing or storing a point Hessian. A frozen
+    subspace is selected only when both its inputs and their directions are
+    exactly zero. Specializing the potential before differentiation avoids
+    multiplying the singular normal curvature by a zero tangent.
+    """
+    count = polarized_feature_count(spec)
+    features = spec.features[:count]
+    outputs = ((), *((row,) for row in range(count)))
+    bindings = {name: f"features[{index}]" for index, name in enumerate(features)}
+    bindings.update(
+        {f"direction_{index}": f"direction[{index}]" for index in range(count)}
+    )
+
+    def body(frozen: tuple[int, ...]) -> list[str]:
+        graph, roots, _ = build_roots(spec, outputs, production=True)
+        if frozen:
+            roots = graph.replace_subexpressions(
+                roots, {graph.variable(features[i]): graph.constant(0) for i in frozen}
+            )
+            graph, roots = graph.lower_small_integer_powers(roots)
+        directions = {
+            name: graph.constant(0)
+            if index in frozen
+            else graph.variable(f"direction_{index}")
+            for index, name in enumerate(features)
+        }
+        actions = tuple(
+            graph.differentiate(
+                root, graph.variable(features[0]), leaf_derivatives=directions
+            )
+            for root in roots[1:]
+        )
+        emitter = ScalarCEmitter(graph, bindings)
+        emitter.emit((*roots, *actions))
+        energy, *partials = map(emitter.reference, roots)
+        tangent = ", ".join(map(emitter.reference, actions))
+        return [
+            *emitter.lines,
+            f"  return {{{energy}, {{{', '.join(partials)}}}, {{{tangent}}}}};",
+        ]
+
+    branches = []
+    for frozen in frozen_feature_sets:
+        predicate = " && ".join(
+            f"features[{i}] == 0.0 && direction[{i}] == 0.0" for i in frozen
+        )
+        branches.extend(
+            [f"  if ({predicate}) {{", *("  " + line for line in body(frozen)), "  }"]
+        )
+    return "\n".join(
+        [
+            f"struct {value_type} {{",
+            "  double energy_density;",
+            f"  double feature_derivative[{count}], directional_derivative[{count}];",
+            "};",
+            f"{function_qualifier} {value_type} {function_name}(",
+            "    const double* features, const double* direction) {",
+            *branches,
+            *body(()),
+            "}",
+            "",
+        ]
+    )
+
+
 def emit_polarized_semilocal(
     spec: typing.Any,
     *,

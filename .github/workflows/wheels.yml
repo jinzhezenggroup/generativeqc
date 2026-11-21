@@ -201,6 +201,7 @@ jobs:
           python - <<'PY'
           import glob
           import pathlib
+          import shutil
           import subprocess
           import tempfile
           import zipfile
@@ -241,6 +242,11 @@ jobs:
                   installed = f"generativeqc_compiler/assets/include/generativeqc/{header}"
                   assert installed in names, installed
                   assert archive.read(installed) == source.read_bytes()
+              for header in ("generativeqc.h", "generativeqc.hpp", "generated_method_ids.h", "ks_hessian.h"):
+                  source = pathlib.Path("include/generativeqc") / header
+                  installed = f"generativeqc/include/generativeqc/{header}"
+                  assert installed in names, installed
+                  assert archive.read(installed) == source.read_bytes()
               cuda_provider_names = (
                   "libcudart.so",
                   "libcublas.so",
@@ -258,7 +264,8 @@ jobs:
               assert not bundled_cuda, bundled_cuda
               with tempfile.TemporaryDirectory() as directory:
                   native = pathlib.Path(directory) / "libgenerativeqc.so"
-                  native.write_bytes(archive.read("generativeqc/lib/libgenerativeqc.so"))
+                  with archive.open("generativeqc/lib/libgenerativeqc.so") as payload, native.open("wb") as output:
+                      shutil.copyfileobj(payload, output)
                   dynamic = subprocess.check_output(
                       ["readelf", "-d", str(native)], text=True
                   )

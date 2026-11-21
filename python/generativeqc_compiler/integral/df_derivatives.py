@@ -57,6 +57,7 @@ class DFDerivativeKernel:
     value: Expr
     gradients: tuple
     boys_argument: Expr
+    reduced_exponent: Expr
     boys_count: int
     centers_count: int
 
@@ -176,6 +177,7 @@ def build_df_derivative_kernel(
         value,
         tuple(roots[c] for c in derivative.requested_centers(integral.operator)),
         argument,
+        rho,
         boys_count,
         count,
     )

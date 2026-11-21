@@ -141,7 +141,12 @@ def native_stationary_model(profile: str) -> tuple[int, int, Fraction, Fraction]
 
 
 def emit_native_stationary_profile_cuda(
-    profile: str, *, staged_point: bool = False, source_cache: Path | None = None
+    profile: str,
+    *,
+    staged_point: bool = False,
+    source_cache: Path | None = None,
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> str:
     """Isolate one unchanged scientific wrapper and emit its typed native table.
 
@@ -152,6 +157,25 @@ def emit_native_stationary_profile_cuda(
     if profile not in NATIVE_STATIONARY_CUDA_PROFILES:
         raise ValueError(f"unsupported native stationary CUDA profile: {profile}")
     selected = _qualified_aot_profile(profile)
+    record = next(
+        (
+            record
+            for record in SEMILOCAL_FAMILIES
+            if record["code"] == selected.functional
+        ),
+        None,
+    )
+    if variational_r2scan and (
+        record is None or record["stationary_kernel"] != "r2scan" or staged_point
+    ):
+        raise ValueError("variational r2SCAN requires a curated fused r2SCAN profile")
+    split_domain = {
+        SPLIT_HYBRIDS["M06-2X"]["functional_code"]: "kCudaM062XVariationalDomain",
+        SPLIT_HYBRIDS["MN15"]["functional_code"]: "kCudaMN15VariationalDomain",
+    }.get(selected.functional)
+    if variational_split_hybrid and (split_domain is None or staged_point):
+        raise ValueError("variational split hybrid requires a curated fused profile")
+    variational = variational_r2scan or variational_split_hybrid
     plan = selected.plan
     sources = stationary_runtime_sources(plan, include_external=True)
     if sources != plan.source_names or len(sources) > 64:
@@ -194,6 +218,8 @@ def emit_native_stationary_profile_cuda(
             include_reduction=False,
             source_cache=source_cache,
             include_external=True,
+            variational_r2scan=variational_r2scan,
+            variational_split_hybrid=variational_split_hybrid,
         )
     )
     runtime = asset_path("src/dft/stationary_gradient_cuda.cuh").read_text()
@@ -217,7 +243,8 @@ def emit_native_stationary_profile_cuda(
         )
         for suffix in ("", "_fp32")
     )
-    prefix = f"generativeqc_native_{shared or profile}_"
+    profile_name = f"{profile}_variational" if variational else (shared or profile)
+    prefix = f"generativeqc_native_{profile_name}_"
     source_identity = canonical_hash(
         {
             "schema": "generativeqc.native-stationary-source.v1",
@@ -264,11 +291,18 @@ def emit_native_stationary_profile_cuda(
     )
     if functional != selected.functional:
         raise ValueError("stationary profile and native point selector disagree")
-    profile_name = shared or profile
     plan_identity = source_identity if shared else plan.identity
     method_identity = "" if shared else plan.method.identity
     if shared:
         functional = domain = 0
+    domain_literal = f"{domain}U"
+    domain_header = ""
+    if variational_r2scan:
+        domain_literal = "kCudaR2scanVariationalDomain"
+        domain_header = '#include "r2scan_cuda_domain.hpp"\n'
+    elif variational_split_hybrid:
+        domain_literal = split_domain
+        domain_header = '#include "dft/split_hybrid_cuda_domain.hpp"\n'
     execution = compile_ks_execution_plan(plan.method)
     ranged = {
         term.operator: term
@@ -330,7 +364,7 @@ const CudaStationaryBinding& native_stationary_profile_{profile_name}() {{
       native_numeric_bytes, native_create, native_topology, native_reset_geometry, native_nuclear,
       native_consume_integrals, native_geometry<false>, native_finish_gradient,
       native_source_span, native_metrics, native_destroy,
-      {{{functional}U, {domain}U, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
+      {{{functional}U, {domain_literal}, {plan.spin_blocks}U, {QUALIFIED_PARTITION_ITERATIONS}U,
        {exact_cuda_literal(exchange_scale)}, {exact_cuda_literal(correlation_scale)},
        {exchange}, {range_values}}},
       stationary_fp32_point_capable ? native_geometry<true> : nullptr, native_grid_topology,
@@ -346,7 +380,8 @@ const CudaStationaryBinding& native_stationary_profile_{profile_name}() {{
 """
     return (
         '#include "dft/cuda_stationary_binding.hpp"\n'
-        "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n"
+        + domain_header
+        + "#define GENERATIVEQC_NATIVE_SHARED_REDUCTION 1\n"
         + ("#define GENERATIVEQC_NATIVE_STAGED_POINT 1\n" if shared else "")
         + f"// stationary-reduction-program: {reduction_program.logical_hash}\n"
         + aliases
@@ -438,8 +473,28 @@ const CudaStationaryBinding& native_stationary_profile_{profile}() {{
 """
 
 
+def native_stationary_variational_profiles(
+    *, include_variational_r2scan: bool, variational_split_hybrids: tuple[str, ...]
+) -> frozenset[str]:
+    """List the separately linked physical-point variants for both spin owners."""
+    return frozenset(
+        f"{method}_{spin}"
+        for method, enabled in (
+            ("r2scan", include_variational_r2scan),
+            ("m06_2x", "M06-2X" in variational_split_hybrids),
+            ("mn15", "MN15" in variational_split_hybrids),
+        )
+        if enabled
+        for spin in ("rks", "uks")
+    )
+
+
 def native_stationary_package_sources(
-    profiles: tuple[str, ...], *, fused_profiles: tuple[str, ...] = ()
+    profiles: tuple[str, ...],
+    *,
+    fused_profiles: tuple[str, ...] = (),
+    include_variational_r2scan: bool = False,
+    variational_split_hybrids: tuple[str, ...] = (),
 ) -> dict[str, str]:
     """Map deterministic output names to their representative profile.
 
@@ -454,6 +509,10 @@ def native_stationary_package_sources(
     if set(fused_profiles) - set(profiles):
         raise ValueError("fused profiles must belong to the selected force package")
     sources = {}
+    variational = native_stationary_variational_profiles(
+        include_variational_r2scan=include_variational_r2scan,
+        variational_split_hybrids=variational_split_hybrids,
+    )
     for profile in sorted(profiles):
         if (
             profile in AUTOMATIC_STATIONARY_AOT_PROFILE_NAMES
@@ -464,15 +523,29 @@ def native_stationary_package_sources(
             sources.setdefault(f"native_{group}.cu", profile)
         else:
             sources[f"native_{profile}.cu"] = profile
+            if profile in variational:
+                sources[f"native_{profile}_variational.cu"] = profile
     return sources
 
 
-def emit_native_stationary_registry_cpp(profiles: tuple[str, ...]) -> str:
+def emit_native_stationary_registry_cpp(
+    profiles: tuple[str, ...],
+    *,
+    include_variational_r2scan: bool = False,
+    variational_split_hybrids: tuple[str, ...] = (),
+) -> str:
     """Emit a deterministic registry containing only the linked profile objects."""
     if len(set(profiles)) != len(profiles) or any(
         profile not in NATIVE_STATIONARY_CUDA_PROFILES for profile in profiles
     ):
         raise ValueError("invalid native stationary CUDA registry inventory")
+    variational = native_stationary_variational_profiles(
+        include_variational_r2scan=include_variational_r2scan,
+        variational_split_hybrids=variational_split_hybrids,
+    )
+    profiles += tuple(
+        f"{profile}_variational" for profile in profiles if profile in variational
+    )
     lines = [
         '#include "dft/cuda_stationary_binding.hpp"',
         "namespace generativeqc::dft {",

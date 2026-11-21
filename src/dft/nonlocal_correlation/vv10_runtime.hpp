@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "dft/nonlocal_correlation/vv10_capacity.hpp"
+#include "dft/nonlocal_correlation/vv10_parameters.hpp"
 #include "generativeqc/generativeqc.h"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -19,16 +20,6 @@ struct GridTaskView;
 }
 
 namespace generativeqc::dft::nlc {
-
-enum class Vv10Variant : std::int32_t { vv10 = 1, rvv10 = 2 };
-
-struct Vv10Parameters {
-  Vv10Variant variant{Vv10Variant::vv10};
-  double b{};
-  double c{};
-  double coefficient{1.0};
-  bool operator==(const Vv10Parameters&) const = default;
-};
 
 struct Vv10ResourceUsage {
   std::uint64_t workspace_bytes{};
@@ -43,6 +34,9 @@ struct Vv10ResourceUsage {
 
 class Vv10Plan {
  public:
+  /** Allocation-free capacity contract shared by prepare and KS planners. */
+  static Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t point_count,
+                                          std::uint32_t tile_points, std::uint64_t maximum_bytes);
   static std::unique_ptr<Vv10Plan> prepare(generativeqc_backend backend, int device_id,
                                            std::uint32_t point_count, std::uint32_t tile_points,
                                            Vv10Parameters parameters, std::uint64_t maximum_bytes,

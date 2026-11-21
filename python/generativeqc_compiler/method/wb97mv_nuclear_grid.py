@@ -10,8 +10,14 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import cache
 
+from generativeqc_compiler.common.nonlocal_correlation import (
+    original_nonlocal_correlation,
+)
 from generativeqc_compiler.integral.expr import Graph
-from generativeqc_compiler.method.nonlocal_pair import vv10_grid_local_expression
+from generativeqc_compiler.method.nonlocal_pair import (
+    nonlocal_grid_beta,
+    nonlocal_grid_local_expression,
+)
 from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.stationary_grid_second import (
     _pair_program,
@@ -95,16 +101,21 @@ def nuclear_grid_maps(
 
 
 @cache
-def nonlocal_field_program(kind: str) -> tuple:
-    """Full energy/first-leg partials/JVP, including both VV10 source motions."""
-    primitive = resolve_method("WB97M-V").primitives[-1]
+def nonlocal_field_program(kind: str, *, runtime_rvv10: bool = False) -> tuple:
+    """Full energy/first-leg partials/JVP, including both nonlocal source motions."""
+    spec = (
+        original_nonlocal_correlation("rvv10")
+        if runtime_rvv10
+        else resolve_method("WB97M-V").primitives[-1].spec
+    )
     if kind == "pair":
-        return _pair_program(primitive.spec)
+        return _pair_program(spec, runtime_parameters=runtime_rvv10)
     if kind != "local":
         raise ValueError("unknown WB97M-V nonlocal field program")
     graph = Graph()
     leg = [graph.variable(f"a{index}") for index in range(9)]
-    energy = vv10_grid_local_expression(graph, leg, primitive.spec)
+    beta = graph.variable("beta") if runtime_rvv10 else nonlocal_grid_beta(spec)
+    energy = nonlocal_grid_local_expression(leg, beta)
     gradient = tuple(graph.differentiate(energy, value) for value in leg)
     leaves = {f"a{index}": graph.variable(f"da{index}") for index in range(9)}
     direction = tuple(

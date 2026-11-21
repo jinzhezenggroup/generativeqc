@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import ctypes
 import json
+import re
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -30,6 +33,33 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _configure_stationary_domains(folder: Path) -> None:
+    """Use production domain declarations with experimental providers off."""
+    for relative in ("r2scan_cuda_domain.hpp", "dft/split_hybrid_cuda_domain.hpp"):
+        template = (ROOT / "src/dft" / f"{Path(relative).name}.in").read_text()
+        output = folder / relative
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(re.sub(r"#cmakedefine01 (\w+)", r"#define \1 0", template))
+
+
+def _generate_stationary_nlc_parameters(folder: Path) -> None:
+    """Use the same model parameters as the native build."""
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/generate_nonlocal_pair_native.py"),
+            "--output",
+            str(folder / "generated_nonlocal_pair_native.hpp"),
+            "--method-parameters",
+            str(folder / "generated_nonlocal_method_parameters.hpp"),
+        ],
+        check=True,
+        timeout=60,
+    )
+
+
 H2 = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
 CONTROLS = ("GENERATIVEQC_CUDA_XC_BATCH_TILES", "GENERATIVEQC_CUDA_XC_BATCH_BYTES")
 
@@ -78,6 +108,7 @@ def native_probe(
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
+    _configure_stationary_domains(folder)
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -105,7 +136,9 @@ def native_probe(
 #include "dft/cuda_stationary_binding.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/split_hybrid_cuda_domain.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "r2scan_cuda_domain.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"
@@ -200,6 +233,7 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
         "void generativeqc_resource_ledger_destroy_v1(",
         "int generativeqc_resource_ledger_bind_v1(",
         "int generativeqc_resource_ledger_read_v1(",
+        "static std::size_t ks_cuda_xc_and_grid_bytes(",
         "int generativeqc_resource_ks_cuda_v2(",
         "int generativeqc_resource_ks_cuda_v1(",
         "int generativeqc_resource_quadrature_cuda_v1(",

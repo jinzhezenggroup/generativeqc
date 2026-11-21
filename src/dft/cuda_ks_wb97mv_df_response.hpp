@@ -38,7 +38,7 @@ class CudaKsWb97mvDfResponse {
                               const CudaWb97mvDfOptions& options, std::string& detail);
   cudaError_t apply(const double* delta_density, const double* delta_three_center,
                     const double* delta_metric, const CudaWb97mvDfOutput& output,
-                    cudaStream_t stream) noexcept;
+                    cudaStream_t stream, const char** detail = nullptr) noexcept;
   CudaWb97mvDfShape shape() const noexcept;
   /** Includes the adapter's retained raw A, not just algebra scratch. */
   CudaWb97mvDfWork work() const noexcept;

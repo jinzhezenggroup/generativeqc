@@ -660,6 +660,8 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_native_api_inputs_tests tests/native/test_native_api_inputs.cpp)
+  generativeqc_native_test(generativeqc_ks_hessian_sdk_tests
+                           tests/native/test_ks_hessian_sdk.cpp NO_SRC_INCLUDE)
   generativeqc_native_test(generativeqc_basis_catalog_tests tests/native/test_basis_catalog.cpp)
   generativeqc_native_test(generativeqc_basis_template_tests tests/native/test_basis_template.cpp)
   generativeqc_native_test(generativeqc_basis_catalog_sdk_tests tests/native/test_basis_catalog_sdk.cpp NO_SRC_INCLUDE)

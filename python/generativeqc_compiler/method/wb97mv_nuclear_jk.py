@@ -1,4 +1,4 @@
-"""Build-only ordered-quartet WB97M-V stationary energy/Fock/source AD.
+"""Build-only ordered-quartet stationary energy/Fock/source AD.
 
 The incumbent stationary gradient plan owns spin factors and SR/LR coefficients.
 The full-primary plus LR-correction decomposition is the same physical operator
@@ -7,6 +7,8 @@ used by native exact/fitted Fock response; no density positivity is assumed.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from fractions import Fraction
 from functools import lru_cache
 
 from generativeqc_compiler.method.ordered_quartet import density_incidence
@@ -18,14 +20,25 @@ from generativeqc_compiler.method.stationary_gradient import (
 )
 from generativeqc_compiler.tensor import (
     Program,
+    TensorSpec,
     add,
+    einsum,
+    input_tensor,
     linearize,
     reshape,
     slice_tensor,
     transpose_program,
 )
 
-PARTS = ("primary", "correction", "coulomb", "short", "long")
+PARTS = (
+    "primary",
+    "correction",
+    "coulomb",
+    "short",
+    "long",
+    "full_hybrid",
+    "range_hybrid",
+)
 SLOTS = ("coulomb_left", "coulomb_right", "exchange_left", "exchange_right")
 
 
@@ -41,12 +54,20 @@ def quartet_program(spins: int, part: str) -> Program:
     """
     if type(spins) is not int or spins not in (1, 2) or part not in PARTS:
         raise ValueError("invalid WB97M-V quartet spin/source")
-    plan = StationaryGradientPlan(
-        resolve_method("WB97M-V", spin="unpolarized" if spins == 1 else "polarized"),
-        StationaryMeanField(SCF_POINT_MODEL),
-    )
+    spin = "unpolarized" if spins == 1 else "polarized"
+    parameterized_exchange = part in ("full_hybrid", "range_hybrid")
+    method = resolve_method("PBE0" if parameterized_exchange else "WB97M-V", spin=spin)
+    if parameterized_exchange:
+        semilocal, exchange = method.primitives
+        # The unit-exchange source supplies the canonical stationary spin
+        # scaling. The actual immutable fraction is supplied as a parameter
+        # (not a density or geometry differentiation seed).
+        method = replace(
+            method, primitives=(semilocal, replace(exchange, coefficient=Fraction(1)))
+        )
+    plan = StationaryGradientPlan(method, StationaryMeanField(SCF_POINT_MODEL))
     roots = []
-    if part in ("primary", "coulomb"):
+    if part in ("primary", "coulomb", "full_hybrid"):
         roots.append(
             density_incidence(
                 plan.integral_block(
@@ -57,9 +78,13 @@ def quartet_program(spins: int, part: str) -> Program:
         )
     if part != "coulomb":
         source = (
-            "exchange_short_range"
-            if part in ("primary", "short")
-            else "exchange_long_range"
+            "exact_exchange"
+            if parameterized_exchange
+            else (
+                "exchange_short_range"
+                if part in ("primary", "short")
+                else "exchange_long_range"
+            )
         )
         block = plan.integral_block(
             source,
@@ -67,7 +92,14 @@ def quartet_program(spins: int, part: str) -> Program:
             differentiate_densities=True,
             mixed_density_fitted_correction=part == "correction",
         )
-        roots.append(density_incidence(block.objective, exchange=True))
+        exchange_energy = density_incidence(block.objective, exchange=True)
+        if parameterized_exchange:
+            exchange_energy = einsum(
+                ",->",
+                input_tensor("exchange_fraction", TensorSpec((), role="parameter")),
+                exchange_energy,
+            )
+        roots.append(exchange_energy)
     objective = Program({"energy": add(*roots) if len(roots) > 1 else roots[0]})
     density_names = tuple(
         name
@@ -109,7 +141,7 @@ def quartet_operator(part: str) -> tuple[str, float]:
     """Explicit radial selectors for the shared full+LR physical decomposition."""
     if part not in PARTS:
         raise ValueError("invalid WB97M-V quartet source")
-    if part in ("primary", "coulomb"):
+    if part in ("primary", "coulomb", "full_hybrid"):
         return "full_range", 0.0
     primitive = resolve_method("WB97M-V").primitives[1]
     return ("short_range" if part == "short" else "long_range"), float(primitive.omega)

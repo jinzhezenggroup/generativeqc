@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "generativeqc/generativeqc.h"
+#include "generativeqc/ks_hessian.h"
 
 namespace generativeqc {
 
@@ -848,14 +849,61 @@ class Batch {
    */
   [[nodiscard]] std::size_t size() const noexcept { return atom_counts_.size(); }
 
+  /** @native-contract generativeqc::Batch::ks_hessian
+   * @behavior Compute the raw CUDA KS Hessian from the item's current accepted SCF state.
+   * @inputs Original input index, disjoint output span of exactly (3*N)^2 doubles, and
+   * optional bounded response controls. Execute the batch successfully first.
+   * @outputs Row-major matrix in the span and a detached work receipt as the return value.
+   * @errors Throws Error on native failure; output remains unchanged.
+   * @lifetime Borrows only for the synchronous call; serialize batch and context operations.
+   * @units Matrix in Hartree/Bohr^2; capacities in bytes.
+   */
+  generativeqc_ks_hessian_receipt_v2 ks_hessian(
+      std::size_t index, std::span<double> output,
+      const generativeqc_ks_hessian_options_v2* options = nullptr) {
+    generativeqc_ks_hessian_options_v2 defaults{};
+    if (!options) check(generativeqc_ks_hessian_default_options_v2(&defaults));
+    generativeqc_ks_hessian_receipt_v2 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cuda_v2(handle_, index, options ? options : &defaults, nullptr, 0,
+                                          output.data(), output.size(), &receipt));
+    return receipt;
+  }
+
+  /** @native-contract generativeqc::Batch::ks_hvp
+   * @behavior Apply the CUDA KS Hessian without constructing a dense matrix.
+   * @inputs Original input index, finite direction and disjoint output spans of exactly 3*N
+   * doubles each, and optional bounded response controls. Execute the batch first.
+   * @outputs Atom-major Cartesian action and a detached work receipt as the return value.
+   * @errors Throws Error on native failure or empty direction; output remains unchanged.
+   * @lifetime Borrows only for the synchronous call; serialize batch and context operations.
+   * @units Hartree/Bohr^2 action on the supplied direction; capacities in bytes.
+   */
+  generativeqc_ks_hessian_receipt_v2 ks_hvp(
+      std::size_t index, std::span<const double> direction, std::span<double> output,
+      const generativeqc_ks_hessian_options_v2* options = nullptr) {
+    if (direction.empty())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "CUDA KS HVP requires a direction");
+    generativeqc_ks_hessian_options_v2 defaults{};
+    if (!options) check(generativeqc_ks_hessian_default_options_v2(&defaults));
+    generativeqc_ks_hessian_receipt_v2 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cuda_v2(handle_, index, options ? options : &defaults,
+                                          direction.data(), direction.size(), output.data(),
+                                          output.size(), &receipt));
+    return receipt;
+  }
+
   /** @native-contract generativeqc::Batch::execute
    * @behavior Run the fleet and return input-ordered per-item results.
    * @inputs coordinates is empty to reuse all prepared geometries, or has size() optional
    * vectors. nullopt selects that item's prepared geometry; a supplied vector has exactly 3*N
-   * Bohr values in atom/xyz order.
-   * @outputs Returns a vector of BatchItemResult with one status per input. The wrapper
-   * requests forces for every item; failures have cleared force vectors. It also queries
-   * per-item SCF and correlation records.
+   * Bohr values in atom/xyz order. Pass compute_forces=false for energy-only preparation.
+   * @outputs Returns a vector of BatchItemResult with one status per input. Force vectors
+   * are empty for energy-only calls and failures. The wrapper also queries per-item SCF
+   * and correlation records.
    * @lifetime Temporary coordinate buffers are borrowed during the synchronous call; returned
    * vectors own all copied output.
    * @errors Throws Error for wrong outer coordinate count, whole-call native failure, or
@@ -867,7 +915,8 @@ class Batch {
    * @units Coordinates Bohr, energies/energy_change Hartree, forces -dE/dR Hartree/Bohr.
    */
   std::vector<BatchItemResult> execute(
-      const std::vector<std::optional<std::vector<double>>>& coordinates = {}) {
+      const std::vector<std::optional<std::vector<double>>>& coordinates = {},
+      bool compute_forces = true) {
     if (!coordinates.empty() && coordinates.size() != size()) {
       throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                   "coordinate list does not match batch size");
@@ -885,12 +934,12 @@ class Batch {
     std::vector<BatchItemResult> results(size());
     std::vector<generativeqc_batch_item_result_descriptor> native(size());
     for (std::size_t i = 0; i < size(); ++i) {
-      results[i].forces.resize(static_cast<std::size_t>(atom_counts_[i]) * 3);
+      if (compute_forces) results[i].forces.resize(static_cast<std::size_t>(atom_counts_[i]) * 3);
       native[i] = {sizeof(generativeqc_batch_item_result_descriptor),
                    GENERATIVEQC_ABI_VERSION,
                    GENERATIVEQC_STATUS_INTERNAL_ERROR,
                    0.0,
-                   results[i].forces.data(),
+                   compute_forces ? results[i].forces.data() : nullptr,
                    static_cast<std::uint32_t>(results[i].forces.size()),
                    0,
                    0.0,

@@ -37,9 +37,9 @@ def quartet_library(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., b
         + generate()
         + '\nextern "C" bool evaluate(unsigned kernel, unsigned spins, '
         "const double* density, const double* delta, std::size_t nao, "
-        "const std::size_t* ao, double value, double motion, double* output) {\n"
+        "const std::size_t* ao, double value, double motion, double* output, double exchange_fraction) {\n"
         "using namespace generativeqc_wb97mv_nuclear_jk_ad; Result result;\n"
-        "if (!evaluate(static_cast<Kernel>(kernel),spins,density,delta,nao,ao,value,motion,result)) return false;\n"
+        "if (!evaluate(static_cast<Kernel>(kernel),spins,density,delta,nao,ao,value,motion,result,exchange_fraction)) return false;\n"
         "output[0]=result.energy; output[1]=result.weight; output[2]=result.delta_weight;\n"
         "for (unsigned index=0; index<8; ++index) { output[3+index]=result.fock[index]; output[11+index]=result.motion[index]; }\n"
         "return true; }\n"
@@ -71,6 +71,7 @@ def quartet_library(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., b
         ctypes.c_double,
         ctypes.c_double,
         panel,
+        ctypes.c_double,
     ]
     evaluate.restype = ctypes.c_bool
     return evaluate
@@ -84,15 +85,18 @@ def _oracle(
     ao: tuple[int, ...],
     value: float,
     motion: float,
+    exchange_fraction: float,
 ) -> np.ndarray:
-    """Published WB97M-V fractions: SR=.15, LR=1; RKS D is spin-summed."""
-    coulomb = 0.5 if part in ("primary", "coulomb") else 0.0
+    """Independent full/SR/LR weights; RKS D is spin-summed."""
+    coulomb = 0.5 if part in ("primary", "coulomb", "full_hybrid") else 0.0
     exchange = {
         "primary": 0.15,
         "correction": 0.85,
         "coulomb": 0.0,
         "short": 0.15,
         "long": 1.0,
+        "full_hybrid": exchange_fraction,
+        "range_hybrid": exchange_fraction,
     }[part] / (-4 if spins == 1 else -2)
     first, second, third, fourth = ao
     left, right = density[:, first, second], density[:, third, fourth]
@@ -137,7 +141,11 @@ def test_compiled_quartet_ad_against_independent_spin_equations(
     part: str,
 ) -> None:
     random = np.random.default_rng(27182)
-    for ao in ((0, 1, 2, 3), (2, 2, 2, 2), (3, 0, 0, 3), (1, 3, 2, 0)):
+    for ao, fraction in zip(
+        ((0, 1, 2, 3), (2, 2, 2, 2), (3, 0, 0, 3), (1, 3, 2, 0)),
+        (0.25, 0.2, -0.45 if part == "range_hybrid" else 0.37, 1.0),
+        strict=True,
+    ):
         density = random.normal(size=(spins, 4, 4))
         delta = random.normal(size=(spins, 4, 4))
         output = np.full(19, np.nan)
@@ -151,10 +159,11 @@ def test_compiled_quartet_ad_against_independent_spin_equations(
             -0.71,
             0.39,
             output,
+            fraction,
         )
         np.testing.assert_allclose(
             output,
-            _oracle(spins, part, density, delta, ao, -0.71, 0.39),
+            _oracle(spins, part, density, delta, ao, -0.71, 0.39, fraction),
             rtol=3e-14,
             atol=3e-14,
         )
@@ -172,14 +181,28 @@ def test_compiled_quartet_fails_closed_on_nonfinite_and_invalid_selectors(
         (0, 2, np.inf),
     ):
         assert not quartet_library(
-            kernel, spins, density, delta, 2, ao, value, 1.0, output
+            kernel, spins, density, delta, 2, ao, value, 1.0, output, 0.25
+        )
+    for fraction in (0.0, -0.25, 1.1, np.nan, np.inf):
+        assert not quartet_library(
+            PARTS.index("full_hybrid"),
+            2,
+            density,
+            delta,
+            2,
+            ao,
+            1.0,
+            1.0,
+            output,
+            fraction,
         )
     delta.fill(np.nan)
-    assert not quartet_library(0, 2, density, delta, 2, ao, 1.0, 1.0, output)
+    assert not quartet_library(0, 2, density, delta, 2, ao, 1.0, 1.0, output, 0.25)
 
 
 def test_quartet_scientific_selectors_and_ad_admission() -> None:
     assert quartet_operator("primary") == ("full_range", 0.0)
+    assert quartet_operator("full_hybrid") == ("full_range", 0.0)
     assert quartet_operator("short") == ("short_range", 0.3)
     assert quartet_operator("correction") == ("long_range", 0.3)
     for spins, part in ((0, "primary"), (True, "primary"), (2, "exact")):

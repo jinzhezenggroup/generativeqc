@@ -25,6 +25,8 @@ struct CudaKsWb97mvResponseOptions {
   std::size_t max_resident_integral_bytes{64ULL << 20};
   bool defer_resident_integrals{false};
   std::size_t max_affine_term_visits{100'000'000};
+  /** Padded products in generated shared-memory tiles, charged separately. */
+  std::size_t max_matrix_terms{1'000'000'000};
   std::uint64_t max_direct_eri_evaluations{16'777'216};
   double reference_absolute_tolerance{3e-9};
   double reference_relative_tolerance{3e-9};
@@ -32,11 +34,12 @@ struct CudaKsWb97mvResponseOptions {
 
 struct CudaKsWb97mvResponseWork {
   std::size_t device_bytes{}, affine_reference_terms{}, affine_action_terms{};
+  std::size_t matrix_reference_terms{}, matrix_action_terms{};
   std::uint64_t reference_quartets{}, reference_eris{}, response_quartets{}, response_eris{};
   std::uint64_t actions{};
   std::size_t resident_integral_bytes{};
   std::uint64_t resident_source_evaluations{};
-  CudaWb97mvGridWork grid{};
+  CudaWb97mvGridWork grid{}, separate_vv10{};
 };
 
 /** Authenticated fixed-geometry physical induced Fock for native WB97M-V KS.
@@ -67,6 +70,8 @@ class CudaKsWb97mvResponse {
                               const CudaKsFinalStateToken& expected,
                               const CudaKsWb97mvResponseOptions& options, std::string& detail);
   cudaError_t apply(const double* direction, double* output, cudaStream_t stream) noexcept;
+  /** Last action's static failure stage; null after a successful publication. */
+  const char* failure_check() const noexcept;
   CudaKsWb97mvResponseWork work() const noexcept;
   /** Optional post-preparation admission, before the first action. Composite
    * owners call this only after all mandatory consumers have reserved storage.

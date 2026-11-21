@@ -105,7 +105,7 @@ def check(
             and result.dispersion.d4.ok
             and result.dispersion.gcp.ok
         )
-        assert result.dispersion.backend == "cuda+cpu"
+        assert result.dispersion.backend == ("cuda+cpu" if fast else "cuda")
         assert abs(result.dispersion.energy - expected["correction_energy"]) < 1e-10
         np.testing.assert_allclose(
             result.dispersion.gradient,

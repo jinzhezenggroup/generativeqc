@@ -993,6 +993,22 @@ class Graph:
             if cached is not None:
                 return cached
             node = self.nodes[identifier]
+            if node.operation == "select_le":
+                left, right, if_true, if_false = node.arguments
+                test_left, test_right = visit(left), visit(right)
+                # A specialized predicate can make a singular arm unreachable.
+                # Resolve it before descending into either arm's arithmetic.
+                if target.is_constant(test_left) and target.is_constant(test_right):
+                    selected = target.select_le(test_left, test_right, 1, 0)
+                    result = visit(
+                        if_true if target.is_constant(selected, 1) else if_false
+                    )
+                else:
+                    result = target.select_le(
+                        test_left, test_right, visit(if_true), visit(if_false)
+                    )
+                rebuilt[identifier] = result
+                return result
             arguments = tuple(visit(item) for item in node.arguments)
             if node.operation == "constant":
                 result = target.clone_constant(node)
@@ -1016,8 +1032,6 @@ class Graph:
                 result = target.exponential(arguments[0])
             elif node.operation in ("log", "log1p", "expm1"):
                 result = target.stable_unary(node.operation, arguments[0])
-            elif node.operation == "select_le":
-                result = target.select_le(*arguments)
             elif node.operation in ("atan", "asinh", "erf"):
                 result = target.transcendental_unary(node.operation, arguments[0])
             elif node.operation == "power":

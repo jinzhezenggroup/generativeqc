@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ctypes
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -11,7 +13,9 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from generativeqc import KsOptions, resources_ks
 from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
-from test_ks_point_batch_resources import _definition
+from test_ks_point_batch_resources import _configure_stationary_domains, _definition
+
+from tools.generate_xc_split_hybrid_registry import emit_registry
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -108,21 +112,25 @@ def final_model_admission(
         (root / "src/dft/ks_final_state.cpp").read_text(), "bool valid_model("
     )
     folder = tmp_path_factory.mktemp("automatic-ks-final-model")
+    _configure_stationary_domains(folder)
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "tools/generate_nonlocal_pair_native.py"),
+            "--output",
+            str(folder / "generated_nonlocal_pair_native.hpp"),
+            "--method-parameters",
+            str(folder / "generated_nonlocal_method_parameters.hpp"),
+        ],
+        check=True,
+        timeout=60,
+    )
     (folder / "cuda_runtime_api.h").write_text(
         "#pragma once\nusing cudaStream_t = void*;\n"
     )
     # The generated hybrid registry is metadata only in this automatic-point
     # probe; execute the real shared composition helpers around that boundary.
-    (folder / "generated_split_hybrid_registry.cuh").write_text(
-        "#pragma once\n#include <cstdint>\n"
-        "namespace generativeqc::dft::generated {\n"
-        "struct SplitComposition { bool matched{}; "
-        "unsigned exact_exchange_numerator{}, exact_exchange_denominator{}; };\n"
-        "constexpr SplitComposition split_hybrid_composition(std::uint32_t) { return {}; }\n"
-        "constexpr bool split_hybrid_registered(std::uint32_t) { return false; }\n"
-        "constexpr bool split_hybrid_cuda_df_energy_force(std::uint32_t) { return false; }\n"
-        "}\n"
-    )
+    (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     source = folder / "policy.cpp"
     source.write_text(
         r"""
@@ -131,8 +139,11 @@ def final_model_admission(
 #include "dft/cuda_xc_point_program.hpp"
 #include "dft/global_hybrid_fock.hpp"
 #include "dft/ks_final_state.hpp"
+#include "dft/r2scan_rvv10_model.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/split_hybrid_cuda_selection.hpp"
 #include "dft/xc.hpp"
+#include "r2scan_cuda_domain.hpp"
 #include "scf/mean_field.hpp"
 namespace generativeqc::dft {
 void validate_grid_spec(const GridSpec&) {}

@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _host_launches(source: str) -> str:
     return re.sub(
-        r"([\w:]+)\s*<<<([\s\S]*?)>>>\s*\(([\s\S]*?)\);",
+        r"([\w:]+(?:<[^<>]+>)?)\s*<<<([\s\S]*?)>>>\s*\(([\s\S]*?)\);",
         r"simulate(\2, [=] { \1(\3); });",
         source,
     )
