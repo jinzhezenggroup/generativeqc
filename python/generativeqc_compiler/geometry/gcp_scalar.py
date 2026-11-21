@@ -134,18 +134,36 @@ def pair_program() -> tuple:
     )
 
 
-def _emit_function(name: str, program: tuple, *, pair: bool = False) -> list[str]:
+def _second_radial_program(program: tuple, *, pair: bool = False) -> tuple:
+    """Differentiate the radial slope, carrying both overlap chain-rule legs."""
+    graph, names, (energy, slope) = program
+    leaf_derivatives = None
+    if pair:
+        names += ("overlap_curvature",)
+        leaf_derivatives = {
+            "overlap": graph.variable("overlap_slope"),
+            "overlap_slope": graph.variable("overlap_curvature"),
+        }
+    curvature = graph.differentiate(slope, graph.variable("distance"), leaf_derivatives)
+    return graph, names, (energy, slope, curvature)
+
+
+def _emit_function(
+    name: str, program: tuple, *, pair: bool = False, second_radial: bool = False
+) -> list[str]:
     graph, names, roots = program
     lines = [
-        "template <bool NeedDerivative>",
+        *([] if second_radial else ["template <bool NeedDerivative>"]),
         f"GENERATIVEQC_GCP_SCALAR_HD inline void {name}("
         + ", ".join(f"double {field}" for field in names)
         + ", double* output) {",
     ]
-    for derivative in (False, True):
+    for derivative in (True,) if second_radial else (False, True):
         selected = roots if derivative else roots[:1]
         lines.append(
-            "  if constexpr (NeedDerivative) {"
+            "  {"
+            if second_radial
+            else "  if constexpr (NeedDerivative) {"
             if derivative
             else "  if constexpr (!NeedDerivative) {"
         )
@@ -216,12 +234,27 @@ def emit_gcp_scalar_header() -> str:
         "namespace generativeqc::generated::dispersion {",
     ]
     lines.extend(_emit_function("gcp_pair", pair_program(), pair=True))
+    lines.extend(
+        _emit_function(
+            "gcp_pair_second",
+            _second_radial_program(pair_program(), pair=True),
+            pair=True,
+            second_radial=True,
+        )
+    )
     for shell_product in SHELL_PRODUCTS:
         for series in (False, True):
             name = (
                 f"gcp_overlap_{shell_product}_{'series' if series else 'exponential'}"
             )
             lines.extend(_emit_function(name, overlap_program(shell_product, series)))
+            lines.extend(
+                _emit_function(
+                    f"{name}_second",
+                    _second_radial_program(overlap_program(shell_product, series)),
+                    second_radial=True,
+                )
+            )
     lines.extend(
         [
             "template <bool NeedDerivative>",
@@ -237,6 +270,27 @@ def emit_gcp_scalar_header() -> str:
                 f"    if (series) gcp_overlap_{shell_product}_series<NeedDerivative>(",
                 "        distance, first_exponent, second_exponent, output);",
                 f"    else gcp_overlap_{shell_product}_exponential<NeedDerivative>(",
+                "        distance, first_exponent, second_exponent, output);",
+                "    return true;",
+            ]
+        )
+    lines.extend(
+        [
+            "  default: return false;",
+            "  }",
+            "}",
+            "GENERATIVEQC_GCP_SCALAR_HD inline bool gcp_overlap_second(int shell_product, bool series,",
+            "    double distance, double first_exponent, double second_exponent, double* output) {",
+            "  switch (shell_product) {",
+        ]
+    )
+    for shell_product in SHELL_PRODUCTS:
+        lines.extend(
+            [
+                f"  case {shell_product}:",
+                f"    if (series) gcp_overlap_{shell_product}_series_second(",
+                "        distance, first_exponent, second_exponent, output);",
+                f"    else gcp_overlap_{shell_product}_exponential_second(",
                 "        distance, first_exponent, second_exponent, output);",
                 "    return true;",
             ]

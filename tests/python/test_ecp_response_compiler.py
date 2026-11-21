@@ -106,8 +106,9 @@ def test_physical_spin_sum_retains_signed_motion(spins: int) -> None:
 
 
 def test_build_time_quadrature_orthonormality_and_radial_integrals() -> None:
-    coarse, fine = ecp_fixed_quadratures()
-    for grid, radial, points in ((coarse, 160, 2048), (fine, 224, 3872)):
+    for grid, (radial, points) in zip(
+        ecp_fixed_quadratures(), ((160, 2048), (224, 3872), (320, 7200)), strict=True
+    ):
         assert grid["radial"].shape == (radial, 2)
         assert grid["sphere"].shape == (points, 3)
         np.testing.assert_allclose(

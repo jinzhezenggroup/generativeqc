@@ -54,6 +54,22 @@ library is loaded. The NVIDIA kernel driver remains system-owned. See the
 [CUDA wheel decision note](../../.agents/notes/implemented/architecture/2026-09-18-provider-free-cuda-wheels.md)
 for the retained provider boundary and fallback rationale.
 
+To build a Linux CUDA wheel with the native DFT Hessian and HVP, enable the
+same linked inventory used by the [native CLI](../user/native_cli.md#compiler-ad-dft-hessian-and-hvp):
+
+```bash
+GENERATIVEQC_CUDA_ARCHITECTURES=120 python -m pip wheel --no-deps \
+  --config-settings=cmake.define.GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON .
+```
+
+Choose the architecture for the execution device. The option is off by
+default. Both the wheel library and the installed CLI resolve CUDA providers
+at runtime; the build does not link the provider DSOs. Run the installed
+Python `Calculator` and CLI from outside the source tree to qualify a wheel,
+without setting `GENERATIVEQC_LIBRARY` to a development build. For the native
+CLI, the CUDA runtime libraries must be visible to the dynamic loader (for
+example through `LD_LIBRARY_PATH` when installed outside system paths).
+
 ## Native CMake builds
 
 For native development and benchmark builds, configure CMake directly:

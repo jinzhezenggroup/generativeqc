@@ -14,7 +14,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
+
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 
 CLI = Path(sys.argv.pop(1)).resolve()
 
@@ -55,6 +60,19 @@ class HessianCli(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn(message, result.stderr)
 
+    def range_payload(self) -> dict:
+        """Use the live compiler encoder rather than pinning a catalog hash."""
+        pbe = resolve_method("PBE", spin="unpolarized")
+        omega = Fraction(33, 100)
+        return replace(
+            pbe,
+            primitives=(
+                *pbe.primitives,
+                RangeSeparatedExchangePrimitive(Fraction(1, 5), omega, "short-range"),
+                RangeSeparatedExchangePrimitive(Fraction(13, 20), omega, "long-range"),
+            ),
+        ).to_payload()
+
     def test_help_documents_linked_native_execution(self) -> None:
         result = subprocess.run(
             [str(CLI), "hessian", "--help"],
@@ -66,6 +84,7 @@ class HessianCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("no Python/JIT", result.stdout)
         self.assertIn("--device-budget-bytes", result.stdout)
+        self.assertIn("--method-ir", result.stdout)
         self.assertNotIn("--compiler-python", result.stdout)
 
     def test_no_cpu_or_implicit_python_fallback(self) -> None:
@@ -123,9 +142,10 @@ class HessianCli(unittest.TestCase):
 
     def test_wrong_method_precision_and_provider_never_touch_cuda(self) -> None:
         self.rejected(
-            self.call("--method", "pbe-rks"), "linked CPU MethodIR or CUDA WB97M-V"
+            self.call("--backend", "cuda", "--method", "rhf"),
+            "no qualified native CUDA hessian/hvp",
         )
-        self.rejected(self.call("--backend", "cuda", "--precision", "mixed"), "fp64")
+        self.rejected(self.call("--backend", "cuda", "--precision", "mixed"), "FP64")
         self.rejected(
             self.call("--backend", "cuda", "--density-fitting", "cpu"),
             "CPU density-fitting",
@@ -366,6 +386,41 @@ class HessianCli(unittest.TestCase):
                         operation=endpoint,
                     ),
                     "CPU Hessian aggregate numerical reservation exceeded",
+                )
+
+    def test_method_ir_is_validated_before_device_initialization(self) -> None:
+        path = self.root / "Method IR.json"
+        path.write_text(json.dumps(self.range_payload()))
+        flags = ("--method-ir", str(path))
+        self.rejected(self.call(*flags), "requires --backend cuda")
+        self.rejected(self.call(*flags, "--method", "pbe-rks"), "mutually exclusive")
+        self.rejected(self.call(*flags, *flags), "can only be specified once")
+        self.rejected(
+            self.call(*flags, "--backend", "cuda", "--precision", "auto"),
+            "range-PBE MethodIR requires FP64",
+        )
+        self.rejected(
+            self.call(*flags, "--backend", "cuda", "--density-fitting", "auto"),
+            "range-PBE MethodIR requires FP64",
+        )
+
+    def test_method_ir_semantic_changes_fail_closed(self) -> None:
+        path = self.root / "Method IR.json"
+        for index, key, value, error in (
+            (0, "functional", {}, "does not match the linked unscaled PBE"),
+            (1, "omega", "1/2", "one shared omega"),
+            (2, "coefficient", "1/5", "distinct FP64"),
+            (2, "coefficient", "3/2", "must not exceed one"),
+            (2, "coefficient", "2/4", "canonical positive MethodIR fraction"),
+            (2, "operator", "short-range", "canonical short-range and long-range"),
+            (2, "omega_units", "angstrom^-1", "canonical short-range and long-range"),
+        ):
+            with self.subTest(index=index, key=key, value=value):
+                payload = self.range_payload()
+                payload["primitives"][index][key] = value
+                path.write_text(json.dumps(payload))
+                self.rejected(
+                    self.call("--method-ir", str(path), "--backend", "cuda"), error
                 )
 
 

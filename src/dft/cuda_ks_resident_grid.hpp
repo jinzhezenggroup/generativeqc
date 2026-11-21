@@ -5,6 +5,9 @@
 
 namespace generativeqc::dft {
 
+/** Select the primary XC quadrature or the independently prepared VV10 one. */
+enum class CudaKsGridRole { primary, separate_nonlocal };
+
 /** Immutable basis/quadrature and accepted spin densities from one live KS
  * owner. The basis is AoBasis's normalized 16-double-record representation;
  * points are [point,xyz], weights [point], density [spin,AO,AO]. The exact

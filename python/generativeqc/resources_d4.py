@@ -2,7 +2,8 @@
 
 Global D4 plans require the complete named KS owner and its additive inventory
 protocol. An older library remains usable for ordinary D4 execution, but cannot
-claim global D4 capacity. Composite gCP is outside this correction-only scope.
+claim global D4 capacity. CUDA r2SCAN-3c additionally requires the native gCP
+layout query for the retained composite owner.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from generativeqc_compiler.method import (
 )
 
 from . import _native
+from ._named_ks import cuda_r2scan3c_resource_graph
 
 _KEYS = (
     "plan_host_bytes",
@@ -68,6 +70,10 @@ def with_native_xc_capacity(
         or calculator._precision_mode != _native.PRECISION_FP64
         or model.xc_schedule != "device_fused"
         or model.has_nonlocal_correlation
+        or any(
+            isinstance(node, GeometricCounterpoisePrimitive)
+            for node in graph.primitives
+        )
         or getattr(calculator, "_application_precision_budget", None) is not None
         or not any(
             isinstance(node, DispersionCorrectionPrimitive)
@@ -252,6 +258,25 @@ def _standalone_d4_inventory(
     return result
 
 
+def _gcp_inventory(counts: tuple[int, ...], library: Any) -> tuple[int, int, int]:
+    """Sum the retained gCP owners and compute the largest equal-share charge."""
+    query = library.generativeqc_resource_ks_gcp_cuda_v1
+    query.argtypes = [ct.c_uint32, ct.POINTER(ct.c_uint64), ct.c_size_t]
+    query.restype = ct.c_int
+    layouts = {}
+    for count in set(counts):
+        output = (ct.c_uint64 * 2)()
+        if query(count, output, len(output)):
+            raise NotImplementedError(
+                "native CUDA gCP inventory rejected the shape/build"
+            )
+        layouts[count] = tuple(output)
+    host = checked_bytes(sum(layouts[count][0] for count in counts))
+    device = checked_bytes(sum(layouts[count][1] for count in counts))
+    equal_share = checked_bytes(len(counts) * sum(layouts[max(counts)]))
+    return host, device, equal_share
+
+
 def d4_resource_request(
     systems: Any,
     *,
@@ -280,16 +305,17 @@ def d4_resource_request(
         for node in method.primitives
         if isinstance(node, DispersionCorrectionPrimitive)
     ]
+    has_gcp = any(
+        isinstance(node, GeometricCounterpoisePrimitive) for node in method.primitives
+    )
+    composite = has_gcp and cuda_r2scan3c_resource_graph(method, backend)
     if (
         len(specs) != 1
         or not isinstance(specs[0], D4Spec)
-        or any(
-            isinstance(node, GeometricCounterpoisePrimitive)
-            for node in method.primitives
-        )
+        or (has_gcp and not composite)
     ):
         raise NotImplementedError(
-            "D4 resource planning requires an individual D4 correction without gCP"
+            "D4 resource planning requires individual D4 or canonical CUDA r2SCAN-3c"
         )
     if backend not in {"cpu", "cuda"}:
         raise ValueError("D4 backend must be cpu or cuda")
@@ -303,6 +329,7 @@ def d4_resource_request(
     if (
         not _native_ks
         or not hasattr(library, "generativeqc_ks_d4_resource_query_v1")
+        or (composite and not hasattr(library, "generativeqc_resource_ks_gcp_cuda_v1"))
         or (
             backend == "cpu"
             and not hasattr(library, "generativeqc_resource_d4_layout_v1")
@@ -325,7 +352,9 @@ def d4_resource_request(
         "inventory_owner": "native-ks-d4-layout-v1",
         "maximum_bytes": maximum_bytes,
         "method_ir_identity": method.identity,
-        "schedule": "retained-native-ks-d4",
+        "schedule": "retained-native-ks-d4-gcp"
+        if composite
+        else "retained-native-ks-d4",
     }
     identity = ResourceIdentity(
         method.identifier,
@@ -343,7 +372,9 @@ def d4_resource_request(
     if backend == "cuda":
         exclusions += ("CUDA driver/context/modules and pool/page retention",)
     unsupported = None
-    if any(z < 1 or z > 86 for system in numbers for z in system):
+    if composite and any(z < 1 or z > 18 for system in numbers for z in system):
+        unsupported = "canonical r2SCAN-3c gCP supports only H-Ar"
+    elif any(z < 1 or z > 86 for system in numbers for z in system):
         unsupported = "production D4 supports atomic numbers 1 through 86"
     elif max(counts) > 256:
         unsupported = "production D4 supports at most 256 atoms per system"
@@ -354,14 +385,17 @@ def d4_resource_request(
             name, identity, (), exclusions, unsupported_reason=unsupported
         )
     inventory = _ks_d4_inventory(counts, backend, library)
-    required = inventory["minimum_maximum_bytes"]
+    gcp_host, gcp_device, gcp_minimum = (
+        _gcp_inventory(counts, library) if composite else (0, 0, 0)
+    )
+    required = checked_bytes(inventory["minimum_maximum_bytes"] + gcp_minimum)
     if required > maximum_bytes:
         return ResourceRequest(
             name,
             identity,
             (),
             exclusions,
-            infeasible_reason=f"native KS D4 retained owners require {required} bytes, exceeding dispersion maximum_bytes={maximum_bytes}",
+            infeasible_reason=f"native KS correction owners require {required} bytes, exceeding dispersion maximum_bytes={maximum_bytes}",
         )
     estimates = [
         ResourceEstimate(
@@ -404,6 +438,22 @@ def d4_resource_request(
                 first_phase,
                 last_phase,
                 kind="persistent",
+            )
+        )
+    if composite:
+        estimates.extend(
+            (
+                ResourceEstimate(
+                    "gCP host staging", gcp_host, "pageable", first_phase, last_phase
+                ),
+                ResourceEstimate(
+                    "gCP retained CUDA owner",
+                    gcp_device,
+                    f"device:{device_id}",
+                    first_phase,
+                    last_phase,
+                    kind="persistent",
+                ),
             )
         )
     candidate = ResourceCandidate(

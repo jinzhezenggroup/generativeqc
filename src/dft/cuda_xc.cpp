@@ -10,9 +10,11 @@
 
 #include "dft/grid_spatial_order.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/split_hybrid_cuda_domain.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "r2scan_cuda_domain.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "tensor/cuda_error.hpp"
@@ -49,6 +51,9 @@ struct CudaXcProgramTraits {
 };
 
 CudaXcProgramTraits cuda_xc_program_traits(std::uint32_t functional) noexcept {
+  if (is_linked_cuda_split_hybrid_point(functional)) return {true, true, true, {}};
+  if (kCudaR2scanVariational && functional == kCudaR2scanVariationalDomain)
+    functional = semilocal_family_code(SemilocalFamily::R2scan);
   if (const auto* metadata = semilocal_family_metadata_from_code(functional))
     return {metadata->cuda_ks, metadata->requires_gradient, metadata->requires_tau,
             metadata->cuda_fast_paths};

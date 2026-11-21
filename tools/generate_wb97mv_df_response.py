@@ -19,12 +19,37 @@ def generate() -> str:
     """Generation imports no public runtime, GPU libraries or reference engine."""
     programs = df_response_maps()
     namespace = "generativeqc_wb97mv_df_maps"
-    extents = {"orbital": "nao", "auxiliary": "naux", "spin": "spins"}
+    extents = {
+        "orbital": "nao",
+        "auxiliary": "naux",
+        "spin": "spins",
+        "symmetric_pair": "npair",
+    }
+    schedule = {
+        "namespace": namespace,
+        "extents": extents,
+        "tiled_matrix_products": True,
+    }
+    # The spectral Gram only needs raw legs, so finish it before evaluating
+    # fitted legs. In the implicit full-rank schedule, consume the residual
+    # in the frozen Fock first, before building the dressed fitted tangent.
+    response_order = {}
+    for name, graph in programs.items():
+        if "weight_direction_inverse" in graph.outputs:
+            response_order[name] = ("weight_direction_inverse",)
+        elif "weight_direction_metric" in graph.outputs and "coulomb" not in name:
+            response_order[name] = ("fock_direction",)
     return (
         "\n".join(
             (
-                emit_affine_cuda(programs, namespace=namespace, extents=extents),
-                emit_affine_work(programs, namespace=namespace, extents=extents),
+                emit_affine_cuda(
+                    programs,
+                    reuse_intermediate_storage=True,
+                    inplace_add=True,
+                    first_outputs=response_order,
+                    **schedule,
+                ),
+                emit_affine_work(programs, **schedule),
             )
         )
         + "\n"

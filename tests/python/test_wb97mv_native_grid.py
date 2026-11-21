@@ -17,6 +17,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
+from generativeqc_compiler.dft.nonlocal_policy import (
+    MOLECULAR_VV10_DENSITY_THRESHOLD,
+    MOLECULAR_VV10_WEIGHT_THRESHOLD,
+)
 from generativeqc_compiler.dft.nonlocal_reference import (
     nonlocal_feature_derivatives_reference,
 )
@@ -97,32 +101,31 @@ def _fixture(spins: int = 2, points: int = 9, *, vacuum: bool = False) -> dict:
 
 def _fields(jets: np.ndarray, density: np.ndarray) -> np.ndarray:
     """Independent direct Cartesian contractions (no compiler feature AD)."""
-    return np.array(
-        [
+    fields = []
+    for block in density:
+        # Evaluate the same contractions with dense products; do not repeat a
+        # three-operand sum for each feature at every displaced SCF iterate.
+        contracted = jets @ block.T
+        fields.append(
             [
-                np.einsum("pi,ij,pj->p", jets[0], block, jets[0]),
-                *(
-                    2 * np.einsum("pi,ij,pj->p", jet, block, jets[0])
-                    for jet in jets[1:]
-                ),
-                sum(np.einsum("pi,ij,pj->p", jet, block, jet) for jet in jets[1:]) / 2,
+                np.sum(jets[0] * contracted[0], axis=1),
+                *[2 * np.sum(jet * contracted[0], axis=1) for jet in jets[1:]],
+                np.sum(jets[1:] * contracted[1:], axis=(0, 2)) / 2,
             ]
-            for block in density
-        ]
-    )
+        )
+    return np.asarray(fields)
 
 
 def _assemble(jets: np.ndarray, coefficients: np.ndarray) -> np.ndarray:
     """Independent physical feature cotangent contraction, with tau one-half."""
     result = []
     for block in coefficients:
-        matrix = np.einsum("pi,p,pj->ij", jets[0], block[0], jets[0])
+        matrix = jets[0].T @ (block[0, :, None] * jets[0])
         for axis in range(3):
-            cross = np.einsum("pi,p,pj->ij", jets[axis + 1], block[axis + 1], jets[0])
+            jet = jets[axis + 1]
+            cross = jet.T @ (block[axis + 1, :, None] * jets[0])
             matrix += cross + cross.T
-            matrix += np.einsum(
-                "pi,p,pj->ij", jets[axis + 1], block[4] / 2, jets[axis + 1]
-            )
+            matrix += jet.T @ ((block[4, :, None] / 2) * jet)
         result.append(matrix)
     return np.array(result)
 
@@ -248,6 +251,8 @@ def _native(
         ]
     )
     header = f"{len(fixture['centers'])} {len(fixture['primitives'])} {fixture['nao']} {len(fixture['points'])} {fixture['spins']} {tile} {pairs}\n"
+    if mode == "fixed-rvv10":
+        header += " ".join(map(str, fixture["revised_nonlocal"])) + "\n"
     result = subprocess.run(
         [str(probe), mode],
         input=header + " ".join(map(repr, values.tolist())),
@@ -258,6 +263,15 @@ def _native(
         env=environment,
     )
     return json.loads(result.stdout)
+
+
+def _molecular_vv10_active(
+    total_density: np.ndarray, weights: np.ndarray
+) -> np.ndarray:
+    """Select the physical SCF pair domain before calling the independent oracle."""
+    return (total_density >= float(MOLECULAR_VV10_DENSITY_THRESHOLD)) & (
+        np.abs(weights) > float(MOLECULAR_VV10_WEIGHT_THRESHOLD)
+    )
 
 
 def _independent_potential(
@@ -371,6 +385,31 @@ def test_native_against_independent_libxc_and_vv10(
     assert result["actions"] == 1
     if spins == 2:
         assert np.linalg.norm(actual[1]) > 1e-7
+
+
+@pytest.mark.parametrize("spins", (1, 2))
+def test_wb97mv_fixed_grid_components(probe: Path, spins: int) -> None:
+    fixture = _fixture(spins)
+    semilocal = _native(probe, fixture, mode="fixed-split-semilocal", tile=0, pairs=0)
+    vv10 = _native(probe, fixture, mode="fixed-split-vv10")
+    together = _native(probe, fixture)
+    for result in (semilocal, vv10, together):
+        assert result["prepared"] == result["applied"] == 0
+    assert semilocal["active"] == semilocal["response_pairs"] == 0
+    assert semilocal["workspace"] < together["workspace"]
+    assert vv10["response_pairs"] == together["response_pairs"] > 0
+    density = fixture["density"]
+    expected = _independent_potential(
+        fixture, density, nonlocal_active=np.zeros(len(fixture["points"]), dtype=bool)
+    )
+    np.testing.assert_allclose(semilocal["potential"], expected.ravel(), atol=3e-10)
+    for field in ("potential", "response"):
+        for result in (semilocal, vv10, together):
+            panel = np.asarray(result[field]).reshape(density.shape)
+            np.testing.assert_array_equal(panel, panel.swapaxes(-1, -2))
+        np.testing.assert_allclose(
+            np.asarray(semilocal[field]) + vv10[field], together[field], atol=2e-13
+        )
 
 
 @pytest.mark.parametrize("spins", (1, 2))

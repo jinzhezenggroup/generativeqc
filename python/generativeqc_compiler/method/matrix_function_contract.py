@@ -4,3 +4,5 @@ RULE_VERSIONS = {
     "inverse_sqrt": "inverse-sqrt-frechet-v1",
     "pseudoinverse": "pseudoinverse-frechet-v1",
 }
+
+PSEUDOINVERSE_SECOND_RULE = "pseudoinverse-fixed-rank-second-frechet-v1"

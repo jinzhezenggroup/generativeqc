@@ -13,6 +13,8 @@ class PreparedBatch;
 }
 namespace generativeqc::dft {
 
+struct CudaWb97mvGridShape;
+
 /** Residual ECP nuclear source bound to an accepted native WB97M-V state.
  * The actual immutable grid AO basis and normalized primary-Fock System own
  * basis identity and residual terms; Direct/DF and RKS/UKS share this source.
@@ -34,6 +36,10 @@ class CudaKsWb97mvEcpNuclear {
   CudaKsWb97mvEcpNuclear& operator=(const CudaKsWb97mvEcpNuclear&) = delete;
   CudaKsWb97mvEcpNuclear(CudaKsWb97mvEcpNuclear&&) = delete;
   CudaKsWb97mvEcpNuclear& operator=(CudaKsWb97mvEcpNuclear&&) = delete;
+  /** Host-only mandatory reservation including spin sums and aligned staging. */
+  static std::size_t mandatory_workspace(const core::System& system,
+                                         const CudaWb97mvGridShape& shape,
+                                         integrals::CudaEcpNuclearOptions options);
   generativeqc_status prepare(methods::PreparedBatch& batch, std::size_t item,
                               const CudaKsFinalStateToken& expected,
                               const integrals::CudaEcpNuclearOptions& options, std::string& detail);

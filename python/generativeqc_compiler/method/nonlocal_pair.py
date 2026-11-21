@@ -67,22 +67,54 @@ def _vv10_pair_factors(
     return first, second, combined, product(product(first, second), combined)
 
 
-def vv10_grid_beta(spec: typing.Any) -> float:
-    """Canonical VV10 local energy coefficient, before the method coefficient."""
-    if spec.variant != VV10:
-        raise UnsupportedNonlocalCorrelation("grid local AD currently requires VV10")
+def _rvv10_pair_factors(
+    radius: typing.Any,
+    omega_a: typing.Any,
+    omega_b: typing.Any,
+    kappa_a: typing.Any,
+    kappa_b: typing.Any,
+    *,
+    preconditioned: bool,
+    one: typing.Any,
+    addition: typing.Any = add,
+    product: typing.Any = multiply,
+    quotient: typing.Any = divide,
+    exponentiate: typing.Any = power,
+) -> tuple:
+    """Share Sabatini's z and Gaussian scale denominator across AD lowerers."""
+    if preconditioned:
+        ratio_a, ratio_b = omega_a, omega_b
+        first = addition(product(ratio_a, radius), one)
+        second = addition(product(ratio_b, radius), one)
+        kappa_factor = product(kappa_a, kappa_b)
+    else:
+        ratio_a, ratio_b = quotient(omega_a, kappa_a), quotient(omega_b, kappa_b)
+        first = addition(one, product(ratio_a, radius))
+        second = addition(one, product(ratio_b, radius))
+        kappa_factor = exponentiate(product(kappa_a, kappa_b), Fraction(3, 2))
+    denominator = product(
+        product(product(kappa_factor, first), second), addition(first, second)
+    )
+    return first, second, ratio_a, ratio_b, denominator
+
+
+def nonlocal_grid_beta(spec: typing.Any) -> float:
+    """Local energy coefficient shared by VV10 and rVV10, before method scaling."""
     return (3 / float(spec.b) ** 2) ** 0.75 / 32
 
 
-def vv10_grid_local_expression(
-    graph: typing.Any, leg: list, spec: typing.Any
-) -> typing.Any:
+def nonlocal_grid_local_expression(leg: list, beta: typing.Any) -> typing.Any:
     """The local beta energy uses the same total-density/measure field ABI."""
-    return vv10_grid_beta(spec) * leg[0] * leg[5]
+    return beta * leg[0] * leg[5]
 
 
-def vv10_grid_pair_expression(
-    graph: typing.Any, first: list, second: list, spec: typing.Any
+def nonlocal_grid_pair_expression(
+    graph: typing.Any,
+    first: list,
+    second: list,
+    spec: typing.Any,
+    *,
+    parameters: tuple | None = None,
 ) -> typing.Any:
     """Weighted ordered pair primal for total-density Cartesian grid AD.
 
@@ -91,30 +123,41 @@ def vv10_grid_pair_expression(
     legs. Energy integration applies its one-half separately. Local scales
     follow the raw CPU policy; runtime masks and admission remain external.
     """
-    if spec.variant != VV10:
-        raise UnsupportedNonlocalCorrelation("grid pair AD currently requires VV10")
+    damping, gradient_scale = parameters or (float(spec.b), float(spec.c))
 
     def scales(leg: list) -> tuple:
         rho = leg[0]
         sigma = graph.sum(value * value for value in leg[1:4])
         omega = (
-            float(spec.c) * sigma * sigma / rho.pow(4) + (4 * math.pi / 3) * rho
+            gradient_scale * sigma * sigma / rho.pow(4) + (4 * math.pi / 3) * rho
         ).pow(0.5)
-        kappa = float(spec.b) * 1.5 * math.pi * (rho / (9 * math.pi)).pow(1 / 6)
+        kappa = damping * 1.5 * math.pi * (rho / (9 * math.pi)).pow(1 / 6)
         return omega, kappa
 
     omega_a, kappa_a = scales(first)
     omega_b, kappa_b = scales(second)
     radius = graph.sum((first[index] - second[index]).pow(2) for index in range(6, 9))
-    *_, denominator = _vv10_pair_factors(
-        radius,
-        omega_a,
-        omega_b,
-        kappa_a,
-        kappa_b,
-        addition=lambda left, right: left + right,
-        product=lambda left, right: left * right,
-    )
+    operations = {
+        "addition": lambda left, right: left + right,
+        "product": lambda left, right: left * right,
+    }
+    if spec.variant == RVV10:
+        *_, denominator = _rvv10_pair_factors(
+            radius,
+            omega_a / kappa_a,
+            omega_b / kappa_b,
+            kappa_a * kappa_a.pow(0.5),
+            kappa_b * kappa_b.pow(0.5),
+            preconditioned=True,
+            one=1,
+            **operations,
+        )
+    elif spec.variant == VV10:
+        *_, denominator = _vv10_pair_factors(
+            radius, omega_a, omega_b, kappa_a, kappa_b, **operations
+        )
+    else:
+        raise UnsupportedNonlocalCorrelation("unknown grid pair variant")
     return Fraction(-3, 2) * first[0] * first[5] * second[0] * second[5] / denominator
 
 
@@ -244,15 +287,9 @@ def build_nonlocal_pair_program(
     one, minus_three_halves = constant(1), constant("-3/2")
     outputs = {}
     if variant == RVV10:
-        ai, aj = (wi, wj) if preconditioned else (divide(wi, ki), divide(wj, kj))
-        if preconditioned:
-            zi, zj = add(multiply(ai, r2), one), add(multiply(aj, r2), one)
-            kappa_factor = multiply(ki, kj)
-        else:
-            zi, zj = add(one, multiply(ai, r2)), add(one, multiply(aj, r2))
-            kappa_factor = power(multiply(ki, kj), "3/2")
-        zsum = add(zi, zj)
-        denominator = multiply(multiply(multiply(kappa_factor, zi), zj), zsum)
+        zi, zj, ai, aj, denominator = _rvv10_pair_factors(
+            r2, wi, wj, ki, kj, preconditioned=preconditioned, one=one
+        )
         phi = divide(minus_three_halves, denominator)
         outputs["phi"] = phi
         if features or geometry:

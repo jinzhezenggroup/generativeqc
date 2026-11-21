@@ -70,9 +70,10 @@ generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::si
 generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
                                                      const dft::CudaKsFinalStateToken& expected,
                                                      dft::CudaKsResidentGridBinding& binding,
-                                                     std::string& detail) {
+                                                     std::string& detail,
+                                                     dft::CudaKsGridRole role) {
   if (auto* ks = dynamic_cast<KsBatchOwnerPort*>(&batch))
-    return ks->resident_grid_reference(index, expected, binding, detail);
+    return ks->resident_grid_reference(index, expected, binding, detail, role);
   binding = {};
   detail = "resident basis/grid requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -174,6 +175,17 @@ generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_
   output = {};
   detail = "prepared batch is not a KS final-state owner";
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
+generativeqc_status borrow_dft_hessian_corrections(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   KsHessianCorrections& output,
+                                                   std::string& detail) {
+  output = {};
+  auto* owner = dynamic_cast<KsBatchOwnerPort*>(&batch);
+  if (owner) return owner->borrow_hessian_corrections(index, expected, output, detail);
+  detail = "post-SCF Hessian sources require a prepared native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
 }  // namespace generativeqc::methods::detail

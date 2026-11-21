@@ -159,6 +159,118 @@ def _evaluate(native: ctypes.CDLL, name: str, values: tuple) -> np.ndarray:
     return result
 
 
+@pytest.mark.parametrize(
+    "name,values",
+    (
+        ("d4_coordination", (2.4, 2.1, 1.0)),
+        ("d4_coordination", (1.8, 2.1, 0.9)),
+        ("eeq_rhs", (0.6, 1.2, 0.5)),
+        ("eeq_rhs", (7.8, 1.2, 0.5)),
+        ("eeq_rhs", (10.0, 1.2, 0.5)),
+        ("eeq_coulomb", (0.1, 0.7)),
+        ("eeq_coulomb", (2.4, 0.7)),
+        ("eeq_coulomb", (8.0, 0.7)),
+    ),
+)
+def test_eeq_response_coefficient_tangent_against_wide_primal(
+    native: ctypes.CDLL, name: str, values: tuple[float, ...]
+) -> None:
+    """Check the generated tangent of the actual Cartesian assembly coefficient."""
+    mp = pytest.importorskip("mpmath").mp.clone()
+    mp.dps = 80
+    coordinate, *parameters = map(mp.mpf, values)
+    if name == "d4_coordination":
+        radius, weight = parameters
+        primal = lambda distance: (
+            weight / 2 * (1 + mp.erf(mp.mpf("7.5") * (1 - distance / radius)))
+        )
+    elif name == "eeq_rhs":
+        chi, weight = parameters
+
+        def primal(raw: object) -> object:
+            coordinated = mp.log1p(mp.exp(8)) - mp.log1p(mp.exp(8 - raw))
+            return -chi + weight * coordinated / mp.sqrt(coordinated + mp.mpf(1e-14))
+
+    else:
+        (gamma,) = parameters
+        primal = lambda distance: mp.erf(gamma * distance) / distance
+
+    if name == "eeq_coulomb":
+        scatter = lambda distance: mp.diff(primal, distance) / distance
+        expected = mp.diff(scatter, coordinate)
+    else:
+        expected = mp.diff(primal, coordinate, 2)
+    jet = _evaluate(native, f"{name}_second", values)
+    np.testing.assert_allclose(
+        jet[:2], _evaluate(native, name, values), rtol=1e-11, atol=1e-13
+    )
+    assert jet[2] == pytest.approx(float(expected), rel=2e-9, abs=2e-13)
+
+
+@pytest.mark.parametrize("edges", ((3.2, 4.7, 3.9), (2.0, 7.99, 2.0)))
+def test_atm_direction_against_wide_energy(
+    native: ctypes.CDLL, edges: tuple[float, float, float]
+) -> None:
+    """Check the mixed edge/C6 Hessian action against a scalar-energy oracle."""
+    mp = pytest.importorskip("mpmath").mp.clone()
+    mp.dps = 70
+    coefficients = (34.0, 22.0, 41.0)
+    direction = (0.2, -0.1, 0.04, -0.45, 0.27, 0.61)
+    radius_product, s9, exponent = 94.0, 1.0, 16.0
+    point = tuple(map(mp.mpf, (*edges, *coefficients)))
+    motion = tuple(map(mp.mpf, direction))
+
+    def energy(arguments: tuple) -> object:
+        edge_a, edge_b, edge_c, coefficient_a, coefficient_b, coefficient_c = arguments
+        angle_prod = (
+            (edge_a + edge_b - edge_c)
+            / (2 * mp.sqrt(edge_a * edge_b))
+            * (edge_a + edge_c - edge_b)
+            / (2 * mp.sqrt(edge_a * edge_c))
+            * (edge_b + edge_c - edge_a)
+            / (2 * mp.sqrt(edge_b * edge_c))
+        )
+        radius = mp.sqrt(edge_a * edge_b * edge_c)
+        damping = 1 / (1 + 6 * (radius_product / radius) ** (mp.mpf(exponent) / 3))
+        return (
+            s9
+            * damping
+            * mp.sqrt(coefficient_a * coefficient_b * coefficient_c)
+            * (1 + 3 * angle_prod)
+            / radius**3
+        )
+
+    def displaced(direction_step: object, axis_step: object, axis: int) -> object:
+        return energy(
+            tuple(
+                value + direction_step * delta + (axis_step if index == axis else 0)
+                for index, (value, delta) in enumerate(zip(point, motion, strict=True))
+            )
+        )
+
+    expected = [mp.diff(lambda step: displaced(step, 0, 0), 0)]
+    for axis in range(6):
+        scale = 2 if axis < 3 else 1
+        expected.append(
+            scale
+            * mp.diff(
+                lambda direction_step, axis_step, axis=axis: displaced(
+                    direction_step, axis_step, axis
+                ),
+                (0, 0),
+                (1, 1),
+            )
+        )
+    arguments = (*edges, radius_product, *coefficients, s9, exponent)
+    actual = _evaluate(native, "atm_direction", (*arguments, *direction))
+    np.testing.assert_allclose(
+        actual[:7], _evaluate(native, "atm", arguments), atol=1e-15, rtol=3e-13
+    )
+    np.testing.assert_allclose(
+        actual[7:], np.asarray(expected, dtype=float), atol=1e-15, rtol=3e-12
+    )
+
+
 @pytest.mark.parametrize("distance", (0.1, 1.7, 100.0))
 @pytest.mark.parametrize("fraction", (-0.8, 0.0, 0.3))
 def test_cached_cartesian_norm_pullback_against_primal_only_oracle(

@@ -4,6 +4,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+
+#include "dft/nonlocal_correlation/vv10_parameters.hpp"
+#include "dft/semilocal_family.hpp"
 
 namespace generativeqc::dft {
 
@@ -13,6 +17,10 @@ struct CudaWb97mvGridShape {
   std::size_t atoms{}, primitives{}, nao{}, points{};
   unsigned spins{1};
 };
+
+/** The same WB97M-V model can integrate its terms on one or two quadratures.
+ * The nonlocal-only option integrates just the configured pair functional. */
+enum class CudaWb97mvGridComponent { combined, semilocal_only, vv10_only };
 
 struct CudaWb97mvGridOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
@@ -28,6 +36,22 @@ struct CudaWb97mvGridOptions {
    * resources retain ordinary precompiled CUDA launches, never CPU execution. */
   bool replay_nuclear_maps{true};
   std::uint64_t max_nuclear_affine_terms{1ULL << 34};
+  /** Physical point code from the converged Fock identity. Curated and
+   * split-hybrid families use disjoint codes. Response owners must verify
+   * the corresponding stationary domain before constructing these options. */
+  std::uint32_t functional_code{semilocal_family_code(SemilocalFamily::Wb97mv)};
+  double exchange_scale{1.0}, correlation_scale{1.0};
+  CudaWb97mvGridComponent component{CudaWb97mvGridComponent::combined};
+  /** An explicit rVV10 provider replaces, rather than adds to, canonical
+   * VV10. Molecular callers must source these options from the accepted KS
+   * model; retaining only the semilocal part does not prepare a pair domain. */
+  std::optional<nlc::Vv10Parameters> revised_nonlocal{};
+
+  [[nodiscard]] bool includes_nonlocal() const noexcept {
+    return (functional_code == semilocal_family_code(SemilocalFamily::Wb97mv) ||
+            revised_nonlocal) &&
+           component != CudaWb97mvGridComponent::semilocal_only;
+  }
 };
 
 /** Immutable native quadrature/basis/density lease, not a detached state label.
@@ -53,6 +77,7 @@ struct CudaWb97mvGridWork {
   std::uint64_t nuclear_reference_pairs{}, nuclear_response_pairs{}, nuclear_affine_terms{};
   std::uint64_t nuclear_directions{}, nuclear_contractions{};
   std::uint64_t nuclear_graph_replays{};
+  bool pair_budget_exceeded{};
 };
 
 /** Pure checked sizing. Pair storage and total ordered-pair WORK are separate
@@ -64,7 +89,9 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape& shape,
                                        const CudaWb97mvGridOptions& options,
                                        std::size_t& bytes) noexcept;
 
-/** Native WB97M-V semilocal + bilateral VV10 density kernel on a fixed grid.
+/** Native fixed- and moving-grid XC response for the admitted physical models.
+ * LDA/PBE/B3LYP reuse their SCF point models, including their vacuum domains; they
+ * do not discover, allocate or traverse a VV10 pair domain.
  * Scalar gradients/JVPs and feature/potential maps are compiler AD, generated
  * at build time. Includes physical spin coupling, tau halves, both VV10 legs,
  * ordered-pair traversal and the local beta term. Optional CUDA graph resources
@@ -132,6 +159,7 @@ class CudaWb97mvGridResponse {
   CudaWb97mvGridReference reference_{};
   CudaWb97mvGridWork work_{};
   void* workspace_{};
+  double beta_{};
   bool ready_{};
   bool nuclear_ready_{};
   cudaGraphExec_t nuclear_graph_{};

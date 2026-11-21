@@ -44,7 +44,7 @@ def _configure(
 def test_default_package_selects_complete_factorized_orbital_f_auxiliary_g(
     tmp_path: Path,
 ) -> None:
-    """The enabled default must not inherit the partial development closure."""
+    """The enabled package closes both full-range and erf DF through auxiliary g."""
     result = _configure(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
     inventory_path = Path((tmp_path / "build/selection.txt").read_text())
@@ -64,6 +64,7 @@ def test_default_package_selects_complete_factorized_orbital_f_auxiliary_g(
         ),
         3,
         max_auxiliary_angular=4,
+        df_long_range=True,
     )
     assert actual.integrals == expected.integrals
     assert actual.arrays == expected.arrays

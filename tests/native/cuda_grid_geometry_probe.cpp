@@ -78,6 +78,17 @@ void host_admission() {
   std::size_t bytes{};
   check(cuda_grid_geometry_workspace(shape, options, bytes));
   require(bytes > 0, "empty admitted geometry arena");
+  auto replay = options;
+  replay.max_ao_replay_terms = 1ULL << 30;
+  std::size_t resident_bytes{}, minimum{};
+  check(cuda_grid_geometry_workspace(shape, replay, resident_bytes, &minimum));
+  require(resident_bytes == bytes && minimum < resident_bytes, "missing bounded replay layout");
+  replay.max_workspace_bytes = minimum;
+  check(cuda_grid_geometry_workspace(shape, replay, bytes));
+  require(bytes == minimum, "reported minimum cannot admit a geometry tile");
+  --replay.max_workspace_bytes;
+  require(cuda_grid_geometry_workspace(shape, replay, bytes) == cudaErrorInvalidValue,
+          "geometry admitted a budget below its smallest tile");
   for (unsigned kind = 0; kind < 4; ++kind) {
     auto invalid = shape;
     if (kind == 0) invalid.points = 8;
@@ -111,7 +122,7 @@ void host_admission() {
 }
 
 void run(const char* fixture, const char* output, bool reject, std::size_t point_tile,
-         const std::string& topology) {
+         const std::string& topology, bool replay, bool partial) {
   std::ifstream input(fixture, std::ios::binary);
   std::array<std::uint64_t, 6> header{};
   require(static_cast<bool>(input.read(reinterpret_cast<char*>(header.data()), sizeof(header))),
@@ -197,16 +208,46 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
   }
   check(prepared);
   check(response.spatial_jets(jets));
+  const auto spatial = download(jets, 20 * shape.points * shape.nao);
+  if (replay) {
+    const auto resident_bytes = bytes;
+    options.max_ao_replay_terms = 4 * response.work().prepared_ao_primitive_term_bound;
+    std::size_t minimum{};
+    check(cuda_grid_geometry_workspace(shape, options, bytes, &minimum));
+    options.max_workspace_bytes = partial ? resident_bytes - 256 : minimum;
+    check(cuda_grid_geometry_workspace(shape, options, bytes));
+    require(bytes < resident_bytes, "replay did not reduce geometry storage");
+    check(response.prepare(shape, options, reference, arena, bytes));
+    require(response.spatial_jets(jets) == cudaErrorNotSupported && !jets,
+            "replayed geometry published tile scratch as resident jets");
+    check(response.admit_actions(1));
+    if (partial) {
+      check(response.admit_actions(5));
+      require(response.work().prepared_ao_primitive_term_bound > 0,
+              "partial arena retained no AO jets");
+    } else {
+      require(response.admit_actions(5) == cudaErrorInvalidValue,
+              "geometry ignored endpoint replay work capacity");
+    }
+  }
   const double* point_directions{};
   require(response.point_directions(point_directions) == cudaErrorInvalidResourceHandle &&
               !point_directions,
           "geometry exposed motion before an action");
   check(response.mixed(left_device, right_device, ao_output, weight_output, storage.stream));
   check(response.point_directions(point_directions));
+  const auto expected_motion = download(point_directions, 6 * shape.points);
+  CudaGridGeometryMixedView view;
+  if (replay) {
+    check(response.mixed_view(left_device, right_device, view, storage.stream));
+    require(download(view.ao, ao_count) == download(ao_output, ao_count) &&
+                download(view.weights, weight_count) == download(weight_output, weight_count) &&
+                download(view.point_directions, 6 * shape.points) == expected_motion,
+            "borrowed geometry differs from copied results");
+  }
   std::ofstream capture(output, std::ios::binary);
-  for (const auto& values :
-       {download(jets, 20 * shape.points * shape.nao), download(ao_output, ao_count),
-        download(weight_output, weight_count), download(point_directions, 6 * shape.points)})
+  for (const auto& values : {spatial, download(ao_output, ao_count),
+                             download(weight_output, weight_count), expected_motion})
     require(static_cast<bool>(capture.write(reinterpret_cast<const char*>(values.data()),
                                             values.size() * sizeof(double))),
             "probe output write failed");
@@ -256,6 +297,10 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
   require(capture_status == cudaErrorStreamCaptureUnsupported, "geometry accepted capture");
   unchanged();
   owner.live = false;
+  require(response.mixed_view(left_device, right_device, view, storage.stream) ==
+                  cudaErrorInvalidResourceHandle &&
+              !view.ao && !view.weights && !view.point_directions,
+          "geometry exposed borrowed panels after revocation");
   require(response.mixed(left_device, right_device, ao_output, weight_output, storage.stream) ==
                   cudaErrorInvalidResourceHandle &&
               response.spatial_jets(jets) == cudaErrorInvalidResourceHandle && !jets,
@@ -267,7 +312,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
             << ",\"prepared_partition_pairs\":" << work.prepared_partition_pairs
             << ",\"action_ao_values\":" << work.action_ao_jet_values
             << ",\"action_partition_pairs\":" << work.action_partition_pairs
-            << ",\"ao_primitive_term_bound\":" << work.prepared_ao_primitive_term_bound << "}\n";
+            << ",\"ao_primitive_term_bound\":" << work.prepared_ao_primitive_term_bound
+            << ",\"ao_replay_term_bound\":" << work.replayed_ao_primitive_term_bound << "}\n";
 }
 }  // namespace
 
@@ -280,17 +326,20 @@ int main(int argc, char** argv) {
     int devices{};
     if (cudaGetDeviceCount(&devices) != cudaSuccess || !devices) return 77;
     require(argc == 3 || argc == 4,
-            "usage: cuda_grid_geometry_probe input output [reject|point-tile]");
+            "usage: cuda_grid_geometry_probe input output [reject|replay|partial|point-tile]");
+    const auto partial = argc == 4 && std::string(argv[3]) == "partial";
+    const auto replay = partial || (argc == 4 && std::string(argv[3]) == "replay");
     const std::string topology =
         argc == 4 && (std::string(argv[3]) == "topology" || std::string(argv[3]) == "understated")
             ? argv[3]
             : "";
     const auto reject =
         argc == 4 && (std::string(argv[3]) == "reject" || topology == "understated");
-    const auto tile = argc == 4 && !reject && topology.empty()
+    const auto tile = replay ? 64
+                      : argc == 4 && !reject && topology.empty()
                           ? std::stoull(argv[3])
                           : CudaGridGeometryOptions{}.point_tile;
-    run(argv[1], argv[2], reject, tile, topology);
+    run(argv[1], argv[2], reject, tile, topology, replay, partial);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

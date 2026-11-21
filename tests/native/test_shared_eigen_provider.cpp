@@ -1181,11 +1181,13 @@ void test_metric_setup() {
           fixture.matrices.data(), fixture.values.data(), fixture.info.data(), nullptr, {}};
       std::string detail;
       const auto status = prepare_metric(&plan, setup, 5, 3, detail);
-      const bool failed = outcome == 1 || outcome == 3;
+      const bool capacity_rejected = outcome == 3 || outcome == 4;
+      const bool failed = outcome == 1 || capacity_rejected;
       assert(status == (failed ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : GENERATIVEQC_STATUS_SUCCESS));
       assert(calls[0].operation == Operation::query_serial && calls[0].batch == 1);
-      if (outcome == 3 || (outcome == 1 && fail_call == 0)) {
+      if (capacity_rejected || (outcome == 1 && fail_call == 0)) {
         assert(calls.size() == 1 && allocations.empty());
+        assert(setup.solver_host_workspace.empty());
       } else {
         assert(calls.size() == (outcome == 1 ? fail_call + 1 : 4));
         if (outcome == 2)

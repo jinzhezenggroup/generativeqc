@@ -136,6 +136,12 @@ class NativeMethodirProjectionTests(unittest.TestCase):
         self.assertEqual(nonlocal_row.range_omega, 0.3)
         self.assertEqual(nonlocal_row.exchange, ((2, 0.15, 0.3), (3, 1.0, 0.3)))
         self.assertEqual(nonlocal_row.nonlocal_correlation, (1, 6.0, 0.01, 1.0))
+        for suffix in ("rks", "uks"):
+            revised = table[f"r2scan+rvv10-{suffix}"]
+            self.assertTrue(revised.cuda)
+            self.assertFalse(revised.cpu)
+            self.assertEqual(revised.exchange, ())
+            self.assertEqual(revised.nonlocal_correlation, (2, 11.95, 0.0093, 1.0))
         for name in ("pbe-d3(bj)-rks", "pbe0-d3(0)-uks", "b3lyp-d4(bj-eeq-atm)-rks"):
             self.assertTrue(table[name].cpu)
             self.assertNotEqual(table[name].dispersion[0], 0)

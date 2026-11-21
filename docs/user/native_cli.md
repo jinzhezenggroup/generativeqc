@@ -127,10 +127,17 @@ RKS/UKS chemistry, ordered isotope masses, the 100-attempt bound, independent
 convergence controls, failure-state retention and unscaled harmonic publication.
 `generativeqc optimize` remains a separate minimum-only task.
 
-## Compiler-AD WB97M-V Hessian and HVP
+## Compiler-AD DFT Hessian and HVP
 
 The C++ executable exposes native `hessian` and `hvp` commands for canonical
-`wb97m-v-rks` (the default) and `wb97m-v-uks`, in strict FP64 on CUDA. Build with
+`wb97m-v-rks` (the default) and `wb97m-v-uks`, with FP64 response on CUDA. The
+canonical LDA, PBE, PBE0, B3LYP, `r2scan` and `r2scan-3c` selectors (each with
+`-rks` or `-uks`) also support Direct or CUDA DF without nonlocal
+pair work. `r2scan+rvv10-rks` and `r2scan+rvv10-uks` include self-consistent
+rVV10. The r²SCAN selectors require the native stationary build option
+(`GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON`) on NVIDIA CUDA. See the
+[supported methods](hessians.md#supported-methods) for experimental M06-2X and MN15,
+named D3/D4, ECP and fitting combinations. Build with
 `GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON`. With no explicit inventory, CMake
 generates the complete factorized through-f orbital / through-g auxiliary
 integral-component closure at configure time. An existing cache that explicitly
@@ -142,6 +149,19 @@ solver and stationary assembly, rather than merely precompiling isolated leaves.
 `--compiler-python`, `--compiler-library`, `--cache` and `--timeout-seconds` are
 obsolete and rejected. WB97M-V CUDA and the CPU B3LYP route above have separate
 linked inventories and resource semantics; neither substitutes for the other.
+
+`--precision auto` selects mixed SCF proposals with strict final closure for
+the eligible [all-electron models](hessians.md#supported-methods), including
+CUDA-fitted PBE RKS. This does not select mixed Hessian arithmetic. The JSON
+diagnostics distinguish requested SCF precision, mixed Fock builds, and strict
+physical Fock certification.
+
+CUDA WB97M-V and r²SCAN+rVV10 retain level 3 nonlocal quadrature when you change
+the XC Treutler level with `--grid-level`. Override it with
+`--nonlocal-grid-level 0..9`, or select a separate product quadrature with all
+three `--nonlocal-grid-radial-points`,
+`--nonlocal-grid-polar-points`, and `--nonlocal-grid-azimuth-points` flags.
+The ordinary `--grid-*-points` flags select a product XC grid, shared by default.
 
 For an independently retained inventory, the equivalent complete selection can
 also be generated before configuring CMake:
@@ -197,7 +217,7 @@ interpreter, runtime compiler or reference engine executes in this path.
 Numerical intermediates remain device-resident; native input handling, bounded
 status receipts and final publication are not claimed to be GPU work.
 See [the Hessian contract](../developer/dft_hessian.md) for admitted basis,
-full-rank DF, ECP quadrature and response gates.
+DF cutoff separation, ECP quadrature and response gates.
 
 Controls include `--device-budget-bytes` (2 GiB aggregate independently owned
 response arenas plus CLI output/direction storage; borrowed SCF storage is
@@ -207,7 +227,9 @@ separate), `--integral-budget-bytes` (64 MiB per source), `--grid-budget-bytes` 
 pairs per action). The pair cap is independent of memory; raise it explicitly
 when qualifying a larger grid. Response controls are `--response-rtol` (`1e-10`),
 `--response-atol` (`0`), `--response-restart` (`30`) and
-`--response-max-iterations` (`200`). Use a finite scheduler time limit for real
+`--response-max-iterations` (`200`). Dense `hessian` additionally accepts
+`--response-cache-precision fp32-proposal`; see the [CUDA response cache contract](hessians.md#supported-methods).
+Use a finite scheduler time limit for real
 GPU runs. Missing closure, failed solves, exceeded limits and nonfinite output
 fail with no partial JSON result. Diagnostics distinguish native execution time
 from an external complete-process wall measurement and expose source/response

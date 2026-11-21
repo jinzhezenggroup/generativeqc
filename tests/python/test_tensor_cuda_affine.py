@@ -109,11 +109,13 @@ def test_affine_cuda_add_preserves_seeded_accumulation(
 
 
 @pytest.mark.parametrize("vector", (False, True))
-def test_affine_cuda_fusion_preserves_checks_outputs_and_duplicate_operands(
+@pytest.mark.parametrize("schedule", ("fusion", "inplace"))
+def test_affine_cuda_schedule_preserves_checks_outputs_and_duplicate_operands(
     tmp_path: Path,
     vector: bool,
+    schedule: str,
 ) -> None:
-    """Execute nested fused maps and a repeated-operand contraction unchanged."""
+    """Retain live values and atomic publication through the optimized schedule."""
     compiler = shutil.which("c++")
     launcher = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not launcher:
@@ -126,15 +128,19 @@ def test_affine_cuda_fusion_preserves_checks_outputs_and_duplicate_operands(
     nested = multiply(add(first, second), add(retained, coefficients=(Fraction(1, 3),)))
     contracted = einsum("p,p->p" if vector else ",->", nested, nested)
     program = Program({"retained": retained, "square": add(contracted, first)})
-    for fused in (False, True):
+    for optimized in (False, True):
+        fused = optimized and schedule == "fusion"
+        reuse = optimized and schedule == "inplace"
         generated = emit_affine_cuda(
             {"evaluate": program},
-            namespace=f"affine_{int(fused)}",
+            namespace=f"affine_{int(optimized)}",
             extents={"sample": "samples"} if vector else {},
             fuse_elementwise=fused,
             fuse_contraction_epilogues=fused,
+            reuse_intermediate_storage=reuse,
+            inplace_add=reuse,
         )
-        (tmp_path / f"generated_{int(fused)}.hpp").write_text(
+        (tmp_path / f"generated_{int(optimized)}.hpp").write_text(
             re.sub(r"<<<.*?>>>", "", generated)
         )
     (tmp_path / "cuda_runtime.h").write_text(

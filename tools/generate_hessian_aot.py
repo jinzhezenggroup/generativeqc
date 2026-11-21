@@ -137,6 +137,23 @@ def _emit_factorized_program(request: IntegralRequest) -> str:
         map(str, (*request.angular, *(0 for _ in range(4 - len(request.angular)))))
     )
     components = ",".join(map(str, request.components))
+    # The factorized recurrence takes omega for ERI, metric and three-center
+    # leaves. Expanded schedules still publish only the fixed selector.
+    runtime = request.radial != "full_range"
+    if runtime:
+        identity = canonical_hash(
+            {
+                "schema": "generativeqc.hessian-integral-aot/runtime-omega-v1",
+                "fixed_reference": integral_program_identity(request),
+            }
+        )
+    else:
+        identity = integral_program_identity(request)
+    range_callback = (
+        f"&factorized_range_integral_callback<{family},{radial},{padded},{components}>"
+        if runtime
+        else "nullptr"
+    )
     return f'''
 #include "dft/hessian_aot.hpp"
 #include "dft/factorized_hessian_integral.hpp"
@@ -146,11 +163,12 @@ const Program& program_{request.name}() noexcept {{
   static constexpr std::array<unsigned,{len(request.angular)}> angular{{{angular}}};
   static constexpr std::array<std::uint32_t,{len(request.components)}> components{{{components}}};
   static const Program program{{
-    "{request.name}","{integral_program_identity(request)}",Kind::integral,{{}},{1 + 6 * request.centers},components,
+    "{request.name}","{identity}",Kind::integral,{{}},{1 + 6 * request.centers},components,
     {request.centers},{request.record_stride},nullptr,nullptr,
     &factorized_integral_callback<{family},{radial},{padded},{components}>,
     {{"{request.family}",angular,"{request.radial}",{request.payload()["omega"]:.17g}}},
-    &factorized_integral_batch_callback<{family},{radial},{padded},{components}>
+    &factorized_integral_batch_callback<{family},{radial},{padded},{components}>,
+    {range_callback}
   }};
   return program;
 }}

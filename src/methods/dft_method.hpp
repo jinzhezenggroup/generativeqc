@@ -21,6 +21,11 @@ class AoBasis;
 namespace generativeqc::scf {
 class PreparedFockPlan;
 }
+namespace generativeqc::dft::dispersion {
+class D3Plan;
+class D4Plan;
+class GcpCudaPlan;
+}  // namespace generativeqc::dft::dispersion
 
 namespace generativeqc::methods::detail {
 
@@ -120,6 +125,19 @@ generativeqc_status read_dft_derivative_sources(PreparedBatch& batch, std::size_
 generativeqc_status borrow_dft_integral_system(PreparedBatch& batch, std::size_t index,
                                                const dft::CudaKsFinalStateToken& expected,
                                                const core::System*& output, std::string& detail);
+
+/** Borrow immutable correction metadata under the batch context lock. If any
+ * active correction cannot be represented, the borrow fails rather than
+ * allowing publication of an electronic-only result. */
+struct KsHessianCorrections {
+  const dft::dispersion::D4Plan* d4{};
+  const dft::dispersion::GcpCudaPlan* gcp{};
+  const dft::dispersion::D3Plan* d3{};
+};
+generativeqc_status borrow_dft_hessian_corrections(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   KsHessianCorrections& output,
+                                                   std::string& detail);
 
 /** Private #2151 single-calculation stationary integral-source bridge.
  * Reuses the exact converged owner and the already qualified DF (CPU/CUDA)
@@ -235,10 +253,10 @@ generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch& batch, std::si
  * density after resident canonical preparation. No device/panel allocation, transfer or
  * scientific work; stale/missing/CPU/host-unfused owners clear the binding.
  * The enclosing endpoint retains the batch and excludes concurrent calls. */
-generativeqc_status dft_cuda_resident_grid_reference(PreparedBatch& batch, std::size_t index,
-                                                     const dft::CudaKsFinalStateToken& expected,
-                                                     dft::CudaKsResidentGridBinding& binding,
-                                                     std::string& detail);
+generativeqc_status dft_cuda_resident_grid_reference(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    dft::CudaKsResidentGridBinding& binding, std::string& detail,
+    dft::CudaKsGridRole role = dft::CudaKsGridRole::primary);
 
 /** Borrow the accepted spin density directly from the exact CUDA KS
  * final-state owner. No transfer or synchronization is performed. source_stream

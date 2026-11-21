@@ -107,12 +107,13 @@ __global__ void norm(const double* values, std::size_t count, double* output,
   }
 }
 
-__global__ void initial(State* state, double relative, double absolute) {
+__global__ void initial(State* state, double relative, double absolute, bool seeded) {
   if (state->code) return;
-  state->residual_norm = state->rhs_norm;
-  state->beta = state->rhs_norm;
+  if (!seeded) state->residual_norm = state->rhs_norm;
+  state->beta = state->residual_norm;
   state->tolerance = fmax(absolute, relative * state->rhs_norm);
-  if (state->rhs_norm <= state->tolerance) state->code = static_cast<int>(Status::converged);
+  if (state->residual_norm <= state->tolerance)
+    state->code = static_cast<int>(Status::converged);
 }
 
 __global__ void cycle(State* state, double* target) {

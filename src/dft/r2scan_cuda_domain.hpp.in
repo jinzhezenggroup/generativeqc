@@ -1,0 +1,18 @@
+#pragma once
+
+#include <cstdint>
+
+#cmakedefine01 GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN
+
+namespace generativeqc::dft {
+inline constexpr bool kCudaR2scanVariational = GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN;
+/** The energy-derived continuation cannot borrow an incumbent Libxc-work state. */
+inline constexpr std::uint32_t kCudaR2scanVariationalDomain = 0x52325302U;
+
+/** Select the point energy before solving, independent of requested properties.
+ * Precision-budget and host-unfused owners retain their existing point policy. */
+constexpr bool use_cuda_r2scan_variational(bool strict_fp64, bool fused,
+                                           double application_energy_budget) noexcept {
+  return kCudaR2scanVariational && strict_fp64 && fused && application_energy_budget == 0;
+}
+}  // namespace generativeqc::dft

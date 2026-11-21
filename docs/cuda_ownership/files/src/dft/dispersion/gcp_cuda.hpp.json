@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/gcp_cuda.hpp",
+  "role": "runtime",
+  "subsystem": "gcp",
+  "reason": "Declares the resident CUDA geometry, force and curvature lifecycle; no separate pair equations are owned by the header.",
+  "regions": []
+}

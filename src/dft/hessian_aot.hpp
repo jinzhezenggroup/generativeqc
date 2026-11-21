@@ -25,9 +25,11 @@ using AoLaunch = int (*)(const double*, std::size_t, std::size_t, std::size_t, c
                          std::size_t, std::size_t, double*, int*, cudaStream_t);
 using IntegralLaunch = int (*)(const double*, std::size_t, const long long*, const double*, double*,
                                int*, cudaStream_t);
+using RangeIntegralLaunch = int (*)(double, const double*, std::size_t, const long long*,
+                                    const double*, double*, int*, cudaStream_t);
 struct FactorizedIntegralBatch;
-using IntegralBatchLaunch = int (*)(const FactorizedIntegralBatch*, std::size_t, const double*,
-                                    int*, cudaStream_t);
+using IntegralBatchLaunch = int (*)(double, const FactorizedIntegralBatch*, std::size_t,
+                                    const double*, int*, cudaStream_t);
 
 /** Scientific selectors for integral closure, independent of program names.
  * Components use the flattened CCA Cartesian product of these shell orders.
@@ -54,6 +56,11 @@ struct Program {
   IntegralLaunch integral{};
   IntegralSignature signature{};
   IntegralBatchLaunch integral_batch{};
+  /** Optional exact radial parameter binding, not a wildcard for other operators.
+   * The named integral callback still evaluates its declared benchmark omega. */
+  RangeIntegralLaunch integral_at_omega{};
+
+  bool accepts_omega(double omega) const noexcept;
 };
 
 /** Immutable, explicitly selected build inventory; no runtime discovery. */
@@ -87,5 +94,12 @@ cudaError_t launch_ao(const double* basis, std::size_t atoms, std::size_t primit
 cudaError_t launch_integral(std::string_view name, const double* records, std::size_t count,
                             const long long* atoms, const double* direction, double* outputs,
                             int* status, cudaStream_t stream) noexcept;
+
+/** Evaluate a linked integral at an authenticated radial parameter. Fixed
+ * leaves only admit their declared value; missing coverage never triggers JIT. */
+cudaError_t launch_integral_at_omega(const Program& program, double omega, const double* records,
+                                     std::size_t count, const long long* atoms,
+                                     const double* direction, double* outputs, int* status,
+                                     cudaStream_t stream) noexcept;
 
 }  // namespace generativeqc::dft::hessian_aot

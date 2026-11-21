@@ -21,8 +21,8 @@ namespace generativeqc::dft {
 class CudaKsGridReference {
  public:
   CudaKsGridReference(methods::PreparedBatch& batch, std::size_t item,
-                      CudaKsFinalStateToken expected)
-      : batch_(batch), item_(item), expected_(std::move(expected)) {}
+                      CudaKsFinalStateToken expected, CudaKsGridRole role = CudaKsGridRole::primary)
+      : batch_(batch), item_(item), expected_(std::move(expected)), role_(role) {}
   CudaKsGridReference(const CudaKsGridReference&) = delete;
   CudaKsGridReference& operator=(const CudaKsGridReference&) = delete;
   CudaKsGridReference(CudaKsGridReference&&) = delete;
@@ -38,7 +38,7 @@ class CudaKsGridReference {
                                                                    detail, true);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     status = methods::detail::dft_cuda_resident_grid_reference(batch_, item_, expected_, binding_,
-                                                               detail);
+                                                               detail, role_);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     int device = -1;
     if (!binding_ || binding_.device_id != frame.device_id || binding_.density != frame.density ||
@@ -106,7 +106,7 @@ class CudaKsGridReference {
       std::string detail;
       int device = -1;
       const auto status = methods::detail::dft_cuda_resident_grid_reference(
-          self.batch_, self.item_, self.expected_, current, detail);
+          self.batch_, self.item_, self.expected_, current, detail, self.role_);
       if (status == GENERATIVEQC_STATUS_SUCCESS && current == self.binding_ &&
           cudaGetDevice(&device) == cudaSuccess && device == current.device_id)
         return cudaSuccess;
@@ -121,6 +121,7 @@ class CudaKsGridReference {
   methods::PreparedBatch& batch_;
   std::size_t item_;
   CudaKsFinalStateToken expected_;
+  const CudaKsGridRole role_;
   CudaKsResidentGridBinding binding_{};
   bool ready_{};
 };

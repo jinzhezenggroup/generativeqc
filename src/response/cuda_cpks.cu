@@ -71,6 +71,8 @@ struct Plan {
 bool plan_workspace(const CudaCpksShape& shape, const CudaCpksOptions& options,
                     Plan& plan) noexcept {
   if (!shape.nao || (shape.spins != 1 && shape.spins != 2) ||
+      (options.resident_precision != CudaCpksResidentPrecision::fp64 &&
+       options.resident_precision != CudaCpksResidentPrecision::fp32_proposal) ||
       (shape.spins == 1 && shape.occupied[1]) ||
       !std::isfinite(options.symmetry_absolute_tolerance) ||
       options.symmetry_absolute_tolerance < 0 ||
@@ -272,29 +274,42 @@ __global__ void unit_rotation(double* output, std::size_t dimension, std::size_t
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     output[index] = index == column ? 1.0 : 0.0;
 }
-__global__ void resident_action(const double* matrix, const double* input, double* output,
-                                std::size_t dimension, int* status) {
+template <typename Storage>
+__global__ void resident_action(const Storage* matrix, const double* input, double* output,
+                                std::size_t dimension) {
   for (std::size_t row = blockIdx.x * blockDim.x + threadIdx.x; row < dimension;
        row += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     double value{};
     for (std::size_t column = 0; column < dimension; ++column)
       value += matrix[column * dimension + row] * input[column];
-    if (!isfinite(value)) atomicExch(status, 1);
     output[row] = value;
   }
 }
+__global__ void compress_column(const double* input, float* output, std::size_t dimension) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < dimension;
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
+    output[index] = static_cast<float>(input[index]);
+}
 struct ResidentExecution {
-  Execution& execution;
-  const double* matrix;
+  const void* matrix;
+  CudaCpksResidentPrecision precision;
   std::size_t& actions;
 };
 cudaError_t apply_resident(void* context, const double* input, double* output,
                            std::size_t dimension, cudaStream_t stream) noexcept {
   auto& resident = *static_cast<ResidentExecution*>(context);
   ++resident.actions;
-  resident_action<<<maps::blocks(dimension), 128, 0, stream>>>(
-      resident.matrix, input, output, dimension, resident.execution.status());
+  if (resident.precision == CudaCpksResidentPrecision::fp32_proposal)
+    resident_action<<<maps::blocks(dimension), 128, 0, stream>>>(
+        static_cast<const float*>(resident.matrix), input, output, dimension);
+  else
+    resident_action<<<maps::blocks(dimension), 128, 0, stream>>>(
+        static_cast<const double*>(resident.matrix), input, output, dimension);
   return cudaGetLastError();
+}
+
+std::size_t resident_scalar_bytes(CudaCpksResidentPrecision precision) noexcept {
+  return precision == CudaCpksResidentPrecision::fp32_proposal ? sizeof(float) : sizeof(double);
 }
 __global__ void physical_residual(const double* rhs, const double* gaps, const double* rotation,
                                   std::size_t dimension, double tolerance, double* norm,
@@ -332,7 +347,7 @@ cudaError_t cuda_cpks_operator_workspace(const CudaCpksShape& shape, const CudaC
   Plan plan;
   if (!plan_workspace(shape, options, plan) ||
       !multiply_size(plan.dimension, plan.dimension, bytes) ||
-      !multiply_size(bytes, sizeof(double), bytes)) {
+      !multiply_size(bytes, resident_scalar_bytes(options.resident_precision), bytes)) {
     bytes = 0;
     return cudaErrorInvalidValue;
   }
@@ -452,12 +467,16 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
       if (overlaps(pointer, bytes, writes[other].first, writes[other].second))
         return cudaErrorInvalidValue;
   }
-  if (operator_cache && plan.dimension) {
+  const bool cached = operator_cache && plan.dimension;
+  const bool mixed =
+      cached && options.resident_precision == CudaCpksResidentPrecision::fp32_proposal;
+  if (cached) {
     auto& cache = *operator_cache;
     std::size_t required{};
-    if (!multiply_size(plan.dimension, plan.dimension, required) ||
-        !multiply_size(required, sizeof(double), required) || cache.bytes_ < required ||
-        !interval(cache.values_, required, end))
+    if (cache.precision_ != options.resident_precision ||
+        !multiply_size(plan.dimension, plan.dimension, required) ||
+        !multiply_size(required, resident_scalar_bytes(cache.precision_), required) ||
+        cache.bytes_ < required || !interval(cache.values_, required, end))
       return cudaErrorInvalidValue;
     for (auto [pointer, bytes] : inputs)
       if (overlaps(cache.values_, required, pointer, bytes)) return cudaErrorInvalidValue;
@@ -529,15 +548,23 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
     result.status = CudaCpksStatus::numerical_failure;
     return cudaSuccess;
   }
-  if (operator_cache && plan.dimension && !operator_cache->ready_) {
+  if (cached && !operator_cache->ready_) {
     auto& cache = *operator_cache;
     for (std::size_t column = 0; column < plan.dimension; ++column) {
       unit_rotation<<<maps::blocks(plan.dimension), 128, 0, stream>>>(base + plan.solution,
                                                                       plan.dimension, column);
       if ((error = cudaGetLastError()) != cudaSuccess) return error;
-      error = apply(&execution, base + plan.solution, cache.values_ + column * plan.dimension,
-                    plan.dimension, stream);
+      // The weighted-density output panel is dead until final assembly and
+      // can hold an FP64 column while we encode it into the FP32 lease.
+      auto* column64 = mixed ? base + plan.weights
+                             : static_cast<double*>(cache.values_) + column * plan.dimension;
+      error = apply(&execution, base + plan.solution, column64, plan.dimension, stream);
       if (error != cudaSuccess) return error;
+      if (mixed) {
+        compress_column<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
+            column64, static_cast<float*>(cache.values_) + column * plan.dimension, plan.dimension);
+        if ((error = cudaGetLastError()) != cudaSuccess) return error;
+      }
       ++cache.columns_;
     }
     error = checkpoint(execution, stream, failed);
@@ -555,12 +582,34 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
     cache.ready_ = true;
   }
   std::size_t unused_actions{};
-  ResidentExecution resident{execution, operator_cache ? operator_cache->values_ : nullptr,
-                             operator_cache ? operator_cache->actions_ : unused_actions};
-  error = solve_cuda_gmres(plan.dimension, options.gmres, operator_cache ? apply_resident : apply,
-                           operator_cache ? static_cast<void*>(&resident) : &execution,
+  ResidentExecution resident{cached ? operator_cache->values_ : nullptr, options.resident_precision,
+                             cached ? operator_cache->actions_ : unused_actions};
+  auto strict = options.gmres;
+  const double* seed = nullptr;
+  if (mixed && strict.max_iterations > 1) {
+    auto proposal = strict;
+    proposal.max_iterations = std::min<std::size_t>(12, strict.max_iterations / 2);
+    // A proposal is not a convergence proof. Reserve the rest of the budget
+    // for the original operator and measure both phases against the same RHS.
+    proposal.relative_tolerance = std::max(proposal.relative_tolerance, 1e-6);
+    CudaGmresResult suggested;
+    error = solve_cuda_gmres(plan.dimension, proposal, apply_resident, &resident, base + plan.rhs,
+                             base + plan.diagonal, base + plan.solution, base + plan.gmres,
+                             plan.gmres_bytes, stream, suggested);
+    if (error != cudaSuccess) return error;
+    result.proposal_iterations = suggested.iterations;
+    result.proposal_operator_actions = suggested.operator_actions;
+    strict.max_iterations -= suggested.iterations;
+    if (suggested.converged() && suggested.iterations) {
+      seed = base + plan.solution;
+      result.proposal_seeded = true;
+    }
+  }
+  const bool use_resident = cached && !mixed;
+  error = solve_cuda_gmres(plan.dimension, strict, use_resident ? apply_resident : apply,
+                           use_resident ? static_cast<void*>(&resident) : &execution,
                            base + plan.rhs, base + plan.diagonal, base + plan.solution,
-                           base + plan.gmres, plan.gmres_bytes, stream, result.gmres);
+                           base + plan.gmres, plan.gmres_bytes, stream, result.gmres, seed);
   if (error != cudaSuccess) return error;
   if (!result.gmres.converged()) {
     result.status = CudaCpksStatus::linear_solve_failed;
@@ -577,7 +626,7 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
   }
   error = execution.induced(stream);
   if (error != cudaSuccess) return error;
-  if (operator_cache && plan.dimension) {
+  if (cached) {
     // The final physical Fock already contains both metric and solved rotation
     // motion. Re-evaluate the compiler's stationarity RHS with that Fock, then
     // subtract the gap term. This is the true residual, not a cached matvec,

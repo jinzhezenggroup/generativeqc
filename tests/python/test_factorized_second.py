@@ -11,8 +11,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
+from generativeqc_compiler.integral.df_second import emit_df_second
 from generativeqc_compiler.integral.factorized_matrix import emit_factorized_matrix_cpu
 from generativeqc_compiler.integral.factorized_second import emit_factorized_second
+from generativeqc_compiler.integral.hessian_aot import IntegralRequest
 from generativeqc_compiler.integral.shell_spec import cartesian_components
 
 from tools.generativeqc_validation.second_derivatives import (
@@ -720,9 +722,13 @@ def reference(
         (1, (0, 0, 0), 0),
         (1, (2, 1, 3), 0),
         (1, (3, 3, 4), 0),
+        (1, (0, 0, 0), 1),
+        (1, (3, 3, 4), 1),
         (2, (0, 0), 0),
         (2, (3, 4), 0),
         (2, (4, 4), 0),
+        (2, (0, 0), 1),
+        (2, (4, 4), 1),
     ),
 )
 def test_factorized_physical_value_gradient_jvp(
@@ -778,6 +784,49 @@ def test_factorized_translation_and_real_exponents(
         exponents[-1] = exponent
         valid, _ = evaluate(library, family, angular, 0, exponents=exponents)
         assert not valid
+
+
+@pytest.mark.parametrize(
+    "family,angular,component", ((1, (1, 0, 2), 13), (2, (2, 1), 7))
+)
+def test_expanded_long_range_df_against_libcint(
+    tmp_path: Path, family: int, angular: tuple, component: int
+) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("C++ compiler is unavailable")
+    name = "three_center_eri" if family == 1 else "coulomb_metric"
+    request = IntegralRequest(name, angular, (component,), "long_range")
+    source = tmp_path / "expanded.cpp"
+    source.write_text(
+        emit_df_second(name, angular, request.components, radial=request.kernel)
+        + '\nextern "C" bool raw(const double* in, double* out) { return component_0(in, out); }'
+    )
+    output = tmp_path / "expanded.so"
+    result = CppCompilerAdapter(Path(compiler), compile_timeout=600).compile_shared(
+        source, output, includes=(ROOT / "src",), options=("-ffp-contract=off",)
+    )
+    assert result.returncode == 0, result.stderr
+    primitive = ctypes.CDLL(str(output)).raw
+    pointer = ctypes.POINTER(ctypes.c_double)
+    primitive.argtypes, primitive.restype = (pointer, pointer), ctypes.c_bool
+    count = len(angular)
+    positions, direction = POSITIONS[:count], DIRECTION[:count]
+    record = np.r_[EXPONENTS[:count], positions.ravel(), direction.ravel()]
+    actual = np.empty(1 + 6 * count)
+    assert primitive(record.ctypes.data_as(pointer), actual.ctypes.data_as(pointer))
+    value, gradient = reference(family, angular, positions, 1)
+    step = 1e-4
+    jvp = (
+        reference(family, angular, positions + step * direction, 1)[1]
+        - reference(family, angular, positions - step * direction, 1)[1]
+    ) / (2 * step)
+    np.testing.assert_allclose(
+        actual,
+        np.r_[value[component], gradient[:, component], jvp[:, component]],
+        atol=3e-10,
+        rtol=2e-9,
+    )
 
 
 def test_factorized_emission_is_finite_and_host_only() -> None:

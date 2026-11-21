@@ -7,6 +7,18 @@
 
 #include "dft/cuda_wb97mv_grid.hpp"
 #include "dft/hessian_aot.hpp"
+#include "dft/split_hybrid_cuda_selection.hpp"
+#include "dft/xc_point_response.hpp"
+#include "generated_split_hybrid_registry.cuh"
+#include "r2scan_cuda_domain.hpp"
+#include "response/b3lyp_direction.cuh"
+#if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
+#include "response/m06_2x_stationary.cuh"
+#endif
+#if GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT
+#include "response/mn15_stationary.cuh"
+#endif
+#include "response/r2scan_stationary.cuh"
 #include "response/wb97mv_grid_response.cuh"
 #include "response/wb97mv_nuclear_grid.cuh"
 
@@ -21,6 +33,10 @@ bool product(std::size_t left, std::size_t right, std::size_t& value) noexcept {
   if (right && left > std::numeric_limits<std::size_t>::max() / right) return false;
   value = left * right;
   return true;
+}
+
+double revised_beta(double damping) noexcept {
+  return std::pow(3.0 / (damping * damping), 0.75) / 32.0;
 }
 
 struct Layout {
@@ -40,9 +56,34 @@ struct Layout {
 
 bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& options,
             Layout& plan) noexcept {
+  const auto code = options.functional_code;
+  const bool wb97mv = code == semilocal_family_code(SemilocalFamily::Wb97mv);
+  const bool split_hybrid = cuda_split_hybrid_variational_domain(code) != 0;
+  const bool nonlocal = options.includes_nonlocal();
+  const bool unscaled = split_hybrid || code == semilocal_family_code(SemilocalFamily::B3lyp) ||
+                        code == semilocal_family_code(SemilocalFamily::R2scan);
+  if ((!wb97mv && !options.revised_nonlocal &&
+       options.component != CudaWb97mvGridComponent::combined) ||
+      (split_hybrid && nonlocal) ||
+      (!wb97mv && !unscaled && code != semilocal_family_code(SemilocalFamily::Lda) &&
+       code != semilocal_family_code(SemilocalFamily::Pbe)) ||
+      ((wb97mv || unscaled) && (options.exchange_scale != 1 || options.correlation_scale != 1)) ||
+      !std::isfinite(options.exchange_scale) || options.exchange_scale < 0 ||
+      !std::isfinite(options.correlation_scale) || options.correlation_scale < 0 ||
+      (nonlocal && (!options.pair_tile_points || options.pair_tile_points > 256 ||
+                    !options.max_pair_evaluations)))
+    return false;
+  if (options.revised_nonlocal) {
+    const auto& parameters = *options.revised_nonlocal;
+    if (parameters.variant != nlc::Vv10Variant::rvv10 || !std::isfinite(parameters.b) ||
+        parameters.b <= 0 || !std::isfinite(parameters.c) || parameters.c <= 0 ||
+        !std::isfinite(parameters.coefficient) || parameters.coefficient <= 0)
+      return false;
+    const auto beta = revised_beta(parameters.b) * parameters.coefficient;
+    if (!std::isfinite(beta) || beta <= 0) return false;
+  }
   if (!shape.atoms || !shape.primitives || !shape.nao || !shape.points ||
-      (shape.spins != 1 && shape.spins != 2) || !options.pair_tile_points ||
-      options.pair_tile_points > 256 || !options.max_pair_evaluations ||
+      (shape.spins != 1 && shape.spins != 2) ||
       !std::isfinite(options.symmetry_absolute_tolerance) ||
       options.symmetry_absolute_tolerance < 0 ||
       !std::isfinite(options.symmetry_relative_tolerance) ||
@@ -70,9 +111,9 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
   std::size_t features{}, potential{}, pair_elements{};
   if (maps::workspace_features(plan.extents, features) != cudaSuccess ||
       maps::workspace_potential(plan.extents, potential) != cudaSuccess ||
-      !product(std::min(shape.points, options.pair_tile_points),
-               std::min(shape.points, options.pair_tile_points), pair_elements) ||
-      !product(pair_elements, options.nuclear_response ? 10 : 4, pair_elements))
+      (nonlocal && (!product(std::min(shape.points, options.pair_tile_points),
+                             std::min(shape.points, options.pair_tile_points), pair_elements) ||
+                    !product(pair_elements, options.nuclear_response ? 10 : 4, pair_elements))))
     return false;
   plan.tensor_bytes = std::max(features, potential);
   if (options.nuclear_response) {
@@ -110,7 +151,8 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
             options.max_nuclear_affine_terms)
       return false;
   }
-  if (!reserve(1, plan.status) || !reserve(1, plan.count) || !reserve(shape.points, plan.active) ||
+  if (!reserve(1, plan.status) ||
+      (nonlocal && (!reserve(1, plan.count) || !reserve(shape.points, plan.active))) ||
       !reserve(plan.ao_elements, plan.ao) || !reserve(plan.fields, plan.base) ||
       !reserve(plan.fields, plan.direction) || !reserve(plan.fields, plan.coefficients) ||
       !reserve(plan.matrices, plan.reference) || !reserve(plan.matrices, plan.candidate) ||
@@ -230,6 +272,272 @@ __global__ void discover(const double* fields, const double* weights, const doub
   *selected = size;
 }
 
+/** Differentiate the B3LYP SCF gradient Gram map as well as its scalar model.
+ * At an empty spin the generated point action is restricted to its tangent
+ * subspace. A finite gradient direction out of that subspace is not admitted. */
+__device__ void b3lyp_point(unsigned spins, const double physical_rho[2],
+                            const double physical_gradient[2][3],
+                            const double physical_delta_rho[2],
+                            const double physical_delta_gradient[2][3], point::Value& base,
+                            point::Value& tangent) {
+  // Polarize only the point evaluator's inputs. The moving weight contraction
+  // still pairs its restricted derivative with the caller's total direction.
+  const double spin_scale = spins == 1 ? 0.5 : 1.0;
+  double gradient[2][3]{}, delta_gradient[2][3]{};
+  double features[5]{}, direction[5]{};
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    const unsigned source = spins == 1 ? 0 : spin;
+    features[spin] = spin_scale * physical_rho[source];
+    direction[spin] = spin_scale * physical_delta_rho[source];
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      gradient[spin][axis] = spin_scale * physical_gradient[source][axis];
+      delta_gradient[spin][axis] = spin_scale * physical_delta_gradient[source][axis];
+    }
+  }
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    if (!isfinite(features[spin]) || features[spin] < 0 || !isfinite(direction[spin]) ||
+        (features[spin] == 0 && direction[spin] != 0))
+      base.valid = false;
+    for (unsigned axis = 0; axis < 3; ++axis)
+      if (!isfinite(gradient[spin][axis]) || !isfinite(delta_gradient[spin][axis]) ||
+          (features[spin] == 0 && (gradient[spin][axis] != 0 || delta_gradient[spin][axis] != 0)))
+        base.valid = false;
+  }
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    const auto alpha = gradient[0][axis], beta = gradient[1][axis];
+    const auto delta_alpha = delta_gradient[0][axis], delta_beta = delta_gradient[1][axis];
+    features[2] += alpha * alpha;
+    features[3] += alpha * beta;
+    features[4] += beta * beta;
+    direction[2] += 2 * alpha * delta_alpha;
+    direction[3] += delta_alpha * beta + alpha * delta_beta;
+    direction[4] += 2 * beta * delta_beta;
+  }
+  if (!base.valid || !isfinite(features[0] + features[1])) {
+    base.valid = false;
+    return;
+  }
+  for (unsigned slot = 2; slot < 5; ++slot) {
+    if (!isfinite(features[slot]) || !isfinite(direction[slot])) {
+      base.valid = false;
+      return;
+    }
+  }
+  const auto point = generated::b3lyp_device_direction(features, direction);
+  const auto& partials = point.feature_derivative;
+  const auto& action = point.directional_derivative;
+  base.energy = point.energy_density;
+  base.valid = isfinite(base.energy);
+  for (unsigned spin = 0; spin < spins; ++spin) {
+    base.rho[spin] = partials[spin];
+    tangent.rho[spin] = action[spin];
+    const auto same = 2 + 2 * spin, other = 1 - spin;
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      base.gradient[spin][axis] =
+          2 * partials[same] * gradient[spin][axis] + partials[3] * gradient[other][axis];
+      tangent.gradient[spin][axis] =
+          2 * (action[same] * gradient[spin][axis] + partials[same] * delta_gradient[spin][axis]) +
+          action[3] * gradient[other][axis] + partials[3] * delta_gradient[other][axis];
+    }
+  }
+}
+
+/** Apply the SCF point potential and its physical directional action.
+ * Shared grid maps expect five fields per spin; LDA/GGA have no tau partial.
+ * In RKS the primal sees two equal spin densities but its derivative is with
+ * respect to their sum; restricted_response takes the *total* direction.
+ * Nuclear response also differentiates the quadrature measure, adding w' V
+ * and emitting d(E_xc density) for the weight cotangent. */
+__global__ void semilocal_points(const double* fields, const double* direction,
+                                 const double* weights, const double* delta_weights,
+                                 std::size_t points, unsigned spins, SemilocalFamily functional,
+                                 double exchange_scale, double correlation_scale, bool response,
+                                 double* partials, double* energy, int* status) {
+  for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
+       lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    double rho[2]{}, gradient[2][3]{}, delta_rho[2]{}, delta_gradient[2][3]{};
+    for (unsigned spin = 0; spin < spins; ++spin) {
+      rho[spin] = fields[5 * spin * points + lane];
+      if (response) delta_rho[spin] = direction[5 * spin * points + lane];
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        gradient[spin][axis] = fields[(5 * spin + 1 + axis) * points + lane];
+        if (response) delta_gradient[spin][axis] = direction[(5 * spin + 1 + axis) * points + lane];
+      }
+    }
+    point::Value base, tangent;
+    if (functional == SemilocalFamily::B3lyp) {
+      b3lyp_point(spins, rho, gradient, delta_rho, delta_gradient, base, tangent);
+    } else {
+      const bool pbe = functional == SemilocalFamily::Pbe;
+      if (response)
+        tangent =
+            spins == 1
+                ? point::restricted_response(pbe, rho[0], gradient[0], delta_rho[0],
+                                             delta_gradient[0], exchange_scale, correlation_scale)
+                : point::unrestricted_response(pbe, rho, gradient, delta_rho, delta_gradient,
+                                               exchange_scale, correlation_scale);
+      if (spins == 1) {
+        rho[1] = (rho[0] *= 0.5);
+        for (unsigned axis = 0; axis < 3; ++axis) gradient[1][axis] = (gradient[0][axis] *= 0.5);
+      }
+      if (!response || energy)
+        base = point::evaluate(pbe, rho, gradient, exchange_scale, correlation_scale);
+    }
+    const double weight = weights[lane];
+    const double delta_weight = response && delta_weights ? delta_weights[lane] : 0.0;
+    if (!base.valid || !tangent.valid || !isfinite(weight) || !isfinite(delta_weight)) {
+      atomicExch(status, 1);
+      continue;
+    }
+    double energy_direction = 0;
+    for (unsigned spin = 0; spin < spins; ++spin) {
+      const double rho_partial = response
+                                     ? weight * tangent.rho[spin] + delta_weight * base.rho[spin]
+                                     : weight * base.rho[spin];
+      partials[5 * spin * points + lane] = rho_partial;
+      if (!isfinite(rho_partial)) atomicExch(status, 1);
+      if (response && energy) energy_direction += base.rho[spin] * delta_rho[spin];
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        const double gradient_partial = response ? weight * tangent.gradient[spin][axis] +
+                                                       delta_weight * base.gradient[spin][axis]
+                                                 : weight * base.gradient[spin][axis];
+        partials[(5 * spin + 1 + axis) * points + lane] = gradient_partial;
+        if (!isfinite(gradient_partial)) atomicExch(status, 1);
+        if (response && energy)
+          energy_direction += base.gradient[spin][axis] * delta_gradient[spin][axis];
+      }
+      partials[(5 * spin + 4) * points + lane] = 0;
+    }
+    if (energy) {
+      const double weight_partial = response ? energy_direction : base.energy;
+      partials[5 * spins * points + lane] = weight_partial;
+      for (unsigned axis = 1; axis <= 3; ++axis) partials[(5 * spins + axis) * points + lane] = 0;
+      if (!response) energy[lane] = weight * base.energy;
+      if (!isfinite(weight_partial) || (!response && !isfinite(energy[lane])))
+        atomicExch(status, 1);
+    }
+  }
+}
+
+/** Contract the variational point in physical rho/gradient/tau coordinates.
+ * TensorIR already puts the kinetic half in the feature map and its adjoint. */
+template <bool response, std::uint32_t domain>
+__global__ void stationary_points(const double* fields, const double* direction,
+                                  const double* weights, const double* delta_weights,
+                                  std::size_t points, unsigned spins, double* partials,
+                                  double* energy, int* status) {
+  for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
+       lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    double point[10], delta[10]{};
+    const double spin_factor = spins == 1 ? 0.5 : 1.0;
+    bool valid = true;
+    for (unsigned spin = 0; spin < 2; ++spin) {
+      const unsigned panel_spin = spins == 1 ? 0 : spin;
+      const unsigned indices[] = {spin, 2 + 3 * spin, 3 + 3 * spin, 4 + 3 * spin, 8 + spin};
+      for (unsigned feature = 0; feature < 5; ++feature) {
+        const auto offset = (5 * panel_spin + feature) * points + lane;
+        const auto index = indices[feature];
+        point[index] = spin_factor * fields[offset];
+        if constexpr (response) delta[index] = spin_factor * direction[offset];
+        valid = valid && isfinite(point[index]) && isfinite(delta[index]) &&
+                ((feature != 0 && feature != 4) || point[index] >= 0);
+      }
+    }
+    const double weight = weights[lane];
+    const double dw = response && delta_weights ? delta_weights[lane] : 0.0;
+    if (!valid || !isfinite(weight) || !isfinite(dw)) {
+      atomicExch(status, 1);
+      continue;
+    }
+    const auto value = [&] {
+#if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
+      if constexpr (domain == kCudaM062XVariationalDomain) {
+        if constexpr (response)
+          return generated::m06_2x_stationary_action(point, delta);
+        else
+          return generated::m06_2x_stationary_value(point);
+      } else
+#endif
+#if GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT
+          if constexpr (domain == kCudaMN15VariationalDomain) {
+        if constexpr (response)
+          return generated::mn15_stationary_action(point, delta);
+        else
+          return generated::mn15_stationary_value(point);
+      } else
+#endif
+      {
+        if constexpr (response)
+          return generated::r2scan_stationary_action(point, delta);
+        else
+          return generated::r2scan_stationary_value(point);
+      }
+    }();
+    for (unsigned spin = 0; spin < spins; ++spin) {
+      const unsigned indices[] = {spin, 2 + 3 * spin, 3 + 3 * spin, 4 + 3 * spin, 8 + spin};
+      const unsigned other[] = {1, 5, 6, 7, 9};
+      for (unsigned feature = 0; feature < 5; ++feature) {
+        const auto index = indices[feature];
+        double base = value.potential[index];
+        double tangent = 0;
+        if constexpr (response) tangent = value.action[index];
+        if (spins == 1) {
+          base = 0.5 * (base + value.potential[other[feature]]);
+          if constexpr (response) tangent = 0.5 * (tangent + value.action[other[feature]]);
+        }
+        const double coefficient = response ? weight * tangent + dw * base : weight * base;
+        partials[(5 * spin + feature) * points + lane] = coefficient;
+        if (!isfinite(coefficient)) atomicExch(status, 1);
+      }
+    }
+    if (energy) {
+      double measure = value.energy;
+      if constexpr (response) {
+        measure = 0;
+        for (unsigned feature = 0; feature < 10; ++feature)
+          measure += value.potential[feature] * delta[feature];
+      } else {
+        energy[lane] = weight * value.energy;
+        if (!isfinite(energy[lane])) atomicExch(status, 1);
+      }
+      partials[5 * spins * points + lane] = measure;
+      for (unsigned axis = 1; axis <= 3; ++axis) partials[(5 * spins + axis) * points + lane] = 0;
+      if (!isfinite(measure)) atomicExch(status, 1);
+    }
+  }
+}
+
+void launch_stationary_points(const double* fields, const double* direction, const double* weights,
+                              const double* delta_weights, CudaWb97mvGridShape shape,
+                              std::uint32_t code, bool response, double* partials, double* energy,
+                              int* status, cudaStream_t stream) {
+  const auto blocks = maps::blocks(shape.points);
+  const auto launch = [&]<std::uint32_t domain>() {
+    if (response)
+      stationary_points<true, domain>
+          <<<blocks, 128, 0, stream>>>(fields, direction, weights, delta_weights, shape.points,
+                                       shape.spins, partials, energy, status);
+    else
+      stationary_points<false, domain><<<blocks, 128, 0, stream>>>(
+          fields, nullptr, weights, nullptr, shape.points, shape.spins, partials, energy, status);
+  };
+#if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
+  if (code == generated::kM062XFunctionalCode)
+    return launch.template operator()<kCudaM062XVariationalDomain>();
+#endif
+#if GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT
+  if (code == generated::kMN15FunctionalCode)
+    return launch.template operator()<kCudaMN15VariationalDomain>();
+#endif
+  (void)code;
+  launch.template operator()<kCudaR2scanVariationalDomain>();
+}
+
+bool uses_stationary_point(std::uint32_t code) noexcept {
+  return code == semilocal_family_code(SemilocalFamily::R2scan) ||
+         cuda_split_hybrid_variational_domain(code) != 0;
+}
+
 __global__ void pair_reduce(const double* values, const std::size_t* active, std::size_t row_begin,
                             std::size_t rows, std::size_t columns, std::size_t points,
                             unsigned spins, double* coefficients, int* status) {
@@ -248,12 +556,13 @@ __global__ void pair_reduce(const double* values, const std::size_t* active, std
 }
 
 __global__ void local_beta(const double* weights, const std::size_t* active, std::size_t count,
-                           std::size_t points, unsigned spins, double* coefficients, int* status) {
+                           std::size_t points, unsigned spins, double beta, double* coefficients,
+                           int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
     for (unsigned spin = 0; spin < spins; ++spin) {
       const auto offset = 5 * spin * points + active[index];
-      coefficients[offset] += ad::vv10_beta * weights[active[index]];
+      coefficients[offset] += beta * weights[active[index]];
       if (!isfinite(coefficients[offset])) atomicExch(status, 1);
     }
 }
@@ -408,6 +717,7 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   if ((error = device_buffer(workspace, reference.device_id)) != cudaSuccess) return error;
   shape_ = shape;
   options_ = options;
+  beta_ = options.revised_nonlocal ? revised_beta(options.revised_nonlocal->b) : ad::vv10_beta;
   reference_ = reference;
   workspace_ = workspace;
   work_.workspace_bytes = plan.bytes;
@@ -426,18 +736,23 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   if (error == cudaSuccess)
     error = features(shape, plan, arena, reference.density, arena + plan.base, reference.stream);
   if (error != cudaSuccess) return drain(error, reference.stream);
-  discover<<<1, 1, 0, reference.stream>>>(
-      arena + plan.base, reference.weights, reference.points, shape.points, shape.spins,
-      reinterpret_cast<std::size_t*>(arena + plan.active),
-      reinterpret_cast<std::size_t*>(arena + plan.count), status);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, reference.stream);
-  if ((error = cudaMemcpyAsync(&work_.active_nonlocal_points, arena + plan.count,
-                               sizeof(std::size_t), cudaMemcpyDeviceToHost, reference.stream)) !=
-      cudaSuccess)
-    return drain(error, reference.stream);
+  if (options.includes_nonlocal()) {
+    discover<<<1, 1, 0, reference.stream>>>(
+        arena + plan.base, reference.weights, reference.points, shape.points, shape.spins,
+        reinterpret_cast<std::size_t*>(arena + plan.active),
+        reinterpret_cast<std::size_t*>(arena + plan.count), status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, reference.stream);
+    if ((error = cudaMemcpyAsync(&work_.active_nonlocal_points, arena + plan.count,
+                                 sizeof(std::size_t), cudaMemcpyDeviceToHost, reference.stream)) !=
+        cudaSuccess)
+      return drain(error, reference.stream);
+  }
   if ((error = numerical_status(status, reference.stream)) != cudaSuccess) return error;
   const auto active = work_.active_nonlocal_points;
-  if (active && active > options.max_pair_evaluations / active) return cudaErrorInvalidValue;
+  if (active && active > options.max_pair_evaluations / active) {
+    work_.pair_budget_exceeded = true;
+    return cudaErrorInvalidValue;
+  }
   ready_ = true;
   if (options.nuclear_response) work_.nuclear_affine_terms = plan.reference_work;
   error = options.nuclear_response ? evaluate_nuclear(false) : evaluate(false);
@@ -454,7 +769,21 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
   auto* status = reinterpret_cast<int*>(arena + plan.status);
   auto* active = reinterpret_cast<std::size_t*>(arena + plan.active);
   const auto stream = reference_.stream;
-  if (shape_.spins == 1)
+  if (options_.component == CudaWb97mvGridComponent::vv10_only) {
+    // Pair and local-beta kernels accumulate into the point coefficients.
+    const auto zero =
+        cudaMemsetAsync(arena + plan.coefficients, 0, plan.fields * sizeof(double), stream);
+    if (zero != cudaSuccess) return drain(zero, stream);
+  } else if (uses_stationary_point(options_.functional_code))
+    launch_stationary_points(arena + plan.base, arena + plan.direction, reference_.weights, nullptr,
+                             shape_, options_.functional_code, response, arena + plan.coefficients,
+                             nullptr, status, stream);
+  else if (options_.functional_code != semilocal_family_code(SemilocalFamily::Wb97mv))
+    semilocal_points<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+        arena + plan.base, arena + plan.direction, reference_.weights, nullptr, shape_.points,
+        shape_.spins, semilocal_family_from_code(options_.functional_code), options_.exchange_scale,
+        options_.correlation_scale, response, arena + plan.coefficients, nullptr, status);
+  else if (shape_.spins == 1)
     ad::point_1<<<maps::blocks(shape_.points), 128, 0, stream>>>(
         arena + plan.base, arena + plan.direction, reference_.weights, shape_.points, response,
         arena + plan.coefficients, status);
@@ -472,10 +801,16 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
     for (std::size_t column = 0; column < count; column += options_.pair_tile_points) {
       const auto rows = std::min(count - row, options_.pair_tile_points);
       const auto columns = std::min(count - column, options_.pair_tile_points);
-      ad::pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
-          arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
-          shape_.points, shape_.spins, active, row, column, rows, columns, response,
-          arena + plan.pairs, status);
+      if (const auto& revised = options_.revised_nonlocal)
+        ad::rvv10_pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
+            arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+            shape_.points, shape_.spins, active, row, column, rows, columns, revised->b, revised->c,
+            revised->coefficient, response, arena + plan.pairs, status);
+      else
+        ad::pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
+            arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+            shape_.points, shape_.spins, active, row, column, rows, columns, response,
+            arena + plan.pairs, status);
       error = cudaGetLastError();
       if (error != cudaSuccess) return drain(error, stream);
       pairs += rows * columns;
@@ -485,8 +820,10 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
       if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
     }
   if (!response && count) {
+    const auto beta =
+        options_.revised_nonlocal ? beta_ * options_.revised_nonlocal->coefficient : beta_;
     local_beta<<<maps::blocks(count), 128, 0, stream>>>(reference_.weights, active, count,
-                                                        shape_.points, shape_.spins,
+                                                        shape_.points, shape_.spins, beta,
                                                         arena + plan.coefficients, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   }
@@ -522,7 +859,23 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
   if (pair_count > UINT64_MAX - pairs ||
       (!response && pair_count > UINT64_MAX - work_.reference_pairs))
     return cudaErrorInvalidValue;
-  if (shape_.spins == 1)
+  if (options_.component == CudaWb97mvGridComponent::vv10_only) {
+    // Clear all spin/weight/point cotangents, including screened-out rows.
+    auto zero = cudaMemsetAsync(partials, 0, plan.full_fields * sizeof(double), stream);
+    if (zero == cudaSuccess)
+      zero = cudaMemsetAsync(arena + plan.energy, 0, shape_.points * sizeof(double), stream);
+    if (zero != cudaSuccess) return drain(zero, stream);
+  } else if (uses_stationary_point(options_.functional_code))
+    launch_stationary_points(arena + plan.base, arena + plan.direction, reference_.weights,
+                             arena + plan.right_weights, shape_, options_.functional_code, response,
+                             partials, arena + plan.energy, status, stream);
+  else if (options_.functional_code != semilocal_family_code(SemilocalFamily::Wb97mv))
+    semilocal_points<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+        arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
+        shape_.points, shape_.spins, semilocal_family_from_code(options_.functional_code),
+        options_.exchange_scale, options_.correlation_scale, response, partials,
+        arena + plan.energy, status);
+  else if (shape_.spins == 1)
     nuclear_ad::point_1<<<maps::blocks(shape_.points), 128, 0, stream>>>(
         arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
         shape_.points, response, partials, arena + plan.energy, status);
@@ -536,10 +889,17 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
     for (std::size_t column = 0; column < count; column += options_.pair_tile_points) {
       const auto rows = std::min(count - row, options_.pair_tile_points);
       const auto columns = std::min(count - column, options_.pair_tile_points);
-      nuclear_ad::pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
-          arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
-          arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
-          active, row, column, rows, columns, response, arena + plan.pairs, status);
+      if (const auto& revised = options_.revised_nonlocal)
+        nuclear_ad::rvv10_pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
+            arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+            arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
+            active, row, column, rows, columns, revised->b, revised->c, revised->coefficient,
+            response, arena + plan.pairs, status);
+      else
+        nuclear_ad::pairs<<<maps::blocks(rows * columns), 128, 0, stream>>>(
+            arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+            arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
+            active, row, column, rows, columns, response, arena + plan.pairs, status);
       if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
       pairs += rows * columns;
       if (!response) work_.reference_pairs += rows * columns;
@@ -549,10 +909,17 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
       if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
     }
   if (count) {
-    nuclear_ad::local<<<maps::blocks(count), 128, 0, stream>>>(
-        arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
-        arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins, active,
-        count, response, partials, arena + plan.energy, status);
+    if (const auto& revised = options_.revised_nonlocal)
+      nuclear_ad::rvv10_local<<<maps::blocks(count), 128, 0, stream>>>(
+          arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+          arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
+          active, beta_, revised->coefficient, count, response, partials, arena + plan.energy,
+          status);
+    else
+      nuclear_ad::local<<<maps::blocks(count), 128, 0, stream>>>(
+          arena + plan.base, arena + plan.direction, reference_.weights, reference_.points,
+          arena + plan.right_weights, arena + plan.right_points, shape_.points, shape_.spins,
+          active, count, response, partials, arena + plan.energy, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   }
   const auto panel = shape_.points * shape_.nao;
@@ -667,9 +1034,8 @@ cudaError_t CudaWb97mvGridResponse::enqueue_nuclear_mixed(
         plan.nuclear_extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
         arena + plan.ao + 3 * panel, right, right + panel, right + 2 * panel, right + 3 * panel,
         arena + plan.right_density + spin * plan.matrix, mixed_ao, mixed_ao + panel,
-        mixed_ao + 2 * panel, mixed_ao + 3 * panel, arena + plan.zero_density,
-        reference_.density + spin * plan.matrix, left_ao, left_ao + panel, left_ao + 2 * panel,
-        left_ao + 3 * panel, arena + plan.zero_density, fields + shape_.points,
+        mixed_ao + 2 * panel, mixed_ao + 3 * panel, reference_.density + spin * plan.matrix,
+        left_ao, left_ao + panel, left_ao + 2 * panel, left_ao + 3 * panel, fields + shape_.points,
         fields + 2 * shape_.points, fields + 3 * shape_.points, fields, fields + 4 * shape_.points,
         arena + plan.tensor, plan.tensor_bytes, status, stream);
     if (queued != cudaSuccess) return queued;

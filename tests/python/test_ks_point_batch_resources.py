@@ -78,6 +78,13 @@ def native_probe(
     (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     (folder / "generated_quadrature.cuh").write_text(emit_quadrature_cuda())
+    domain_template = (ROOT / "src/dft/r2scan_cuda_domain.hpp.in").read_text()
+    (folder / "r2scan_cuda_domain.hpp").write_text(
+        domain_template.replace(
+            "#cmakedefine01 GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN",
+            "#define GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN 0",
+        )
+    )
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
@@ -106,6 +113,7 @@ def native_probe(
 #include "dft/cuda_xc.hpp"
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "r2scan_cuda_domain.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/cuda_device_scope.hpp"
 #include "runtime/resource_usage.hpp"

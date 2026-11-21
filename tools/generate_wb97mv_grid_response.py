@@ -14,10 +14,10 @@ from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_WEIGHT_THRESHOLD,
 )
 from generativeqc_compiler.integral.cuda import CudaEmitter
-from generativeqc_compiler.method.nonlocal_pair import vv10_grid_beta
+from generativeqc_compiler.method.nonlocal_pair import nonlocal_grid_beta
 from generativeqc_compiler.method.spec import resolve_method
-from generativeqc_compiler.method.stationary_grid_second import _pair_program
 from generativeqc_compiler.method.wb97mv_grid_response import grid_maps, point_program
+from generativeqc_compiler.method.wb97mv_nuclear_grid import nonlocal_field_program
 from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda, emit_affine_work
 
 from tools.generate_df_kernels import write_if_changed
@@ -34,6 +34,9 @@ def generate() -> str:
             fuse_contraction_epilogues=True,
             parallel_scalar_reduction=True,
             parallel_output_reduction=True,
+            # Every AO feature is a symmetric bilinear in the density. Use
+            # the same rounded adjoint for both entries of each AO pair.
+            symmetric_outputs={"potential": ("potential",)},
         ),
         emit_affine_work(
             grid_maps(),
@@ -76,8 +79,6 @@ def generate() -> str:
             )
         text.extend([" }", "}"])
     primitive = resolve_method("WB97M-V").primitives[-1]
-    graph, roots = _pair_program(primitive.spec)
-    roots = (*roots[1:5], *roots[10:14])
     variables = {}
     for side, point in (("a", "first"), ("b", "second")):
         for index in range(9):
@@ -95,37 +96,48 @@ def generate() -> str:
                     else f"positions[3 * {point} + {index - 6}]"
                 )
                 variables[f"d{side}{index}"] = "0.0"
-    emitter = CudaEmitter(graph, variables)
-    emitter.emit(roots)
-    text.extend(
-        [
-            "__global__ void pairs(const double* fields, const double* direction, const double* weights,",
-            " const double* positions, std::size_t points, unsigned spins, const std::size_t* active,",
-            " std::size_t row_begin, std::size_t column_begin, std::size_t rows, std::size_t columns,",
-            " bool response, double* output, int* status) {",
-            " const auto lanes = rows * columns;",
-            " for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < lanes;",
-            "      lane += static_cast<std::size_t>(blockDim.x) * gridDim.x) {",
-            " const auto first = active[row_begin + lane / columns];",
-            " const auto second = active[column_begin + lane % columns];",
-            *emitter.lines,
-        ]
-    )
-    for index in range(4):
-        factor = float(primitive.coefficient)
+    for revised in (False, True):
+        graph, roots = nonlocal_field_program("pair", runtime_rvv10=revised)
+        roots = (*roots[1:5], *roots[10:14])
+        emitter = CudaEmitter(
+            graph,
+            {**variables, "damping": "damping", "gradient_scale": "gradient_scale"},
+        )
+        emitter.emit(roots)
+        name = "rvv10_pairs" if revised else "pairs"
+        parameters = (
+            " double damping, double gradient_scale, double coefficient,"
+            if revised
+            else ""
+        )
+        factor = "coefficient" if revised else f"{float(primitive.coefficient):.17g}"
         text.extend(
             [
-                f" const double value_{index} = {factor:.17g} * (response ? {emitter.reference(roots[index + 4])} : {emitter.reference(roots[index])});",
-                f" output[{index} * lanes + lane] = value_{index};",
-                f" if (!isfinite(value_{index})) atomicExch(status, 1);",
+                f"__global__ void {name}(const double* fields, const double* direction, const double* weights,",
+                " const double* positions, std::size_t points, unsigned spins, const std::size_t* active,",
+                " std::size_t row_begin, std::size_t column_begin, std::size_t rows, std::size_t columns,",
+                f"{parameters} bool response, double* output, int* status) {{",
+                " const auto lanes = rows * columns;",
+                " for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < lanes;",
+                "      lane += static_cast<std::size_t>(blockDim.x) * gridDim.x) {",
+                " const auto first = active[row_begin + lane / columns];",
+                " const auto second = active[column_begin + lane % columns];",
+                *emitter.lines,
             ]
         )
-    beta = vv10_grid_beta(primitive.spec) * float(primitive.coefficient)
+        for index in range(4):
+            text.extend(
+                [
+                    f" const double value_{index} = {factor} * (response ? {emitter.reference(roots[index + 4])} : {emitter.reference(roots[index])});",
+                    f" output[{index} * lanes + lane] = value_{index};",
+                    f" if (!isfinite(value_{index})) atomicExch(status, 1);",
+                ]
+            )
+        text.extend([" }", "}"])
+    beta = nonlocal_grid_beta(primitive.spec) * float(primitive.coefficient)
     threshold = float(MOLECULAR_VV10_DENSITY_THRESHOLD)
     text.extend(
         [
-            " }",
-            "}",
             f"inline constexpr double vv10_beta = {beta:.17g};",
             f"inline constexpr double vv10_density_threshold = {threshold:.17g};",
             f"inline constexpr double vv10_weight_threshold = {float(MOLECULAR_VV10_WEIGHT_THRESHOLD):.17g};",

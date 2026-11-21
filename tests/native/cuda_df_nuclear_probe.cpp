@@ -11,6 +11,7 @@
 #include "core/types.hpp"
 #include "integrals/cuda_df_nuclear_response.hpp"
 #include "molecule/basis.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 
 namespace {
 using namespace generativeqc;
@@ -126,11 +127,13 @@ void host_admission() {
 }
 void run(const char* source, const char* result) {
   std::ifstream file(source, std::ios::binary);
-  const auto header = read<std::uint64_t>(file, 7);
+  const auto header = read<std::uint64_t>(file, 8);
   require(header[0] >= 2 && header[0] <= 8 && header[1] > 0 && header[1] <= 8 && header[2] > 0 &&
-              header[2] <= 8 && header[3] <= 1 && header[4] <= 1 && header[6] <= 4,
+              header[2] <= 8 && header[3] <= 1 && header[4] <= 1 && header[6] <= 5 &&
+              header[7] <= 2,
           "invalid fixture metadata");
   core::System orbital, auxiliary;
+  const double omega = header[7] == 2 ? read<double>(file, 1)[0] : header[7] ? 0.3 : 0;
   const auto positions = read<double>(file, 3 * header[0]);
   for (std::size_t atom = 0; atom < header[0]; ++atom)
     orbital.atoms.push_back(
@@ -163,9 +166,13 @@ void run(const char* source, const char* result) {
   check(cudaGetDevice(&device));
   std::vector<double> source_metric;
   std::size_t nao{}, naux{};
-  require(scf::create_cuda_density_fitting_integral_source(device, {orbital}, {auxiliary},
-                                                           &owner.source, source_metric, nao, naux,
-                                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+  scf::cuda_execution::CudaDfSourcePolicy policy;
+  const bool resolved = scf::cuda_execution::resolve_cuda_df_source_policy(policy, detail);
+  require(resolved, detail.c_str());
+  policy.range_omega = omega;
+  require(scf::create_cuda_density_fitting_integral_source(
+              device, {orbital}, {auxiliary}, &owner.source, source_metric, nao, naux, detail,
+              &policy) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   owner.basis = scf::cuda_density_fitting_readonly_basis(owner.source);
   require(static_cast<bool>(owner.basis), "no actual readonly DF basis");
@@ -183,6 +190,7 @@ void run(const char* source, const char* result) {
                                      weight_storage + 2 * raw_count + metric_count};
   CudaDfNuclearOptions options;
   options.radial_tile = header[5];
+  options.range_omega = header[6] == 5 ? 0.3 : policy.range_omega;
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital_shells, auxiliary_shells, options, bytes));
   auto* arena = storage.allocate((bytes + sizeof(double) - 1) / sizeof(double));

@@ -161,6 +161,7 @@ class StationaryKsState:
         *,
         index: typing.Any = 0,
         allow_budget_stationarity: bool = False,
+        allow_reference_domain: bool = False,
     ) -> typing.Any:
         """Read the actual current #162 state and verify its AO/grid sources.
 
@@ -169,6 +170,8 @@ class StationaryKsState:
         before applying the compiler-generated density/AO geometry pullback.
         Force callers may explicitly consume a native-authenticated physical
         allowance; ordinary and response callers retain the strict default.
+        Reference callers may inspect the different CUDA r²SCAN SCF domain,
+        which has no derivative program in this legacy bridge.
         """
         from ._ks_snapshot import NativeKsSnapshot
 
@@ -176,12 +179,14 @@ class StationaryKsState:
             grid is not None and not isinstance(grid, ExplicitGrid)
         ):
             raise TypeError("stationary snapshot requires NativeAO and ExplicitGrid")
-        source = NativeKsSnapshot(batch, index)
+        source = NativeKsSnapshot(
+            batch, index, allow_reference_domain=allow_reference_domain
+        )
         try:
             state = cls(**source.decode(basis, grid))
             StationaryDerivativeContract(
                 state.identity, allow_budget_stationarity=allow_budget_stationarity
-            ).validate(state)
+            )._validate_native(state, for_derivative=not allow_reference_domain)
             return state
         except Exception:
             source.close()
@@ -284,16 +289,23 @@ class StationaryDerivativeContract:
             payload["budget_stationarity"] = "native-owner-allowance"
         return payload
 
-    def validate(self, state: typing.Any) -> None:
+    def validate(self, state: typing.Any) -> typing.Any:
         """Require numerical consistency and recheck the live native #162 proof.
 
         A force composition validates the same detached state at admission and
         publication. Reuse its algebra only for identical bytes-backed arrays
         and policy; native content/epoch checks remain mandatory on every call.
         """
+        return self._validate_native(state, for_derivative=True)
+
+    def _validate_native(
+        self, state: typing.Any, *, for_derivative: bool
+    ) -> typing.Any:
         from ._ks_snapshot import NativeKsSnapshot
 
         tolerance = self._validate_state(state)
+        if for_derivative and type(state._source) is NativeKsSnapshot:
+            state._source.require_derivative_domain()
         arrays = self._immutable_algebra_inputs(state)
         policy = self.to_payload()
         proof = state._validated_algebra

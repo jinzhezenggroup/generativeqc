@@ -308,36 +308,48 @@ def nonlocal_feature_derivatives_reference(
     weighted_density = weights * density
     ngrid = density.size
 
-    for i in range(ngrid):
-        sum_phi = 0.0
-        sum_rho = 0.0
-        sum_sigma = 0.0
+    # Vectorize a bounded group of independent rows. The column reductions
+    # and analytical feature chain rule remain the scalar reference formulas.
+    for first in range(0, ngrid, 32):
+        rows = slice(first, min(first + 32, ngrid))
+        row_omega = omega[rows, None]
+        row_kappa = kappa[rows, None]
+        sum_phi = np.zeros_like(density[rows])
+        sum_rho = np.zeros_like(sum_phi)
+        sum_sigma = np.zeros_like(sum_phi)
         for start in range(0, ngrid, tile_size):
             stop = min(start + tile_size, ngrid)
-            delta = coords[start:stop] - coords[i]
-            r2 = np.einsum("pi,pi->p", delta, delta)
+            delta = coords[None, start:stop] - coords[rows, None]
+            r2 = np.einsum("rci,rci->rc", delta, delta)
+            column_omega, column_kappa = (
+                omega[None, start:stop],
+                kappa[None, start:stop],
+            )
             phi = _pair_kernel(
-                r2, omega[i], omega[start:stop], kappa[i], kappa[start:stop], spec
+                r2, row_omega, column_omega, row_kappa, column_kappa, spec
             )
             if spec.variant == "rvv10":
-                zi = 1 + omega[i] / kappa[i] * r2
-                zj = 1 + omega[start:stop] / kappa[start:stop] * r2
+                zi = 1 + row_omega / row_kappa * r2
+                zj = 1 + column_omega / column_kappa * r2
                 factor_z = 1 / zi + 1 / (zi + zj)
-                dphi_domega = -phi * r2 / kappa[i] * factor_z
-                dphi_dkappa = phi / kappa[i] * (-1.5 + (zi - 1) * factor_z)
+                dphi_domega = -phi * r2 / row_kappa * factor_z
+                dphi_dkappa = phi / row_kappa * (-1.5 + (zi - 1) * factor_z)
             else:
-                gi = omega[i] * r2 + kappa[i]
-                gj = omega[start:stop] * r2 + kappa[start:stop]
+                gi = row_omega * r2 + row_kappa
+                gj = column_omega * r2 + column_kappa
                 dphi_dgi = -phi * (1 / gi + 1 / (gi + gj))
                 dphi_domega, dphi_dkappa = dphi_dgi * r2, dphi_dgi
-            dphi_drho = dphi_domega * domega_drho[i] + dphi_dkappa * dkappa_drho[i]
-            dphi_dsigma = dphi_domega * domega_dsigma[i]
+            dphi_drho = (
+                dphi_domega * domega_drho[rows, None]
+                + dphi_dkappa * dkappa_drho[rows, None]
+            )
+            dphi_dsigma = dphi_domega * domega_dsigma[rows, None]
             factor = weighted_density[start:stop]
-            sum_phi += float(np.sum(factor * phi, dtype=np.float64))
-            sum_rho += float(np.sum(factor * dphi_drho, dtype=np.float64))
-            sum_sigma += float(np.sum(factor * dphi_dsigma, dtype=np.float64))
-        vrho[i] = beta + sum_phi + density[i] * sum_rho
-        vsigma[i] = density[i] * sum_sigma
+            sum_phi += np.sum(factor * phi, axis=1, dtype=np.float64)
+            sum_rho += np.sum(factor * dphi_drho, axis=1, dtype=np.float64)
+            sum_sigma += np.sum(factor * dphi_dsigma, axis=1, dtype=np.float64)
+        vrho[rows] = beta + sum_phi + density[rows] * sum_rho
+        vsigma[rows] = density[rows] * sum_sigma
     return vrho, vsigma
 
 

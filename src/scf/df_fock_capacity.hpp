@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "scf/density_fitting.hpp"
+#include "scf/df_source_capacity.hpp"
 
 namespace generativeqc::scf {
 
@@ -18,6 +19,28 @@ namespace generativeqc::scf {
 struct DfFockDeviceCapacity {
   std::size_t retained_response_bytes{}, source_setup_bytes{};
 };
+
+/** Shape-only device inventory of the combined orbital/auxiliary/dummy source.
+ * Use the same conservative public-AO transform bound as prepared Fock when
+ * deciding whether to promote a streamed value owner to resident storage. */
+inline std::size_t df_fock_source_metadata_bytes(const df_source_capacity::Shape& orbital,
+                                                 const df_source_capacity::Shape& auxiliary) {
+  using df_source_capacity::add;
+  using df_source_capacity::mul;
+  for (const auto* basis : {&orbital, &auxiliary}) {
+    if (!basis->atoms || !basis->shells || basis->primitives < basis->shells ||
+        basis->public_aos < basis->shells || basis->cartesian_aos < basis->public_aos)
+      throw std::invalid_argument("invalid DF Fock basis capacity shape");
+  }
+  if (orbital.atoms != auxiliary.atoms)
+    throw std::invalid_argument("DF Fock capacity requires matching orbital/auxiliary atom counts");
+  return density_fitting_source_metadata_bytes(
+      1, orbital.atoms, add(add(orbital.shells, auxiliary.shells), 1),
+      add(add(orbital.cartesian_aos, auxiliary.cartesian_aos), 1),
+      add(add(orbital.primitives, auxiliary.primitives), 1),
+      add(mul(orbital.cartesian_aos, orbital.public_aos),
+          mul(auxiliary.cartesian_aos, auxiliary.public_aos)));
+}
 
 /** Compose the actual native DF policy leaves without a live-memory probe.
  * exact_bytes bounds an already retained Direct provider (zero for pure DF).
@@ -56,5 +79,26 @@ inline DfFockDeviceCapacity df_fock_device_capacity(
   const auto metric = workload.naux * workload.naux * sizeof(double);
   return {retained, add(exact, add(source_bytes, metric))};
 }
+
+/** Upper bound for one prepared radial owner (full or erf) and any exact
+ * provider in that owner. Callers compose separate radial owners explicitly;
+ * a shared basis does not imply shared fitted metric or value buffers. */
+inline DfFockDeviceCapacity prepared_df_fock_device_capacity(
+    const df_source_capacity::Shape& orbital, const df_source_capacity::Shape& auxiliary,
+    std::size_t requested_bytes, std::size_t exact_bytes, std::size_t restricted_rank,
+    bool retain_derivatives, bool allow_zero_rank_coulomb, bool automatic_pair_storage) {
+  const DfBudgetWorkload workload{orbital.public_aos, auxiliary.public_aos, orbital.atoms, 1, 0,
+                                  retain_derivatives};
+  const auto bytes = df_fock_source_metadata_bytes(orbital, auxiliary);
+  return df_fock_device_capacity(workload, requested_bytes, exact_bytes, bytes, restricted_rank,
+                                 allow_zero_rank_coulomb, automatic_pair_storage);
+}
+
+/** Conservative complete pageable envelope for one CUDA source-backed Fock
+ * owner. Reserved as retained by KS so no packing/setup/optional storage may
+ * overlap other owners without being accounted for. */
+std::size_t prepared_df_fock_host_capacity(const df_source_capacity::Shape& orbital,
+                                           const df_source_capacity::Shape& auxiliary,
+                                           std::size_t fitted_device_cap);
 
 }  // namespace generativeqc::scf

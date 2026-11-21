@@ -29,6 +29,7 @@ FAMILIES = (
     "three_center_eri",
 )
 RADIALS = ("full_range", "long_range", "short_range")
+DF_FAMILIES = ("coulomb_metric", "three_center_eri")
 RANGE_OMEGA = 0.3
 
 
@@ -82,12 +83,15 @@ class IntegralRequest:
             raise ValueError(
                 "Hessian AOT requires one to sixteen ordered distinct raw components"
             )
-        if self.radial not in RADIALS or (
-            self.family != "eri" and self.radial != "full_range"
-        ):
-            raise ValueError(
-                "only ERI Hessian AOT programs carry range-separated operators"
-            )
+        allowed = (
+            RADIALS
+            if self.family == "eri"
+            else RADIALS[:2]
+            if self.family in DF_FAMILIES
+            else RADIALS[:1]
+        )
+        if self.radial not in allowed:
+            raise ValueError("unsupported radial operator for the Hessian AOT family")
 
     @property
     def name(self) -> str:
@@ -103,13 +107,19 @@ class IntegralRequest:
     def record_stride(self) -> int:
         return len(self.angular) + 3 * self.centers + 1
 
+    @property
+    def kernel(self) -> CoulombKernel:
+        return CoulombKernel(
+            self.radial, RANGE_OMEGA if self.radial != "full_range" else 0
+        )
+
     def payload(self) -> dict:
         return {
             "family": self.family,
             "angular": self.angular,
             "components": self.components,
             "radial": self.radial,
-            "omega": RANGE_OMEGA if self.radial != "full_range" else 0,
+            "omega": 0 if self.radial == "full_range" else self.kernel.omega,
             "charge": 1,
             "packing": "value-gradient-gradient-jvp",
         }
@@ -141,7 +151,7 @@ def integral_request(payload: Any) -> IntegralRequest:
 @cache
 def _integral_ir(family: str, angular: tuple, radial: str) -> Any:
     """Share immutable scientific metadata across component packaging tiles."""
-    if family in ("coulomb_metric", "three_center_eri"):
+    if family in DF_FAMILIES:
         from .df_derivatives import build_df_derivative_ir
 
         return build_df_derivative_ir(family, angular)
@@ -160,7 +170,11 @@ def _integral_ir(family: str, angular: tuple, radial: str) -> Any:
 
 
 def integral_program_identity(request: IntegralRequest) -> str:
-    """Keep scientific identity independent of the selected factoring schedule."""
+    """Hash both the recurrence IR and its physical boundary binding.
+
+    For DF the geometry IR ends at unbound Boys leaves. The request declares
+    the range and omega binding those leaves on either AOT schedule.
+    """
     integral = _integral_ir(request.family, request.angular, request.radial)
     return canonical_hash(
         {
@@ -175,8 +189,10 @@ def emit_integral(request: IntegralRequest) -> tuple[str, str]:
     """Return unchanged compiler-AD arithmetic and scientific package identity."""
     integral = _integral_ir(request.family, request.angular, request.radial)
     source = (
-        emit_resident_df_second(request.family, request.angular, request.components)
-        if request.family in ("coulomb_metric", "three_center_eri")
+        emit_resident_df_second(
+            request.family, request.angular, request.components, radial=request.kernel
+        )
+        if request.family in DF_FAMILIES
         else emit_resident_second(integral, request.components)
     )
     return source, integral_program_identity(request)

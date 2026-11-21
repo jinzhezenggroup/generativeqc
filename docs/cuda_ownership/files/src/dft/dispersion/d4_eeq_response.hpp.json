@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/d4_eeq_response.hpp",
+  "role": "scientific",
+  "subsystem": "d4_dispersion",
+  "reason": "Contracts charge response and its directional derivative through the shared bordered EEQ factorization and compiler-generated pair derivatives without a charge Hessian tensor.",
+  "regions": []
+}

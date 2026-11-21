@@ -102,17 +102,20 @@ default library or fall back to cached/Python capability metadata. Public aliase
 explicit compiler compositions and later contextual admission remain separate.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
-CPU direct all-electron Cartesian strict-FP64 closed-shell LDA/PBE domain,
-or canonical strict-FP64 WB97M-V with RKS/UKS, CPU/CUDA, Cartesian/spherical,
-direct/full-rank DF and all-electron/scalar-semilocal ECP combinations.
-Per-geometry numerical gates still apply. WB97M-V uses compiler automatic differentiation and implicit CPKS,
-not numerical differentiation of displaced forces. Its bounded scalar-column
-Hessian additionally exposes `grid_budget_bytes` and `max_nonlocal_pairs`;
-the latter is a per-action ordered-pair work cap and may reject a fine/default
-grid. See the [DFT Hessian execution contract](../developer/dft_hessian.md) for
+method-, basis- and backend-specific domain listed in [Supported methods](../user/hessians.md#supported-methods).
+On CUDA, canonical LDA/PBE/PBE0/B3LYP and WB97M-V RKS/UKS admit Direct or
+CUDA density fitting, with or without scalar semilocal ECPs.
+Per-geometry numerical gates still apply. The native CUDA Hessian uses compiler automatic
+differentiation and implicit CPKS, not numerical differentiation of displaced
+forces. `grid_budget_bytes` bounds the numeric grid workspace;
+`max_nonlocal_pairs` is a separate per-action cap on ordered WB97M-V pairs and
+may reject a fine/default grid. See the
+[DFT Hessian execution contract](../developer/dft_hessian.md) for
 the fixed-branch, resource and qualification scope, including the explicit
 device-resident CUDA numerical contract with a linked native AOT package, explicit
-resource/response/quadrature failure gates, and rejection of rank-truncated DF metrics.
+resource/response/quadrature failure gates, and rejection of cutoff-unstable
+DF metrics. Separated truncated CUDA metrics are differentiated on their
+retained branch.
 Public CUDA Hessian/HVP calls need neither CuPy nor a runtime compiler; the
 `cuda-hessian` extra is retained for the separate low-level development owner.
 

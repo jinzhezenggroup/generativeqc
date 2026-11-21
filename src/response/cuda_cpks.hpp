@@ -10,6 +10,7 @@ namespace generativeqc::response {
 
 enum class CudaCpksLayout { row_major, column_major };
 enum class CudaCpksStatus { running, converged, numerical_failure, linear_solve_failed };
+enum class CudaCpksResidentPrecision { fp64, fp32_proposal };
 
 struct CudaCpksShape {
   std::size_t nao{};
@@ -19,6 +20,7 @@ struct CudaCpksShape {
 
 struct CudaCpksOptions {
   CudaGmresOptions gmres{};
+  CudaCpksResidentPrecision resident_precision{CudaCpksResidentPrecision::fp64};
   std::size_t max_workspace_bytes{512ULL << 20};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
@@ -56,6 +58,8 @@ struct CudaCpksResult {
   CudaGmresResult gmres{};
   std::size_t workspace_bytes{};
   std::size_t induced_fock_actions{};
+  std::size_t proposal_iterations{}, proposal_operator_actions{};
+  bool proposal_seeded{};
   bool converged() const noexcept { return status == CudaCpksStatus::converged; }
 };
 
@@ -63,16 +67,19 @@ struct CudaCpksResult {
  * The caller owns the device storage and keeps the exact reference/provider
  * alive and unchanged. Reset explicitly before changing either source. Columns
  * are built on CUDA from physical unit rotations, never from fitted residuals.
- * Every cached solve still checks its true residual with the physical provider.
+ * The FP32 format compresses only this projection. Its optional proposal
+ * always hands off to physical GMRES, and both formats audit final residuals.
  * This noncopyable lease is for repeated RHSs, not a detached numerical oracle. */
 class CudaCpksOperatorCache {
  public:
   CudaCpksOperatorCache() = default;
   CudaCpksOperatorCache(const CudaCpksOperatorCache&) = delete;
   CudaCpksOperatorCache& operator=(const CudaCpksOperatorCache&) = delete;
-  void reset(double* values, std::size_t bytes) noexcept {
+  void reset(void* values, std::size_t bytes,
+             CudaCpksResidentPrecision precision = CudaCpksResidentPrecision::fp64) noexcept {
     values_ = values;
     bytes_ = bytes;
+    precision_ = precision;
     ready_ = false;
     columns_ = actions_ = checks_ = 0;
   }
@@ -81,7 +88,8 @@ class CudaCpksOperatorCache {
   std::size_t physical_checks() const noexcept { return checks_; }
 
  private:
-  double* values_{};
+  void* values_{};
+  CudaCpksResidentPrecision precision_{CudaCpksResidentPrecision::fp64};
   std::size_t bytes_{}, dimension_{}, columns_{}, actions_{}, checks_{};
   CudaCpksShape shape_{};
   CudaCpksReference reference_{};

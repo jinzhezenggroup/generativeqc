@@ -408,6 +408,21 @@ Schedule identity records CUDA host fleet authority separately from device
 inventory and ECP queries. Device fleet composition and complete
 provider/allocation/lease authority are outside this host bridge.
 
+The native prepared DF Fock device inventory sizes one radial owner from
+orbital/auxiliary topology and the native fitted value/response policy. It
+returns retained capacity separately from source construction, including the
+temporary auxiliary metric. The CUDA KS device fleet v2 composer accepts both
+Fock construction and deferred setup peaks without treating them as retained
+storage. Full-range and fitted long-range owners do not share a value or
+metric allowance. These private queries do not admit a fitted KS
+`ResourceBudget` by themselves. The qualified PBE composition replaces the
+Direct provider estimate and charges a conservative fitted host envelope
+overlapping all other owners, including native source packing, metric setup
+and bounded optional staging. DF metric setup checks both the host and device
+eigensolver workspace requests against the native shape bound before allocating
+either workspace. See the [Hessian guide](../developer/dft_hessian.md) for the
+qualified second-order budget domain.
+
 HF/KS ECP workspace sizing uses the already loaded library's
 `generativeqc_resource_ecp_workspace_v1` query, shared with the native CLI.
 This allocation-free scalar owner uses generated two-grid policy and CUDA
@@ -436,6 +451,8 @@ checks local budget eligibility; global declared-capacity selection uses the
 separately discovered native composition owner. The prepared native D3 owner
 continues to enforce its local retained-byte cap. These numeric capacities are
 not process RSS receipts or new CUDA scientific qualification.
+For CUDA Hessian/HVP, an exact catalog D3 energy plan must select the native
+KS correction owner; a standalone correction is not part of the native response.
 
 Named D4(BJ)-EEQ global planning requires the native
 `generativeqc_ks_d4_resource_query_v1` protocol and an admitted complete KS program.
@@ -443,11 +460,13 @@ It sums the actual per-system correction owners, including replicated tables,
 and uses the largest individual retained capacity times the fleet size for the
 existing equal-share dispersion cap. The standalone D4 worker schedule and this
 query share one native sizing authority. CPU plans also reserve the native-sized
-standalone correction-gradient owner for an electronic force compatibility path;
-CUDA plans require the existing native stationary-capacity context. Selected
-native failures propagate. Missing inventory support leaves ordinary D4 available
-but rejects global D4 plans. Composite D4/gCP and electronic domains already
-excluded by KS planning remain unsupported.
+standalone correction-gradient owner for an electronic force compatibility path.
+CUDA D4 force plans require the existing native stationary-capacity context.
+Energy-only plans may use separate electronic and correction inventories on the
+same native ledger, including for Hessian/HVP preparation. They cannot replay
+forces. Canonical CUDA r²SCAN-3c additionally accounts for gCP; other composite
+and unqualified electronic domains remain unsupported. Missing inventory support
+leaves ordinary D4 available but rejects global D4 plans; selected failures propagate.
 
 Complete native CUDA D4 batches retain their validated electronic resource request
 across replay. The scientific model and remaining planning inputs, including the

@@ -1,11 +1,14 @@
 """AOT inventory admission and generation without the public runtime."""
 
+from __future__ import annotations
+
 import json
 import os
 import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.integral.hessian_aot import (
@@ -14,6 +17,9 @@ from generativeqc_compiler.integral.hessian_aot import (
 )
 
 from tools.generate_hessian_aot import parse_inventory
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
 def test_factorized_inventory_groups_host_metadata_without_changing_selectors() -> None:
@@ -36,10 +42,74 @@ def test_factorized_inventory_groups_host_metadata_without_changing_selectors() 
             assert request.name + ".cu" not in units
             assert "factorized_integral_callback<" in source
             assert "factorized_integral_batch_callback<" in source
-            assert integral_program_identity(request) in source
+            is_parametric = request.radial != "full_range"
+            assert (integral_program_identity(request) not in source) == is_parametric
             assert request.name in source
     with pytest.raises(ValueError, match="inventory"):
         parse_inventory({**inventory_payload(factorized), "integral_schedule": "jit"})
+
+
+def test_integral_omega_admission_without_device(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Test the production dispatch with fake callbacks that record the radial parameter."""
+    source = tmp_path / "radial.cpp"
+    source.write_text(
+        """
+#include <cassert>
+#include <limits>
+#include "dft/hessian_aot.hpp"
+namespace generativeqc::dft::hessian_aot {
+namespace {
+int runtime_eri(double omega, const double*, std::size_t, const long long*, const double*,
+                double* output, int*, cudaStream_t) {
+  *output = omega;
+  return cudaSuccess;
+}
+int fixed_eri(const double* records, std::size_t count, const long long* atoms,
+              const double* direction, double* output, int* status, cudaStream_t stream) {
+  return runtime_eri(0.3, records, count, atoms, direction, output, status, stream);
+}
+}
+std::span<const Program> programs() noexcept {
+  static const Program inventory[] = {
+      {"fixed", "fixed-id", Kind::integral, {}, 25, {}, 4, 17,
+       nullptr, nullptr, fixed_eri, {"eri", {}, "long_range", 0.3}},
+      {"runtime", "runtime-id", Kind::integral, {}, 25, {}, 4, 17,
+       nullptr, nullptr, fixed_eri, {"eri", {}, "long_range", 0.3}, nullptr, runtime_eri},
+  };
+  return inventory;
+}
+}
+int main() {
+  namespace aot = generativeqc::dft::hessian_aot;
+  double records[17]{}, direction[3]{}, output{};
+  long long atoms[4]{};
+  int status{};
+  const auto at = [&](const char* leaf, double omega) {
+    return aot::launch_integral_at_omega(*aot::find(leaf), omega, records, 1, atoms,
+                                         direction, &output, &status, nullptr);
+  };
+  assert(at("fixed", 0.33) == cudaErrorNotSupported && output == 0);
+  assert(at("runtime", -0.33) == cudaErrorNotSupported && output == 0);
+  assert(at("runtime", std::numeric_limits<double>::infinity()) == cudaErrorNotSupported);
+  assert(at("runtime", 0.33) == cudaSuccess && output == 0.33);
+  assert(aot::launch_integral("runtime", records, 1, atoms, direction, &output,
+                              &status, nullptr) == cudaSuccess && output == 0.3);
+  assert(at("fixed", 0.3) == cudaSuccess && output == 0.3);
+}
+"""
+    )
+    probe = native_cxx.build_executable(
+        (source, ROOT / "src/dft/hessian_aot.cpp"),
+        tmp_path / "radial",
+        compile_args=(
+            "-std=c++20",
+            f"-I{ROOT / 'tests/native/fixtures/hessian_budget'}",
+            f"-I{ROOT / 'src'}",
+        ),
+    )
+    subprocess.run([str(probe)], check=True, timeout=20)
 
 
 def test_complete_factorized_f_g_inventory_has_bounded_compilation_units() -> None:
@@ -134,7 +204,7 @@ def test_inventory_rejects_ignored_or_ambiguous_controls(change: dict) -> None:
         ("overlap", (0, 0), (0, 0), "full_range"),
         ("overlap", (1, 0), (1, 0), "full_range"),
         ("overlap", (0, 0), (1,), "full_range"),
-        ("coulomb_metric", (0, 0), (0,), "long_range"),
+        ("coulomb_metric", (0, 0), (0,), "short_range"),
     ],
 )
 def test_raw_component_requests_have_no_wildcard_fallback(specification: tuple) -> None:
@@ -150,6 +220,27 @@ def test_attraction_retains_external_mathematical_center_and_unit_charge() -> No
     assert request.record_stride == 12
     assert request.payload()["charge"] == 1
     assert request.components == (0, 2)
+
+
+def test_fitted_long_range_closure_round_trips_with_distinct_leaf_identity() -> None:
+    from generativeqc_compiler.integral.hessian_aot import integral_program_identity
+
+    from tools.complete_hessian_aot_inventory import (
+        complete_inventory,
+        inventory_payload,
+    )
+
+    families = ("coulomb_metric", "three_center_eri")
+    seed = replace(parse_inventory(json.loads(INVENTORY.read_text())), integrals=())
+    closure = complete_inventory(seed, families, 1, df_long_range=True)
+    assert parse_inventory(inventory_payload(closure)) == closure
+    for family in families:
+        angular = (0,) * (2 if family == "coulomb_metric" else 3)
+        full = IntegralRequest(family, angular, (0,))
+        ranged = IntegralRequest(family, angular, (0,), "long_range")
+        assert full in closure.integrals and ranged in closure.integrals
+        assert full.payload()["omega"] == 0 and ranged.payload()["omega"] == 0.3
+        assert integral_program_identity(full) != integral_program_identity(ranged)
 
 
 @pytest.mark.parametrize(
@@ -218,6 +309,16 @@ def test_native_leaf_target_preserves_configured_compile_pool(
         '  cmake_parse_arguments(G "" "GENERATOR" "OUTPUTS;DEPENDS;ARGS;COMMENT" ${ARGN})\n'
         "  set_source_files_properties(${G_OUTPUTS} PROPERTIES GENERATED TRUE LANGUAGE CXX)\n"
         "endfunction()\n"
+        # The parent build registers these shared codegen inputs before
+        # adding the Hessian archive. Leave their generators inert here.
+        'generativeqc_register_generated_sources(OUTPUTS "${CMAKE_BINARY_DIR}/generated/'
+        'generated_symmetric_matrix_function.cuh")\n'
+        'generativeqc_register_generated_sources(OUTPUTS "${CMAKE_BINARY_DIR}/generated/'
+        'generated_split_hybrid_registry.cuh")\n'
+        "add_custom_target(generativeqc_d3_codegen)\n"
+        "add_custom_target(generativeqc_dispersion_scalar_codegen)\n"
+        "add_custom_target(generativeqc_method_parameters_codegen)\n"
+        "add_custom_target(generativeqc_nonlocal_pair_codegen)\n"
         f'include("{ROOT}/cmake/GenerativeQCCuda.cmake")\n'
         f'include("{ROOT}/cmake/GenerativeQCHessianAot.cmake")\n'
         f'set(_generativeqc_aot_compile_pool "{pool}")\n'
@@ -227,7 +328,7 @@ def test_native_leaf_target_preserves_configured_compile_pool(
         'file(WRITE "${CMAKE_BINARY_DIR}/pool.txt" "${pool}")\n'
     )
     build = tmp_path / "build"
-    subprocess.run(
+    result = subprocess.run(
         [
             cmake,
             "-S",
@@ -237,11 +338,12 @@ def test_native_leaf_target_preserves_configured_compile_pool(
             f"-DCMAKE_CXX_COMPILER={native_cxx.compiler}",
             f"-DCMAKE_CXX_COMPILER_LAUNCHER={native_cxx.cache}",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
     )
+    assert result.returncode == 0, result.stdout + result.stderr
     assert (build / "pool.txt").read_text() == (pool or "pool-NOTFOUND")
 
 

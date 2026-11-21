@@ -23,8 +23,8 @@ from generativeqc_compiler.dft.nonlocal_policy import (
 )
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.method.nonlocal_pair import (
-    vv10_grid_beta,
-    vv10_grid_pair_expression,
+    nonlocal_grid_beta,
+    nonlocal_grid_pair_expression,
 )
 from generativeqc_compiler.tensor import (
     Index,
@@ -286,10 +286,8 @@ class GridPartials:
 
 
 @cache
-def _pair_program(spec: typing.Any) -> tuple:
-    """Differentiate the VV10 energy, including both legs' changing local scales."""
-    if spec.variant != "vv10":
-        raise NotImplementedError("second-order nonlocal grid currently requires VV10")
+def _pair_program(spec: typing.Any, *, runtime_parameters: bool = False) -> tuple:
+    """Differentiate the nonlocal energy in both legs with fixed b and c."""
     graph = Graph()
     legs = [
         [graph.variable(f"{side}{index}") for index in range(FIELD_COUNT)]
@@ -297,7 +295,14 @@ def _pair_program(spec: typing.Any) -> tuple:
     ]
 
     first, second = legs
-    energy = vv10_grid_pair_expression(graph, first, second, spec)
+    parameters = (
+        (graph.variable("damping"), graph.variable("gradient_scale"))
+        if runtime_parameters
+        else None
+    )
+    energy = nonlocal_grid_pair_expression(
+        graph, first, second, spec, parameters=parameters
+    )
     gradients = tuple(graph.differentiate(energy, variable) for variable in first)
     leaves = {
         f"{side}{index}": graph.variable(f"d{side}{index}")
@@ -342,7 +347,7 @@ class StationaryGridSecondOrder:
     """Bounded compiler-AD grid partials with an optional VV10 contribution.
 
     The Libxc work policy is applied outside functional differentiation, exactly
-    as in SCF. The VV10 rho>=1e-8 mask is fixed on both legs. Work and temporary
+    as in SCF. The molecular VV10 active mask is fixed on both legs. Work and temporary
     pair capacity have independent explicit limits; neither is a scaling claim.
     Without VV10 no pair graph, pair work or pair-work admission is introduced.
     The full-range B88/VWN-RPA/LYP family differentiates the shared native
@@ -647,7 +652,7 @@ class StationaryGridSecondOrder:
         tile = min(64, int(math.sqrt(max(0, remaining) / (32 * node_count))))
         if count and tile < 1:
             raise MemoryError("VV10 AD pair tile exceeds grid_budget_bytes")
-        beta = vv10_grid_beta(primitive.spec)
+        beta = nonlocal_grid_beta(primitive.spec)
         factor = float(primitive.coefficient)
         for start in range(0, count, max(1, tile)):
             row = indices[start : start + tile]

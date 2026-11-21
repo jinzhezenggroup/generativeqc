@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/d4_fixed_charge_response.hpp",
+  "role": "scientific",
+  "subsystem": "d4_dispersion",
+  "reason": "Directional interpolation, coefficient and radial pullbacks use the existing generated D4 pair arithmetic; the custom contraction covers bounded coordination and ATM work.",
+  "regions": []
+}

@@ -89,13 +89,15 @@ WB97M-V also exposes `Calculator.hessian()` and
 differentiation and implicit CPKS, not finite differences of forces. It includes meta-GGA kinetic-density
 response, both range-exchange operators, self-consistent VV10 and moving-grid/
 partition and overlap/Pulay terms. RKS/UKS, Cartesian/real-spherical AOs through f,
-direct/full-rank DF, and all-electron/scalar-semilocal ECP combinations are
-supported in strict FP64. DF differentiates the fitting metric as well as
-three-center values; rank-truncated or near-cutoff metrics fail explicitly.
+direct/DF, and all-electron/scalar-semilocal ECP combinations are supported in
+strict FP64. CUDA DF differentiates the three-center values and the actual
+primary and fitted-LR metric branches, including separated rank truncations.
+Near-cutoff metrics fail explicitly; CPU DF still requires full rank and exact
+LR exchange.
 CUDA Hessian numerical stages are device-resident, including moving-grid/VV10,
 DF metric response, ECP projector AD, first/second integrals and the coupled
-RKS/UKS response solve. Install `generativeqc[cuda-hessian]` for this endpoint;
-it fails explicitly rather than falling back to CPU differentiation. Host
+RKS/UKS response solve. Use a native build with the Hessian AOT package linked;
+the endpoint fails explicitly rather than falling back to CPU differentiation. Host
 orchestration, fixed metadata/quadrature setup and scalar convergence checks
 remain normal host work. Completed HVPs/matrices are returned as detached NumPy
 arrays; intermediate numerical panels are not downloaded. This is not a speedup

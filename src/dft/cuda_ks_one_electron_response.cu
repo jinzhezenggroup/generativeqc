@@ -5,11 +5,13 @@
 #include "dft/cuda_ks_one_electron_response.hpp"
 #include "dft/cuda_ks_resident_fock.hpp"
 #include "methods/dft_method.hpp"
+#include "runtime/resource_cuda.cuh"
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::dft {
 namespace {
 void check(cudaError_t error) {
+  if (error == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
 void require(bool valid, const char* message) {
@@ -71,7 +73,7 @@ struct CudaKsOneElectronResponse::Impl {
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
-    if (arena) (void)cudaFree(arena);
+    if (arena) (void)runtime::resource_cuda_free(arena);
   }
   static cudaError_t authenticate(void* context) noexcept {
     auto& self = *static_cast<Impl*>(context);
@@ -124,7 +126,7 @@ generativeqc_status CudaKsOneElectronResponse::prepare(
     std::vector<double> charges;
     for (const auto& atom : system.atoms) charges.push_back(atom.ionic_charge());
     candidate->device_bytes = plan.device_bytes;
-    check(cudaMalloc(&candidate->arena, candidate->device_bytes));
+    check(runtime::resource_cuda_malloc(&candidate->arena, candidate->device_bytes));
     auto* device_charges = reinterpret_cast<double*>(static_cast<char*>(candidate->arena) + bytes);
     // This is native immutable input packing from integer ionic charges, not a
     // host numerical integral or derivative contraction.

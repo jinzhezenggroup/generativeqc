@@ -9,9 +9,14 @@ from typing import ClassVar
 
 from generativeqc_compiler.common.exact import require_fraction
 from generativeqc_compiler.common.nonlocal_correlation import (
+    RVV10,
     NonlocalCorrelationSpec,
     UnsupportedNonlocalCorrelation,
 )
+
+# Ning et al., Phys. Rev. B 106, 075422 (2022), Sec. II A. The r²SCAN+VV10
+# fit (b=12.3) uses a different kernel and must not share this definition.
+R2SCAN_RVV10 = NonlocalCorrelationSpec(RVV10, Fraction("11.95"), Fraction("0.0093"))
 
 
 @dataclass(frozen=True)

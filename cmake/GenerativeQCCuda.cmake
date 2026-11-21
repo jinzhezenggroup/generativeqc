@@ -611,10 +611,20 @@ macro(generativeqc_configure_cuda_backend target)
       endif()
     endforeach()
     if(_generativeqc_native_stationary_profiles)
+      set(_native_variational_args)
+      if(GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN)
+        list(APPEND _native_variational_args --include-variational-r2scan)
+      endif()
+      if(GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT)
+        list(APPEND _native_variational_args --include-variational-split-hybrid M06-2X)
+      endif()
+      if(GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT)
+        list(APPEND _native_variational_args --include-variational-split-hybrid MN15)
+      endif()
       execute_process(
         COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
-                --list-sources --profiles ${_generativeqc_native_stationary_profiles}
+                --list-sources ${_native_variational_args} --profiles ${_generativeqc_native_stationary_profiles}
                 --fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}
         OUTPUT_VARIABLE _native_package_sources
         OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
@@ -637,6 +647,7 @@ macro(generativeqc_configure_cuda_backend target)
                 "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/cuda_xc_point_value.hpp"
         ARGS --output-dir "${GENERATIVEQC_STATIONARY_AOT_DIRECTORY}" --all-profiles
              ${_generativeqc_stationary_source_cache_args}
+             ${_native_variational_args}
              --profiles ${_generativeqc_native_stationary_profiles}
              --fused-profiles ${GENERATIVEQC_AUTOMATIC_FORCE_FUSED_PROFILES}
         COMMENT "Generating compiler-selected CUDA stationary force graphs")
@@ -648,6 +659,7 @@ macro(generativeqc_configure_cuda_backend target)
                        generativeqc_libxc_semilocal_cuda_codegen)
       target_include_directories(generativeqc_native_stationary PRIVATE
           "${CMAKE_CURRENT_SOURCE_DIR}/src"
+          "${CMAKE_CURRENT_BINARY_DIR}/generated"
           "$<TARGET_PROPERTY:generativeqc_libxc_semilocal_cuda,INCLUDE_DIRECTORIES>")
       target_compile_definitions(generativeqc_native_stationary PRIVATE GENERATIVEQC_HAS_CUDA=1)
       target_compile_options(generativeqc_native_stationary PRIVATE
@@ -677,7 +689,8 @@ macro(generativeqc_configure_cuda_backend target)
         NAME generativeqc_native_stationary_registry_codegen
         GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_stationary_cuda.py"
         OUTPUTS "${_native_registry}"
-        ARGS --output "${_native_registry}" --registry ${_generativeqc_native_stationary_profiles}
+        ARGS --output "${_native_registry}" ${_native_variational_args}
+             --registry ${_generativeqc_native_stationary_profiles}
         COMMENT "Recording native stationary CUDA inventory")
       target_sources(${target} PRIVATE "${_native_registry}")
       add_dependencies(${target} generativeqc_native_stationary_registry_codegen)

@@ -30,6 +30,8 @@ struct CudaDfReadonlyBasis {
   const std::uint8_t* shell_angular{};
   const std::int64_t *shell_primitive_offsets{}, *shell_cartesian_offsets{};
   const cuda_execution::DfPublicAoExpansion *orbital_expansions{}, *auxiliary_expansions{};
+  /** Zero is full Coulomb; nonzero identifies the parent erf-Coulomb source. */
+  double range_omega{};
   bool operator==(const CudaDfReadonlyBasis&) const = default;
   explicit operator bool() const noexcept {
     return device_id >= 0 && atoms && primitives && orbital_shells && auxiliary_shells && nao &&

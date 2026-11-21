@@ -46,6 +46,11 @@ from .ks import (
     electronic_method_ir,
     uses_molecular_nonlocal_domain,
 )
+from .ks_diagnostics import (
+    CUDA_R2SCAN_STATIONARY_DOMAIN,
+    CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION,
+    CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS,
+)
 
 _SCF_DOMAIN_VERSION_BY_DOMAIN = {
     domain: version for version, domain in SCF_DOMAIN_BY_VERSION.items()
@@ -266,6 +271,7 @@ class NativeKsSnapshot:
         "nonlocal_density_policy",
         "nonlocal_grid",
         "nonlocal_grid_spec",
+        "scf_domain",
         "stationarity_tolerance",
         "values",
     )
@@ -285,7 +291,13 @@ class NativeKsSnapshot:
             raise AttributeError("native KS snapshot provenance is immutable")
         super().__delattr__(name)
 
-    def __init__(self, batch: typing.Any, index: typing.Any) -> None:
+    def __init__(
+        self,
+        batch: typing.Any,
+        index: typing.Any,
+        *,
+        allow_reference_domain: bool = False,
+    ) -> None:
         if not isinstance(batch, PreparedBatch):
             raise TypeError("stationary snapshot requires a native PreparedBatch")
         if type(index) is not int or not 0 <= index < batch.system_count:
@@ -357,6 +369,22 @@ class NativeKsSnapshot:
                     if expected_domain == SPLIT_HYBRID_SCF_DOMAIN
                     else _SCF_DOMAIN_VERSION_BY_DOMAIN.get(expected_domain)
                 )
+            family = SEMILOCAL_FAMILY_BY_CODE.get(functional_code)
+            scf_domain = options.scf_domain
+            if metadata[7] in CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS:
+                raise NotImplementedError(
+                    "legacy KS snapshots cannot consume CUDA variational split-hybrid domains"
+                )
+            if (
+                allow_reference_domain
+                and family is not None
+                and family["symbol"] == "R2scan"
+                and scf_domain == family["scf_domain"]
+                and metadata[0] in (1, 3, 5, 8, 9)
+                and metadata[7] == CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION
+            ):
+                scf_domain = CUDA_R2SCAN_STATIONARY_DOMAIN
+                expected_domain_version = CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION
             if (
                 expected_domain_version is None
                 or metadata[0] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
@@ -365,6 +393,7 @@ class NativeKsSnapshot:
                 raise NotImplementedError(
                     "unsupported native KS snapshot/domain version"
                 )
+            self.scf_domain = scf_domain
             cpu = metadata[0] in (2, 4, 6, 7)
             if (metadata[12] == 2**64 - 1) != cpu:
                 raise ValueError("native KS snapshot backend/device mismatch")
@@ -1434,7 +1463,7 @@ class NativeKsSnapshot:
                 {
                     "native_owner": owner,
                     "functional": spec.identity,
-                    "scf_domain": options.scf_domain,
+                    "scf_domain": self.scf_domain,
                     "grid": grid.identity,
                     **(
                         {"grid_provenance": dict(self.grid_provenance)}
@@ -1467,7 +1496,7 @@ class NativeKsSnapshot:
             functional_identity=spec.identity,
             # The derivative bridge consumes this exact SCF point model;
             # interior-v1 remains a separate diagnostic contract.
-            regularization_identity=canonical_hash({"scf_domain": options.scf_domain}),
+            regularization_identity=canonical_hash({"scf_domain": self.scf_domain}),
             provider_identity=canonical_hash(provider_payload),
             owner=owner,
             solve_epoch=epoch,
@@ -1500,6 +1529,7 @@ class NativeKsSnapshot:
         tau: typing.Any = None,
     ) -> typing.Any:
         """Return SCF-domain point energy and Cartesian first derivatives."""
+        self.require_derivative_domain()
         self.check_current()
         if not isinstance(functional, FunctionalSpec):
             raise TypeError("XC point evaluation requires a typed functional")
@@ -1819,6 +1849,13 @@ class NativeKsSnapshot:
         if not np.isfinite(output).all():
             raise ArithmeticError("nonfinite native ECP derivatives")
         return immutable(output)
+
+    def require_derivative_domain(self) -> None:
+        """Disallow the incumbent point and response recipes on reference exports."""
+        if self.scf_domain == CUDA_R2SCAN_STATIONARY_DOMAIN:
+            raise NotImplementedError(
+                "legacy KS derivatives cannot consume the CUDA r2SCAN variational domain"
+            )
 
     def validate(self, state: typing.Any) -> None:
         """Reject copied labels and even self-consistent replacement matrices."""

@@ -56,6 +56,15 @@ D3ResourceUsage ks_d3_resource_usage(generativeqc_backend backend,
 
 struct D3CudaOwner;
 
+/** Immutable one-molecule device panels borrowed by stationary response. The
+ * caller holds the owning KS batch lock and supplies a separate stream arena. */
+struct D3CudaDirectionSource {
+  int device_id{-1};
+  std::size_t atoms{};
+  const std::int32_t* numbers{};
+  D3Tables tables;
+};
+
 class D3Plan {
  public:
   static std::unique_ptr<D3Plan> prepare(generativeqc_backend backend, int device_id,
@@ -91,6 +100,7 @@ class D3Plan {
   [[nodiscard]] generativeqc_backend backend() const noexcept { return backend_; }
   [[nodiscard]] const D3ModelParameters& parameters() const noexcept { return parameters_; }
   [[nodiscard]] const D3ResourceUsage& resources() const noexcept { return resources_; }
+  [[nodiscard]] D3CudaDirectionSource cuda_direction_source() const noexcept;
   [[nodiscard]] std::span<const double> default_coordinates(std::uint32_t system) const noexcept {
     const auto begin = static_cast<std::size_t>(offsets_[system]) * 3;
     return std::span<const double>(default_coordinates_.data() + begin,

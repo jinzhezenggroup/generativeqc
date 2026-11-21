@@ -61,8 +61,10 @@ grid explicitly always takes precedence; supplying the same level-4 grid for
 both opts back into the shared-grid path. When an explicitly selected
 Treutler XC level differs from 3, omitted VV10 uses level 3 too.
 The grid prescriptions are identical for energy and force requests.
-Independent grids currently do not support Hessians/HVPs, coupled response or
-explicit resource-ledger planning. Fixed element tables
+Native CUDA Hessian/HVP supports independent grids for the qualified nonlocal
+models described in [the Hessian guide](../developer/dft_hessian.md). Other
+coupled-response paths and explicit resource-ledger planning do not yet support
+independent grids. Fixed element tables
 and shell pruning do not depend on geometry or density; points move with their
 owner atoms and analytic responses differentiate the adjusted partition.
 PySCF is not required at runtime. The pinned numerical tables are from

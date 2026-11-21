@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerate the independent r2SCAN tail fixture from pinned Libxc Maple C.
+"""Regenerate independent r2SCAN tail fixtures from pinned Libxc Maple C.
 
 Requires GCC/libquadmath and the exact Libxc 7.0.0 source archive. This is an
 offline qualification tool; it imports no GenerativeQC algebra, AD, or runtime. The
 original upstream E/vxc formulas (including their cancelling spin coordinates)
 are evaluated in 113-bit arithmetic, then rounded once to binary64. The narrow
-driver preserves Libxc work_mgga thresholds and raw-work derivative semantics.
+default driver preserves Libxc work_mgga thresholds and raw-work derivative
+semantics. The stationary driver uses the proposed smooth work coordinates
+and differentiates upstream energy by a quad-precision numerical stencil.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import hashlib
 import json
 import math
 import re
+import shutil
 import struct
 import subprocess
 import tarfile
@@ -24,11 +27,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/data/xc/r2scan-tail-reference.json"
 TEMPLATE = ROOT / "tests/data/xc/r2scan-tail-oracle.cpp.in"
+STATIONARY_FIXTURE = ROOT / "tests/data/xc/r2scan-stationary-tail-reference.json"
+STATIONARY_DRIVER = ROOT / "tests/data/xc/r2scan-stationary-wide-driver.cpp"
 ARCHIVE_SHA256 = "8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a77"
 PREFIX = "libxc-7.0.0/src/"
 
 
-def oracle_source(archive: Path) -> tuple[str, dict[str, str]]:
+def oracle_source(
+    archive: Path, *, stationary: bool = False
+) -> tuple[str, dict[str, str]]:
     """Extract only two E/vxc functions; never unpack archive paths to disk."""
     if hashlib.sha256(archive.read_bytes()).hexdigest() != ARCHIVE_SHA256:
         raise ValueError("expected the pinned Libxc 7.0.0 archive")
@@ -60,6 +67,10 @@ def oracle_source(archive: Path) -> tuple[str, dict[str, str]]:
         formulas.append(text)
     source = TEMPLATE.read_text().replace("@CONSTANTS@", "\n".join(constants))
     source = source.replace("@FORMULAS@", "\n".join(formulas))
+    if stationary:
+        source = (
+            source[: source.index("\nint main(")] + "\n" + STATIONARY_DRIVER.read_text()
+        )
     hashes = {
         name: hashlib.sha256(text.encode()).hexdigest()
         for name, text in sources.items()
@@ -70,30 +81,50 @@ def oracle_source(archive: Path) -> tuple[str, dict[str, str]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", required=True, type=Path)
-    parser.add_argument("--fixture", type=Path, default=FIXTURE)
+    parser.add_argument("--fixture", type=Path)
+    parser.add_argument("--stationary", action="store_true")
     parser.add_argument("--cxx", default="c++")
     args = parser.parse_args()
-    fixture = json.loads(args.fixture.read_text())
+    fixture_path = args.fixture or (STATIONARY_FIXTURE if args.stationary else FIXTURE)
+    fixture = json.loads(fixture_path.read_text())
     points = fixture["points"]
-    source, hashes = oracle_source(args.archive)
+    source, hashes = oracle_source(args.archive, stationary=args.stationary)
+    input_size, output_size = (20, 3) if args.stationary else (7, 8)
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if launcher is None:
+        raise RuntimeError(
+            "a usable sccache or ccache is required to regenerate the oracle"
+        )
+    subprocess.run([launcher, "--version"], check=True, timeout=10)
     with tempfile.TemporaryDirectory(prefix="libxc-r2scan-quad-") as directory:
         path = Path(directory)
         (path / "probe.cpp").write_text(source)
         data = struct.pack("=Q", len(points))
-        data += b"".join(struct.pack("=7d", *point["inputs"]) for point in points)
+        data += b"".join(
+            struct.pack(
+                f"={input_size}d", *point["inputs"], *point.get("direction", ())
+            )
+            for point in points
+        )
         (path / "inputs.bin").write_bytes(data)
         subprocess.run(
             [
+                launcher,
                 args.cxx,
                 "-std=gnu++17",
                 "-O2",
                 str(path / "probe.cpp"),
-                "-lquadmath",
+                "-c",
                 "-o",
-                str(path / "probe"),
+                str(path / "probe.o"),
             ],
             check=True,
             timeout=120,
+        )
+        subprocess.run(
+            [args.cxx, str(path / "probe.o"), "-lquadmath", "-o", str(path / "probe")],
+            check=True,
+            timeout=30,
         )
         subprocess.run(
             [str(path / "probe"), str(path / "inputs.bin"), str(path / "outputs.bin")],
@@ -101,9 +132,11 @@ def main() -> None:
             timeout=30,
         )
         output = (path / "outputs.bin").read_bytes()
-        assert len(output) == 8 + len(points) * 64
+        assert len(output) == 8 + len(points) * 8 * output_size
         for i, point in enumerate(points):
-            values = struct.unpack_from("=8d", output, 8 + 64 * i)
+            values = struct.unpack_from(
+                f"={output_size}d", output, 8 + 8 * output_size * i
+            )
             assert all(math.isfinite(value) for value in values), point["label"]
             point["reference"] = values
     fixture["oracle"] = {
@@ -126,7 +159,18 @@ def main() -> None:
         "tolerance": {"rtol": 5e-12, "atol": 1e-12},
         "policy": "Unchanged work_mgga FP64 floors; physical-density energy, raw-work vxc",
     }
-    args.fixture.write_text(json.dumps(fixture, indent=2) + "\n")
+    if args.stationary:
+        fixture["oracle"]["channels"] = [
+            "energy_density",
+            "directional_energy",
+            "directional_curvature",
+        ]
+        fixture["oracle"]["regenerate"] += " --stationary"
+        fixture["oracle"]["policy"] = (
+            "C2 continuation; Richardson stencil of widened upstream energies"
+        )
+        fixture["oracle"]["tolerance"] = {"rtol": 2e-8, "atol": 0}
+    fixture_path.write_text(json.dumps(fixture, indent=2) + "\n")
 
 
 if __name__ == "__main__":

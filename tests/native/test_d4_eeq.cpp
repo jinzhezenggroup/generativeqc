@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "d4_eeq_oracle_fixtures.hpp"
+#include "dft/dispersion/d4_eeq_response.hpp"
+#include "dft/dispersion/d4_second_order.hpp"
 
 using namespace d4_eeq_tests;
 
@@ -128,6 +130,136 @@ int complete_gradient_finite_difference() {
   return 0;
 }
 
+int directional_charge_pullback() {
+  // E = 1/2 sum_i (1 + i/4) q_i(R)^2. This exercises both the geometric
+  // change of the charge Jacobian and the moving charge cotangent.
+  double largest_error = 0;
+  for (const auto& fixture : kEEQOracleFixtures) {
+    const int atoms = fixture.atoms;
+    const int coordinates = 3 * atoms;
+    std::vector<double> workspace(eeq_direction_workspace_elements(atoms));
+    std::vector<double> direction(coordinates), gradient(coordinates, 19), action(coordinates, 23);
+    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+      direction[coordinate] = 0.3 * std::sin(0.23 + 0.65 * coordinate);
+    const auto seed = [=](const double* charges, const double* response, double* cotangent,
+                          double* tangent) {
+      double charge_sum = 0, response_sum = 0;
+      for (int atom = 0; atom < atoms; ++atom) {
+        charge_sum += charges[atom];
+        response_sum += response[atom];
+        cotangent[atom] = (1 + 0.25 * atom) * charges[atom];
+        tangent[atom] = (1 + 0.25 * atom) * response[atom];
+      }
+      return near(charge_sum, fixture.total_charge, 2e-13) && near(response_sum, 0, 2e-13)
+                 ? D4Status::success
+                 : D4Status::numerical_failure;
+    };
+    const auto evaluate = [&](std::size_t capacity) {
+      return eeq_directional_pullback(
+          atoms, fixture.z.data(), fixture.xyz.data(), fixture.total_charge, eeq2019_host_tables(),
+          direction.data(), workspace.data(), capacity, seed, gradient.data(), action.data());
+    };
+    if (evaluate(workspace.size() - 1) != D4Status::invalid_argument ||
+        gradient != std::vector<double>(coordinates, 19) ||
+        action != std::vector<double>(coordinates, 23) ||
+        evaluate(workspace.size()) != D4Status::success)
+      return 40;
+    // Use the independent full-Jacobian transport, not the adjoint, at displaced
+    // geometries. Its first-order charge/gradient provenance is gated above.
+    const auto reference = [&](double step, std::vector<double>& result) {
+      auto xyz = fixture.xyz;
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+        xyz[coordinate] += step * direction[coordinate];
+      std::vector<double> scratch(eeq2019_workspace_elements(atoms));
+      std::vector<double> charges(atoms), jacobian(coordinates * atoms);
+      if (evaluate_eeq2019(atoms, fixture.z.data(), xyz.data(), fixture.total_charge,
+                           scratch.data(), scratch.size(), charges.data(),
+                           jacobian.data()) != D4Status::success)
+        return false;
+      std::fill(result.begin(), result.end(), 0);
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+        for (int atom = 0; atom < atoms; ++atom)
+          result[coordinate] +=
+              jacobian[coordinate * atoms + atom] * (1 + 0.25 * atom) * charges[atom];
+      return true;
+    };
+    std::vector<double> plus(coordinates), minus(coordinates);
+    if (!reference(0, plus)) return 41;
+    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+      if (!near(gradient[coordinate], plus[coordinate], 2e-13)) return 42;
+    for (const double step : {1e-4, 5e-5}) {
+      if (!reference(step, plus) || !reference(-step, minus)) return 43;
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate) {
+        const double expected = (plus[coordinate] - minus[coordinate]) / (2 * step);
+        if (!near(action[coordinate], expected, 1e-8)) return 44;
+        largest_error = std::max(largest_error, std::fabs(action[coordinate] - expected));
+      }
+    }
+    std::fill(direction.begin(), direction.end(), 0.125);
+    if (evaluate(workspace.size()) != D4Status::success ||
+        !std::all_of(action.begin(), action.end(), [](double value) { return value == 0; }))
+      return 45;
+  }
+  std::printf("EEQ charge pullback: max directional error %.3e\n", largest_error);
+  return 0;
+}
+
+int complete_hessian_action() {
+  double largest_error = 0;
+  for (const auto& fixture : kEEQOracleFixtures) {
+    const auto atoms = fixture.atoms;
+    const auto coordinates = 3 * atoms;
+    std::vector<double> scratch(d4_eeq_direction_workspace_elements(atoms));
+    std::vector<double> direction(coordinates), gradient(coordinates), action(coordinates);
+    const auto run = [&] {
+      return d4_eeq_direction(atoms, fixture.z.data(), fixture.xyz.data(), direction.data(),
+                              fixture.total_charge, fixture.parameters,
+                              eeq_d4_host_tables(fixture.profile), eeq2019_host_tables(),
+                              scratch.data(), scratch.size(), gradient.data(), action.data());
+    };
+    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+      direction[coordinate] = 0.37 * std::sin(0.13 + 0.71 * coordinate);
+    if (run() != D4Status::success) {
+      std::fprintf(stderr, "%s: complete D4 Hessian action failed\n", fixture.name);
+      return 50;
+    }
+    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+      if (!near(gradient[coordinate], fixture.gradient[coordinate], 2e-12)) return 51;
+    std::vector<double> reference_workspace(complete_d4_eeq_workspace_elements(atoms));
+    std::vector<double> charges(atoms), plus(coordinates), minus(coordinates);
+    const auto reference = [&](double step, std::vector<double>& output) {
+      auto xyz = fixture.xyz;
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+        xyz[coordinate] += step * direction[coordinate];
+      double energy[2];
+      return evaluate_complete_d4_eeq(atoms, fixture.z.data(), xyz.data(), fixture.total_charge,
+                                      fixture.parameters, fixture.profile,
+                                      reference_workspace.data(), reference_workspace.size(),
+                                      energy, output.data(), charges.data());
+    };
+    for (const double step : {1e-4, 5e-5}) {
+      if (reference(step, plus) != D4Status::success ||
+          reference(-step, minus) != D4Status::success)
+        return 52;
+      for (int coordinate = 0; coordinate < coordinates; ++coordinate) {
+        const double expected = (plus[coordinate] - minus[coordinate]) / (2 * step);
+        if (!near(action[coordinate], expected, 2e-9)) {
+          std::fprintf(stderr, "%s: D4 HVP[%d] %.17g expected %.17g\n", fixture.name, coordinate,
+                       action[coordinate], expected);
+          return 53;
+        }
+        largest_error = std::max(largest_error, std::abs(action[coordinate] - expected));
+      }
+    }
+    std::fill(direction.begin(), direction.end(), -0.625);
+    if (run() != D4Status::success ||
+        !std::all_of(action.begin(), action.end(), [](double value) { return value == 0; }))
+      return 54;
+  }
+  std::printf("Complete D4 HVP: max reconverged-gradient error %.3e\n", largest_error);
+  return 0;
+}
+
 int negative_cases() {
   const auto& f = kEEQOracleFixtures.front();
   std::vector<double> workspace(complete_d4_eeq_workspace_elements(f.atoms));
@@ -165,6 +297,8 @@ int main() {
   if (const int rc = oracle_cases()) return rc;
   if (const int rc = response_finite_differences()) return rc;
   if (const int rc = complete_gradient_finite_difference()) return rc;
+  if (const int rc = directional_charge_pullback()) return rc;
+  if (const int rc = complete_hessian_action()) return rc;
   if (const int rc = negative_cases()) return rc;
   std::puts("D4 EEQ oracle/response/complete-gradient tests passed");
   return 0;

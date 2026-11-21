@@ -1,4 +1,4 @@
-"""Thin WB97M-V CUDA second-order frontend; all numerical work is linked C++/CUDA.
+"""Thin KS CUDA second-order frontend; all numerical work is linked C++/CUDA.
 
 This module validates/marshals public inputs and publishes detached results.
 It must not construct a KS snapshot, AO provider, Python response operator or
@@ -19,10 +19,74 @@ from types import MappingProxyType
 import numpy as np
 
 from . import _native
+from .ks_diagnostics import (
+    CUDA_M062X_STATIONARY_DOMAIN_VERSION,
+    CUDA_MN15_STATIONARY_DOMAIN_VERSION,
+    CUDA_R2SCAN_STATIONARY_DOMAIN,
+    CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION,
+    CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS,
+)
 
 if typing.TYPE_CHECKING:
     from .calculator import Atom, Calculator
     from .response_solver import GMRESOptions
+
+
+def has_cuda_r2scan_stationary_domain(library: typing.Any) -> bool:
+    """Require the variational point program and Hessian in the loaded package."""
+    query = getattr(library, "generativeqc_ks_hessian_cuda_r2scan_domain_v1", None)
+    if query is None:
+        return False
+    query.argtypes, query.restype = [], ct.c_uint32
+    return query() == CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION
+
+
+def linked_cuda_split_hybrid_domain(library: typing.Any, method: str) -> str | None:
+    """Require the linked energy/force/response domain, not just XC support."""
+    key = {
+        "M06-2X": ("m062x", CUDA_M062X_STATIONARY_DOMAIN_VERSION),
+        "MN15": ("mn15", CUDA_MN15_STATIONARY_DOMAIN_VERSION),
+    }.get(method)
+    if key is None:
+        return None
+    tag, version = key
+    query = getattr(library, f"generativeqc_ks_hessian_cuda_{tag}_domain_v1", None)
+    if query is None:
+        return None
+    query.argtypes = []
+    query.restype = ct.c_uint32
+    return CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS[version] if query() == version else None
+
+
+def canonical_cuda_split_hybrid_domain(
+    library: typing.Any, graph: typing.Any
+) -> str | None:
+    """Authorize the linked domain only for the exact physical MethodIR."""
+    from generativeqc_compiler.method import resolve_method
+
+    domain = linked_cuda_split_hybrid_domain(library, graph.identifier)
+    if (
+        domain
+        and graph.identity == resolve_method(graph.identifier, spin=graph.spin).identity
+    ):
+        return domain
+    return None
+
+
+def cuda_hessian_bridge(library: typing.Any) -> typing.Any:
+    """Resolve the linked ABI without initializing CUDA or preparing a molecule."""
+    version = getattr(library, "generativeqc_ks_hessian_cuda_version_v2", None)
+    execute = getattr(library, "generativeqc_ks_hessian_cuda_v2", None)
+    if version is None or execute is None:
+        raise NotImplementedError(
+            "native CUDA Hessian bridge is unavailable; no Python/JIT fallback"
+        )
+    version.argtypes, version.restype = [], ct.c_uint32
+    if version() != 2:
+        raise NotImplementedError(
+            "CUDA Hessian requires a linked build-time AOT package; no Python/JIT fallback"
+        )
+    return execute
 
 
 class _Options(ct.Structure):
@@ -45,6 +109,7 @@ class _Options(ct.Structure):
         ("reorthogonalizations", ct.c_uint),
         ("relative_tolerance", ct.c_double),
         ("absolute_tolerance", ct.c_double),
+        ("response_fp32_proposal", ct.c_uint32),
     ]
 
 
@@ -78,6 +143,17 @@ class _Receipt(ct.Structure):
                 "response_residual_norm",
                 "response_tolerance",
                 "execution_seconds",
+            )
+        ),
+        *(
+            (name, ct.c_uint64)
+            for name in (
+                "cpks_operator_bytes",
+                "cpks_physical_checks",
+                "cpks_cached_actions",
+                "cpks_proposal_iterations",
+                "cpks_proposal_seeds",
+                "cpks_strict_iterations",
             )
         ),
     ]
@@ -150,7 +226,8 @@ def _options(
         max_iterations=200,
         reorthogonalizations=2,
         relative_tolerance=1e-10,
-        absolute_tolerance=0.0,
+        # Match the native solver's absolute gate for symmetry-zero RHS columns.
+        absolute_tolerance=1e-12,
     )
     if solver_options is not None:
         from .response_solver import GMRESOptions
@@ -194,6 +271,7 @@ def run_native_cuda(
     output_budget_bytes: int = 64 << 20,
     max_nonlocal_pairs: int = 16_777_216,
     solver_options: GMRESOptions | None = None,
+    response_cache_precision: str = "fp64",
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Execute one accepted native batch under its context lock, then detach it.
 
@@ -202,11 +280,7 @@ def run_native_cuda(
     the final HVP/matrix and scalar receipt cross the numerical boundary.
     """
     started = time.perf_counter()
-    if getattr(calculator, "_resource_budget", None) is not None:
-        raise NotImplementedError(
-            "native CUDA Hessian resources are not part of the global ResourceBudget plan; "
-            "use the endpoint's explicit integral/grid/response/output limits"
-        )
+    budget = getattr(calculator, "_resource_budget", None)
     options = _options(
         integral_budget_bytes,
         grid_budget_bytes,
@@ -214,6 +288,11 @@ def run_native_cuda(
         max_nonlocal_pairs,
         solver_options,
     )
+    if response_cache_precision not in ("fp64", "fp32-proposal"):
+        raise ValueError("response_cache_precision must be 'fp64' or 'fp32-proposal'")
+    if direction is not None and response_cache_precision != "fp64":
+        raise ValueError("fp32-proposal response cache requires a dense Hessian")
+    options.response_fp32_proposal = response_cache_precision == "fp32-proposal"
     coordinates = 3 * len(atoms)
     shape = (coordinates, coordinates) if direction is None else (len(atoms), 3)
     if 2 * int(np.prod(shape)) * 8 > options.output_bytes:
@@ -221,17 +300,34 @@ def run_native_cuda(
             "native Hessian result publication exceeds output_budget_bytes"
         )
     library = calculator._library
-    version = getattr(library, "generativeqc_ks_hessian_cuda_version_v1", None)
-    execute = getattr(library, "generativeqc_ks_hessian_cuda_v1", None)
-    if version is None or execute is None:
-        raise NotImplementedError(
-            "native CUDA Hessian bridge is unavailable; no Python/JIT fallback"
+    execute = cuda_hessian_bridge(library)
+    batch_controls = {}
+    if budget is not None:
+        from ._hessian_resources import plan_cuda_hessian
+
+        resource_version = getattr(
+            library, "generativeqc_ks_hessian_cuda_resource_version_v1", None
         )
-    version.argtypes, version.restype = [], ct.c_uint32
-    if version() != 1:
-        raise NotImplementedError(
-            "CUDA Hessian requires a linked build-time AOT package; no Python/JIT fallback"
+        if resource_version is None:
+            raise NotImplementedError(
+                "native CUDA Hessian lacks shared ResourceBudget admission"
+            )
+        resource_version.argtypes, resource_version.restype = [], ct.c_uint32
+        if resource_version() != 1:
+            raise NotImplementedError(
+                "native CUDA Hessian lacks shared ResourceBudget admission"
+            )
+        plan, request, capacity = plan_cuda_hessian(
+            calculator,
+            atoms,
+            charge=charge,
+            multiplicity=multiplicity,
+            dense=direction is None,
+            budget=budget,
+            options=options,
         )
+        options.device_bytes = capacity
+        batch_controls.update(resource_plan=plan, _hessian_request=request)
     pointer = ct.POINTER(ct.c_double)
     execute.argtypes = [
         ct.c_void_p,
@@ -246,14 +342,41 @@ def run_native_cuda(
     execute.restype = ct.c_int
     output = np.empty(shape, dtype=np.float64)
     receipt = _Receipt(struct_size=ct.sizeof(_Receipt), abi_version=_native.ABI_VERSION)
+    scf_domain = None
+    resource_diagnostics = None
     with calculator.prepare_batch(
-        [atoms], charges=[charge], multiplicities=[multiplicity], warm_start=False
+        [atoms],
+        charges=[charge],
+        multiplicities=[multiplicity],
+        warm_start=False,
+        **batch_controls,
     ) as batch:
-        batch.execute(strict=True, properties=("energy",))
+        # Compatibility corrections live outside the native SCF handle. The
+        # linked Hessian could otherwise return only the electronic response.
+        if (
+            calculator._dispersion_method_ir is not None
+            and batch._native_dispersion is None
+        ):
+            raise NotImplementedError(
+                "CUDA Hessian requires dispersion owned by the native KS batch"
+            )
+        solved = batch.execute(strict=True, properties=("energy",))
+        scf_precision = getattr(solved.items[0], "precision", None)
+        required_domain = getattr(calculator, "_cuda_split_hybrid_stationary", None)
+        if getattr(calculator, "_cuda_r2scan_stationary", False):
+            required_domain = ("r2SCAN", CUDA_R2SCAN_STATIONARY_DOMAIN)
+        if required_domain is not None:
+            method_name, expected_domain = required_domain
+            diagnostic = solved.items[0].ks_diagnostic
+            if diagnostic is None or diagnostic.scf_domain != expected_domain:
+                raise RuntimeError(
+                    f"CUDA {method_name} Hessian requires the variational SCF domain"
+                )
+            scf_domain = diagnostic.scf_domain
         model_signature = batch._model_signature
-        _native.check(
-            library,
-            execute(
+
+        def invoke() -> int:
+            return execute(
                 batch._batch,
                 0,
                 ct.byref(options),
@@ -262,11 +385,41 @@ def run_native_cuda(
                 output.ctypes.data_as(pointer),
                 output.size,
                 ct.byref(receipt),
-            ),
-            context=batch._context,
-        )
+            )
+
+        if budget is None:
+            _native.check(library, invoke(), context=batch._context)
+        else:
+            from ._hessian_resources import HESSIAN_RESOURCE_OWNER
+            from .resources_native import check_resource_status, observe_method_call
+
+            ledger = batch._resource_ledger
+            if ledger is None or ledger.prepared_call is None:
+                raise RuntimeError(
+                    "CUDA Hessian resource plan has no native device ledger"
+                )
+            status, resource_diagnostics = observe_method_call(
+                library,
+                batch.resource_plan,
+                ledger,
+                invoke,
+                owner=HESSIAN_RESOURCE_OWNER,
+                phase="hessian_response",
+                previous=batch.resource_diagnostics,
+                native_managed=True,
+            )
+            check_resource_status(
+                library, status, resource_diagnostics, context=batch._context
+            )
     value = np.frombuffer(output.tobytes(), dtype=np.float64).reshape(shape)
     diagnostics = {name: getattr(receipt, name) for name, _ in _Receipt._fields_[2:]}
+    if scf_precision is not None:
+        diagnostics["scf_requested_precision"] = scf_precision["requested_mode"]
+        diagnostics["scf_mixed_fock_builds"] = scf_precision["mixed_stage_fock_builds"]
+    if scf_domain is not None:
+        diagnostics["scf_domain"] = scf_domain
+    if resource_diagnostics is not None:
+        diagnostics["resources"] = resource_diagnostics
     diagnostics.update(
         derivative_authority="compiler-ad",
         derivative_method="compiler-automatic-differentiation",
@@ -283,6 +436,9 @@ def run_native_cuda(
         second_integral_backend="cuda",
         grid_ad_backend="cuda",
         response_backend="cuda",
+        cpks_cache_precision=response_cache_precision
+        if receipt.cpks_operator_bytes
+        else None,
         component_publication="aggregate-only",
         ecp_ad_backend="cuda" if receipt.ecp_workspace_bytes else None,
         df_integral_ad_backend="cuda" if receipt.df_workspace_bytes else None,
@@ -292,7 +448,9 @@ def run_native_cuda(
     identity.update(
         json.dumps(
             {
-                "model": model_signature,
+                "model": model_signature
+                if scf_domain is None
+                else (model_signature, scf_domain),
                 "atoms": [(atom.atomic_number, atom.position) for atom in atoms],
                 "charge": int(charge),
                 "multiplicity": int(multiplicity),

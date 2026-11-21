@@ -15,6 +15,17 @@ from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 from . import _native
 from .ks import AUTOMATIC_SCF_DOMAIN, SPLIT_HYBRID_SCF_DOMAIN
 
+CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION = 0x52325302
+CUDA_R2SCAN_STATIONARY_DOMAIN = "r2scan-energy-derived-c2-v1"
+CUDA_M062X_STATIONARY_DOMAIN_VERSION = 0x4D363202
+CUDA_M062X_STATIONARY_DOMAIN = "m06-2x-energy-derived-c2-v1"
+CUDA_MN15_STATIONARY_DOMAIN_VERSION = 0x4D4E1502
+CUDA_MN15_STATIONARY_DOMAIN = "mn15-energy-derived-c2-v1"
+CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS = {
+    CUDA_M062X_STATIONARY_DOMAIN_VERSION: CUDA_M062X_STATIONARY_DOMAIN,
+    CUDA_MN15_STATIONARY_DOMAIN_VERSION: CUDA_MN15_STATIONARY_DOMAIN,
+}
+
 
 @dataclass(frozen=True)
 class KsEnergyComponents:
@@ -199,9 +210,14 @@ def read_ks_diagnostic(
             raise RuntimeError("native automatic Libxc diagnostic domain mismatch")
         domain = AUTOMATIC_SCF_DOMAIN
     elif expected_domain == SPLIT_HYBRID_SCF_DOMAIN:
-        if summary.scf_domain_version != 4:
+        if summary.scf_domain_version == 4:
+            domain = SPLIT_HYBRID_SCF_DOMAIN
+        elif summary.scf_domain_version in CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS:
+            domain = CUDA_SPLIT_HYBRID_STATIONARY_DOMAINS[summary.scf_domain_version]
+        else:
             raise RuntimeError("native split-hybrid diagnostic domain mismatch")
-        domain = SPLIT_HYBRID_SCF_DOMAIN
+    elif summary.scf_domain_version == CUDA_R2SCAN_STATIONARY_DOMAIN_VERSION:
+        domain = CUDA_R2SCAN_STATIONARY_DOMAIN
     elif summary.scf_domain_version in SCF_DOMAIN_BY_VERSION:
         domain = SCF_DOMAIN_BY_VERSION[summary.scf_domain_version]
     else:

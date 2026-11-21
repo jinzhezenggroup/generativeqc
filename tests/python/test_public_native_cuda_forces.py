@@ -105,7 +105,7 @@ def test_public_native_force_matches_independent_grid_and_final_state(
         movement = batch.ks_transport_diagnostics[0]
         assert movement.matrix_d2h_bytes == baseline_movement.matrix_d2h_bytes
         assert result.energy == pytest.approx(baseline.energy, abs=2e-9)
-        state = StationaryKsState.from_native(batch, basis)
+        state = StationaryKsState.from_native(batch, basis, allow_reference_domain=True)
         energy, gradient, reference = independent_global_hybrid_gradient(
             basis,
             state,
