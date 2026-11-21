@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.hpp"
+#include "integrals/packed_spherical_eri.hpp"
 #include "tensor/cpu_compensated_sum.hpp"
 #include "tensor/cpu_linalg.hpp"
 
@@ -105,8 +106,8 @@ void validate_densities(FockSpin spin, std::size_t count, std::span<const double
   for (double value : beta) require(std::isfinite(value), "nonfinite Fock spin density");
 }
 
-template <bool Unrestricted, bool Coulomb, bool Exchange>
-void contract_exact_source_major(std::size_t nbf, std::span<const double> eri,
+template <bool Unrestricted, bool Coulomb, bool Exchange, class ReadValue>
+void contract_exact_source_major(std::size_t nbf, const ReadValue& read,
                                  std::span<const double> density, std::span<const double> beta,
                                  DirectJkMatrices& result) {
   // Consume each stored [i,a,b,c] once. J[i,a] retains its (b,c) reduction
@@ -119,9 +120,8 @@ void contract_exact_source_major(std::size_t nbf, std::span<const double> eri,
         const std::size_t ib = i * nbf + b;
         double exchange_alpha = Exchange ? result.exchange_alpha[ib] : 0.0;
         double exchange_beta = Exchange && Unrestricted ? result.exchange_beta[ib] : 0.0;
-        const double* source = eri.data() + ((i * nbf + a) * nbf + b) * nbf;
         for (std::size_t c = 0; c < nbf; ++c) {
-          const double value = source[c];
+          const double value = read(i, a, b, c);
           if constexpr (Coulomb) {
             const std::size_t bc = b * nbf + c;
             const double alpha = density[bc];
@@ -146,6 +146,112 @@ void contract_exact_source_major(std::size_t nbf, std::span<const double> eri,
   if constexpr (Coulomb) ++result.coulomb_exchange_work.coulomb_applications;
   if constexpr (Exchange)
     result.coulomb_exchange_work.exchange_applications += Unrestricted ? 2U : 1U;
+}
+
+template <class ReadValue>
+void dispatch_exact_contraction(const FockBuildSpec& spec, std::size_t basis, const ReadValue& read,
+                                std::span<const double> density, std::span<const double> beta,
+                                DirectJkMatrices& result) {
+  if (spec.spin == FockSpin::Unrestricted) {
+    if (!spec.exchange.present)
+      contract_exact_source_major<true, true, false>(basis, read, density, beta, result);
+    else if (!spec.coulomb.present)
+      contract_exact_source_major<true, false, true>(basis, read, density, beta, result);
+    else
+      contract_exact_source_major<true, true, true>(basis, read, density, beta, result);
+  } else if (!spec.exchange.present) {
+    contract_exact_source_major<false, true, false>(basis, read, density, beta, result);
+  } else if (!spec.coulomb.present) {
+    contract_exact_source_major<false, false, true>(basis, read, density, beta, result);
+  } else {
+    contract_exact_source_major<false, true, true>(basis, read, density, beta, result);
+  }
+}
+
+/** Visit each eightfold orbit once, in its stored pair-triangle order. Coulomb
+ * uses its lower output triangle as scratch and mirrors it on return. Exchange
+ * scatters every distinct ordered tuple, even for nonsymmetric spin densities.
+ * The reduction order differs from the ordered path; neither changes precision.
+ */
+template <bool Unrestricted, bool Coulomb, bool Exchange>
+void contract_packed_orbits(const integrals::PackedSphericalEri& eri,
+                            std::span<const double> density, std::span<const double> beta,
+                            DirectJkMatrices& result) {
+  const auto basis = eri.basis();
+  const auto values = eri.values();
+  std::size_t cursor{};
+  const auto total = [&](std::size_t index) {
+    if constexpr (Unrestricted) return density[index] + beta[index];
+    return density[index];
+  };
+  const auto charge = [&](std::size_t high, std::size_t low) {
+    const double first = total(high * basis + low);
+    return high == low ? first : first + total(low * basis + high);
+  };
+  const auto exchange = [&](std::size_t output, std::size_t input, double value) {
+    result.exchange_alpha[output] += density[input] * value;
+    if constexpr (Unrestricted) result.exchange_beta[output] += beta[input] * value;
+  };
+  const auto scatter = [&](std::size_t first_high, std::size_t first_low, std::size_t second_high,
+                           std::size_t second_low, double value) {
+    const auto high_row = first_high * basis;
+    const auto low_row = first_low * basis;
+    exchange(high_row + second_high, low_row + second_low, value);
+    if (second_high != second_low) exchange(high_row + second_low, low_row + second_high, value);
+    if (first_high != first_low) {
+      exchange(low_row + second_high, high_row + second_low, value);
+      if (second_high != second_low) exchange(low_row + second_low, high_row + second_high, value);
+    }
+  };
+  for (std::size_t left_high = 0; left_high < basis; ++left_high) {
+    for (std::size_t left_low = 0; left_low <= left_high; ++left_low) {
+      const auto left_index = left_high * basis + left_low;
+      const double left_charge = Coulomb ? charge(left_high, left_low) : 0.0;
+      double left_output = Coulomb ? result.coulomb[left_index] : 0.0;
+      for (std::size_t right_high = 0; right_high <= left_high; ++right_high) {
+        const auto stop = right_high == left_high ? left_low : right_high + 1;
+        for (std::size_t right_low = 0; right_low < stop; ++right_low) {
+          const double value = values[cursor++];
+          if constexpr (Coulomb) {
+            left_output += charge(right_high, right_low) * value;
+            result.coulomb[right_high * basis + right_low] += left_charge * value;
+          }
+          if constexpr (Exchange) {
+            scatter(left_high, left_low, right_high, right_low, value);
+            scatter(right_high, right_low, left_high, left_low, value);
+          }
+        }
+      }
+      const double diagonal = values[cursor++];
+      if constexpr (Coulomb) result.coulomb[left_index] = left_output + left_charge * diagonal;
+      if constexpr (Exchange) scatter(left_high, left_low, left_high, left_low, diagonal);
+    }
+  }
+  if constexpr (Coulomb) {
+    for (std::size_t row = 0; row < basis; ++row)
+      for (std::size_t column = 0; column < row; ++column)
+        result.coulomb[column * basis + row] = result.coulomb[row * basis + column];
+    ++result.coulomb_exchange_work.coulomb_applications;
+  }
+  if constexpr (Exchange)
+    result.coulomb_exchange_work.exchange_applications += Unrestricted ? 2U : 1U;
+}
+
+void dispatch_packed_orbits(const FockBuildSpec& spec, const integrals::PackedSphericalEri& eri,
+                            std::span<const double> density, std::span<const double> beta,
+                            DirectJkMatrices& result) {
+  const auto dispatch_spin = [&]<bool Unrestricted>() {
+    if (!spec.exchange.present)
+      contract_packed_orbits<Unrestricted, true, false>(eri, density, beta, result);
+    else if (!spec.coulomb.present)
+      contract_packed_orbits<Unrestricted, false, true>(eri, density, beta, result);
+    else
+      contract_packed_orbits<Unrestricted, true, true>(eri, density, beta, result);
+  };
+  if (spec.spin == FockSpin::Unrestricted)
+    dispatch_spin.template operator()<true>();
+  else
+    dispatch_spin.template operator()<false>();
 }
 
 constexpr FockProviderCapabilities supported_fock_domain() {
@@ -428,19 +534,44 @@ DirectJkMatrices build_exact_direct_jk(const ResolvedFockBuild& strategy, std::s
     return result;
   }
 
-  if (unrestricted) {
-    if (!strategy.spec.exchange.present)
-      contract_exact_source_major<true, true, false>(nbf, eri, density, beta, result);
-    else if (!strategy.spec.coulomb.present)
-      contract_exact_source_major<true, false, true>(nbf, eri, density, beta, result);
-    else
-      contract_exact_source_major<true, true, true>(nbf, eri, density, beta, result);
-  } else {
-    if (!strategy.spec.coulomb.present)
-      contract_exact_source_major<false, false, true>(nbf, eri, density, beta, result);
-    else
-      contract_exact_source_major<false, true, true>(nbf, eri, density, beta, result);
+  const auto read = [&](auto first, auto second, auto third, auto fourth) {
+    return eri[((first * nbf + second) * nbf + third) * nbf + fourth];
+  };
+  dispatch_exact_contraction(strategy.spec, nbf, read, density, beta, result);
+  return result;
+}
+
+DirectJkMatrices build_packed_spherical_jk(const ResolvedFockBuild& strategy,
+                                           const integrals::PackedSphericalEri& eri,
+                                           std::span<const double> density,
+                                           std::span<const double> beta,
+                                           PackedEriContraction contraction) {
+  require_cpu_exact_consumer(strategy);
+  require(
+      strategy.spec.derivative_order == 0 &&
+          (!strategy.spec.exchange.present || strategy.spec.exchange.op == FockOperator::FullRange),
+      "packed spherical J/K requires value-only full-range ERIs");
+  const auto basis = eri.basis();
+  const auto count = matrix_size(basis);
+  validate_densities(strategy.spec.spin, count, density, beta);
+  DirectJkMatrices result;
+  result.nbf = basis;
+  result.coulomb_exchange_work = CoulombExchangeWork::empty();
+  if (!strategy.spec.coulomb.present && !strategy.spec.exchange.present) return result;
+  if (strategy.spec.coulomb.present) result.coulomb.resize(count);
+  if (strategy.spec.exchange.present) {
+    result.exchange_alpha.resize(count);
+    if (strategy.spec.spin == FockSpin::Unrestricted) result.exchange_beta.resize(count);
   }
+  if (contraction == PackedEriContraction::Streamed) {
+    dispatch_packed_orbits(strategy.spec, eri, density, beta, result);
+    return result;
+  }
+  require(contraction == PackedEriContraction::Ordered, "unknown packed ERI contraction order");
+  const auto read = [&](auto first, auto second, auto third, auto fourth) {
+    return eri.value(first, second, third, fourth);
+  };
+  dispatch_exact_contraction(strategy.spec, basis, read, density, beta, result);
   return result;
 }
 

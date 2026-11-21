@@ -231,6 +231,7 @@ class PreparedBatch:
         inactive_eigensolver_profiling: bool = False,
         ks_export: bool = True,
         resource_plan: typing.Any = None,
+        _cold_rks_fock: _native.RksColdFockOptions | None = None,
     ) -> None:
         """Prepare native systems and method resources for repeated batch evaluation.
 
@@ -240,6 +241,12 @@ class PreparedBatch:
         """
         if not systems:
             raise ValueError("a batch requires at least one system")
+        if _cold_rks_fock is not None and (
+            resource_plan is not None or len(systems) != 1
+        ):
+            raise NotImplementedError(
+                "cold RKS Fock damping requires one unprofiled native item"
+            )
         if not isinstance(ks_export, bool):
             raise TypeError("ks_export must be a boolean")
         if not ks_export and not (
@@ -475,8 +482,13 @@ class PreparedBatch:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
             native_name = resource_native_name
+            # Packed values require the named preparation ABI even when the
+            # electronic MethodIR has no geometry-only correction.
+            named_graph = calculator._dispersion_method_ir
+            if calculator._cpu_packed_eri_maximum_bytes:
+                named_graph = calculator.method_ir
             if (
-                calculator._dispersion_method_ir is not None
+                named_graph is not None
                 and self.resource_plan is None
                 and calculator._precision_mode == _native.PRECISION_FP64
             ):
@@ -484,10 +496,15 @@ class PreparedBatch:
 
                 native_name = select_named_program(
                     self._library,
-                    calculator._dispersion_method_ir,
+                    named_graph,
                     _native.BACKEND_CUDA
                     if calculator._device_name == "cuda"
                     else _native.BACKEND_CPU_REFERENCE,
+                )
+
+            if calculator._cpu_packed_eri_maximum_bytes and native_name is None:
+                raise NotImplementedError(
+                    "packed ERI storage requires linked named KS preparation"
                 )
 
             def prepare() -> typing.Any:
@@ -503,13 +520,19 @@ class PreparedBatch:
                         flags,
                         ctypes.byref(self._batch),
                         native_name,
-                        calculator._dispersion_method_ir,
+                        named_graph,
                         calculator._dispersion_memory_budget_bytes,
                         resources=(
                             self._resource_ledger.handle
                             if self._resource_ledger is not None
                             else None
                         ),
+                        cpu_packed_eri_maximum_bytes=calculator._cpu_packed_eri_maximum_bytes,
+                        cold_rks_fock=_cold_rks_fock,
+                    )
+                if _cold_rks_fock is not None:
+                    raise NotImplementedError(
+                        "cold RKS Fock damping requires named native KS"
                     )
                 if self._resource_prepare is not None:
                     return self._resource_prepare(
@@ -569,7 +592,7 @@ class PreparedBatch:
                 configure_native_cuda_stationary_batch(
                     self._library, self._batch, self.resource_plan
                 )
-            if native_name is not None:
+            if native_name is not None and calculator._dispersion_method_ir is not None:
                 from ._named_ks import NativeKsDispersion
 
                 self._native_dispersion = NativeKsDispersion(

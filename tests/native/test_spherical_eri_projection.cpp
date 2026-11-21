@@ -7,12 +7,14 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/types.hpp"
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
+#include "scf/fock_prepared.hpp"
 
 namespace {
 thread_local std::size_t allocation_limit = std::numeric_limits<std::size_t>::max();
@@ -74,6 +76,79 @@ System fixture(bool four_d, bool reversed, bool with_f = false) {
   return system;
 }
 
+void check_packed_fock(const System& system, const generativeqc::integrals::IntegralData& dense,
+                       const generativeqc::integrals::PackedSphericalEri& packed) {
+  using namespace generativeqc::scf;
+  const auto basis = dense.nbf;
+  std::vector<double> alpha(basis * basis), beta(basis * basis);
+  for (std::size_t item = 0; item < alpha.size(); ++item) {
+    alpha[item] = static_cast<double>(item % 23) / 47.0 - 0.25;
+    beta[item] = static_cast<double>(item % 17) / 67.0 - 0.125;
+  }
+  const std::vector<double> restricted;
+  for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+    auto spec = make_hf_fock_spec(spin);
+    const auto& secondary = spin == FockSpin::Restricted ? restricted : beta;
+    const auto derivative_strategy = resolve_fock_build(spec, FockBackend::Cpu);
+    bool refused_derivatives = false;
+    try {
+      (void)build_packed_spherical_jk(derivative_strategy, packed, alpha, secondary);
+    } catch (const std::invalid_argument& error) {
+      refused_derivatives = std::string_view(error.what()).find("value-only full-range ERIs") !=
+                            std::string_view::npos;
+    }
+    require(refused_derivatives, "packed value-only Fock accepted a derivative strategy");
+    spec.derivative_order = 0;
+    const auto strategy = resolve_fock_build(spec, FockBackend::Cpu);
+    const auto reference = build_exact_direct_jk(strategy, basis, dense.eri, alpha, secondary);
+    const auto check = [&](const DirectJkMatrices& observed) {
+      require(observed.coulomb == reference.coulomb &&
+                  observed.exchange_alpha == reference.exchange_alpha &&
+                  observed.exchange_beta == reference.exchange_beta,
+              "packed exact J/K differs from the dense source-major contraction");
+    };
+    const auto close_matrix = [](const auto& observed, const auto& expected) {
+      require(observed.size() == expected.size(), "packed orbit result shape changed");
+      for (std::size_t index = 0; index < observed.size(); ++index)
+        close(observed[index], expected[index], "packed orbit J/K summation changed");
+    };
+    const auto close_jk = [&](const DirectJkMatrices& observed, const DirectJkMatrices& expected) {
+      close_matrix(observed.coulomb, expected.coulomb);
+      close_matrix(observed.exchange_alpha, expected.exchange_alpha);
+      close_matrix(observed.exchange_beta, expected.exchange_beta);
+      require(observed.coulomb_exchange_work.coulomb_applications ==
+                      expected.coulomb_exchange_work.coulomb_applications &&
+                  observed.coulomb_exchange_work.exchange_applications ==
+                      expected.coulomb_exchange_work.exchange_applications,
+              "packed orbit J/K semantic work changed");
+    };
+    check(build_packed_spherical_jk(strategy, packed, alpha, secondary));
+    for (bool coulomb : {false, true}) {
+      for (bool exchange : {false, true}) {
+        auto selected_spec = spec;
+        selected_spec.coulomb.present = coulomb;
+        selected_spec.exchange.present = exchange;
+        const auto selected = resolve_fock_build(selected_spec, FockBackend::Cpu);
+        close_jk(build_packed_spherical_jk(selected, packed, alpha, secondary,
+                                           PackedEriContraction::Streamed),
+                 build_exact_direct_jk(selected, basis, dense.eri, alpha, secondary));
+      }
+    }
+    for (auto contraction : {PackedEriContraction::Ordered, PackedEriContraction::Streamed}) {
+      const PreparedFockPlan prepared(
+          system, nullptr, strategy, -1, 0, 0, 0, {},
+          CpuPackedEriPreparation{packed.capacity_bytes(), contraction});
+      require(prepared.one_electron().eri.empty() &&
+                  prepared.cpu_observation_capacity() >= packed.values().size_bytes(),
+              "prepared Fock retained dense ERI or failed to account for the packed values");
+      if (contraction == PackedEriContraction::Streamed)
+        close_jk(prepared.build(alpha, secondary), reference);
+      else
+        check(prepared.build(alpha, secondary));
+    }
+  }
+}
+
 void exercise(bool four_d, bool reversed, bool with_f = false) {
   const auto system = fixture(four_d, reversed, with_f);
   auto cartesian_system = system;
@@ -97,6 +172,18 @@ void exercise(bool four_d, bool reversed, bool with_f = false) {
               actual.eri_derivative.empty(),
           "shell-local projection changed one-electron or derivative output");
   const auto n = actual.nbf;
+  const auto packed_bytes = generativeqc::integrals::PackedSphericalEri::required_bytes(n);
+  bool refused = false;
+  try {
+    (void)generativeqc::integrals::build_packed_spherical_eri(system, packed_bytes - 1);
+  } catch (const std::length_error&) {
+    refused = true;
+  }
+  require(refused, "packed spherical source did not enforce its reservation");
+  const auto packed = generativeqc::integrals::build_packed_spherical_eri(system, packed_bytes);
+  require(packed.basis() == n && packed.values().size_bytes() == packed_bytes,
+          "packed spherical source extent changed");
+  check_packed_fock(system, actual, packed);
   double max_transform_error = 0.0;
   // This visits EVERY public element, including all equal-shell/equal-pair
   // cases and i=k,j!=l where global AO-pair and shell-pair ordering disagree.
@@ -105,6 +192,8 @@ void exercise(bool four_d, bool reversed, bool with_f = false) {
       for (std::size_t k = 0; k < n; ++k) {
         for (std::size_t l = 0; l < n; ++l) {
           const double value = actual.eri[index(i, j, k, l, n)];
+          require(packed.value(i, j, k, l) == value,
+                  "packed spherical source differs from dense orbit publication");
           const double expected = reference.eri[index(i, j, k, l, n)];
           close(value, expected, "shell-local versus Cartesian-transform ERI");
           max_transform_error = std::max(max_transform_error, std::abs(value - expected));

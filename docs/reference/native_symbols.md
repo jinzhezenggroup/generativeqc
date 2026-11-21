@@ -84,6 +84,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_batch_prepare_named_ks_cold_rks_v1](#native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)
 - [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
 - [generativeqc_ks_d4_resource_query_v1](#native-c-generativeqc-ks-d4-resource-query-v1)
 - [generativeqc_calculation_prepare_named_ks_with_device_resources_v1](#native-c-generativeqc-calculation-prepare-named-ks-with-device-resources-v1)
@@ -2294,6 +2295,35 @@ identity checks and execution-control-only ks_options.
 **Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)=
+## generativeqc_batch_prepare_named_ks_cold_rks_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , const generativeqc_rks_cold_fock_options_v1 * cold , generativeqc_batch_flags flags , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare one direct FP64 CPU B3LYP-D3(BJ) RKS item with optional
+warm reuse and a bounded Fock-proposal prefix on the initial cold solve.
+The requested physical Fock and strict final verification are not damped.
+
+**Inputs.** Ordinary named KS preparation inputs; system_count is one. The
+cold options are required; reserved is zero, weight is strictly between
+zero and one, and the prefix is at least two and shorter than the SCF budget.
+
+**Outputs.** Clears the output slot on entry; success publishes an owning batch.
+
+**Lifetime.** Copies all controls and requires the context to outlive the batch.
+
+**Errors.** A malformed size/version returns ABI mismatch; incompatible methods,
+invalid cold controls, seeded preliminary stages and insufficient workspace
+fail without publishing a batch.
+
+**Execution.** Synchronous; restores, warm SCF and warm retry use no proposal prefix.
+
+**Units.** Coordinates in Bohr, energies in Hartree, the workspace cap in bytes.
 
 (native-c-generativeqc-ks-d3-resource-query-v1)=
 ## generativeqc_ks_d3_resource_query_v1
@@ -6603,6 +6633,7 @@ typedef int ( * generativeqc_saddle_progress_v1 ) ( void * user , const generati
 
 **Inputs.** user is the caller's context; receipt and count coordinates describe
 the last fully accepted state, not an unaccepted trial geometry.
+An ATTEMPT_LIMIT status in this callback is provisional, not termination.
 
 **Outputs.** Return zero to continue or nonzero to request cancellation.
 
@@ -6651,6 +6682,7 @@ GENERATIVEQC_API generativeqc_status generativeqc_saddle_correct_v1 ( const gene
 **Behavior.** Execute the native local first-order-saddle corrector with exact initial,
 accepted-step and final Hessians. Every accepted/rejected trial consumes one attempt
 from max_attempts<=100; initial preparation and final verification are separate calls.
+Exhausting the cap retains the last valid state without fresh-final verification.
 A nonstationary input requires an already negative target mode, not minimum escape.
 
 **Inputs.** Initialize options and receipt with sizeof(type) and GENERATIVEQC_ABI_VERSION.

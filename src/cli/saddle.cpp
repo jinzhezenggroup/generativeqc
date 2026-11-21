@@ -173,8 +173,26 @@ class MolecularEvaluator : public NativeMolecularEvaluator {
                                                         ? std::optional(options.representation)
                                                         : std::nullopt)),
         invocation_(invocation) {
-    if (uses_ecp())
-      throw UsageError("native molecular saddle ECP requires separate real-element qualification");
+    if (uses_ecp()) {
+      if (program.name != "b3lyp-d3(bj)-rks" || !invocation.accepted_frame_warm_start)
+        throw UsageError(
+            "native molecular saddle ECP requires separate real-element qualification; "
+            "Cs46 def2-ECP or I28 def2-ECP requires spherical B3LYP-D3(BJ) RKS "
+            "with accepted-frame warm starts");
+      const bool cs46 = uses_only_spherical_def2_ecp(55) && invocation.cold_fock_damping;
+      // The larger initial trial failed I28 occupied continuity even from a cold SCF.
+      // Admit the bounded step protocol, not a weakened root threshold.
+      const bool i28 = uses_only_spherical_def2_ecp(53) && !invocation.cold_fock_damping &&
+                       invocation.minimum_occupied_overlap >= 0.99 &&
+                       invocation.controls.initial_radius <= 0.015 &&
+                       invocation.controls.maximum_radius <= 0.03;
+      if (!cs46 && !i28)
+        throw UsageError(
+            "native molecular saddle ECP requires separate real-element qualification; "
+            "use spherical Cs46 def2-ECP with explicit cold Fock damping, or "
+            "spherical I28 def2-ECP without damping, with initial/max radii at most "
+            "0.015/0.03 Bohr and occupied overlap at least 0.99");
+    }
     failure.reserve(4096);
   }
 
@@ -209,8 +227,19 @@ class MolecularEvaluator : public NativeMolecularEvaluator {
                       const double* coordinates, std::size_t count) noexcept {
     auto& self = *static_cast<MolecularEvaluator*>(user);
     try {
-      if (receipt->has_valid_state) self.accept_geometry({coordinates, count});
+      // A rejected trial can report the previous geometry. Only a publication
+      // by the corrector is allowed to replace its associated orbital frame.
+      if (receipt->has_valid_state &&
+          (!self.published_state_ || receipt->accepted_steps > self.published_steps_ ||
+           receipt->stationary_verified)) {
+        self.accept_geometry({coordinates, count});
+        self.published_state_ = true;
+        self.published_steps_ = receipt->accepted_steps;
+      }
       auto event = optimizer_receipt(*receipt);
+      // The v1 callback reuses the terminal receipt layout. Its provisional
+      // attempt-limit sentinel is not the outcome of the running optimizer.
+      if (receipt->status == GENERATIVEQC_SADDLE_ATTEMPT_LIMIT) event["status"] = "in_progress";
       event["coordinates_bohr"] = rows({coordinates, count}, 3);
       event["elapsed_seconds"] = self.elapsed();
       self.observations.push_back(event);
@@ -231,6 +260,8 @@ class MolecularEvaluator : public NativeMolecularEvaluator {
 
  private:
   const SaddleInvocation& invocation_;
+  bool published_state_{};
+  std::uint64_t published_steps_{};
 };
 }  // namespace
 
@@ -263,6 +294,27 @@ SaddleInvocation parse_saddle_invocation(int argc, char** argv) {
       result.progress_json = true;
       continue;
     }
+    if (option == "--accepted-frame-warm-start") {
+      result.accepted_frame_warm_start = true;
+      continue;
+    }
+    if (option == "--cold-fock-damping") {
+      if (argc - index < 4 || result.cold_fock_damping)
+        throw UsageError("--cold-fock-damping requires one PREFIX WEIGHT BYTES triple");
+      const auto prefix = integer(argv[index + 1], "cold Fock prefix", UINT32_MAX);
+      const auto weight = positive(argv[index + 2], "cold Fock previous weight");
+      const auto bytes = integer(argv[index + 3], "cold Fock workspace bytes");
+      if (prefix < 2 || weight >= 1)
+        throw UsageError("cold Fock prefix must be at least two and weight must be in (0, 1)");
+      result.cold_fock_damping = {sizeof(generativeqc_rks_cold_fock_options_v1),
+                                  GENERATIVEQC_ABI_VERSION,
+                                  static_cast<std::uint32_t>(prefix),
+                                  0,
+                                  weight,
+                                  bytes};
+      index += 3;
+      continue;
+    }
     if (option == "--json") {
       forwarded.emplace_back(option);
       continue;
@@ -282,6 +334,8 @@ SaddleInvocation parse_saddle_invocation(int argc, char** argv) {
       controls.maximum_numeric_bytes = integer(value, option);
     else if (option == "--root-budget-bytes")
       result.root_bytes = integer(value, option);
+    else if (option == "--occupied-state-budget-bytes")
+      result.occupied_state_bytes = integer(value, option);
     else if (option == "--energy-change")
       controls.energy_change = positive(value, option);
     else if (option == "--gradient-rms")
@@ -340,6 +394,12 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
       options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE ||
       options.auxiliary_basis_explicit)
     throw UsageError("molecular saddle requires direct FP64 without an auxiliary basis");
+  const auto& cold = invocation.cold_fock_damping;
+  if (cold && (!invocation.accepted_frame_warm_start || program->name != "b3lyp-d3(bj)-rks" ||
+               cold->prefix_iterations >= options.max_iterations.value_or(240)))
+    throw UsageError(
+        "--cold-fock-damping requires canonical B3LYP-D3(BJ) RKS, "
+        "--accepted-frame-warm-start and a prefix shorter than --max-iterations");
   if (invocation.derivatives.cuda_controls_explicit)
     throw UsageError("molecular saddle does not use CUDA device/nonlocal budgets");
   const auto count = 3 * atoms.size();
@@ -421,8 +481,14 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
         {"curvature_tolerance", invocation.controls.curvature_tolerance},
         {"minimum_mode_overlap", invocation.controls.minimum_mode_overlap},
         {"minimum_occupied_overlap", invocation.minimum_occupied_overlap},
+        {"accepted_frame_warm_start", invocation.accepted_frame_warm_start},
+        {"cold_fock_damping", cold ? Json{{"prefix_iterations", cold->prefix_iterations},
+                                          {"previous_weight", cold->previous_weight},
+                                          {"maximum_bytes", cold->maximum_bytes}}
+                                   : Json(nullptr)},
         {"acceptance_ratio", invocation.controls.acceptance_ratio},
         {"scf_max_iterations", options.max_iterations.value_or(240)},
+        {"scf_diis_history", options.diis_history},
         {"scf_energy_tolerance", options.energy_tolerance.value_or(1e-13)},
         {"scf_density_tolerance", options.density_tolerance.value_or(1e-11)},
         {"screening_tolerance", options.screening_tolerance.value_or(1e-14)},
@@ -463,6 +529,19 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
       receipt.has_valid_state
           ? Json(std::vector<double>(curvatures.begin(), curvatures.begin() + receipt.active_modes))
           : Json(nullptr);
+  if (invocation.occupied_state_bytes) {
+    result["occupied_state"] = nullptr;
+    result["occupied_state_export_failure"] = nullptr;
+    if (receipt.has_valid_state) {
+      try {
+        result["occupied_state"] =
+            evaluator.accepted_occupied_state(coordinates, invocation.occupied_state_bytes);
+      } catch (const std::exception& error) {
+        result["occupied_state_export_failure"] = error.what();
+        result["converged"] = converged = false;
+      }
+    }
+  }
   if (options.json)
     std::cout << result.dump() << '\n';
   else {

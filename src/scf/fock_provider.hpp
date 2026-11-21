@@ -25,10 +25,11 @@ struct FockEnergyDerivativeComponents {
 class CpuFockProviderView {
  public:
   static constexpr FockBackend backend = FockBackend::Cpu;
-  explicit CpuFockProviderView(const integrals::IntegralData& exact,
-                               const std::vector<double>* range_eri = nullptr,
-                               FockOperator range_operator = FockOperator::FullRange,
-                               double range_omega = 0.0);
+  explicit CpuFockProviderView(
+      const integrals::IntegralData& exact, const std::vector<double>* range_eri = nullptr,
+      FockOperator range_operator = FockOperator::FullRange, double range_omega = 0.0,
+      const integrals::PackedSphericalEri* packed_eri = nullptr,
+      PackedEriContraction packed_contraction = PackedEriContraction::Ordered);
   explicit CpuFockProviderView(const DensityFittingScfData& fitted);
   // Do not allow a view of a temporary integral owner.
   CpuFockProviderView(integrals::IntegralData&&) = delete;
@@ -51,6 +52,8 @@ class CpuFockProviderView {
   const integrals::IntegralData* exact_{};
   const DensityFittingScfData* fitted_{};
   const std::vector<double>* range_eri_{};
+  const integrals::PackedSphericalEri* packed_eri_{};
+  PackedEriContraction packed_contraction_{PackedEriContraction::Ordered};
   FockOperator range_operator_{FockOperator::FullRange};
   double range_omega_{};
 };

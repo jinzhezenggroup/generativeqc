@@ -53,6 +53,18 @@ struct FockOccupiedProjectionReservation {
   bool operator==(const FockOccupiedProjectionReservation&) const = default;
 };
 
+/** Explicit storage policy for immutable real-spherical full-range CPU ERI
+ * values. The budget is a numeric array extent, not a total host RSS bound. */
+struct CpuPackedEriPreparation {
+  std::size_t maximum_bytes;
+  PackedEriContraction contraction{PackedEriContraction::Streamed};
+};
+
+/** Reject an unsupported exact-value request or a fleet that cannot fit all
+ * of its retained ERIs. Performs no preparation or numeric allocation. */
+void preflight_packed_eri(const ResolvedFockBuild& strategy, std::span<const core::System> systems,
+                          CpuPackedEriPreparation request);
+
 /** Pre-construction numeric capacities for the geometry-backed CUDA Fock
  * owner. The supplied exact_device_bytes must come from the native Direct
  * allocator's capacity query, or be zero when the strategy has no exact term.
@@ -90,7 +102,8 @@ class PreparedFockPlan {
                    std::size_t device_budget_bytes = 0,
                    unsigned retained_direct_derivative_order = 0,
                    unsigned retained_fitted_derivative_order = 0,
-                   FockOccupiedProjectionReservation projection_reservation = {});
+                   FockOccupiedProjectionReservation projection_reservation = {},
+                   std::optional<CpuPackedEriPreparation> packed_eri = {});
   /** Own explicit differentiable integral values for an unscreened HF solve.
    * CUDA uses a retained dense integral provider; CPU uses the exact source view.
    * No integral or force provider is evaluated during construction. Such a plan

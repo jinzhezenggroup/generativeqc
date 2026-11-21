@@ -153,6 +153,23 @@ class _OrbitalFrame:
     numeric_reservation_bytes: int
 
 
+def _numeric_budgets(
+    numeric_budget_bytes: int | None, response_budget_bytes: int | None
+) -> tuple[int, int]:
+    """Resolve the Hessian and nested response reservations for either caller."""
+    numeric = _capacity(
+        (512 << 20) if numeric_budget_bytes is None else numeric_budget_bytes,
+        "numeric_budget_bytes",
+    )
+    response = _capacity(
+        (128 << 20) if response_budget_bytes is None else response_budget_bytes,
+        "response_budget_bytes",
+    )
+    if response > numeric:
+        raise ValueError("response_budget_bytes must fit within numeric_budget_bytes")
+    return numeric, response
+
+
 def _options(
     integral_budget_bytes: int,
     grid_budget_bytes: int,
@@ -180,16 +197,7 @@ def _options(
         raise ValueError("reorthogonalize must fit a positive uint32")
     if not (solver.rtol > 0 or solver.atol > 0):
         raise ValueError("native CPU response requires a positive residual tolerance")
-    numeric = _capacity(
-        (512 << 20) if numeric_budget_bytes is None else numeric_budget_bytes,
-        "numeric_budget_bytes",
-    )
-    response = _capacity(
-        (128 << 20) if response_budget_bytes is None else response_budget_bytes,
-        "response_budget_bytes",
-    )
-    if response > numeric:
-        raise ValueError("response_budget_bytes must fit within numeric_budget_bytes")
+    numeric, response = _numeric_budgets(numeric_budget_bytes, response_budget_bytes)
     return _Options(
         struct_size=ct.sizeof(_Options),
         abi_version=_native.ABI_VERSION,

@@ -26,6 +26,7 @@ if typing.TYPE_CHECKING:
 
 __all__ = [
     "MolecularSaddleResult",
+    "RksColdFockDamping",
     "SaddleOptions",
     "SaddleProgress",
     "SaddleResult",
@@ -73,6 +74,8 @@ _METRICS = (
 class SaddleOptions:
     """Explicit native-corrector controls, with at most 100 attempted steps.
 
+    Accepted and rejected steps both consume the cap. Reaching the cap
+    stops without verifying a saddle, even if the last step met the controls.
     Energy is Hartree, gradient controls Hartree/Bohr, displacement controls
     Angstrom and trust radii Bohr. Both RMS denominators are 3N; no rigid
     alignment is applied. ``maximum_numeric_bytes`` bounds only native optimizer
@@ -131,7 +134,7 @@ class SaddleOptions:
 class SaddleProgress:
     """Detached accepted-state observation, including after a rejected trial.
 
-    Coordinates have shape (N, 3) in Bohr; receipt contains the native status,
+    Coordinates have shape (N, 3) in Bohr; receipt contains the running status,
     work counts and convergence metrics. Arrays and mapping are read-only and
     remain usable after callback return. ``elapsed_seconds`` includes callback
     work since entry to the complete corrector endpoint. A progress observation
@@ -205,6 +208,40 @@ class MolecularSaddleResult:
         return self.optimizer.converged and self.harmonics is not None
 
 
+@dataclass(frozen=True)
+class RksColdFockDamping:
+    """Bound the initial cold RKS proposal prefix and its retained AO matrix."""
+
+    prefix_iterations: int
+    previous_weight: float
+    maximum_bytes: int
+
+    def __post_init__(self) -> None:
+        """Validate the proposal count, mixing weight and retained-matrix cap."""
+        if (
+            type(self.prefix_iterations) is not int
+            or not 2 <= self.prefix_iterations < 1 << 32
+        ):
+            raise ValueError("prefix_iterations must be a uint32 of at least two")
+        if (
+            type(self.previous_weight) not in (float, int)
+            or not 0 < self.previous_weight < 1
+        ):
+            raise ValueError("previous_weight must be a real number in (0, 1)")
+        if type(self.maximum_bytes) is not int or not 0 < self.maximum_bytes < 1 << 63:
+            raise ValueError("maximum_bytes must be a positive int64 byte count")
+
+    def _descriptor(self) -> _native.RksColdFockOptions:
+        return _native.RksColdFockOptions(
+            ct.sizeof(_native.RksColdFockOptions),
+            _native.ABI_VERSION,
+            self.prefix_iterations,
+            0,
+            self.previous_weight,
+            self.maximum_bytes,
+        )
+
+
 def optimize_saddle(
     calculator: Calculator,
     atoms: typing.Iterable[Atom | tuple[str | int, typing.Sequence[float]]],
@@ -216,10 +253,15 @@ def optimize_saddle(
     initial_mode: typing.Any = None,
     minimum_occupied_overlap: float = 0.9,
     root_overlap_budget_bytes: int = 128 << 20,
+    accepted_frame_warm_start: bool = False,
+    cold_fock_damping: RksColdFockDamping | None = None,
     integral_budget_bytes: int = 64 << 20,
     max_eri_primitives: int | None = None,
+    max_map_terms: int | None = None,
     output_budget_bytes: int = 64 << 20,
     grid_budget_bytes: int = 128 << 20,
+    numeric_budget_bytes: int | None = None,
+    response_budget_bytes: int | None = None,
     solver_options: GMRESOptions | None = None,
     progress: typing.Callable[[SaddleProgress], bool | None] | None = None,
     evaluation_progress: typing.Callable[[typing.Mapping[str, typing.Any]], None]
@@ -230,15 +272,21 @@ def optimize_saddle(
 
     Supply a Calculator whose public Hessian and forces are admitted, finite
     ordered atoms in Bohr, and positive physical/isotopic masses in dalton.
-    This adapter currently requires canonical B3LYP, all-electron, direct,
-    CPU RKS/UKS; no ECP, DF, GPU, reference engine or lower-level
-    preoptimization is used.
+    This adapter requires linked direct CPU B3LYP RKS/UKS. The spherical
+    scalar def2-ECP exceptions require B3LYP-D3(BJ) RKS and accepted-frame
+    warm starts: Cs46 requires explicit cold Fock damping; I28 requires no
+    damping, initial/maximum radii at most 0.015/0.03 Bohr, and occupied
+    overlap at least 0.99. Other ECPs, DF, GPU, reference engines and
+    lower-level preoptimization are excluded.
     A qualified uncut two-body D3(BJ) source is retained unchanged. The native
     C++ corrector owns all optimizer steps and the <=100-attempt cap. Default
     controls enable rigid projection and use the five reference thresholds.
 
     Each geometry uses one prepared SCF for energy/forces and raw Hessian.
-    Independent cold SCFs must retain each occupied spin subspace and its
+    SCFs start cold by default. Opt in with ``accepted_frame_warm_start=True``
+    to seed later SCFs from only the last accepted frame; an unavailable or
+    unused seed (including cold fallback) is a derivative failure. Either
+    policy must retain each occupied spin subspace and its
     integer population: all principal overlaps with the last accepted state's
     corresponding orbitals must meet
     ``minimum_occupied_overlap`` in (0, 1]. This is a fail-closed local continuity
@@ -250,11 +298,22 @@ def optimize_saddle(
     No Python AO/grid reconstruction, numerical response or runtime compiler is
     used. Native canonical orbitals are exported only for root continuity.
 
+    In canonical B3LYP-D3(BJ) RKS with ``initial_guess=None`` and accepted-frame
+    warm starts, ``cold_fock_damping`` optionally bounds the first SCF's orbital
+    proposal mixing. Its prefix consumes the same SCF iteration budget; physical
+    convergence, forces and response use the requested, unmixed Hamiltonian.
+
     Byte controls independently bound their named providers, not total RSS.
+    ``numeric_budget_bytes`` bounds each native Hessian reservation (default
+    512 MiB), including ``response_budget_bytes`` (default 128 MiB) for
+    response resources such as optional resident coordinate sources. Neither
+    controls the optimizer's own ``SaddleOptions.maximum_numeric_bytes``.
     ``max_eri_primitives`` caps first-plus-curvature nuclear ERI primitive
     visits over each complete requested Hessian (default 100,000,000), not over
     individual columns or the entire optimization. Increasing it does not
     change the model, qualify a domain, or bound endpoint time/induced-Fock work.
+    ``max_map_terms`` overrides the separate contraction and assembly work
+    cap per complete Hessian (default ``2**40``).
     ``progress`` follows correct_saddle; ``evaluation_progress`` observes
     detached start/complete/failed stage records, including geometry and elapsed
     seconds. Callback/SCF/response failures preserve the last accepted geometry
@@ -275,10 +334,15 @@ def optimize_saddle(
         initial_mode=initial_mode,
         minimum_occupied_overlap=minimum_occupied_overlap,
         root_overlap_budget_bytes=root_overlap_budget_bytes,
+        accepted_frame_warm_start=accepted_frame_warm_start,
+        cold_fock_damping=cold_fock_damping,
         integral_budget_bytes=integral_budget_bytes,
         max_eri_primitives=max_eri_primitives,
+        max_map_terms=max_map_terms,
         output_budget_bytes=output_budget_bytes,
         grid_budget_bytes=grid_budget_bytes,
+        numeric_budget_bytes=numeric_budget_bytes,
+        response_budget_bytes=response_budget_bytes,
         solver_options=solver_options,
         progress=progress,
         evaluation_progress=evaluation_progress,
@@ -344,10 +408,16 @@ def _real_array(values: typing.Any, name: str) -> np.ndarray:
     return np.array(array, dtype=np.float64, order="C", copy=True)
 
 
-def _receipt(value: _Receipt) -> typing.Mapping[str, typing.Any]:
+def _receipt(
+    value: _Receipt, *, observation: bool = False
+) -> typing.Mapping[str, typing.Any]:
+    status = _STATUSES[value.status]
+    # v1 progress borrows the terminal receipt type before the outcome is known.
+    if observation and status == "attempt_limit":
+        status = "in_progress"
     return MappingProxyType(
         {
-            "status": _STATUSES[value.status],
+            "status": status,
             "has_valid_state": bool(value.has_valid_state),
             "stationary_verified": bool(value.stationary_verified),
             **{name: getattr(value, name) for name in _COUNTS},
@@ -491,7 +561,7 @@ def correct_saddle(
                     progress(
                         SaddleProgress(
                             observed,
-                            _receipt(pointer.contents),
+                            _receipt(pointer.contents, observation=True),
                             perf_counter() - started,
                         )
                     )

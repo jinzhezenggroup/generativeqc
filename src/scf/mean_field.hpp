@@ -26,6 +26,7 @@ struct CudaRhfSourceHandoff;
 struct CudaDensityFittingMetricDiagnostic;
 struct CudaDensityFittingJkPlan;
 class PreparedFockPlan;
+struct RksColdFockDamping;
 
 }  // namespace generativeqc::scf
 
@@ -114,11 +115,12 @@ FockBuildSpec make_rsh_correction_fock_spec(
 /** Native B3 semilocal graph with an explicitly authenticated full-range weight.
  * The prepared MethodIR owns the coefficient; a display name never supplies it.
  * Exact equality with the supplied Fock strategy remains a preflight invariant.
+ * Optional cold proposal damping does not change the physical endpoint or warm SCF.
  */
 ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
-                        double exact_exchange,
-                        const std::vector<double>* initial_density = nullptr);
+                        double exact_exchange, const std::vector<double>* initial_density = nullptr,
+                        const RksColdFockDamping* cold_damping = nullptr);
 
 /** Canonical generated B97M/RSH/VV10 contract. No independent SCF loop. */
 void require_wb97mv_composition(const ResolvedFockBuild& primary,

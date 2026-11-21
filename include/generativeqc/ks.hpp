@@ -86,8 +86,8 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
     extended.grid = &nonlocal_options;
   }
   method.ks_options = &options;
-  const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
-                                               name.c_str(), identity, dispersion_bytes};
+  const generativeqc_named_ks_descriptor named{
+      sizeof(named), GENERATIVEQC_ABI_VERSION, name.c_str(), identity, dispersion_bytes, 0};
   return Calculation(context, system, method, named);
 }
 

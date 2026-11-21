@@ -94,7 +94,8 @@ class NativeBatch {
     method.screening_tolerance = 1e-14;
     method.ks_options = &grid;
     generativeqc_named_ks_descriptor selection{sizeof(selection), GENERATIVEQC_ABI_VERSION,
-                                               name.c_str(), named->identity.data(), 16U << 20};
+                                               name.c_str(),      named->identity.data(),
+                                               16U << 20,         0};
     const generativeqc_system* systems[]{system};
     check(generativeqc_batch_prepare_named_ks_v1(context, systems, 1, &method, &selection,
                                                  GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, &batch));

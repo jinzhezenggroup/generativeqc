@@ -66,13 +66,13 @@ void binding_case(unsigned spins, bool dispersion) {
   const auto* capabilities = methods::find_capabilities(descriptor.method);
   require(capabilities, "native DFT carrier is unavailable");
   auto systems = std::vector<core::System>{molecule(spins), molecule(spins)};
-  auto batch =
-      dispersion
-          ? methods::detail::prepare_composed_dft_batch(
-                *capabilities, context, std::move(systems), descriptor,
-                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, nullptr, named->dispersion, 16U << 20)
-          : methods::detail::prepare_dft_batch(*capabilities, context, std::move(systems),
-                                               descriptor, GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
+  auto batch = dispersion ? methods::detail::prepare_composed_dft_batch(
+                                *capabilities, context, std::move(systems), descriptor,
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, nullptr, named->dispersion,
+                                16U << 20, nullptr)
+                          : methods::detail::prepare_dft_batch(
+                                *capabilities, context, std::move(systems), descriptor,
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
   std::string detail;
   dft::CudaKsFinalStateToken token;
   KsHostDerivativeSources sources;

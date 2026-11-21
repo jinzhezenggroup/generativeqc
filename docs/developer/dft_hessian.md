@@ -337,7 +337,9 @@ primitive-visit cap is 100,000,000 over the whole requested matrix or HVP.
 for the linked native CPU path; `None` retains that default. The saddle cap
 applies to each complete requested Hessian, not each column or the whole search.
 The two `Calculator` endpoints also accept explicit `numeric_budget_bytes`
-and `response_budget_bytes` and a separate `max_map_terms` ceiling. The
+and `response_budget_bytes` and a separate `max_map_terms` ceiling. Both
+molecular saddle frontends accept the map-work ceiling per complete Hessian.
+The
 planner checks whole-request integral-map and moving-grid XC-map workloads
 separately against the latter limit. A work refusal gives the estimate and
 cap, and labels preliminary lower bounds as such. No numerical, source or
@@ -350,7 +352,11 @@ public Calculator runner labels its own endpoint receipt that way.
 With `GENERATIVEQC_DF_PROGRESS_TRACE` set to a fresh JSONL path, the CPU bridge
 also records admitted work and the actual frozen-integral schedule before
 execution, first-source/frozen-integral preparation scopes, and completed
-nuclear directions. Admitted work is a plan, not an executed-work receipt.
+nuclear directions. Within a direction it distinguishes integral, moving-grid
+XC, scalar ECP and coupled response work. Sampled integral scopes report
+completed primitive visits; response scopes report whether the solve converged
+and its iteration/operator counts. Admitted work is a plan, not an
+executed-work receipt.
 An unfinished scope or a returned direction is not a complete accepted Hessian;
 the raw matrix/receipt still publish only after the final scientific gates.
 The journal is best-effort diagnostic I/O: unavailable storage does not change

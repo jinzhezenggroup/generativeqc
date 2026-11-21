@@ -346,6 +346,20 @@ class NamedKsDescriptor(ctypes.Structure):
         ("name", ctypes.c_char_p),
         ("identity", ctypes.c_char_p),
         ("dispersion_maximum_bytes", ctypes.c_uint64),
+        ("cpu_packed_eri_maximum_bytes", ctypes.c_uint64),
+    ]
+
+
+class RksColdFockOptions(ctypes.Structure):
+    """Bounded native RKS orbital-proposal policy, separate from MethodIR."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("prefix_iterations", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32),
+        ("previous_weight", ctypes.c_double),
+        ("maximum_bytes", ctypes.c_uint64),
     ]
 
 

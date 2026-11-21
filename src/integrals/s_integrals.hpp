@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "integrals/packed_spherical_eri.hpp"
 #include "integrals/range_moments.hpp"
 
 namespace generativeqc::integrals {
@@ -97,6 +98,13 @@ struct EspContractedGeometryDerivative {
  */
 IntegralData build_integrals(const core::System& system, bool include_derivatives = true,
                              bool include_eri = true);
+
+/** Build exact spherical values through f, with no dense molecular tensor.
+ * maximum_bytes caps retained FP64 orbit values; the shared shell producer's
+ * bounded local projection workspace is separate.
+ */
+PackedSphericalEri build_packed_spherical_eri(const core::System& system,
+                                              std::size_t maximum_bytes);
 
 /** Evaluate value-only short-/long-range two-electron integrals in the public AO basis.
  *

@@ -1469,6 +1469,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_batch_prepare_named_ks_cold_rks_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "158dd4eb0eb7aac077ecbe055b72e417e13dbeeefe71a851aac3d1e9eaf93a76",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_batch_prepare_named_ks_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

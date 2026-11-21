@@ -269,18 +269,19 @@ const Capabilities* find_capabilities(generativeqc_method method) noexcept {
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis,
-    const named_ks::Dispersion* dispersion, std::uint64_t dispersion_bytes) {
+    const named_ks::Dispersion* dispersion, std::uint64_t dispersion_bytes,
+    std::uint64_t cpu_packed_eri_bytes) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
   validate_preliminary_system(descriptor, system);
-  if (dispersion) {
+  if (dispersion || cpu_packed_eri_bytes) {
     if (definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                        "KS dispersion requires a DFT carrier");
+                        "named KS resources require a DFT carrier");
     return detail::prepare_composed_dft_calculation(definition.provider.domain, context, system,
-                                                    descriptor, auxiliary_basis, *dispersion,
-                                                    dispersion_bytes);
+                                                    descriptor, auxiliary_basis, dispersion,
+                                                    dispersion_bytes, cpu_packed_eri_bytes);
   }
   return definition.prepare_calculation(definition.provider.domain, context, system, descriptor,
                                         auxiliary_basis);
@@ -306,13 +307,12 @@ void prepare_calculation_with_provider_initialization_intent_into(
   }
 }
 
-std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
-                                             std::vector<core::System> systems,
-                                             const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags,
-                                             const core::System* auxiliary_basis,
-                                             const named_ks::Dispersion* dispersion,
-                                             std::uint64_t dispersion_bytes) {
+std::unique_ptr<PreparedBatch> prepare_batch(
+    core::ContextState& context, std::vector<core::System> systems,
+    const generativeqc_method_descriptor& descriptor, generativeqc_batch_flags flags,
+    const core::System* auxiliary_basis, const named_ks::Dispersion* dispersion,
+    std::uint64_t dispersion_bytes, std::uint64_t cpu_packed_eri_bytes,
+    const scf::RksColdFockDamping* cold_damping) {
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   if (!definition.provider.domain.supports_batch || definition.prepare_batch == nullptr) {
@@ -323,13 +323,16 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
     validate_system(definition, system);
     validate_preliminary_system(descriptor, system);
   }
-  if (dispersion) {
+  if (cold_damping && !dispersion)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "cold Fock damping requires the composed B3LYP-D3(BJ) RKS program");
+  if (dispersion || cpu_packed_eri_bytes) {
     if (definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                        "KS dispersion requires a DFT carrier");
-    return detail::prepare_composed_dft_batch(definition.provider.domain, context,
-                                              std::move(systems), descriptor, flags,
-                                              auxiliary_basis, *dispersion, dispersion_bytes);
+                        "named KS resources require a DFT carrier");
+    return detail::prepare_composed_dft_batch(
+        definition.provider.domain, context, std::move(systems), descriptor, flags, auxiliary_basis,
+        dispersion, dispersion_bytes, cpu_packed_eri_bytes, cold_damping);
   }
   return definition.prepare_batch(definition.provider.domain, context, std::move(systems),
                                   descriptor, flags, auxiliary_basis);

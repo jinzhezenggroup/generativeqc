@@ -47,6 +47,8 @@ def test_native_saddle_converges_and_detaches(native: None) -> None:
     np.testing.assert_array_equal(result.hessian, np.diag([-1.0, 2.0, 3.0]))
     assert result.receipt["energy_gradient_calls"] > result.receipt["accepted_steps"]
     assert result.receipt["hessian_calls"] > result.receipt["accepted_steps"]
+    assert observations[0].receipt["status"] == "in_progress"
+    assert observations[-1].receipt["status"] == "first_order_saddle"
     assert result.elapsed_seconds >= observations[-1].elapsed_seconds > 0
     assert not result.failures
     initial[:] = 99
@@ -84,6 +86,30 @@ def test_native_saddle_converges_and_detaches(native: None) -> None:
 def test_invalid_options(changes: dict[str, typing.Any]) -> None:
     with pytest.raises(ValueError):
         SaddleOptions(**changes)
+
+
+def test_hundredth_accepted_step_cannot_publish_a_verified_saddle(native: None) -> None:
+    # With a fixed 0.001 Bohr radius, the same quadratic meets all five
+    # criteria on step 99 or 100 depending only on the starting coordinate.
+    options = SaddleOptions(initial_radius=0.001, maximum_radius=0.001)
+    control = correct_saddle([[0.09905, 0, 0]], **derivatives(), options=options)
+    assert control.converged
+    assert control.receipt["attempts"] == 99
+
+    result = correct_saddle([[0.10005, 0, 0]], **derivatives(), options=options)
+    receipt = result.receipt
+    assert receipt["attempts"] == receipt["accepted_steps"] == 100
+    assert receipt["energy_change"] <= options.energy_change
+    assert receipt["gradient_rms"] <= options.gradient_rms
+    assert receipt["gradient_max"] <= options.gradient_max
+    assert receipt["displacement_rms_angstrom"] <= options.displacement_rms_angstrom
+    assert receipt["displacement_max_angstrom"] <= options.displacement_max_angstrom
+    assert receipt["status"] == "attempt_limit"
+    assert receipt["has_valid_state"]
+    assert not receipt["stationary_verified"]
+    assert not result.converged
+    assert receipt["energy_gradient_calls"] == receipt["hessian_calls"] == 101
+    np.testing.assert_allclose(result.coordinates, [[0.00005, 0, 0]], atol=1e-14)
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "cli/molecular_evaluator.hpp"
@@ -86,7 +87,8 @@ struct Evaluation {
   std::vector<double> gradient, hessian;
 };
 
-Evaluation explicit_batch(const Fixture& fixture, std::span<const double> positions) {
+Evaluation explicit_batch(const Fixture& fixture, std::span<const double> positions,
+                          const generativeqc_rks_cold_fock_options_v1* damping = nullptr) {
   Context context(generativeqc_context_descriptor{sizeof(generativeqc_context_descriptor),
                                                   GENERATIVEQC_ABI_VERSION, -1,
                                                   GENERATIVEQC_BACKEND_CPU_REFERENCE});
@@ -134,13 +136,27 @@ Evaluation explicit_batch(const Fixture& fixture, std::span<const double> positi
   method.energy_tolerance = *fixture.options.energy_tolerance;
   method.density_tolerance = *fixture.options.density_tolerance;
   method.screening_tolerance = 1e-14;
-  const generativeqc_named_ks_descriptor named{
-      sizeof(named), GENERATIVEQC_ABI_VERSION, fixture.program->name.data(),
-      fixture.program->identity.data(), fixture.invocation.derivatives.dispersion_bytes};
+  const generativeqc_named_ks_descriptor named{sizeof(named),
+                                               GENERATIVEQC_ABI_VERSION,
+                                               fixture.program->name.data(),
+                                               fixture.program->identity.data(),
+                                               fixture.invocation.derivatives.dispersion_bytes,
+                                               fixture.invocation.derivatives.cpu_packed_eri_bytes};
   const generativeqc_system* systems[]{system.get()};
   generativeqc_batch* prepared{};
-  check(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
-                                               &prepared));
+  if (damping) {
+    auto inadequate = *damping;
+    inadequate.maximum_bytes = 1;
+    const auto refused = generativeqc_batch_prepare_named_ks_cold_rks_v1(
+        context.get(), systems, 1, &method, &named, &inadequate, 0, &prepared);
+    require(refused == GENERATIVEQC_STATUS_RESOURCE_LIMIT && !prepared,
+            "cold RKS batch published an owner despite failed workspace admission");
+    check(generativeqc_batch_prepare_named_ks_cold_rks_v1(context.get(), systems, 1, &method,
+                                                          &named, damping, 0, &prepared));
+  } else {
+    check(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
+                                                 &prepared));
+  }
   std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
       prepared, generativeqc_batch_destroy);
   Evaluation result{0, std::vector<double>(positions.size()),
@@ -201,6 +217,14 @@ void contracts(bool unrestricted) {
   require(owner.uses_ecp(), "molecular ECP metadata disappeared before execution");
   const auto baseline = evaluate(owner, initial);
   same(baseline, explicit_batch(fixture, initial));
+  if (!unrestricted) {
+    const generativeqc_rks_cold_fock_options_v1 damping{
+        sizeof(damping), GENERATIVEQC_ABI_VERSION, 8, 0, 0.5, 4096};
+    same(baseline, explicit_batch(fixture, initial, &damping));
+  }
+  // The analytic Gaussian test potential uses kernel blocks, not radial quadrature.
+  const auto initial_ecp_blocks = owner.work.at("ecp_kernel_blocks").get<std::uint64_t>();
+  require(initial_ecp_blocks > 0, "completed native ECP Hessian lost its kernel block count");
   for (const auto* stage : {"system_prepare", "batch_prepare", "scf_forces"}) {
     const auto started =
         std::find_if(owner.records.begin(), owner.records.end(), [&](const auto& event) {
@@ -230,6 +254,21 @@ void contracts(bool unrestricted) {
   close(owner.orbital_snapshot(initial, 128ULL << 20).coefficients, saved_coefficients, 0);
   refuses([&] { owner.orbital_snapshot(initial, 1); });
   owner.accept_geometry(initial);
+  const auto accepted = owner.accepted_occupied_state(initial, 128ULL << 20);
+  const auto basis = orbitals.shape.basis;
+  const auto& channels = accepted.at("channels");
+  require(channels.size() == orbitals.shape.spins, "occupied output lost a spin channel");
+  for (std::size_t spin = 0; spin < channels.size(); ++spin) {
+    const auto occupied = spin == 0 ? orbitals.shape.alpha_occupied : orbitals.shape.beta_occupied;
+    const auto& coefficients = channels[spin].at("coefficients");
+    require(channels[spin].at("occupied_orbitals") == occupied && coefficients.size() == basis,
+            "occupied output has the wrong orbital shape");
+    for (std::size_t ao = 0; ao < basis; ++ao) {
+      const auto begin = saved_coefficients.begin() + (spin * basis + ao) * basis;
+      close(coefficients[ao].get<std::vector<double>>(),
+            std::vector<double>(begin, begin + occupied), 0);
+    }
+  }
   auto translated = initial;
   for (double& component : translated) component += 0.125;
   const auto previous_gate = fixture.invocation.minimum_occupied_overlap;
@@ -247,6 +286,11 @@ void contracts(bool unrestricted) {
   trial[5] += 0.025;
   const auto changed = evaluate(owner, trial);
   same(changed, explicit_batch(fixture, trial));
+  require(owner.work.at("ecp_kernel_blocks").get<std::uint64_t>() > initial_ecp_blocks,
+          "molecular receipt did not accumulate ECP work across Hessians");
+  refuses([&] { owner.accepted_occupied_state(trial, 128ULL << 20); });
+  require(owner.accepted_occupied_state(initial, 128ULL << 20) == accepted,
+          "unaccepted trial replaced the exported occupied state");
   close(owner.orbital_snapshot(initial, 128ULL << 20).coefficients, saved_coefficients, 0);
   require(std::abs(changed.energy - baseline.energy) > 1e-7,
           "molecular ECP consumer ignored trial geometry");
@@ -255,6 +299,15 @@ void contracts(bool unrestricted) {
   auto remote = initial;
   remote[5] += 6;
   fixture.invocation.minimum_occupied_overlap = 1 - 1e-10;
+  std::string refusal;
+  try {
+    owner.energy_gradient(trial, energy, output);
+  } catch (const std::runtime_error& error) {
+    refusal = error.what();
+  }
+  if (refusal.find(": minimum overlap ") == std::string::npos ||
+      refusal.find(", required ") == std::string::npos)
+    throw std::runtime_error("expected measured occupied-root failure, got: " + refusal);
   refuses([&] { owner.energy_gradient(remote, energy, output); },
           "strict occupied-root gate admitted an internal bond displacement");
   fixture.invocation.minimum_occupied_overlap = previous_gate;

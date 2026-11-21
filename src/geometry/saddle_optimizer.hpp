@@ -315,6 +315,12 @@ inline Result correct(std::span<const double> initial, const Options& options,
   if (notify()) return result;
   for (;;) {
     if (stop()) return result;
+    // Keep the last fully accepted state at the cap, but do not start
+    // fresh-final verification even if that last step met all five tests.
+    if (result.attempts == options.max_attempts) {
+      result.status = Status::attempt_limit;
+      return result;
+    }
     if (five_tests()) {
       Evaluation final_state;
       std::vector<double> final_matrix, final_mode;
@@ -347,10 +353,6 @@ inline Result correct(std::span<const double> initial, const Options& options,
     }
     if (spectrum.values[selected] >= -options.curvature_tolerance) {
       result.status = Status::target_not_negative;
-      return result;
-    }
-    if (result.attempts == options.max_attempts) {
-      result.status = Status::attempt_limit;
       return result;
     }
     std::vector<double> step(count, 0);

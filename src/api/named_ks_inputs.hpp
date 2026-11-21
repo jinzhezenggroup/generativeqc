@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 
@@ -10,12 +13,24 @@
 
 namespace generativeqc::api {
 
+/** Copy the validated descriptor into current-size storage. A v1 caller
+ * supplies the original prefix only; never dereference its appended field. */
+inline generativeqc_named_ks_descriptor copy_named_ks_descriptor(const void* input) {
+  std::array<std::uint32_t, 2> header{};
+  std::memcpy(header.data(), input, sizeof(header));
+  constexpr auto prefix = offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes);
+  if (header[1] != GENERATIVEQC_ABI_VERSION ||
+      (header[0] != prefix && header[0] != sizeof(generativeqc_named_ks_descriptor)))
+    throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
+                               "named KS descriptor ABI mismatch");
+  generativeqc_named_ks_descriptor result{};
+  std::memcpy(&result, input, header[0]);
+  return result;
+}
+
 /** Resolve exact native program identity before constructing any owner. */
 inline const methods::named_ks::Method& named_ks_program(
     const generativeqc_named_ks_descriptor& named, generativeqc_backend backend) {
-  if (!valid_descriptor(&named))
-    throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
-                               "named KS descriptor ABI mismatch");
   if (!named.name || !*named.name)
     throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                                "a named KS selector is required");
@@ -35,15 +50,17 @@ struct NamedKsInputs {
   generativeqc_ks_nonlocal_grid_options storage{};
   generativeqc_ks_options nonlocal_grid{};
   methods::detail::ApplicationPrecisionMethodOptions method{};
+  const generativeqc_named_ks_descriptor selection;
   const methods::named_ks::Method* program{};
 
   NamedKsInputs(const generativeqc_method_descriptor& input,
-                const generativeqc_named_ks_descriptor& named, generativeqc_backend backend) {
+                const generativeqc_named_ks_descriptor* named, generativeqc_backend backend)
+      : selection(copy_named_ks_descriptor(named)) {
     if (input.struct_size != sizeof(input) && input.struct_size != sizeof(method))
       throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                                  "unknown named method controls ABI");
     std::memcpy(&method, &input, input.struct_size);
-    program = &named_ks_program(named, backend);
+    program = &named_ks_program(selection, backend);
     if (method.base.method != program->carrier)
       throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                                  "named KS identity or spin carrier mismatch");

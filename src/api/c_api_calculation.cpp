@@ -51,7 +51,7 @@ generativeqc_status prepare_candidate(
     generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
     if (named) {
-      named_inputs.emplace(*descriptor, *named, context->state.executed_backend);
+      named_inputs.emplace(*descriptor, named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
       generativeqc::methods::named_ks::validate_bound_basis(*named_inputs->program, system->data);
     }
@@ -89,7 +89,8 @@ generativeqc_status prepare_candidate(
           named_inputs && named_inputs->program->dispersion.kind
               ? &named_inputs->program->dispersion
               : nullptr,
-          named ? named->dispersion_maximum_bytes : 0);
+          named_inputs ? named_inputs->selection.dispersion_maximum_bytes : 0,
+          named_inputs ? named_inputs->selection.cpu_packed_eri_maximum_bytes : 0);
     }
     *calculation = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -257,8 +258,9 @@ generativeqc_status generativeqc_system_create_named_ks_v1(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(context->mutex);
   try {
+    const auto selection = generativeqc::api::copy_named_ks_descriptor(named);
     const auto& program =
-        generativeqc::api::named_ks_program(*named, context->state.executed_backend);
+        generativeqc::api::named_ks_program(selection, context->state.executed_backend);
     if (!program.bound_basis)
       throw generativeqc::methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                                "named method does not define an orbital basis");

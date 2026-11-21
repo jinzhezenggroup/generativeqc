@@ -148,12 +148,33 @@ rigid projection is mandatory; it never removes small vibrational eigenvalues.
 The current domain is the linked canonical Gaussian/VWN-RPA B3LYP RKS/UKS
 CPU direct-FP64 domain, optionally with uncut two-body D3(BJ), ATM off.
 The command defaults to bare `b3lyp-rks`; choose UKS and the supplied
-multiplicity explicitly. ECP, DF, CUDA, semilocal-only and range/nonlocal
-molecular saddle paths refuse. Prepared native force admission is checked
+multiplicity explicitly. DF, CUDA, semilocal-only and range/nonlocal
+molecular saddle paths refuse. The CLI admits spherical scalar Cs46 or I28
+def2-ECP with `b3lyp-d3(bj)-rks` and `--accepted-frame-warm-start`. The
+actual potential parameters must match; a frozen-core count is not enough.
+Cs46 requires explicit `--cold-fock-damping`. For I28, omit that option and
+use `--initial-radius 0.015 --maximum-radius 0.03 --minimum-occupied-overlap 0.99`
+(smaller radii or a higher overlap threshold are allowed). These two ECPs
+cannot be combined in one saddle calculation. Prepared native force admission is checked
 before SCF, and each raw Hessian consumes that geometry's actual retained
 native batch. No Python, runtime compiler, reference engine, displaced SCF
 or external optimizer runs. Occupied-root continuity is checked separately
 for each spin against the last accepted geometry, not a rejected trial.
+The first SCF is always cold. Later SCFs also start cold by default. With
+`--accepted-frame-warm-start`, the solver instead uses a bounded native snapshot
+from the last frame with accepted forces and Hessian. Every trial still runs a
+fresh SCF and checks occupied overlap independently. A missing, unused or
+rejected seed, including a cold fallback, fails the evaluation rather than
+silently changing initialization policy. Warm starts alone do not admit ECP saddles.
+
+For linked `b3lyp-d3(bj)-rks`, `--cold-fock-damping PREFIX WEIGHT BYTES`
+optionally mixes early orbital proposals on the first SCF only. It requires
+`--accepted-frame-warm-start`, at least two prefix iterations and a previous
+proposal weight strictly between zero and one. The first proposal is unmixed;
+the prefix is shorter than and consumes the ordinary SCF iteration budget. The
+byte cap bounds one retained FP64 AO-square proposal, not total RSS. The
+physical Fock, residuals and strict final verification are unchanged. A
+reservation refusal is an evaluation failure, not an undamped retry.
 
 All five convergence controls remain independent:
 
@@ -166,22 +187,32 @@ All five convergence controls remain independent:
 | `--displacement-max` | `1.8e-3` | Angstrom |
 
 `--max-attempts` defaults to 100 and cannot exceed 100; accepted **and rejected**
-steps consume that budget. Initial preparation and fresh-final verification
-are counted separately as derivative work. Trust-radius controls are
+steps consume that budget. Reaching the cap stops without fresh-final
+verification, even if the last accepted step meets the five criteria. Initial
+preparation and fresh-final verification are counted separately as derivative
+work. Trust-radius controls are
 `--initial-radius 0.1`, `--minimum-radius 1e-8`, and `--maximum-radius 0.5`
 (Bohr). Other controls are `--curvature-tolerance 1e-7`,
 `--raw-symmetry-tolerance 1e-10` (Hartree/Bohr²),
 `--minimum-mode-overlap 0.5`, `--minimum-occupied-overlap 0.7`, and
-`--acceptance-ratio 0.1`. SCF defaults are 240 iterations,
-`--energy-tolerance 1e-13`, and `--density-tolerance 1e-11`; explicit values
-are forwarded without relaxing the native accepted-state verification gate.
+`--acceptance-ratio 0.1`. SCF defaults are 240 iterations, `--diis-history 8`,
+`--energy-tolerance 1e-13`, and `--density-tolerance 1e-11`. The final JSON
+records these controls; explicit values do not relax native accepted-state
+verification.
 Derivative work/response controls are the same as
 [the native CPU Hessian command](native_cli.md#native-cpu-b3lyp-hessian-and-hvp).
+
+The saddle task accepts the same optional packed ERI value cap described in
+[the native CPU Hessian command](native_cli.md#native-cpu-b3lyp-hessian-and-hvp).
+It applies throughout the solve, independently of cold Fock damping and
+accepted-frame warm starts. Neither proposal mixing nor a warm seed can make
+an over-budget packed request fall back to ordinary values.
 
 `--saddle-budget-bytes` (128 MiB) bounds the corrector and, separately, final
 harmonic analysis. `--root-budget-bytes` (128 MiB) bounds retained orbital
 panels and root-tracking matrices, including the current orbital export
-reservation. These are owner-specific numeric bounds, not an aggregate RSS
+reservation and any retained native seed snapshots. These are owner-specific
+numeric bounds, not an aggregate RSS
 promise; primal/provider scratch, cross-overlap integral scratch, allocation
 metadata, JSON and process overhead are excluded. `--output-budget-bytes`
 also admits the task's dense result panels; `--max-coordinates` defaults to
@@ -190,15 +221,22 @@ work at the largest admitted dimension.
 
 With `--json`, stdout contains one final `generativeqc.native-molecular-saddle-result/v1`
 record. `--progress-json` streams derivative-stage and last-accepted optimizer
-observations as JSON lines to stderr. The result separates optimizer attempts,
-SCF iterations/Fock builds and completed response/integral/D3 work. Counters
-do not invent unknown work inside a failed derivative stage. Each native
+observations as JSON lines to stderr. `in_progress` is an observation, not a
+termination reason; read the final receipt for the outcome. The result separates
+optimizer attempts, SCF iterations/Fock builds and completed Hessian-source work.
+The latter includes response, integral, moving-grid XC, scalar ECP and D3 work
+where applicable, not work from the separate primal force or an unfinished
+Hessian. A freshly verified
+minimum or higher-index saddle reports `other_index`, `stationary_verified=true`
+and `converged=false`. Available harmonics describe the verified stationary
+point, not a successful first-order saddle. Each native
 energy/gradient evaluation additionally reports `system_prepare`, `batch_prepare`
 and `scf_forces` phase starts and completions (or failures), with coordinates
 and elapsed time; terminal phase records include `phase_seconds`. A phase start
 is not evidence of convergence or completed work. If the process is interrupted
 before a terminal record, use the external wall timer rather than the last
-record's timestamp as the total duration.
+record's timestamp as the total duration. Completed derivative records identify
+actual `accepted_frame_warm_start` use and retained `root_seed_snapshot_bytes`.
 
 For deeper CPU SCF diagnostics, set `GENERATIVEQC_DF_PROGRESS_TRACE` to a fresh
 JSONL path. The separate append-only journal records RKS/UKS SCF scopes, basis
@@ -217,6 +255,17 @@ raw symmetry before roundoff averaging its own copy; the published raw Hessian
 is unchanged. Cartesian curvatures are explicitly separate from frequencies.
 Harmonic rank/index disagreement or mode-publication failure retains the
 verified geometry but prevents a successful task result.
+
+For independent electronic-root checks, `--occupied-state-budget-bytes N`
+adds `occupied_state` to the final record. It contains native-order AO rows
+and occupied orbital columns, with one channel for RKS or alpha then beta for
+UKS. The coefficients come from the frame that supplied the published
+derivatives, including the fresh final verification on convergence. No new
+SCF is run, and no rejected trial coefficients are emitted. The separate budget
+covers the FP64 coefficient payload, not JSON overhead. Without an accepted
+state the field is null; an export refusal also leaves it null, reports
+`occupied_state_export_failure`, and makes the requested endpoint unsuccessful
+without removing the derivative receipt.
 
 Exit zero requires a freshly verified first-order saddle **and** successful
 harmonic publication. Other indices, nonnegative targets, attempt/resource
@@ -287,14 +336,21 @@ endpoint includes fresh final derivatives, not just the last accepted step.
 (python-saddle-backends)=
 ### Admission and execution
 
-The molecular adapter requires an already qualified public Hessian and forces,
-CPU FP64 direct all-electron canonical B3LYP RKS/UKS, and one fixed charge
+The molecular adapter requires an admitted public Hessian and a prepared native
+force owner, CPU FP64 direct canonical B3LYP RKS/UKS, and one fixed charge
 and multiplicity. Restricted calculations require multiplicity one; UKS must
-already have public Hessian admission. Semilocal-only, range/nonlocal, ECP, DF
+already have public Hessian admission. Semilocal-only, range/nonlocal, DF
 and CUDA calculators are not admitted by this adapter. A qualified uncut two-body
-D3(BJ) correction remains part of the same total MethodIR. This narrower adapter
-does not promote an unqualified derivative domain. In particular, it does not
-deliver the requested Ni/I/Cs transition-state endpoint.
+D3(BJ) correction remains part of the same total MethodIR. Scalar ECP saddle
+admission requires real-spherical canonical B3LYP-D3(BJ) RKS,
+`accepted_frame_warm_start=True`, and `initial_guess=None` on the calculator.
+Cs46 def2-ECP requires explicit `cold_fock_damping=RksColdFockDamping(...)`.
+I28 def2-ECP instead requires `cold_fock_damping=None`,
+`options=SaddleOptions(project_rigid_motions=True, initial_radius=0.015,
+maximum_radius=0.03)` or smaller radii (Bohr), and
+`minimum_occupied_overlap=0.99` or higher. Each ECP center must use the actual
+qualified def2 operator; mixing the two ECP families is not admitted for saddle
+correction. These restrictions do not qualify arbitrary initial geometries.
 
 One prepared native SCF supplies native energy/forces and the raw Hessian at each
 geometry. The Hessian callback consumes that retained batch through the same
@@ -308,19 +364,26 @@ The obsolete molecular `cache` option is removed; no compiler cache is needed
 by this precompiled endpoint. No reference engine, finite differences, external
 optimizer or preliminary lower-level calculation runs in production.
 
-`max_eri_primitives` optionally overrides the native nuclear-integral work cap
-for each complete Hessian request; its default and scope are defined in the
+`max_eri_primitives` and `max_map_terms` optionally override the native primitive
+and contraction/assembly work caps for each complete Hessian request, as defined in the
 [native CPU derivative contract](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
 It is not a bound on time, induced-Fock work or the complete optimization, and
 does not promote an unqualified molecular domain.
 
-Independent cold SCFs must preserve
-the occupied subspace relative to the **last accepted** state: the smallest
+Each SCF must preserve the occupied subspace relative to the **last accepted**
+state: the smallest
 principal cross-geometry AO overlap in **each occupied spin channel** must meet
 `minimum_occupied_overlap` (default `0.9`). Each channel retains its integer
 population; an empty channel must remain empty. Independent occupied-orbital
 gauge rotations do not change this test, and one continuous spin cannot mask
 a root change in the other. Rejected trial roots never replace the accepted reference.
+Pass `accepted_frame_warm_start=True` for the same opt-in snapshot policy as
+the CLI; `root_overlap_budget_bytes` then also accounts for the retained
+accepted and trial seed storage. This is continuation of an occupied branch,
+not a guarantee that it is the lowest-energy root.
+With canonical B3LYP-D3(BJ) RKS and `Calculator(..., initial_guess=None)`, pass
+`cold_fock_damping=RksColdFockDamping(prefix_iterations, previous_weight, maximum_bytes)`
+from `generativeqc.saddle` for the same bounded first-frame proposal policy.
 For this comparison alone, the current AO centres are translated to the last
 accepted geometry's mass-weighted centre. This removes arbitrary whole-molecule
 translation, which otherwise attenuates compact core-orbital overlaps even for
@@ -351,6 +414,13 @@ continues. `evaluation_progress` additionally receives start/complete/failed
 derivative stages, coordinates, elapsed seconds and completed SCF/response work.
 Those observer calls are not optimizer iterations.
 
+`RksColdFockDamping` is immutable. `prefix_iterations` is an integer from 2
+through `2**32 - 1` and must be less than the solver's SCF iteration limit.
+The first proposal is unmixed; each later proposal in the prefix mixes in
+`previous_weight` of the previous proposal, strictly between 0 and 1. These
+steps count against the normal SCF limit. `maximum_bytes` is a positive
+integer less than `2**63` for the extra retained FP64 AO-square matrix.
+
 `SaddleResult` separates native execution from verified convergence. Inspect
 `converged`, `receipt`, `detail` and `failures`; zero C execution status alone is
 not convergence. `MolecularSaddleResult.optimizer` retains that native outcome;
@@ -364,6 +434,8 @@ symmetry gate; the optimizer result always retains the unmodified raw Hessian.
 ### Failure publication
 
 Invalid controls, shapes, units and masses raise ValueError or TypeError.
+Invalid `RksColdFockDamping` fields raise ValueError at construction; a
+prefix incompatible with the SCF limit is rejected when preparing the solve.
 Unqualified molecular domains raise NotImplementedError before SCF; native
 numeric-capacity and molecular output preflight refusals raise MemoryError.
 Library and ABI errors raise RuntimeError. Exceptions from derivative, progress
@@ -379,7 +451,7 @@ Publication also fails if harmonic rigid-mode rank differs from the native
 optimizer, or if a verified native saddle's negative-mode count changes after
 mass weighting. The latter check includes soft negative modes, not only
 significant imaginary frequencies; no mode is deleted to obtain agreement.
-Completed SCF/response counts do not invent partially completed failed work;
+Completed SCF and Hessian-source counts do not include unfinished work;
 `work_counters_complete` and `work_counters_scope` make that limitation explicit.
 The attempt cap, a nonnegative target, lost tracking, ambiguous curvature and
 cancellation are never reported as successful index-one convergence.
@@ -393,8 +465,18 @@ usable after callback return. No callback retains a borrowed C pointer, and no
 prepared electronic owner survives the molecular endpoint, including failures.
 Changing the calculator's physical model during a callback fails explicitly.
 
-`maximum_numeric_bytes` bounds the native optimizer only; overlap, integral,
-grid and output controls bound their named providers independently. The root
+The initial cold RKS preparation copies `RksColdFockDamping` controls and
+owns its retained proposal matrix. The cap covers only that extra matrix,
+not ordinary SCF scratch. Warm continuations and warm retries do not retain
+or use the cold proposal prefix.
+
+`SaddleOptions.maximum_numeric_bytes` bounds the native optimizer only. The
+separate `optimize_saddle` keyword `numeric_budget_bytes` (default 512 MiB)
+bounds each native Hessian's aggregate numerical reservation. The nested
+`response_budget_bytes` (default 128 MiB) bounds response resources, including
+optional resident coordinate sources. Overlap, integral, grid and output
+controls keep their own bounds. Changing a capacity neither raises the work
+caps nor qualifies a new molecular domain. The root
 overlap budget separately admits canonical-frame export (verified frame,
 staged C and caller C) and the rectangular cross-geometry overlap matrix;
 it excludes producer eigensolver scratch and detached Python copies. Neither

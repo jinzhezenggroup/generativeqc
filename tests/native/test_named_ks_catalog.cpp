@@ -1,5 +1,6 @@
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iomanip>
@@ -24,6 +25,24 @@ extern "C" generativeqc_status generativeqc_ks_catalog_plan_v1(const char*, std:
 namespace {
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
+}
+
+// A client built before the packed ERI field passes only this allocation.
+struct OriginalNamedKsDescriptor {
+  std::uint32_t struct_size;
+  std::uint32_t abi_version;
+  const char* name;
+  const char* identity;
+  std::uint64_t dispersion_maximum_bytes;
+};
+
+static_assert(sizeof(OriginalNamedKsDescriptor) ==
+              offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes));
+
+const generativeqc_named_ks_descriptor* original_wire(const OriginalNamedKsDescriptor& original) {
+  // Pass the historical wire bytes; neither caller nor callee should read a
+  // current-layout object from that address.
+  return reinterpret_cast<const generativeqc_named_ks_descriptor*>(&original);
 }
 
 generativeqc_ks_options controls() {
@@ -220,8 +239,9 @@ void test_named_preparation_failures_and_lifetime() {
     method.ks_options = &grid;
     std::string selector = "pbe-d3(bj)-rks";
     std::string identity(generativeqc::methods::named_ks::find_method(selector)->identity);
-    generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
-                                           selector.c_str(), identity.c_str(), 256ull << 20};
+    generativeqc_named_ks_descriptor named{sizeof(named),    GENERATIVEQC_ABI_VERSION,
+                                           selector.c_str(), identity.c_str(),
+                                           256ull << 20,     0};
     // Both public entry points must clear an old output value even when
     // rejection happens before any numerical owner is constructed.
     const auto rejected = [&](const generativeqc_method_descriptor& request,
@@ -242,6 +262,12 @@ void test_named_preparation_failures_and_lifetime() {
     auto invalid = named;
     invalid.abi_version += 1;
     rejected(method, &invalid, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    for (const auto bytes : {sizeof(OriginalNamedKsDescriptor) - 1,
+                             sizeof(OriginalNamedKsDescriptor) + 1, sizeof(named) + 1}) {
+      invalid = named;
+      invalid.struct_size = static_cast<std::uint32_t>(bytes);
+      rejected(method, &invalid, GENERATIVEQC_STATUS_ABI_MISMATCH);
+    }
     invalid = named;
     invalid.identity = "incorrect-identity";
     rejected(method, &invalid, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -278,9 +304,16 @@ void test_named_preparation_failures_and_lifetime() {
 
     calculation =
         std::make_unique<generativeqc::Calculation>(context, system, extended_method.base, named);
+    const OriginalNamedKsDescriptor original{sizeof(original), named.abi_version, named.name,
+                                             named.identity, named.dispersion_maximum_bytes};
+    generativeqc_calculation* original_single = nullptr;
+    generativeqc::check(generativeqc_calculation_prepare_named_ks_v1(
+        context.get(), system.get(), &extended_method.base, original_wire(original),
+        &original_single));
+    generativeqc_calculation_destroy(original_single);
     generativeqc_batch* raw = nullptr;
     generativeqc::check(generativeqc_batch_prepare_named_ks_v1(
-        context.get(), systems, 1, &extended_method.base, &named, 0, &raw));
+        context.get(), systems, 1, &extended_method.base, original_wire(original), 0, &raw));
     batch.reset(raw);
     extended_grid.base.base.struct_size = sizeof(extended_grid);
     named.name = "wb97m-v-rks";
@@ -325,8 +358,8 @@ void test_bound_basis_and_system_factory() {
   const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
   const auto* entry = generativeqc::methods::named_ks::find_method("r2scan-3c-rks");
   require(entry && entry->bound_basis && entry->cpu, "canonical bound basis is unavailable");
-  generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION, "r2scan-3c-rks",
-                                         nullptr, 256ull << 20};
+  generativeqc_named_ks_descriptor named{
+      sizeof(named), GENERATIVEQC_ABI_VERSION, "r2scan-3c-rks", nullptr, 256ull << 20, 0};
   generativeqc_system_descriptor descriptor{sizeof(descriptor),
                                             GENERATIVEQC_ABI_VERSION,
                                             atoms.data(),
@@ -347,6 +380,19 @@ void test_bound_basis_and_system_factory() {
   auto wrong = named;
   wrong.identity = "wrong-identity";
   refused_factory(descriptor, wrong);
+  wrong = named;
+  ++wrong.struct_size;
+  generativeqc_system* bad_size = reinterpret_cast<generativeqc_system*>(1);
+  require(generativeqc_system_create_named_ks_v1(context.get(), &descriptor, &wrong, &bad_size) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
+              !bad_size,
+          "bound basis factory accepted an unknown named descriptor size");
+  const OriginalNamedKsDescriptor original{sizeof(original), named.abi_version, named.name,
+                                           named.identity, named.dispersion_maximum_bytes};
+  generativeqc_system* original_system = nullptr;
+  generativeqc::check(generativeqc_system_create_named_ks_v1(
+      context.get(), &descriptor, original_wire(original), &original_system));
+  generativeqc_system_destroy(original_system);
   wrong = named;
   wrong.name = "pbe-rks";
   refused_factory(descriptor, wrong);

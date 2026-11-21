@@ -18,6 +18,10 @@
 #include "scf/target_fock_work.hpp"
 #include "scf/types.hpp"
 
+namespace generativeqc::scf {
+struct RksColdFockDamping;
+}
+
 namespace generativeqc::methods {
 
 namespace named_ks {
@@ -308,15 +312,15 @@ class MethodError final : public std::runtime_error {
 std::unique_ptr<PreparedCalculation> prepare_calculation(
     core::ContextState& context, const core::System& system,
     const generativeqc_method_descriptor& descriptor, const core::System* auxiliary_basis = nullptr,
-    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0);
+    const named_ks::Dispersion* dispersion = nullptr, std::uint64_t dispersion_bytes = 0,
+    std::uint64_t cpu_packed_eri_bytes = 0);
 
-std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
-                                             std::vector<core::System> systems,
-                                             const generativeqc_method_descriptor& descriptor,
-                                             generativeqc_batch_flags flags,
-                                             const core::System* auxiliary_basis = nullptr,
-                                             const named_ks::Dispersion* dispersion = nullptr,
-                                             std::uint64_t dispersion_bytes = 0);
+std::unique_ptr<PreparedBatch> prepare_batch(
+    core::ContextState& context, std::vector<core::System> systems,
+    const generativeqc_method_descriptor& descriptor, generativeqc_batch_flags flags,
+    const core::System* auxiliary_basis = nullptr, const named_ks::Dispersion* dispersion = nullptr,
+    std::uint64_t dispersion_bytes = 0, std::uint64_t cpu_packed_eri_bytes = 0,
+    const scf::RksColdFockDamping* cold_damping = nullptr);
 
 }  // namespace generativeqc::methods
 

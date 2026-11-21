@@ -116,9 +116,12 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   method.density_tolerance = options.density_tolerance.value_or(1e-10);
   method.screening_tolerance = options.screening_tolerance.value_or(1e-14);
   method.ks_options = &grid;
-  const generativeqc_named_ks_descriptor named{sizeof(named), GENERATIVEQC_ABI_VERSION,
-                                               program->name.data(), program->identity.data(),
-                                               invocation.dispersion_bytes};
+  const generativeqc_named_ks_descriptor named{sizeof(named),
+                                               GENERATIVEQC_ABI_VERSION,
+                                               program->name.data(),
+                                               program->identity.data(),
+                                               invocation.dispersion_bytes,
+                                               invocation.cpu_packed_eri_bytes};
   const auto check_status = [&](generativeqc_status status) {
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw Error(status, generativeqc_context_get_last_detail(context.get()));
@@ -154,6 +157,7 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   controls.dispersion_bytes = invocation.dispersion_bytes;
   controls.output_bytes = invocation.output_bytes;
   controls.max_eri_primitives = invocation.max_eri_primitives;
+  controls.max_map_terms = invocation.max_map_terms;
   controls.max_d3_pairs = invocation.max_d3_pairs;
   controls.relative_tolerance = invocation.response_rtol;
   controls.absolute_tolerance =
@@ -196,6 +200,7 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
       {"raw_symmetry_error", receipt.raw_symmetry_error},
       {"numeric_reservation_bytes", receipt.numeric_reservation_bytes},
       {"max_eri_primitives", controls.max_eri_primitives},
+      {"max_map_terms", controls.max_map_terms},
       {"max_d3_pairs", controls.max_d3_pairs},
       {"reservation_scope", "derivative-owned; excludes primal/export-scratch/BLAS/RSS"},
       {"scf_iterations", primal.iterations},
@@ -502,7 +507,8 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
       invocation.cuda_controls_explicit = true;
     } else if (option == "--numeric-budget-bytes" || option == "--ecp-budget-bytes" ||
                option == "--dispersion-budget-bytes" || option == "--max-eri-primitives" ||
-               option == "--max-d3-pairs") {
+               option == "--max-d3-pairs" || option == "--max-map-terms" ||
+               option == "--cpu-packed-eri-budget-bytes") {
       invocation.cpu_controls_explicit = true;
       const auto parsed = positive_integer(value, option);
       if (option == "--numeric-budget-bytes")
@@ -513,6 +519,10 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
         invocation.dispersion_bytes = parsed;
       else if (option == "--max-eri-primitives")
         invocation.max_eri_primitives = parsed;
+      else if (option == "--cpu-packed-eri-budget-bytes")
+        invocation.cpu_packed_eri_bytes = parsed;
+      else if (option == "--max-map-terms")
+        invocation.max_map_terms = parsed;
       else
         invocation.max_d3_pairs = parsed;
     } else if (option == "--integral-budget-bytes")

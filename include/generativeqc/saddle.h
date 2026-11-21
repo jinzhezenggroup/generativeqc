@@ -91,6 +91,7 @@ typedef int (*generativeqc_saddle_evaluator_v1)(void* user, uint32_t stage,
  * @behavior Observe initial, accepted/rejected and fresh-final states.
  * @inputs user is the caller's context; receipt and count coordinates describe
  * the last fully accepted state, not an unaccepted trial geometry.
+ * An ATTEMPT_LIMIT status in this callback is provisional, not termination.
  * @outputs Return zero to continue or nonzero to request cancellation.
  * @lifetime Borrowed immutable observation, valid only until callback return.
  * @errors Do not throw. Nonzero cancels before further derivative work and clears
@@ -117,6 +118,7 @@ typedef int (*generativeqc_saddle_cancellation_v1)(void* user);
  * @behavior Execute the native local first-order-saddle corrector with exact initial,
  * accepted-step and final Hessians. Every accepted/rejected trial consumes one attempt
  * from max_attempts<=100; initial preparation and final verification are separate calls.
+ * Exhausting the cap retains the last valid state without fresh-final verification.
  * A nonstationary input requires an already negative target mode, not minimum escape.
  * @inputs Initialize options and receipt with sizeof(type) and GENERATIVEQC_ABI_VERSION.
  * All controls are explicit, finite and positive; coordinate triples are finite Bohr.

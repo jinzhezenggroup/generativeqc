@@ -278,7 +278,8 @@ void print_usage(std::ostream& out) {
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
          "  --response-budget-bytes N --max-nonlocal-pairs N\n"
          "  CPU: --numeric-budget-bytes N --ecp-budget-bytes N --dispersion-budget-bytes N\n"
-         "  CPU: --max-eri-primitives N --max-d3-pairs N (whole-request work caps)\n"
+         "       --cpu-packed-eri-budget-bytes N\n"
+         "  CPU: --max-eri-primitives N --max-map-terms N --max-d3-pairs N (work caps)\n"
          "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n";
   out << "Native saddle options (CPU B3LYP RKS/UKS; no Python/JIT or preoptimization):\n"
          "  --masses FILE.json       Required ordered positive masses in dalton\n"
@@ -290,6 +291,10 @@ void print_usage(std::ostream& out) {
          "  --curvature-tolerance F --raw-symmetry-tolerance F (Hartree/Bohr^2)\n"
          "  --minimum-mode-overlap F --minimum-occupied-overlap F --acceptance-ratio F\n"
          "  --max-coordinates N --saddle-budget-bytes N --root-budget-bytes N\n"
+         "  --occupied-state-budget-bytes N  Opt in to bounded occupied coefficients in final "
+         "JSON\n"
+         "  --accepted-frame-warm-start  Seed SCF from the last accepted derivative frame\n"
+         "  --cold-fock-damping PREFIX WEIGHT BYTES  Bound the first RKS Fock proposal prefix\n"
          "  --progress-json          Stream derivative/accepted-state records to stderr\n"
          "  Final JSON retains failure geometry/raw Hessian; verified frequencies are unscaled "
          "cm^-1\n";

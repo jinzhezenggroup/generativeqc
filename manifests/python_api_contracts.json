@@ -3,6 +3,7 @@
   "debt": [],
   "exports": {
     "generativeqc.saddle.MolecularSaddleResult": "generativeqc/saddle.py:MolecularSaddleResult",
+    "generativeqc.saddle.RksColdFockDamping": "generativeqc/saddle.py:RksColdFockDamping",
     "generativeqc.saddle.SaddleOptions": "generativeqc/saddle.py:SaddleOptions",
     "generativeqc.saddle.SaddleProgress": "generativeqc/saddle.py:SaddleProgress",
     "generativeqc.saddle.SaddleResult": "generativeqc/saddle.py:SaddleResult",
@@ -469,6 +470,24 @@
       "kind": "function",
       "profile": "accessor",
       "facets": {"behavior": "docstring"}
+    },
+    "generativeqc/saddle.py:RksColdFockDamping": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "ownership": "docs/user/geometry_optimization.md#python-saddle-ownership"
+      }
+    },
+    "generativeqc/saddle.py:RksColdFockDamping.__post_init__": {
+      "kind": "function",
+      "profile": "validation",
+      "facets": {
+        "behavior": "docstring",
+        "values": "docs/user/geometry_optimization.md#python-saddle-values",
+        "errors": "docs/user/geometry_optimization.md#python-saddle-errors"
+      }
     },
     "generativeqc/saddle.py:SaddleOptions": {
       "kind": "class",
