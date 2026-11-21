@@ -142,9 +142,11 @@ def test_actual_native_helpers_cover_blocks_and_public_orbits(tmp_path: Path) ->
     components = SOURCE.split("std::size_t eri_index(", 1)[1].split(
         "std::size_t prepare_value_eri_components(", 1
     )[0]
-    projection = SOURCE.split("using ValueEriCartesianBlock", 1)[1].split(
-        "void build_spherical_value_eri_shell_quartets(", 1
-    )[0].removesuffix("template <class Publish>\n")
+    projection = (
+        SOURCE.split("using ValueEriCartesianBlock", 1)[1]
+        .split("void build_spherical_value_eri_shell_quartets(", 1)[0]
+        .removesuffix("template <class Publish>\n")
+    )
     text = (
         "#include <algorithm>\n#include <array>\n#include <vector>\n#include <span>\n"
         "#include <cmath>\n#include <limits>\n#include <iostream>\n"
