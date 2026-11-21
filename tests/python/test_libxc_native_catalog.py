@@ -572,46 +572,54 @@ def test_first_force_scope_never_grants_second_order(
     assert not any(row["product"] == product for row in report["endpoints"])
 
 
-def test_live_checker_rejects_changed_toolchain_and_old_update_baseline(
-    bundle: dict, monkeypatch: pytest.MonkeyPatch
+def test_checker_rejects_changed_toolchain_and_old_update_baseline(
+    bundle: dict, report: dict, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Test catalog transitions on authenticated historical inputs, not live XC admission."""
     from tools import check_libxc_native_catalog as checker
 
-    actual_load = checker.load_json
+    # Freeze the measured source so a legitimate dependency demotion cannot
+    # mask the independent build-identity and previous-summary guards.
+    monkeypatch.setattr(checker, "ROOT", tmp_path)
+
+    def ingest_recorded(receipt: dict, root: Path, *, measured_inputs: None) -> dict:
+        assert root == tmp_path and measured_inputs is None
+        return replay_recorded_source(receipt)
+
+    monkeypatch.setattr(checker, "ingest", ingest_recorded)
+    manifest_path = tmp_path / "qualification.json"
+    manifest: dict[str, str | dict[str, str]] = {
+        "schema": "generativeqc.libxc-native-catalog-manifest.v1",
+        "snapshot": "snapshot.json",
+        "report": "report.md",
+    }
+
+    def record_input(field: str, value: dict) -> None:
+        path = tmp_path / f"{field}.json"
+        checker.write_json(path, value)
+        manifest[field] = {"path": path.name, "sha256": checker.file_hash(path)}
+        checker.write_json(manifest_path, manifest)
+
+    record_input("campaign", bundle)
+    record_input("previous", report["summary"])
+    checker.check(manifest_path, write=True)
+
     changed = deepcopy(bundle)
     changed["build"]["toolchain"]["CMAKE_CXX_COMPILER"]["version"] += " changed"
-    manifest = actual_load(checker.MANIFEST)
-    campaign_path = ROOT / manifest["campaign"]["path"]
-    monkeypatch.setattr(
-        checker,
-        "load_json",
-        lambda path: changed if path == campaign_path else actual_load(path),
-    )
+    record_input("campaign", changed)
     with pytest.raises(ValueError, match="differs from retained snapshot"):
-        checker.check(checker.MANIFEST)
+        checker.check(manifest_path)
 
-    # A legitimate catalog refresh can make previous equal the current summary.
-    # Construct an older identity explicitly so the guard remains exercised
-    # after that rotation, without relying on the repository's snapshot history.
-    previous_path = ROOT / manifest["previous"]["path"]
-    older = deepcopy(actual_load(ROOT / manifest["snapshot"])["summary"])
+    older = deepcopy(report["summary"])
     older["functionals"][NAME]["identity"] = "0" * 64
-
-    def load(path: Path) -> dict:
-        if path == campaign_path:
-            return changed
-        if path == previous_path:
-            return older
-        return actual_load(path)
-
-    monkeypatch.setattr(checker, "load_json", load)
+    record_input("previous", older)
     monkeypatch.setattr(
         checker,
         "write_json",
         lambda *_args: pytest.fail("rejected catalog updates must not write"),
     )
     with pytest.raises(ValueError, match="older baseline cannot hide"):
-        checker.check(checker.MANIFEST, write=True)
+        checker.check(manifest_path, write=True)
 
 
 @pytest.mark.parametrize(

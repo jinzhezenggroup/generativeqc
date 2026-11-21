@@ -19,6 +19,7 @@ from generativeqc._dft_gradient import (
     xc_regularization_identity,
 )
 from generativeqc._ks_snapshot import NativeKsSnapshot, _scf_xc_points
+from generativeqc.ks import scf_domain_for_method
 from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.dft.fixtures import basis_arguments
 from generativeqc_compiler.xc import functional
@@ -46,6 +47,13 @@ def identity(method: typing.Any = "pbe-rks") -> typing.Any:
         fock_generation=9,
         orbital_generation=11,
     )
+
+
+def detached_snapshot() -> NativeKsSnapshot:
+    """Construct a host-only incumbent PBE snapshot for validation probes."""
+    source = object.__new__(NativeKsSnapshot)
+    source.scf_domain = scf_domain_for_method("pbe-rks")
+    return source
 
 
 def state(
@@ -305,7 +313,7 @@ def test_stationary_contract_accepts_consistent_rks_and_uks(
 def test_all_force_compositions_inherit_only_the_native_allowance(
     allowance: float,
 ) -> None:
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     source._batch = SimpleNamespace(_ensure_open=lambda: None)
     source.stationarity_tolerance = allowance
@@ -327,7 +335,7 @@ def test_force_budget_needs_native_allowance_and_never_relaxes_response_default(
     loose = StationaryDerivativeContract(value.identity, allow_budget_stationarity=True)
     with pytest.raises(ValueError, match="physical residual"):
         loose._validate_arrays(value)
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     source._batch = SimpleNamespace(_ensure_open=lambda: None)
     source.stationarity_tolerance = 1e-5
@@ -344,7 +352,7 @@ def test_force_budget_needs_native_allowance_and_never_relaxes_response_default(
 @pytest.fixture
 def authenticated_state(monkeypatch: pytest.MonkeyPatch) -> typing.Any:
     """Use the real content proof with a controllable native lifetime boundary."""
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     source.stationarity_tolerance = 1e-5
     value = state()
@@ -953,7 +961,7 @@ def test_finite_xc_components_cannot_publish_an_overflowed_total() -> None:
     "allowance", [0.0, -1e-8, np.nan, np.inf, np.nextafter(1e-4, np.inf)]
 )
 def test_budget_contract_revalidates_native_allowance_bounds(allowance: float) -> None:
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     source.stationarity_tolerance = allowance
     value = replace(state(), _source=source)
@@ -968,7 +976,7 @@ def test_budget_contract_revalidates_native_allowance_bounds(allowance: float) -
 def test_budget_contract_keeps_density_reconstruction_relaxation_native_and_opt_in(
     native: bool, opt_in: bool
 ) -> None:
-    source = object.__new__(NativeKsSnapshot) if native else SimpleNamespace()
+    source = detached_snapshot() if native else SimpleNamespace()
     source._handle = 0
     source.stationarity_tolerance = 1e-5
     value = state()
@@ -996,7 +1004,7 @@ def test_budget_contract_keeps_density_reconstruction_relaxation_native_and_opt_
 def test_budget_contract_preserves_strict_orbital_and_weighted_density_algebra(
     field: str, message: str
 ) -> None:
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     source.stationarity_tolerance = 1e-4
     value = state()
@@ -1019,7 +1027,7 @@ def test_cuda_force_entry_validates_native_budget_before_device_work(
     class ValidatedBeforeDevice(Exception):
         pass
 
-    source = object.__new__(NativeKsSnapshot)
+    source = detached_snapshot()
     source._handle = 0
     if allowance is not None:
         source.stationarity_tolerance = allowance

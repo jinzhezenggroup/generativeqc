@@ -42,6 +42,7 @@ def reservation_probe(
         check=True,
     )
     method = (ROOT / "src/methods/dft_method.cpp").read_text()
+    preparation = (ROOT / "src/methods/dft_method_preparation.cpp").read_text()
     prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
     public = (ROOT / "src/scf/fock_prepared.hpp").read_text()
     occupations = (ROOT / "src/scf/initial_guess/density.cpp").read_text()
@@ -177,6 +178,7 @@ struct NativeKsExecutionPlan {
         method,
         "scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(",
     )
+    unit += definition(preparation, "std::size_t ks_fitted_radial_budget(")
     unit += definition(method, "std::size_t ks_fitted_provider_budget(")
     unit += r"""
 unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend,

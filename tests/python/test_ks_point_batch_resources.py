@@ -9,6 +9,8 @@ from __future__ import annotations
 import ctypes
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -40,6 +42,22 @@ def _configure_stationary_domains(folder: Path) -> None:
         output = folder / relative
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(re.sub(r"#cmakedefine01 (\w+)", r"#define \1 0", template))
+
+
+def _generate_stationary_nlc_parameters(folder: Path) -> None:
+    """Use the same model parameters as the native build."""
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/generate_nonlocal_pair_native.py"),
+            "--output",
+            str(folder / "generated_nonlocal_pair_native.hpp"),
+            "--method-parameters",
+            str(folder / "generated_nonlocal_method_parameters.hpp"),
+        ],
+        check=True,
+        timeout=60,
+    )
 
 
 H2 = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]

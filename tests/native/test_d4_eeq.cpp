@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <vector>
 
@@ -136,10 +137,11 @@ int directional_charge_pullback() {
   double largest_error = 0;
   for (const auto& fixture : kEEQOracleFixtures) {
     const int atoms = fixture.atoms;
-    const int coordinates = 3 * atoms;
+    const auto atom_count = static_cast<std::size_t>(atoms);
+    const auto coordinates = 3 * atom_count;
     std::vector<double> workspace(eeq_direction_workspace_elements(atoms));
     std::vector<double> direction(coordinates), gradient(coordinates, 19), action(coordinates, 23);
-    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
       direction[coordinate] = 0.3 * std::sin(0.23 + 0.65 * coordinate);
     const auto seed = [=](const double* charges, const double* response, double* cotangent,
                           double* tangent) {
@@ -168,28 +170,28 @@ int directional_charge_pullback() {
     // geometries. Its first-order charge/gradient provenance is gated above.
     const auto reference = [&](double step, std::vector<double>& result) {
       auto xyz = fixture.xyz;
-      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
         xyz[coordinate] += step * direction[coordinate];
       std::vector<double> scratch(eeq2019_workspace_elements(atoms));
-      std::vector<double> charges(atoms), jacobian(coordinates * atoms);
+      std::vector<double> charges(atom_count), jacobian(coordinates * atom_count);
       if (evaluate_eeq2019(atoms, fixture.z.data(), xyz.data(), fixture.total_charge,
                            scratch.data(), scratch.size(), charges.data(),
                            jacobian.data()) != D4Status::success)
         return false;
       std::fill(result.begin(), result.end(), 0);
-      for (int coordinate = 0; coordinate < coordinates; ++coordinate)
-        for (int atom = 0; atom < atoms; ++atom)
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
+        for (std::size_t atom = 0; atom < atom_count; ++atom)
           result[coordinate] +=
-              jacobian[coordinate * atoms + atom] * (1 + 0.25 * atom) * charges[atom];
+              jacobian[coordinate * atom_count + atom] * (1 + 0.25 * atom) * charges[atom];
       return true;
     };
     std::vector<double> plus(coordinates), minus(coordinates);
     if (!reference(0, plus)) return 41;
-    for (int coordinate = 0; coordinate < coordinates; ++coordinate)
+    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
       if (!near(gradient[coordinate], plus[coordinate], 2e-13)) return 42;
     for (const double step : {1e-4, 5e-5}) {
       if (!reference(step, plus) || !reference(-step, minus)) return 43;
-      for (int coordinate = 0; coordinate < coordinates; ++coordinate) {
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
         const double expected = (plus[coordinate] - minus[coordinate]) / (2 * step);
         if (!near(action[coordinate], expected, 1e-8)) return 44;
         largest_error = std::max(largest_error, std::fabs(action[coordinate] - expected));
