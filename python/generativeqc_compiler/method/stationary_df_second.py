@@ -316,14 +316,14 @@ def df_second_programs(
         energies["coulomb"] = fitted_coulomb_energy(charge, fitted_charge)
         coulomb_fock = einsum("ijq,q->ij", pair_values, fitted_charge)
         fock_terms["coulomb"] = broadcast(coulomb_fock, (spin, row, column), (1, 2))
+    fraction = (
+        input_tensor("exchange_fraction", TensorSpec((), role="parameter"))
+        if exchange is None
+        else None
+    )
     if exchange != 0:
         spin_factor = Fraction(1, 2) if spins == 2 else Fraction(1, 4)
         exchange_scale = -(Fraction(1) if exchange is None else exchange) * spin_factor
-        fraction = (
-            input_tensor("exchange_fraction", TensorSpec((), role="parameter"))
-            if exchange is None
-            else None
-        )
         # A D B is symmetric for the physical inverse and AO-pair domains.
         # Evaluate it in one orientation, share D B with the raw-source
         # pullback, and explicitly take the adjoint on symmetric AO matrices.
@@ -368,7 +368,7 @@ def df_second_programs(
                 coefficient=Fraction(-1 if pullback_metric else 1, 2),
             )
         else:
-            if exchange is None:
+            if fraction is not None:
                 seed = einsum(",->", seed, fraction)
             metric_leg = fitted if pullback_metric else pair_values
 
