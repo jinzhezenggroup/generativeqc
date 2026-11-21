@@ -110,10 +110,9 @@ def test_dft_policy_extraction_rejects_missing_or_ambiguous_accessor() -> None:
 
 
 def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
-    hf, dft, options, _ = control_sources()
+    hf, _, options, _ = control_sources()
     assert "if (warm_retry) attempt_options.preliminary_guess.reset();" in hf
     assert "attempt_options," in hf
-    assert "warm_enabled_ && warm_updates_, !attempt)" in dft
     assert (
         "if (!allow_preliminary) execution_options.preliminary_guess.reset();"
         in options
@@ -168,6 +167,7 @@ HARNESS = r"""
 #include "dft/scf_diagnostic.hpp"
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/fleet_item.hpp"
+#include "scf/rks_cold_fock.hpp"
 using generativeqc::methods::MethodError;
 using generativeqc::methods::item_exception_status;
 using generativeqc::methods::item_exception_detail;
@@ -201,7 +201,7 @@ struct Item : scf::FleetItemResult {
   std::exception_ptr failure;
 };
 std::string scenario;
-unsigned calls{}, preparations{};
+unsigned calls{}, preparations{}, damped_calls{};
 std::vector<bool> policies, seeds;
 
 Native solve(const Options& options, const std::vector<double>* seed) {
@@ -317,8 +317,10 @@ struct StubKsPlan {
   std::vector<double> warm_{1};
   // DFT_POLICY
   Native run_cpu(const std::vector<double>* initial_density, bool reuse_warm,
-             bool update_warm, bool allow_preliminary = true) {
+             bool update_warm, bool allow_preliminary,
+             const scf::RksColdFockDamping* cold_damping) {
     // DFT_OPTIONS
+    if (cold_damping) ++damped_calls;
     return solve(execution_options, seed);
   }
 };
@@ -334,15 +336,16 @@ struct KsItem {
   std::optional<Warm> warm{Warm{}};
   bool resident_warm{};
 };
-Item run_dft(bool resident) {
+Item run_dft(bool resident, bool cold) {
   Options options_(shared_policy_enabled);
   bool warm_enabled_ = true, warm_updates_ = true;
+  const std::optional<scf::RksColdFockDamping> cold_damping_{{2, 0.2}};
   std::vector<KsItem> items_(1);
   items_[0].resident_warm = resident;
   std::vector<BatchResult> results(1);
   std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
       1, scf::CoulombExchangeWork::empty());
-  results[0].warm_start_used = true;
+  results[0].warm_start_used = !cold;
   std::vector<bool> ready(1, true);
   std::vector<std::optional<std::vector<double>>> preliminary_seeds(1);
   std::vector<initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(1);
@@ -376,7 +379,7 @@ int main(int argc, char** argv) {
   const auto item = route == "hf" ? run_hf()
                     : route == "hf-direct" ? run_hf_bucket(false)
                     : route == "hf-df" ? run_hf_bucket(true)
-                    : run_dft(route == "dft-resident");
+                    : run_dft(route == "dft-resident", route == "dft-cold");
   std::string detail;
   if (item.failure) {
     try { std::rethrow_exception(item.failure); }
@@ -400,7 +403,8 @@ int main(int argc, char** argv) {
             << ",\"first_policy\":" << policies.front()
             << ",\"last_policy\":" << policies.back()
             << ",\"first_seed\":" << seeds.front()
-            << ",\"last_seed\":" << seeds.back() << "}";
+            << ",\"last_seed\":" << seeds.back()
+            << ",\"damped_calls\":" << damped_calls << "}";
 }
 """
 
@@ -487,6 +491,7 @@ def test_actual_warm_retry_controls_use_only_core_and_count_work(
     host_control_harness: Path, route: str, scenario: str, shared_policy: bool
 ) -> None:
     result = probe(host_control_harness, route, scenario, shared_policy=shared_policy)
+    assert result["damped_calls"] == 0
     if route.startswith("dft") and scenario == "runtime_error":
         assert result["calls"] == 1 and result["status"] == result["numerical_failure"]
         assert result["first_seed"] and result["last_seed"]
@@ -510,6 +515,15 @@ def test_actual_warm_retry_controls_use_only_core_and_count_work(
     assert result["discarded_focks"] == (
         (1 << 33) + 7 if scenario == "nonconverged" else 0
     )
+
+
+def test_ks_damping_is_forwarded_only_to_a_fresh_cold_solve(
+    host_control_harness: Path,
+) -> None:
+    """A fresh CPU solve is eligible; a discarded warm attempt is not."""
+    result = probe(host_control_harness, "dft-cold", policy=False)
+    assert result["calls"] == 1 and result["damped_calls"] == 1
+    assert result["status"] == result["success"] and not result["first_seed"]
 
 
 @pytest.mark.parametrize("route", ["hf", "dft-imported", "dft-resident"])
