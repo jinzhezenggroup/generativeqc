@@ -145,7 +145,10 @@ class HessianCli(unittest.TestCase):
             self.call("--backend", "cuda", "--method", "rhf"),
             "no qualified native CUDA hessian/hvp",
         )
-        self.rejected(self.call("--backend", "cuda", "--precision", "mixed"), "FP64")
+        self.rejected(
+            self.call("--backend", "cuda", "--precision", "mixed"),
+            "--precision must be fp64 or auto",
+        )
         self.rejected(
             self.call("--backend", "cuda", "--density-fitting", "cpu"),
             "CPU density-fitting",
