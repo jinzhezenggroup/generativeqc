@@ -68,8 +68,8 @@ void binding_case(unsigned spins, bool dispersion) {
   auto systems = std::vector<core::System>{molecule(spins), molecule(spins)};
   auto batch = dispersion ? methods::detail::prepare_composed_dft_batch(
                                 *capabilities, context, std::move(systems), descriptor,
-                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, nullptr, named->dispersion,
-                                16U << 20, nullptr)
+                                GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, nullptr, &named->dispersion,
+                                16U << 20, 0, nullptr)
                           : methods::detail::prepare_dft_batch(
                                 *capabilities, context, std::move(systems), descriptor,
                                 GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);

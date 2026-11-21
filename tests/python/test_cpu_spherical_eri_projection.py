@@ -144,7 +144,7 @@ def test_actual_native_helpers_cover_blocks_and_public_orbits(tmp_path: Path) ->
     )[0]
     projection = SOURCE.split("using ValueEriCartesianBlock", 1)[1].split(
         "void build_spherical_value_eri_shell_quartets(", 1
-    )[0]
+    )[0].removesuffix("template <class Publish>\n")
     text = (
         "#include <algorithm>\n#include <array>\n#include <vector>\n#include <span>\n"
         "#include <cmath>\n#include <limits>\n#include <iostream>\n"
@@ -236,7 +236,9 @@ int main() {
                       require(block[local++] == orbit_value(i, j, k, l));
               for (auto i = local; i < block.size(); ++i) require(block[i] == -17.0);
               project_value_eri_shell_quartet(shells, offsets, target_aos, begins, extents,
-                                             block, output);
+                                             block, [&](const auto& orbit, double value) {
+                store_eri_symmetry(output, target_aos.size(), orbit, value);
+              });
               ++blocks;
               local_values += local;
             }

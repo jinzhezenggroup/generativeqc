@@ -44,6 +44,7 @@ def closure_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "scf/rks_cold_fock.hpp"
 #include "solver/self_consistent.hpp"
 #include "runtime/df_progress_trace.hpp"
 struct Matrix : std::vector<double> {
@@ -173,6 +174,8 @@ Result run(unsigned budget, bool incremental_xc, int scenario, unsigned& clears)
   if(factor->generation!=identity.generation) throw std::runtime_error("factor identity mismatch");
   result.factor=factor; clears=diis.clears;
  };
+ const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr;
+ const std::size_t proposal_bytes = 0;
 """
         + region
         + r"""
