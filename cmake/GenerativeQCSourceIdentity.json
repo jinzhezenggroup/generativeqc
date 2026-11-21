@@ -184,6 +184,7 @@
     "tools/generate_xc_b3lyp_cuda.py",
     "tools/generate_xc_r2scan_cuda.py",
     "tools/generate_xc_split_hybrid_registry.py",
+    "tools/generate_xc_split_hybrid_stationary.py",
     "tools/generate_xc_wb97mv_cuda.py",
     "tools/generativeqc_d3/generate_native_data.py"
   ]
