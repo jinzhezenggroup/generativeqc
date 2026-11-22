@@ -29,6 +29,8 @@ def _translation_unit(source: str) -> str:
     helpers = source[
         source.index("namespace generativeqc::dft {") : source.index("struct Range {")
     ]
+    audit_start = source.index("struct DenseAssemblyAudit {")
+    audit = source[audit_start : source.index("\n};", audit_start) + 3]
     start = source.index("struct CudaKsWb97mvHessian::Impl {")
     owner = source[start : source.index("  cudaError_t authenticate()", start)]
     # Numerical methods are isolated; keep all real storage fields, construction,
@@ -55,7 +57,8 @@ CudaKsWb97mvHessianWork CudaKsWb97mvHessian::work() const noexcept {
     return (
         '#include "providers.hpp"\n'
         + helpers
-        + "}\n"
+        + audit
+        + "\n}\n"
         + owner
         + prepare
         + receipt
