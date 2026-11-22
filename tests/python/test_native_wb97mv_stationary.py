@@ -262,6 +262,9 @@ def test_stationary_response_reuse_and_parallel_integrals_preserve_hessians(
     assert cached["frozen_exact_bytes"] > 0
     assert cached["frozen_exact_columns"] > 0
     assert physical["frozen_exact_bytes"] == 0
+    assert cached["frozen_core_bytes"] > 0
+    assert physical["frozen_core_bytes"] == 0
+    assert cached["one_electron_components"] < physical["one_electron_components"]
     for field in ("energy", "hvp", "hessian", "response_residual"):
         np.testing.assert_allclose(
             cached[field], physical[field], atol=3e-12, rtol=3e-12

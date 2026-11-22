@@ -15,8 +15,8 @@ int never_launch(const double*, std::size_t, const long long*, const double*, do
                  cudaStream_t) {
   throw std::runtime_error("host closure admission launched CUDA");
 }
-int never_batch(const aot::FactorizedIntegralBatch*, std::size_t, const double*, int*,
-                cudaStream_t) {
+int never_batch(double, const aot::FactorizedIntegralBatch*, std::size_t, const double*, long long,
+                int*, cudaStream_t) {
   throw std::runtime_error("host tiled admission launched CUDA");
 }
 void require(bool valid, const char* message) {

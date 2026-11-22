@@ -169,7 +169,8 @@ def _pair_source(output: str) -> str:
                 )
             )
         cases.append(
-            f"case {5 * left_power + right_power}: {{\n"
+            f"case {5 * left_power + right_power}: "
+            f"if constexpr (!sp_only || {max(left_power, right_power)} <= 1) {{\n"
             + _jet_function(
                 graph,
                 tuple(roots),
@@ -179,10 +180,11 @@ def _pair_source(output: str) -> str:
                 fields=("value", "directional", "gradient", "gradient", "jvp", "jvp")
                 * (left_power + right_power + 1),
             )
-            + "\nreturn true; }"
+            + "\nreturn true; } else return false;"
         )
     return (
         f"""
+template<bool sp_only=false>
 GQC_FACTOR_FUNCTION bool pair_coefficients(unsigned left_power, unsigned right_power,
     double inverse_two, double left_shift, double right_shift,
     {scale_attribute}double left_scale, {scale_attribute}double right_scale, {direction_attribute}double left_direction,
@@ -247,10 +249,14 @@ def _coulomb_source(output: str) -> str:
             )
             + "\nreturn result; }\n"
         )
-        cases.append(f"case {code}: return {name}(geometry,direction);")
+        cases.append(
+            f"case {code}: if constexpr (maximum_order >= {sum(orders)}) "
+            f"return {name}(geometry,direction); else return {{}};"
+        )
     return (
         "\n".join(functions)
         + """
+template<unsigned maximum_order=12>
 GQC_FACTOR_FUNCTION Jet<3> coulomb_state(unsigned first, unsigned second, unsigned third,
     const Geometry& geometry, const double* direction) {
   Jet<3> result{};
@@ -369,7 +375,8 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         + _pair_source(output)
         + _coulomb_source(output)
         + _prefactor_source(output)
-        + "\nGQC_FACTOR_FUNCTION bool primitive(unsigned family, unsigned radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
+        + "\ntemplate<bool full_eri_sp=false>\n"
+        + "GQC_FACTOR_FUNCTION bool primitive(unsigned input_family, unsigned input_radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
         + (
             ", const Geometry* prepared_geometry=nullptr"
             if backend == "cpu"
@@ -380,7 +387,10 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         + ",".join(components)
         + "};\n"
         + r"""
+  const unsigned family=full_eri_sp ? 0 : input_family;
+  const unsigned radial=full_eri_sp ? 0 : input_radial;
   if (family>2 || radial>2 || (family && radial==2) || !angular || !record || !direction || !output) return false;
+  if (full_eri_sp && (input_family || input_radial)) return false;
   const unsigned centers=family==0 ? 4 : family==1 ? 3 : 2;
   unsigned orders[4]{}, incidence[4]{};
   if (family==0) {
@@ -392,7 +402,7 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
     orders[0]=angular[0]; orders[2]=angular[1]; incidence[2]=incidence[3]=1;
   }
   for (unsigned center=0; center<centers; ++center)
-    if (angular[center]>(family && (family==2 || center==2) ? 4u : 3u) || !std::isfinite(record[center]) || record[center]<=0) return false;
+    if (angular[center]>(full_eri_sp ? 1u : family && (family==2 || center==2) ? 4u : 3u) || !std::isfinite(record[center]) || record[center]<=0) return false;
   double exponents[4]{}, coordinates[12]{}, motion[12]{};
   for (unsigned center=0; center<4; ++center) {
     const bool unit=(family==1 && center==3) || (family==2 && (center==1 || center==3));
@@ -434,12 +444,14 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
 """
         + ("  }\n" if backend == "cpu" else "")
         + r"""  if (!valid) return false;
-  Jet<4> coefficients[3][13]{};
+  // Four s/p orbitals need at most quartic axis states and quadratic pair
+  // states. A separate instantiation bounds per-thread scratch and branches.
+  Jet<4> coefficients[3][full_eri_sp ? 5 : 13]{};
   unsigned axis_orders[3]{};
   for (unsigned axis=0; axis<3; ++axis) {
-    Jet<2> first[7]{}, second[7]{};
-    if (!pair_coefficients(quantums[0][axis],quantums[1][axis],geometry.inverse_two_p,geometry.shifts[0][axis],geometry.shifts[1][axis],geometry.product_scales[0],geometry.product_scales[1],motion[axis],motion[3+axis],first) ||
-        !pair_coefficients(quantums[2][axis],quantums[3][axis],geometry.inverse_two_q,geometry.shifts[2][axis],geometry.shifts[3][axis],geometry.product_scales[2],geometry.product_scales[3],motion[6+axis],motion[9+axis],second)) return false;
+    Jet<2> first[full_eri_sp ? 3 : 7]{}, second[full_eri_sp ? 3 : 7]{};
+    if (!pair_coefficients<full_eri_sp>(quantums[0][axis],quantums[1][axis],geometry.inverse_two_p,geometry.shifts[0][axis],geometry.shifts[1][axis],geometry.product_scales[0],geometry.product_scales[1],motion[axis],motion[3+axis],first) ||
+        !pair_coefficients<full_eri_sp>(quantums[2][axis],quantums[3][axis],geometry.inverse_two_q,geometry.shifts[2][axis],geometry.shifts[3][axis],geometry.product_scales[2],geometry.product_scales[3],motion[6+axis],motion[9+axis],second)) return false;
     const unsigned first_order=quantums[0][axis]+quantums[1][axis], second_order=quantums[2][axis]+quantums[3][axis];
     axis_orders[axis]=first_order+second_order;
     for (unsigned left=0; left<=first_order; ++left) {
@@ -473,7 +485,7 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
           axes[axis].value=coefficient.value; axes[axis].directional=coefficient.directional;
           if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center) { axes[axis].gradient[3*center+axis]=coefficient.gradient[center]; axes[axis].jvp[3*center+axis]=coefficient.jvp[center]; }
         }
-        const auto state=coulomb_state(first,second,third,geometry,difference_direction);
+        const auto state=coulomb_state<full_eri_sp ? 4 : 12>(first,second,third,geometry,difference_direction);
         Jet<12> coulomb{}; coulomb.value=state.value; coulomb.directional=state.directional;
         if constexpr (emit_gradient) for (unsigned center=0; center<4; ++center)
           for (unsigned axis=0; axis<3; ++axis) {
@@ -528,19 +540,23 @@ struct FactorizedSelection {
   unsigned family, radial, angular[4], components[16], component_count, centers, stride;
   double omega;
 };
+template<bool full_eri_sp>
 __global__ void factorized_integral_kernel(FactorizedSelection selection, const double* records,
     size_t count, const long long* atoms, const double* molecular_direction,
-    double* output, int* status, const FactorizedIntegralBatch* batches) {
+    double* output, int* status, const FactorizedIntegralBatch* batches, long long frozen_atom) {
   const double* coordinates=nullptr;
   if (batches) {
     const auto& batch=batches[blockIdx.y];
     records=batch.records; count=batch.count; atoms=batch.atoms; output=batch.output;
     coordinates=batch.coordinates;
   }
+  if (!active_eri_centers(atoms,frozen_atom)) return;
   const unsigned packed=blockIdx.x;
   if (packed>=selection.component_count) return;
-  __shared__ double terms[25][64];
-  double direction[12]{}, result[25]{};
+  // Primitive producers write one row; adjacent output lanes then read the
+  // same radial row without striding by a whole tile through shared banks.
+  __shared__ double terms[64][25];
+  double direction[12]{}, result=0;
   const unsigned outputs=1+6*selection.centers;
   for (unsigned center=0; center<selection.centers; ++center)
     for (unsigned axis=0; axis<3; ++axis) direction[3*center+axis]=molecular_direction[3*atoms[center]+axis];
@@ -560,37 +576,37 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
         record=expanded;
       }
       double values[25]{};
-      valid=generativeqc::scf::factorized_second::primitive(selection.family,selection.radial,
+      valid=generativeqc::scf::factorized_second::primitive<full_eri_sp>(selection.family,selection.radial,
           selection.angular,selection.components[packed],record,direction,values,selection.omega);
-      for (unsigned index=0; index<outputs; ++index) terms[index][threadIdx.x]=record[selection.stride-1]*values[index];
+      for (unsigned index=0; index<outputs; ++index) terms[threadIdx.x][index]=record[selection.stride-1]*values[index];
     }
     if (__syncthreads_or(!valid)) {
       if (threadIdx.x==0) atomicExch(status,1);
       return;
     }
-    // Keep the original radial addition order even though primitives evaluate
-    // concurrently. There is no floating atomic or reassociating reduction.
-    if (threadIdx.x==0)
-      for (unsigned index=0; index<outputs; ++index)
-        for (size_t radial=0; radial<active; ++radial) result[index]+=terms[index][radial];
+    // Each derivative lane sums its own radial axis in the original order,
+    // including across tile boundaries. There is no reassociating reduction.
+    if (threadIdx.x<outputs)
+      for (size_t radial=0; radial<active; ++radial) result+=terms[radial][threadIdx.x];
     __syncthreads();
     begin+=active;
   }
-  if (threadIdx.x!=0) return;
-  for (unsigned index=0; index<outputs; ++index) {
-    if (!std::isfinite(result[index])) atomicExch(status,2);
-    output[packed*outputs+index]=result[index];
+  if (threadIdx.x<outputs) {
+    if (!std::isfinite(result)) atomicExch(status,2);
+    output[packed*outputs+threadIdx.x]=result;
   }
 }
 }  // namespace
 int launch_factorized_integral(unsigned family, unsigned radial, double omega, const unsigned* angular,
     const std::uint32_t* components, size_t component_count, const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status,
-    cudaStream_t stream, const FactorizedIntegralBatch* batches, size_t batch_count) noexcept {
+    cudaStream_t stream, const FactorizedIntegralBatch* batches, size_t batch_count,
+    long long frozen_atom) noexcept {
   if (family>2 || radial>2 || (family && radial==2) || !angular || !components ||
       (radial==0 ? omega!=0 : !std::isfinite(omega) || omega<=0) ||
       !component_count || component_count>16 || !batch_count || batch_count>65535 ||
       (!batches && (!records || !count || !atoms || !output || batch_count!=1)) ||
+      (frozen_atom>=0 && (!batches || family!=0)) ||
       !direction || !status) return static_cast<int>(cudaErrorInvalidValue);
   FactorizedSelection selection{};
   selection.family=family; selection.radial=radial; selection.omega=omega;
@@ -598,10 +614,12 @@ int launch_factorized_integral(unsigned family, unsigned radial, double omega, c
   selection.stride=4*selection.centers+1;
   selection.component_count=static_cast<unsigned>(component_count);
   size_t size=1;
+  bool full_eri_sp=family==0 && radial==0;
   for (unsigned center=0; center<selection.centers; ++center) {
     if (angular[center]>(family && (family==2 || center==2) ? 4u : 3u))
       return static_cast<int>(cudaErrorInvalidValue);
     selection.angular[center]=angular[center];
+    full_eri_sp=full_eri_sp && angular[center]<=1;
     size*=(angular[center]+1)*(angular[center]+2)/2;
   }
   if (count>std::numeric_limits<size_t>::max()/sizeof(double)/selection.stride)
@@ -611,7 +629,11 @@ int launch_factorized_integral(unsigned family, unsigned radial, double omega, c
       return static_cast<int>(cudaErrorInvalidValue);
     selection.components[index]=components[index];
   }
-  factorized_integral_kernel<<<dim3(selection.component_count,batch_count),64,0,stream>>>(selection,records,count,atoms,direction,output,status,batches);
+  const dim3 grid(selection.component_count,batch_count);
+  if (full_eri_sp)
+    factorized_integral_kernel<true><<<grid,64,0,stream>>>(selection,records,count,atoms,direction,output,status,batches,frozen_atom);
+  else
+    factorized_integral_kernel<false><<<grid,64,0,stream>>>(selection,records,count,atoms,direction,output,status,batches,frozen_atom);
   return static_cast<int>(cudaGetLastError());
 }
 }  // namespace generativeqc::dft::hessian_aot

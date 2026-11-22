@@ -36,6 +36,7 @@ from generativeqc_compiler.tensor import (
     linearize,
     reduce_sum,
     rewrite,
+    transpose_program,
 )
 
 
@@ -98,6 +99,38 @@ def nuclear_grid_maps(
         if shared_contractions
         else result
     )
+
+
+def nuclear_grid_ao_adjoints(points: int = 3, nao: int = 2) -> dict[str, Program]:
+    """Transpose the AO-only left legs; the retained coefficients do not depend on them."""
+    maps = nuclear_grid_maps(points, nao)
+    result = {}
+    for name, legs in (
+        ("feature_direction", ("d_ao",)),
+        ("feature_mixed", ("left_ao", "d_left_ao")),
+    ):
+        replacements = {}
+        for node in maps[name].nodes:
+            replacements[node] = replace(
+                node,
+                inputs=tuple(replacements[value] for value in node.inputs),
+                spec=replace(node.spec, differentiable=True),
+            )
+        program = Program(
+            {key: replacements[node] for key, node in maps[name].outputs.items()}
+        )
+        linear_inputs = tuple(f"{leg}{axis}" for leg in legs for axis in range(4))
+        vjp = transpose_program(program, tuple(program.outputs), inputs=linear_inputs)
+        # Keep only demanded coefficient outputs. The dense CUDA consumer
+        # validates each actual left/mixed jet before the adjoint dot product.
+        coefficients = Program(dict(vjp.program.outputs))
+        if any(
+            node.op == "input" and node.attrs["name"] in linear_inputs
+            for node in coefficients.nodes
+        ):
+            raise ValueError("nuclear AO adjoint depends on its left input")
+        result[name] = rewrite(coefficients, "exact_cse")
+    return result
 
 
 @cache

@@ -59,6 +59,9 @@ struct CudaWb97mvJkOptions {
   double symmetry_relative_tolerance{1e-10};
   /// Cap on persistent last-direction jets, not transient streamed tiles.
   std::size_t max_resident_integral_bytes{64ULL << 20};
+  /** Prefer batched windows over unbatched resident jets for fresh directions.
+   * Leave off for HVP pairs that can reuse the full last-direction cache. */
+  bool prefer_fresh_direction_batches{};
   /** Physical fraction of same-spin exchange for full_hybrid; zero otherwise. */
   double full_exchange_fraction{};
   /** Bind both radial sources from the accepted KS state. Unbound leaf probes
@@ -94,6 +97,8 @@ struct CudaWb97mvJkWork {
       projection_terms_bound{}, reduction_terms{};
   std::size_t resident_integral_bytes{};
   std::size_t batched_workspace_bytes{};
+  /** Read-only window sources retained once in addition to the reused scratch. */
+  std::size_t retained_window_source_bytes{};
   std::uint64_t integral_launches{}, projection_launches{}, reduction_launches{};
   std::uint64_t integral_source_builds{}, resident_integral_hits{};
   std::size_t streaming_tiles{}, source_groups{};
@@ -140,16 +145,20 @@ class CudaWb97mvNuclearJk {
                     const CudaWb97mvJkOutput& output, cudaStream_t stream) noexcept;
   /** Enqueue a fresh action into private buffers. The caller owns the sticky
    * transaction audit and must drain and accept it before using the outputs.
-   * This path neither consumes nor authorizes the optional direction cache. */
+   * This path neither consumes nor authorizes the optional direction cache.
+   * With a Cartesian column, the direction must be that unit vector and
+   * delta_density must be zero. Only the directional Fock and HVP are written. */
   cudaError_t enqueue_private_fresh(const double* direction, const double* density,
                                     const double* delta_density, const CudaWb97mvJkOutput& output,
-                                    int* transaction_status, cudaStream_t stream) noexcept;
+                                    int* transaction_status, cudaStream_t stream,
+                                    std::size_t frozen_column = SIZE_MAX) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:
   cudaError_t apply_impl(const double* direction, const double* density,
                          const double* delta_density, const CudaWb97mvJkOutput& output,
-                         int* transaction_status, cudaStream_t stream) noexcept;
+                         int* transaction_status, cudaStream_t stream,
+                         std::size_t frozen_column) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

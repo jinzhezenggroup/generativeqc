@@ -208,6 +208,7 @@ def emit_program(inventory: Inventory, name: str) -> str:
     inputs, components = (), ()
     centers, stride = 0, 0
     angular, signature = (), "{}"
+    integral_batch = "nullptr"
     callbacks = ["nullptr", "nullptr", "nullptr"]
     if name == "ao":
         source, identity = emit_resident_ao(), _ao_identity()
@@ -234,7 +235,8 @@ def emit_program(inventory: Inventory, name: str) -> str:
             "coulomb_metric",
         ):
             return _emit_factorized_program(request)
-        source, identity = emit_integral(request)
+        batched = request.family in ("overlap", "kinetic", "nuclear_attraction")
+        source, identity = emit_integral(request, batched=batched)
         kind = "integral"
         centers, stride = request.centers, request.record_stride
         components, outputs = request.components, 1 + 6 * request.centers
@@ -254,6 +256,9 @@ def emit_program(inventory: Inventory, name: str) -> str:
                 for index in range(len(components))
             },
         }
+        if batched:
+            integral_batch = f"&{prefix}_batch"
+            aliases["generativeqc_resident_integral_batch"] = f"{prefix}_batch"
     quoted_inputs = ",".join(json.dumps(value) for value in inputs)
     packed_components = ",".join(str(value) for value in components)
     return (
@@ -272,7 +277,7 @@ const Program& program_{name}() noexcept {{
   [[maybe_unused]] static constexpr std::array<unsigned, {len(angular)}> angular{{{",".join(map(str, angular))}}};
   static const Program program{{
     "{name}", "{identity}", Kind::{kind}, inputs, {outputs}, components,
-    {centers}, {stride}, {", ".join(callbacks)}, {signature}
+    {centers}, {stride}, {", ".join(callbacks)}, {signature}, {integral_batch}
   }};
   return program;
 }}

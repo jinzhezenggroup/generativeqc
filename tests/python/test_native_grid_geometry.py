@@ -17,7 +17,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
-from generativeqc_compiler.xc.grid_geometry_response import ao_motion_program
+from generativeqc_compiler.xc.grid_geometry_response import (
+    ao_motion_program,
+    local_program,
+    lower_cuda_geometry_powers,
+)
 from numpy.polynomial import Polynomial
 
 
@@ -198,6 +202,37 @@ def test_build_time_ao_motion_has_independent_polynomial_oracle() -> None:
     np.testing.assert_allclose(
         actual, _ao_motion(fixture, jets), atol=3e-15, rtol=3e-14
     )
+
+
+@pytest.mark.parametrize("kind,limit", [("norm", 250), ("ratio", 300)])
+def test_cuda_geometry_power_lowering_retains_extended_range(
+    kind: str, limit: int
+) -> None:
+    graph, original, names = local_program(kind)
+    lowered = lower_cuda_geometry_powers(kind, graph, original, names)
+    for exponent in (-limit - 10, -limit, -limit + 1, 0, limit - 1, limit, limit + 10):
+        scale = 2.0**exponent
+        if kind == "norm":
+            variables = {"x": scale, "y": 0.0, "z": 0.0}
+            variables.update(lx=0.0, ly=0.5 * scale, lz=0.0)
+            variables.update(rx=0.0, ry=0.25 * scale, rz=0.0)
+            variables.update(lrx=0.0, lry=0.0, lrz=0.0)
+        else:
+            variables = {
+                "a": 0.3 * scale,
+                "b": scale,
+                "la": 0.2 * scale,
+                "lb": 0.7 * scale,
+            }
+            variables.update(ra=0.4 * scale, rb=0.6 * scale, lra=0.0, lrb=0.0)
+        expected = [graph.evaluate(root, variables) for root in original]
+        assert np.isfinite(expected).all()
+        np.testing.assert_allclose(
+            [graph.evaluate(root, variables) for root in lowered],
+            expected,
+            rtol=4e-15,
+            atol=0,
+        )
 
 
 def test_geometry_aot_generator_is_deterministic_and_build_only(tmp_path: Path) -> None:

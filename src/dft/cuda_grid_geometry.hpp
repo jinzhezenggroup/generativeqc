@@ -75,6 +75,13 @@ struct CudaGridGeometryMixedView {
   const double *ao{}, *weights{}, *point_directions{};
 };
 
+/** Private weights plus immutable spatial jets; no directional AO panels. */
+struct CudaGridGeometryCartesianView {
+  const double *basis{}, *spatial{}, *weights{};
+  const std::uint64_t* atom_offsets{};
+  std::size_t atoms{}, points_per_atom{}, left{}, right{};
+};
+
 /** Pure host overflow/resource/work admission. The optional minimum reserves
  * the smallest admissible tile (or the full resident layout if replay is disabled). */
 cudaError_t cuda_grid_geometry_workspace(const CudaGridGeometryShape& shape,
@@ -124,6 +131,12 @@ class CudaGridGeometryResponse {
   cudaError_t enqueue_private_mixed_view(const double* left, const double* right,
                                          CudaGridGeometryMixedView& view, int* transaction_status,
                                          cudaStream_t stream) noexcept;
+  /** Dense unit directions constructed by the caller. Return cudaErrorNotSupported
+   * before enqueue if order-three spatial jets are not fully resident. */
+  cudaError_t enqueue_private_cartesian_view(const double* left, const double* right,
+                                             std::size_t left_column, std::size_t right_column,
+                                             CudaGridGeometryCartesianView& view,
+                                             int* transaction_status, cudaStream_t stream) noexcept;
   /** Admit all mixed actions of an endpoint before any partial work. */
   cudaError_t admit_actions(std::size_t actions) noexcept;
   /** Borrow [20,point,AO] spatial jets when resident; replay has no such view. */
@@ -138,7 +151,7 @@ class CudaGridGeometryResponse {
   cudaError_t authenticate(cudaStream_t stream) noexcept;
   cudaError_t partition(const double* left, const double* right) noexcept;
   cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream,
-                             int* transaction_status = nullptr) noexcept;
+                             int* transaction_status = nullptr, bool weights_only = false) noexcept;
   cudaError_t mixed_view_impl(const double* left, const double* right,
                               CudaGridGeometryMixedView& view, int* transaction_status,
                               cudaStream_t stream) noexcept;

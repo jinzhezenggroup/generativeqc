@@ -80,6 +80,47 @@ def local_program(kind: str) -> tuple[Graph, tuple[Expr, ...], tuple[str, ...]]:
     return graph, _mixed(graph, root, names), names
 
 
+def lower_cuda_geometry_powers(
+    kind: str, graph: Graph, roots: tuple[Expr, ...], names: tuple[str, ...]
+) -> tuple[Expr, ...]:
+    """Reuse the norm and reciprocal already present in the differentiated DAG.
+
+    The regular branches keep every replacement intermediate normal in
+    binary64. Outside those bounds the canonical power expressions retain
+    their original extended-range and nonfinite behavior.
+    """
+    if kind == "norm":
+        squared = graph.sum(
+            graph.variable(name) * graph.variable(name) for name in names
+        )
+        inverse = 1 / roots[0]
+        powers = {squared.pow(-0.5): inverse, squared.pow(-1.5): inverse / squared}
+        base, limit = squared, 500
+    elif kind == "ratio":
+        base, limit = graph.variable("b"), 300
+        inverse = 1 / base
+        squared_inverse = inverse * inverse
+        powers = {
+            base.pow(-2): squared_inverse,
+            base.pow(-3): squared_inverse * inverse,
+        }
+    else:
+        return roots
+
+    def guarded(original: Expr, regular: Expr) -> Expr:
+        return graph.select_le(
+            2.0**-limit,
+            base,
+            graph.select_le(base, 2.0**limit, regular, original),
+            original,
+        )
+
+    return graph.replace_subexpressions(
+        roots,
+        {original: guarded(original, regular) for original, regular in powers.items()},
+    )
+
+
 @cache
 def prepared_center_norm_program() -> tuple[Graph, tuple[Expr, ...], tuple[str, ...]]:
     """Specialize the differentiated norm at the force owner's unit separation.

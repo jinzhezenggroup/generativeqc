@@ -29,7 +29,7 @@ using RangeIntegralLaunch = int (*)(double, const double*, std::size_t, const lo
                                     const double*, double*, int*, cudaStream_t);
 struct FactorizedIntegralBatch;
 using IntegralBatchLaunch = int (*)(double, const FactorizedIntegralBatch*, std::size_t,
-                                    const double*, int*, cudaStream_t);
+                                    const double*, long long, int*, cudaStream_t);
 
 /** Scientific selectors for integral closure, independent of program names.
  * Components use the flattened CCA Cartesian product of these shell orders.

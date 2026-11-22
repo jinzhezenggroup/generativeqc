@@ -23,6 +23,7 @@ int main() {
         dft::primary.data.ecp_terms.resize(df ? 1 : 0);
         dft::CudaKsWb97mvHessianOptions serial;
         serial.max_frozen_exact_bytes = 0;
+        serial.max_frozen_core_bytes = 0;
         serial.max_resident_cpks_bytes = 0;
         serial.one_electron.parallel_streams = 0;
         serial.grid.replay_nuclear_maps = false;
@@ -40,12 +41,13 @@ int main() {
         assert(stub::live_bytes == 0);
         {
           // Fit a standalone action at a budget that rejects even a dense
-          // owner with both optional caches disabled. Leave both caches
+          // owner with its optional caches disabled. Leave those caches
           // enabled for the action to exercise mode selection, not cap=0.
           dft::CudaKsWb97mvHessian owner;
           auto action = serial;
           action.max_resident_cpks_bytes = 128ULL << 10;
           action.max_frozen_exact_bytes = 8ULL << 20;
+          action.max_frozen_core_bytes = 8ULL << 20;
           action.max_device_bytes = baseline - 1;
           stub::peak_bytes = 0;
           assert(owner.prepare(batch, 0, token, Mode::action_only, action, detail) ==
@@ -53,7 +55,7 @@ int main() {
           const auto work = owner.work();
           assert(work.device_bytes == stub::live_bytes &&
                  stub::peak_bytes <= action.max_device_bytes);
-          assert(!work.cpks_operator_bytes && !work.frozen_exact_bytes);
+          assert(!work.cpks_operator_bytes && !work.frozen_exact_bytes && !work.frozen_core_bytes);
         }
         assert(stub::live_bytes == 0 && stub::allocations.empty());
         auto options = serial;
