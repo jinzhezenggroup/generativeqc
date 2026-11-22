@@ -30,6 +30,7 @@ from generativeqc_compiler.method.stationary_grid_second import (
 from generativeqc_compiler.method.wb97mv_grid_response import point_field_partials
 from generativeqc_compiler.method.wb97mv_nuclear_grid import (
     nonlocal_field_program,
+    nuclear_grid_ao_adjoints,
     nuclear_grid_maps,
 )
 from generativeqc_compiler.tensor import execute
@@ -74,6 +75,48 @@ def _feeds(fixture: dict, spin: int) -> dict:
 
 def _ordered(result: dict) -> np.ndarray:
     return np.array([result[name] for name in ("rho", "g0", "g1", "g2", "tau")])
+
+
+def test_nuclear_ao_adjoints_match_signed_forward_contractions() -> None:
+    fixture = _data(1)
+    shape = len(fixture["points"]), fixture["nao"]
+    maps = nuclear_grid_maps(*shape)
+    adjoints = nuclear_grid_ao_adjoints(*shape)
+    feeds = _feeds(fixture, 0)
+    random = np.random.default_rng(1730)
+    for name, legs in (
+        ("feature_direction", {"d_ao": fixture["left_ao"]}),
+        (
+            "feature_mixed",
+            {"left_ao": fixture["left_ao"], "d_left_ao": fixture["mixed_ao"]},
+        ),
+    ):
+        cotangents = {key: random.normal(size=shape[0]) for key in maps[name].outputs}
+        base = {
+            **feeds,
+            **(
+                {"d_density": np.zeros_like(feeds["density"])}
+                if name == "feature_direction"
+                else {}
+            ),
+        }
+        motions = {
+            f"{leg}{axis}": value
+            for leg, panel in legs.items()
+            for axis, value in enumerate(panel)
+        }
+        reference = execute(maps[name], {**base, **motions}).outputs
+        coefficients = execute(
+            adjoints[name],
+            {**base, **{f"bar_{key}": value for key, value in cotangents.items()}},
+        ).outputs
+        expected = sum(
+            np.vdot(cotangents[key], value) for key, value in reference.items()
+        )
+        actual = sum(
+            np.vdot(coefficients[f"bar_{key}"], value) for key, value in motions.items()
+        )
+        np.testing.assert_allclose(actual, expected, rtol=2e-13, atol=2e-13)
 
 
 @pytest.mark.parametrize("spins", [1, 2])

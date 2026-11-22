@@ -4,6 +4,7 @@
 #include <limits>
 #include <vector>
 
+#include "dft/factorized_hessian_integral.hpp"
 #include "dft/hessian_aot.hpp"
 #include "integrals/cuda_one_electron_response.hpp"
 #include "response/nuclear_integral_response.cuh"
@@ -27,13 +28,20 @@ struct Job {
 struct ParallelTask {
   std::size_t job{}, begin{}, count{}, records{}, raw{}, projected{}, candidate{};
 };
+struct BatchRun {
+  const aot::Program* program{};
+  std::size_t first{}, count{};
+};
 struct Layout {
   std::size_t bytes{}, matrix{}, basis_elements{}, descriptors{}, shells{}, records{}, raw{},
       projected{}, candidates{}, status{}, radial_records{};
   std::uint64_t components{}, projections{};
   std::size_t parallel_begin{}, parallel_descriptors{}, parallel_direction{}, parallel_weights{},
-      parallel_candidates{}, parallel_candidate_bytes{};
+      parallel_candidates{}, parallel_candidate_bytes{}, batch_inputs{}, collect_offsets{},
+      collect_tasks{};
   std::vector<ParallelTask> tasks;
+  std::vector<std::size_t> owner_offsets;
+  std::vector<std::uint32_t> owner_tasks;
 };
 
 bool multiply(std::size_t first, std::size_t second, std::size_t& result) {
@@ -218,6 +226,56 @@ cudaError_t schedule(const CudaOneElectronShape& shape,
     for (std::size_t index = 0; index < parallel.tasks.size(); ++index)
       parallel.tasks[index].candidate =
           parallel.parallel_candidates + index * 4 * plan.matrix * sizeof(double);
+    if (std::all_of(jobs.begin(), jobs.end(),
+                    [](const auto& job) { return job.program->integral_batch != nullptr; })) {
+      Layout batch;
+      batch.bytes = parallel.bytes;
+      if (append(batch, parallel.tasks.size(), sizeof(aot::FactorizedIntegralBatch),
+                 parallel.batch_inputs) &&
+          batch.bytes - plan.bytes <= options.max_parallel_workspace_bytes &&
+          batch.bytes <= options.max_workspace_bytes)
+        parallel.bytes = batch.bytes;
+      else
+        parallel.batch_inputs = 0;
+    }
+    if (parallel.batch_inputs && parallel.tasks.size() <= UINT32_MAX) {
+      // Value and tangent panels share incidence. Insert in task order so
+      // skipping zero slots does not reorder any numerical contribution.
+      std::vector<std::vector<std::uint32_t>> owners(2 * plan.matrix + shape.atoms);
+      for (std::size_t index = 0; index < parallel.tasks.size(); ++index) {
+        const auto& job = jobs[parallel.tasks[index].job].device;
+        const auto panel = job.family ? 0 : plan.matrix;
+        for (std::size_t row = job.first.ao_begin; row < job.first.ao_begin + job.first.ao_count;
+             ++row)
+          for (std::size_t column = job.second.ao_begin;
+               column < job.second.ao_begin + job.second.ao_count; ++column)
+            owners[panel + row * shape.nao + column].push_back(static_cast<std::uint32_t>(index));
+        for (unsigned center = 0; center < job.centers; ++center) {
+          auto& owner = owners[2 * plan.matrix + job.atoms[center]];
+          if (owner.empty() || owner.back() != index)
+            owner.push_back(static_cast<std::uint32_t>(index));
+        }
+      }
+      for (const auto& owner : owners) {
+        parallel.owner_offsets.push_back(parallel.owner_tasks.size());
+        parallel.owner_tasks.insert(parallel.owner_tasks.end(), owner.begin(), owner.end());
+      }
+      parallel.owner_offsets.push_back(parallel.owner_tasks.size());
+      Layout collection;
+      collection.bytes = parallel.bytes;
+      if (append(collection, parallel.owner_offsets.size(), sizeof(std::size_t),
+                 parallel.collect_offsets) &&
+          append(collection, parallel.owner_tasks.size(), sizeof(std::uint32_t),
+                 parallel.collect_tasks) &&
+          collection.bytes - plan.bytes <= options.max_parallel_workspace_bytes &&
+          collection.bytes <= options.max_workspace_bytes) {
+        parallel.bytes = collection.bytes;
+      } else {
+        parallel.collect_offsets = parallel.collect_tasks = 0;
+        parallel.owner_offsets.clear();
+        parallel.owner_tasks.clear();
+      }
+    }
     plan = std::move(parallel);
   } catch (const std::bad_alloc&) {
     return cudaSuccess;
@@ -311,9 +369,9 @@ __global__ void symmetric(const double* values, std::size_t nao, double absolute
       atomicExch(status, 1);
   }
 }
-__global__ void build_records(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
-                              const double* charges, std::size_t begin, std::size_t count,
-                              double* records, int* status) {
+__device__ void fill_records(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
+                             const double* charges, std::size_t begin, std::size_t count,
+                             double* records, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto* primitives = basis + 3 * shape.atoms;
   const auto stride = 3 + 3 * job->centers;
@@ -336,6 +394,21 @@ __global__ void build_records(CudaOneElectronShape shape, const DeviceJob* job, 
     record[stride - 1] = scale;
   }
 }
+__global__ void build_records(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
+                              const double* charges, std::size_t begin, std::size_t count,
+                              double* records, int* status) {
+  fill_records(shape, job, basis, charges, begin, count, records, status);
+}
+__global__ void build_batch_records(CudaOneElectronShape shape, const DeviceJob* jobs,
+                                    const ParallelTask* tasks, std::size_t count,
+                                    const double* basis, const double* charges, char* base,
+                                    int* status) {
+  for (std::size_t index = blockIdx.x; index < count; index += gridDim.x) {
+    const auto& task = tasks[index];
+    fill_records(shape, jobs + task.job, basis, charges, task.begin, task.count,
+                 reinterpret_cast<double*>(base + task.records), status);
+  }
+}
 __device__ double coefficient(const double* record, const unsigned* powers) {
   double result{};
   for (unsigned term = 0; term < static_cast<unsigned>(record[3]); ++term)
@@ -344,9 +417,9 @@ __device__ double coefficient(const double* record, const unsigned* powers) {
       result += record[7 + 4 * term];
   return result;
 }
-__global__ void project(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
-                        const double* direction, CudaOneElectronWeights weights, const double* raw,
-                        double* candidate, double* projected, int* status) {
+__device__ void project_task(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
+                             const double* direction, CudaOneElectronWeights weights,
+                             const double* raw, double* candidate, double* projected, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto pair = threadIdx.x;
   const auto pairs = job->first.ao_count * job->second.ao_count;
@@ -387,6 +460,23 @@ __global__ void project(CudaOneElectronShape shape, const DeviceJob* job, const 
     projected[(pairs + pair) * coordinates + coordinate] = hvp[coordinate];
   }
 }
+__global__ void project(CudaOneElectronShape shape, const DeviceJob* job, const double* basis,
+                        const double* direction, CudaOneElectronWeights weights, const double* raw,
+                        double* candidate, double* projected, int* status) {
+  project_task(shape, job, basis, direction, weights, raw, candidate, projected, status);
+}
+__global__ void project_batch(CudaOneElectronShape shape, const DeviceJob* jobs,
+                              const ParallelTask* tasks, std::size_t count, const double* basis,
+                              const double* direction, CudaOneElectronWeights weights, char* base,
+                              int* status) {
+  for (std::size_t index = blockIdx.x; index < count; index += gridDim.x) {
+    const auto& task = tasks[index];
+    project_task(shape, jobs + task.job, basis, direction, weights,
+                 reinterpret_cast<const double*>(base + task.raw),
+                 reinterpret_cast<double*>(base + task.candidate),
+                 reinterpret_cast<double*>(base + task.projected), status);
+  }
+}
 __global__ void scatter(const DeviceJob* job, std::size_t atoms, const double* projected,
                         double* vectors, int* status) {
   if (atomicAdd(status, 0)) return;
@@ -409,6 +499,7 @@ __global__ void scatter(const DeviceJob* job, std::size_t atoms, const double* p
 
 __global__ void collect_parallel(CudaOneElectronShape shape, const DeviceJob* jobs,
                                  const ParallelTask* tasks, std::size_t count, const char* base,
+                                 const std::size_t* offsets, const std::uint32_t* owners,
                                  double* candidate, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto matrix = shape.nao * shape.nao;
@@ -416,12 +507,19 @@ __global__ void collect_parallel(CudaOneElectronShape shape, const DeviceJob* jo
        index < 4 * matrix + 3 * shape.atoms;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     double value{}, motion{};
+    const auto owner =
+        index < 4 * matrix ? index % (2 * matrix) : 2 * matrix + (index - 4 * matrix) / 3;
+    const auto begin = offsets ? offsets[owner] : 0;
+    const auto end = offsets ? offsets[owner + 1] : count;
     if (index < 4 * matrix) {
-      for (std::size_t task = 0; task < count; ++task)
+      for (std::size_t position = begin; position < end; ++position) {
+        const auto task = owners ? owners[position] : position;
         value += reinterpret_cast<const double*>(base + tasks[task].candidate)[index];
+      }
     } else {
       const auto coordinate = index - 4 * matrix;
-      for (std::size_t task = 0; task < count; ++task) {
+      for (std::size_t position = begin; position < end; ++position) {
+        const auto task = owners ? owners[position] : position;
         const auto& job = jobs[tasks[task].job];
         const auto pairs = job.first.ao_count * job.second.ao_count;
         const auto coordinates = 3 * job.centers;
@@ -457,6 +555,45 @@ struct CudaOneElectronResponse::Impl {
   cudaGraphExec_t replay{};
   std::vector<cudaStream_t> workers;
   std::vector<cudaEvent_t> events;
+  std::vector<BatchRun> batch_runs;
+
+  cudaError_t prepare_batches() {
+    auto* base = static_cast<char*>(workspace);
+    const auto stream = reference.stream;
+    auto* status = reinterpret_cast<int*>(base + plan.status);
+    const auto* tasks = reinterpret_cast<const ParallelTask*>(base + plan.parallel_descriptors);
+    const auto* device_jobs = reinterpret_cast<const DeviceJob*>(base + plan.descriptors);
+    std::vector<std::size_t> order(plan.tasks.size());
+    for (std::size_t index = 0; index < order.size(); ++index) order[index] = index;
+    std::sort(order.begin(), order.end(), [&](auto first, auto second) {
+      return jobs[plan.tasks[first].job].program->name < jobs[plan.tasks[second].job].program->name;
+    });
+    std::vector<aot::FactorizedIntegralBatch> inputs;
+    inputs.reserve(order.size());
+    for (const auto index : order) {
+      const auto& task = plan.tasks[index];
+      const auto& job = jobs[task.job];
+      if (batch_runs.empty() || batch_runs.back().program != job.program ||
+          batch_runs.back().count == 65535)
+        batch_runs.push_back({job.program, inputs.size(), 0});
+      auto& input = inputs.emplace_back();
+      input.records = reinterpret_cast<const double*>(base + task.records);
+      input.count = task.count;
+      std::copy_n(job.device.atoms, job.device.centers, input.atoms);
+      input.output = reinterpret_cast<double*>(base + task.raw);
+      ++batch_runs.back().count;
+    }
+    auto error =
+        cudaMemcpyAsync(base + plan.batch_inputs, inputs.data(),
+                        inputs.size() * sizeof(inputs.front()), cudaMemcpyHostToDevice, stream);
+    if (error == cudaSuccess) {
+      build_batch_records<<<std::min<std::size_t>(order.size(), 65535), 128, 0, stream>>>(
+          shape, device_jobs, tasks, order.size(), reference.basis, reference.charges, base,
+          status);
+      error = cudaGetLastError();
+    }
+    return error == cudaSuccess ? gate(status, stream) : drain(error, stream);
+  }
 
   ~Impl() { release_graph(); }
   void release_graph() noexcept {
@@ -573,6 +710,7 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
                                              void* workspace,
                                              std::size_t workspace_bytes) noexcept {
   impl_->release_graph();
+  impl_->batch_runs.clear();
   impl_->ready = false;
   impl_->work = {};
   try {
@@ -640,6 +778,15 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
       error =
           cudaMemcpyAsync(base + plan.parallel_descriptors, plan.tasks.data(),
                           plan.tasks.size() * sizeof(ParallelTask), cudaMemcpyHostToDevice, stream);
+    if (error == cudaSuccess && plan.collect_offsets) {
+      error = cudaMemcpyAsync(base + plan.collect_offsets, plan.owner_offsets.data(),
+                              plan.owner_offsets.size() * sizeof(std::size_t),
+                              cudaMemcpyHostToDevice, stream);
+      if (error == cudaSuccess)
+        error = cudaMemcpyAsync(base + plan.collect_tasks, plan.owner_tasks.data(),
+                                plan.owner_tasks.size() * sizeof(std::uint32_t),
+                                cudaMemcpyHostToDevice, stream);
+    }
     if (error == cudaSuccess) {
       finite_values<<<blocks(plan.basis_elements), 128, 0, stream>>>(reference.basis,
                                                                      plan.basis_elements, status);
@@ -659,7 +806,7 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
     error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
     if (error == cudaSuccess) {
       try {
-        error = state.prepare_graph();
+        error = plan.batch_inputs ? state.prepare_batches() : state.prepare_graph();
       } catch (const std::bad_alloc&) {
         // Worker/event metadata is optional, just like CUDA graph resources.
         error = cudaErrorMemoryAllocation;
@@ -667,6 +814,7 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
       if (error == cudaErrorMemoryAllocation || error == cudaErrorNotSupported ||
           error == cudaErrorStreamCaptureUnsupported) {
         state.release_graph();
+        state.batch_runs.clear();
         (void)cudaGetLastError();
         error = cudaSuccess;
       }
@@ -676,7 +824,7 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
     if (state.ready) {
       state.work = {plan.bytes, state.jobs.size(), plan.radial_records, plan.components,
                     plan.projections};
-      if (state.replay) {
+      if (state.replay || !state.batch_runs.empty()) {
         state.work.parallel_workspace_bytes = plan.bytes - plan.parallel_begin;
         state.work.parallel_tasks = plan.tasks.size();
       }
@@ -784,31 +932,57 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
   if (error != cudaSuccess) return transaction_status ? error : drain(error, stream);
   error =
       cudaMemsetAsync(candidate, 0, (4 * plan.matrix + 6 * shape.atoms) * sizeof(double), stream);
-  if (state.replay && error == cudaSuccess) {
-    error = cudaMemcpyAsync(base + plan.parallel_direction, direction,
-                            3 * shape.atoms * sizeof(double), cudaMemcpyDeviceToDevice, stream);
-    const double* panels[]{weights.core, weights.core_direction, weights.overlap,
-                           weights.overlap_direction};
-    for (unsigned index = 0; index < 4 && error == cudaSuccess; ++index)
-      error = cudaMemcpyAsync(base + plan.parallel_weights + index * plan.matrix * sizeof(double),
-                              panels[index], plan.matrix * sizeof(double), cudaMemcpyDeviceToDevice,
-                              stream);
+  const bool batched = !state.batch_runs.empty();
+  if ((state.replay || batched) && error == cudaSuccess) {
+    if (!batched) {
+      error = cudaMemcpyAsync(base + plan.parallel_direction, direction,
+                              3 * shape.atoms * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+      const double* panels[]{weights.core, weights.core_direction, weights.overlap,
+                             weights.overlap_direction};
+      for (unsigned index = 0; index < 4 && error == cudaSuccess; ++index)
+        error = cudaMemcpyAsync(base + plan.parallel_weights + index * plan.matrix * sizeof(double),
+                                panels[index], plan.matrix * sizeof(double),
+                                cudaMemcpyDeviceToDevice, stream);
+    }
     if (error == cudaSuccess)
       error = cudaMemsetAsync(base + plan.parallel_candidates, 0, plan.parallel_candidate_bytes,
                               stream);
-    if (error == cudaSuccess) error = cudaGraphLaunch(state.replay, stream);
+    if (batched) {
+      const auto* inputs =
+          reinterpret_cast<const aot::FactorizedIntegralBatch*>(base + plan.batch_inputs);
+      // Batch order changes only which independent primitive tiles share a
+      // launch. Every tile still feeds its original ordered collection slot.
+      for (const auto& run : state.batch_runs) {
+        if (error != cudaSuccess) break;
+        error = static_cast<cudaError_t>(run.program->integral_batch(
+            0, inputs + run.first, run.count, direction, -1, status, stream));
+      }
+      if (error == cudaSuccess) {
+        project_batch<<<std::min<std::size_t>(plan.tasks.size(), 65535), 128, 0, stream>>>(
+            shape, jobs, reinterpret_cast<const ParallelTask*>(base + plan.parallel_descriptors),
+            plan.tasks.size(), reference.basis, direction, weights, base, status);
+        error = cudaGetLastError();
+      }
+    } else if (error == cudaSuccess) {
+      error = cudaGraphLaunch(state.replay, stream);
+    }
     if (error == cudaSuccess) {
       ++state.work.parallel_actions;
       state.work.component_evaluations += plan.components;
       state.work.projection_terms += plan.projections;
       collect_parallel<<<blocks(4 * plan.matrix + 3 * shape.atoms), 128, 0, stream>>>(
           shape, jobs, reinterpret_cast<const ParallelTask*>(base + plan.parallel_descriptors),
-          plan.tasks.size(), base, candidate, status);
+          plan.tasks.size(), base,
+          plan.collect_offsets ? reinterpret_cast<const std::size_t*>(base + plan.collect_offsets)
+                               : nullptr,
+          plan.collect_tasks ? reinterpret_cast<const std::uint32_t*>(base + plan.collect_tasks)
+                             : nullptr,
+          candidate, status);
       error = cudaGetLastError();
     }
   }
-  for (std::size_t index = 0; !state.replay && index < state.jobs.size() && error == cudaSuccess;
-       ++index) {
+  for (std::size_t index = 0;
+       !state.replay && !batched && index < state.jobs.size() && error == cudaSuccess; ++index) {
     const auto& job = state.jobs[index];
     for (std::size_t begin = 0; begin < job.radials && error == cudaSuccess;) {
       const auto count = std::min(state.options.radial_tile, job.radials - begin);

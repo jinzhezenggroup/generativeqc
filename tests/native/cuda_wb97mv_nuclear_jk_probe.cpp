@@ -147,6 +147,31 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
       options.max_batch_workspace_bytes = 128ULL << 20;
     }
   }
+  if (cache_mode == "fresh-batch-budgeted") {
+    std::size_t full{}, unbatched{};
+    check(cuda_wb97mv_jk_workspace(shape, shells, options, full));
+    auto scalar = options;
+    scalar.max_batch_workspace_bytes = 0;
+    check(cuda_wb97mv_jk_workspace(shape, shells, scalar, unbatched));
+    require(full > unbatched, "fixture needs an optional full batch");
+    // Full batches can keep their metadata and shrink only projection scratch.
+    // Find the true refusal boundary rather than guessing from their full size.
+    auto cap = options;
+    cap.source_tile = 0;
+    auto lower = unbatched, upper = full;
+    while (upper - lower > 1) {
+      cap.max_workspace_bytes = lower + (upper - lower) / 2;
+      std::size_t planned{};
+      check(cuda_wb97mv_jk_workspace(shape, shells, cap, planned));
+      if (planned > unbatched)
+        upper = cap.max_workspace_bytes;
+      else
+        lower = cap.max_workspace_bytes;
+    }
+    options.max_workspace_bytes = lower;
+    options.source_tile = 2;
+    options.prefer_fresh_direction_batches = true;
+  }
   std::size_t bytes{};
   check(cuda_wb97mv_jk_workspace(shape, shells, options, bytes));
   const auto ao_offset = 3 * shape.atoms + 2 * shape.primitives;
@@ -301,10 +326,10 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
           "nonfinite direction admitted");
   unchanged();
   auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
-  const auto private_action = [&] {
+  const auto private_action = [&](std::size_t frozen_column = SIZE_MAX) {
     check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
     check(response.enqueue_private_fresh(motion, density, delta, output, transaction,
-                                         storage.stream));
+                                         storage.stream, frozen_column));
     int status{};
     check(cudaMemcpyAsync(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost,
                           storage.stream));
@@ -323,6 +348,36 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   for (unsigned index = 0; index < 5; ++index)
     require(private_output[index] == download(pointers[index], counts[index]),
             "private exact action changed the checked output");
+  sentinel();
+  require(private_action(0) != 0, "frozen column accepted an arbitrary direction");
+  unchanged();
+  std::vector<double> unit(direction.size());
+  unit.front() = 1;
+  check(cudaMemcpy(motion, unit.data(), unit.size() * sizeof(double), cudaMemcpyHostToDevice));
+  check(cudaMemsetAsync(delta, 0, panels * sizeof(double), storage.stream));
+  const auto before = response.work().component_evaluations;
+  require(private_action(0) == 0, "frozen column rejected valid stationary weights");
+  const auto frozen_components = response.work().component_evaluations - before;
+  const auto frozen_fock = download(pointers[2], counts[2]);
+  const auto frozen_hvp = download(pointers[4], counts[4]);
+  for (const unsigned index : {0, 1, 3})
+    require(download(pointers[index], counts[index]) == std::vector<double>(counts[index], 27),
+            "frozen column overwrote a primal output");
+  check(response.apply(motion, density, delta, output, storage.stream));
+  for (auto index : {2, 4}) {
+    const auto& frozen = index == 2 ? frozen_fock : frozen_hvp;
+    const auto full = download(pointers[index], counts[index]);
+    for (std::size_t element = 0; element < full.size(); ++element)
+      require(std::abs(full[element] - frozen[element]) <= 1e-11 * (1 + std::abs(full[element])),
+              "frozen column changed a directional output");
+  }
+  if (response.work().batched_workspace_bytes)
+    require(frozen_components < response.work().component_evaluations - before - frozen_components,
+            "frozen column evaluated inactive primitive components");
+  check(cudaMemcpy(motion, direction.data(), direction.size() * sizeof(double),
+                   cudaMemcpyHostToDevice));
+  check(cudaMemcpy(delta, densities.data() + panels, panels * sizeof(double),
+                   cudaMemcpyHostToDevice));
   sentinel();
   for (unsigned index = 0; index < 2 * shape.spins; ++index) {
     const auto offset = index * shape.nao * shape.nao;
@@ -401,7 +456,7 @@ int main(int argc, char** argv) {
     require(mode == "resident" || mode == "streamed" || mode == "budgeted" || mode == "unbatched" ||
                 mode == "batch-budgeted" || mode == "batch-chunked" ||
                 mode == "projection-budgeted" || mode == "tiled" || mode == "resident-cap-tiled" ||
-                mode == "resident-cap-fallback",
+                mode == "resident-cap-fallback" || mode == "fresh-batch-budgeted",
             "invalid cache mode");
     run(argv[1], argv[2], mode);
     return 0;

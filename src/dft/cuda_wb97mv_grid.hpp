@@ -11,6 +11,8 @@
 
 namespace generativeqc::dft {
 
+struct CudaGridGeometryCartesianView;
+
 using CudaWb97mvGridAuthenticate = cudaError_t (*)(void*) noexcept;
 
 struct CudaWb97mvGridShape {
@@ -35,6 +37,8 @@ struct CudaWb97mvGridOptions {
    * Extra storage remains subordinate to max_workspace_bytes; unavailable graph
    * resources retain ordinary precompiled CUDA launches, never CPU execution. */
   bool replay_nuclear_maps{true};
+  /** Budget for dense RKS AO cotangents shared by every left contraction. */
+  std::size_t max_nuclear_adjoint_bytes{};
   std::uint64_t max_nuclear_affine_terms{1ULL << 34};
   /** Physical point code from the converged Fock identity. Curated and
    * split-hybrid families use disjoint codes. Response owners must verify
@@ -77,6 +81,7 @@ struct CudaWb97mvGridWork {
   std::uint64_t nuclear_reference_pairs{}, nuclear_response_pairs{}, nuclear_affine_terms{};
   std::uint64_t nuclear_directions{}, nuclear_contractions{};
   std::uint64_t nuclear_graph_replays{};
+  std::uint64_t nuclear_adjoint_builds{}, nuclear_adjoint_contractions{};
   bool pair_budget_exceeded{};
 };
 
@@ -163,6 +168,11 @@ class CudaWb97mvGridResponse {
                                             const double* left_weights, const double* mixed_weights,
                                             const double* left_points, double* output,
                                             int* transaction_status, cudaStream_t stream) noexcept;
+  /** The dense owner may contract directly from the live geometry lease. */
+  bool admits_cartesian_mixed() const noexcept;
+  cudaError_t enqueue_private_cartesian_mixed(const CudaGridGeometryCartesianView& motion,
+                                              double* output, int* transaction_status,
+                                              cudaStream_t stream) noexcept;
   /** Borrow the opt-in prepared grid energy scalar under the live lease. */
   cudaError_t reference_energy(const double*& energy) noexcept;
   const CudaWb97mvGridWork& work() const noexcept { return work_; }
@@ -184,7 +194,8 @@ class CudaWb97mvGridResponse {
   cudaError_t nuclear_mixed_impl(const double* left_ao, const double* mixed_ao,
                                  const double* left_weights, const double* mixed_weights,
                                  const double* left_points, double* output, int* transaction_status,
-                                 cudaStream_t stream) noexcept;
+                                 cudaStream_t stream,
+                                 const CudaGridGeometryCartesianView* cartesian = nullptr) noexcept;
   CudaWb97mvGridShape shape_{};
   CudaWb97mvGridOptions options_{};
   CudaWb97mvGridReference reference_{};
@@ -193,6 +204,7 @@ class CudaWb97mvGridResponse {
   double beta_{};
   bool ready_{};
   bool nuclear_ready_{};
+  bool nuclear_adjoint_ready_{};
   int* private_nuclear_status_{};
   cudaGraphExec_t nuclear_graph_{};
 };

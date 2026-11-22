@@ -185,7 +185,9 @@ def integral_program_identity(request: IntegralRequest) -> str:
     )
 
 
-def emit_integral(request: IntegralRequest) -> tuple[str, str]:
+def emit_integral(
+    request: IntegralRequest, *, batched: bool = False
+) -> tuple[str, str]:
     """Return unchanged compiler-AD arithmetic and scientific package identity."""
     integral = _integral_ir(request.family, request.angular, request.radial)
     source = (
@@ -193,6 +195,6 @@ def emit_integral(request: IntegralRequest) -> tuple[str, str]:
             request.family, request.angular, request.components, radial=request.kernel
         )
         if request.family in DF_FAMILIES
-        else emit_resident_second(integral, request.components)
+        else emit_resident_second(integral, request.components, batched=batched)
     )
     return source, integral_program_identity(request)

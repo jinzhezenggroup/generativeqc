@@ -9,12 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
+from generativeqc_compiler.dft.ao import jet_indices
 from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from generativeqc_compiler.xc.grid_center_pair import emit_center_pair_layout
 from generativeqc_compiler.xc.grid_geometry_response import (
     ao_motion_program,
     local_program,
+    lower_cuda_geometry_powers,
     prepared_center_norm_program,
 )
 
@@ -51,6 +53,8 @@ def generate(backend: str = "cuda") -> str:
         *(f"becke_{count}" for count in range(1, 6)),
     ):
         graph, roots, names = local_program(kind)
+        if backend == "cuda":
+            roots = lower_cuda_geometry_powers(kind, graph, roots, names)
         variables = {
             f"{prefix}{name}": f"{name}.{field}"
             for name in names
@@ -118,7 +122,45 @@ def generate(backend: str = "cuda") -> str:
     )
     for index, root in enumerate(roots):
         text.append(f"output[{index}] = {emitter.reference(root)};")
-    text.extend(["}", "}"])
+    text.append("}")
+    if backend == "cuda":
+        # Bind unit directions to the same Taylor jet ordering as ao_motion.
+        lookup = {index: offset for offset, index in enumerate(jet_indices(3))}
+        first, mixed = [], []
+        for base in jet_indices(1):
+            for left in range(3):
+                shifted = tuple(
+                    value + (axis == left) for axis, value in enumerate(base)
+                )
+                first.append(lookup[shifted])
+                for right in range(3):
+                    mixed.append(
+                        lookup[
+                            tuple(
+                                value + (axis == right)
+                                for axis, value in enumerate(shifted)
+                            )
+                        ]
+                    )
+        for name, indices, arguments, index in (
+            ("cartesian_first", first, "unsigned jet, unsigned left", "3 * jet + left"),
+            (
+                "cartesian_mixed",
+                mixed,
+                "unsigned jet, unsigned left, unsigned right",
+                "9 * jet + 3 * left + right",
+            ),
+        ):
+            text.append(
+                f"static __device__ __constant__ unsigned char {name}_indices[] = "
+                + "{"
+                + ", ".join(map(str, indices))
+                + "};"
+            )
+            text.append(
+                f"{qualifier} unsigned {name}_index({arguments}) {{ return {name}_indices[{index}]; }}"
+            )
+    text.append("}")
     return "\n".join(text) + "\n"
 
 

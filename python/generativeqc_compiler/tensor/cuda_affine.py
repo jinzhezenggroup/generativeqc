@@ -767,7 +767,7 @@ __global__ void {symbol}_matrix(Extents shape, std::size_t tiles, std::size_t ro
         slots: dict[tuple[str, ...], list[tuple[int, int]]] = {}
         slot_value: dict[int, int] = {}
         for index, node in enumerate(nodes):
-            allocate = node.op != "input"
+            allocate = node.op != "input" and node not in absorbed
             previous = None
             if reuse_intermediate_storage and allocate:
                 compatible = slots.setdefault(tuple(sorted(dims(node))), [])

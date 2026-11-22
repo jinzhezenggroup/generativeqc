@@ -268,6 +268,7 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
         "batch-chunked",
         "unbatched",
         "batch-budgeted",
+        "fresh-batch-budgeted",
         "projection-budgeted",
         "tiled",
         "resident-cap-tiled",
@@ -280,8 +281,9 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
         _qualify(fixture, outputs[mode], "exact")
     assert receipts["resident"]["batch_bytes"] > 0
     assert receipts["batch-chunked"]["batch_bytes"] > 0
+    # Raw radial data may determine the shared scratch size for both routes.
     assert (
-        receipts["batch-chunked"]["batch_bytes"] < receipts["resident"]["batch_bytes"]
+        receipts["batch-chunked"]["batch_bytes"] <= receipts["resident"]["batch_bytes"]
     )
     assert (
         receipts["batch-chunked"]["projection_launches"]
@@ -302,7 +304,7 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
     )
     for field in ("projection_launches", "reduction_launches"):
         assert receipts["resident"][field] < receipts["unbatched"][field]
-    for mode in ("tiled", "resident-cap-tiled"):
+    for mode in ("tiled", "resident-cap-tiled", "fresh-batch-budgeted"):
         receipt = receipts[mode]
         assert receipt["streaming_tiles"] > 1
         assert receipt["source_groups"] == receipts["resident"]["source_groups"]

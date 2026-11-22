@@ -5,6 +5,7 @@
 #include <tuple>
 #include <utility>
 
+#include "dft/cuda_grid_geometry.hpp"
 #include "dft/cuda_wb97mv_grid.hpp"
 #include "dft/hessian_aot.hpp"
 #include "dft/split_hybrid_cuda_selection.hpp"
@@ -12,6 +13,7 @@
 #include "generated_split_hybrid_registry.cuh"
 #include "r2scan_cuda_domain.hpp"
 #include "response/b3lyp_direction.cuh"
+#include "response/grid_geometry_response.cuh"
 #if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
 #include "response/m06_2x_stationary.cuh"
 #endif
@@ -28,6 +30,9 @@ namespace maps = generativeqc_wb97mv_grid_maps;
 namespace ad = generativeqc_wb97mv_grid_ad;
 namespace nuclear_maps = generativeqc_wb97mv_nuclear_maps;
 namespace nuclear_ad = generativeqc_wb97mv_nuclear_ad;
+namespace adjoints = generativeqc_wb97mv_nuclear_ao_adjoints;
+namespace geometry_ad = generativeqc_grid_geometry_ad;
+constexpr unsigned adjoint_blocks = 192;
 
 bool product(std::size_t left, std::size_t right, std::size_t& value) noexcept {
   if (right && left > std::numeric_limits<std::size_t>::max() / right) return false;
@@ -49,6 +54,8 @@ struct Layout {
   std::size_t energy{}, energy_scalar{}, scalar{};
   std::size_t staged_left_ao{}, staged_mixed_ao{}, staged_left_weights{}, staged_mixed_weights{},
       staged_left_points{};
+  std::size_t adjoint_first{}, adjoint_second{}, adjoint_left{}, adjoint_scratch{}, adjoint_bytes{},
+      adjoint_partials{}, adjoint_build_work{}, adjoint_dot_work{}, adjoint_tile{};
   bool replay{};
   std::size_t reference_work{}, direction_work{}, mixed_work{};
   nuclear_maps::Extents nuclear_extents{};
@@ -170,7 +177,39 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
        !reserve(1, plan.energy_scalar) || !reserve(1, plan.scalar)))
     return false;
   const auto mandatory_elements = elements;
-  if (options.nuclear_response && options.replay_nuclear_maps &&
+  if (options.nuclear_response && shape.spins == 1 && !nonlocal &&
+      options.max_nuclear_adjoint_bytes) {
+    // Only the coefficient panels persist across directions. Reuse a bounded
+    // intermediate arena for contiguous point intervals of those panels.
+    const auto tile = std::min<std::size_t>(4096, shape.points);
+    const auto tiles = 1 + (shape.points - 1) / tile;
+    const adjoints::Extents extents{shape.nao, tile};
+    std::size_t first{}, second{}, first_work{}, second_work{};
+    if (adjoints::workspace_feature_direction(extents, first) == cudaSuccess &&
+        adjoints::workspace_feature_mixed(extents, second) == cudaSuccess &&
+        adjoints::work_feature_direction(extents, first_work) &&
+        adjoints::work_feature_mixed(extents, second_work) &&
+        adjoints::add_work(plan.adjoint_build_work, {first_work, tiles}) &&
+        adjoints::add_work(plan.adjoint_build_work, {second_work, tiles}) &&
+        adjoints::add_work(plan.adjoint_dot_work, {plan.ao_elements, 3}) &&
+        adjoints::add_work(plan.adjoint_dot_work, {shape.points, 5}) &&
+        plan.adjoint_build_work <= options.max_nuclear_affine_terms &&
+        plan.adjoint_dot_work <= options.max_nuclear_affine_terms &&
+        reserve(plan.ao_elements, plan.adjoint_first) &&
+        reserve(plan.ao_elements, plan.adjoint_second) &&
+        reserve(plan.ao_elements, plan.adjoint_left) &&
+        reserve(adjoint_blocks, plan.adjoint_partials) &&
+        reserve(std::max(first, second) / sizeof(double), plan.adjoint_scratch) &&
+        elements <= options.max_workspace_bytes / sizeof(double) &&
+        elements - mandatory_elements <= options.max_nuclear_adjoint_bytes / sizeof(double)) {
+      plan.adjoint_bytes = std::max(first, second);
+      plan.adjoint_tile = tile;
+    } else {
+      elements = mandatory_elements;
+    }
+  }
+  const auto retained_elements = elements;
+  if (!plan.adjoint_bytes && options.nuclear_response && options.replay_nuclear_maps &&
       reserve(plan.ao_elements, plan.staged_left_ao) &&
       reserve(plan.ao_elements, plan.staged_mixed_ao) &&
       reserve(shape.points, plan.staged_left_weights) &&
@@ -179,7 +218,7 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
       elements <= options.max_workspace_bytes / sizeof(double))
     plan.replay = true;
   else
-    elements = mandatory_elements;
+    elements = retained_elements;
   plan.bytes = elements * sizeof(double);
   return plan.bytes <= options.max_workspace_bytes;
 }
@@ -633,6 +672,137 @@ __global__ void append_geometry(const double* weights, const double* points, std
   }
 }
 
+__device__ double adjoint_sum(double value) {
+  __shared__ double terms[128];
+  terms[threadIdx.x] = value;
+  __syncthreads();
+  for (unsigned stride = 64; stride; stride /= 2) {
+    if (threadIdx.x < stride) terms[threadIdx.x] += terms[threadIdx.x + stride];
+    __syncthreads();
+  }
+  return terms[0];
+}
+__global__ void contract_ao_adjoint(std::size_t ao_elements, std::size_t points,
+                                    const double* first, const double* second,
+                                    const double* left_coeff, const double* base_partial,
+                                    const double* right_partial, const double* left_ao,
+                                    const double* mixed_ao, const double* left_weights,
+                                    const double* mixed_weights, const double* left_points,
+                                    double* partials, int* status) {
+  if (atomicAdd(status, 0)) return;
+  const std::size_t start = blockIdx.x * blockDim.x + threadIdx.x;
+  const auto stride = std::size_t(gridDim.x) * blockDim.x;
+  double value = 0;
+  for (std::size_t index = start; index < ao_elements; index += stride)
+    value += first[index] * left_ao[index] + left_coeff[index] * left_ao[index] +
+             second[index] * mixed_ao[index];
+  for (std::size_t point = start; point < points; point += stride) {
+    value += right_partial[5 * points + point] * left_weights[point] +
+             base_partial[5 * points + point] * mixed_weights[point];
+    for (unsigned axis = 0; axis < 3; ++axis)
+      value += right_partial[(6 + axis) * points + point] * left_points[3 * point + axis];
+  }
+  const auto sum = adjoint_sum(value);
+  if (!threadIdx.x) partials[blockIdx.x] = sum;
+}
+__global__ void finish_ao_adjoint(const double* partials, double* output, int* status) {
+  if (atomicAdd(status, 0)) return;
+  double value = 0;
+  for (unsigned index = threadIdx.x; index < adjoint_blocks; index += blockDim.x)
+    value += partials[index];
+  const auto sum = adjoint_sum(value);
+  if (!threadIdx.x) {
+    if (!isfinite(sum))
+      atomicExch(status, 1);
+    else
+      *output = sum;
+  }
+}
+
+__global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
+                                              CudaGridGeometryCartesianView motion,
+                                              const double* first, const double* second,
+                                              const double* left_coeff, const double* base_partial,
+                                              const double* right_partial, double* partials,
+                                              const int* status) {
+  if (*status) return;
+  const auto left = motion.left / 3, right = motion.right / 3;
+  const auto left_axis = motion.left % 3, right_axis = motion.right % 3;
+  const auto* offsets = motion.atom_offsets;
+  const auto left_begin = offsets ? offsets[left] : left * motion.points_per_atom;
+  const auto left_end = offsets ? offsets[left + 1] : left_begin + motion.points_per_atom;
+  const auto right_begin = offsets ? offsets[right] : right * motion.points_per_atom;
+  const auto right_end = offsets ? offsets[right + 1] : right_begin + motion.points_per_atom;
+  const auto panel = shape.points * shape.nao;
+  const auto* aos = motion.basis + 3 * shape.atoms + 2 * shape.primitives;
+  const std::size_t start = blockIdx.x * blockDim.x + threadIdx.x;
+  const auto stride = std::size_t(gridDim.x) * blockDim.x;
+  double value{};
+  // A unit column changes the point or the AO center by one, with opposite
+  // signs. Derivative indices come from the compiler's spatial jet ordering.
+  for (std::size_t index = start; index < panel; index += stride) {
+    const auto point = index / shape.nao;
+    const auto center = static_cast<std::size_t>(aos[16 * (index % shape.nao)]);
+    const int sign = int(point >= left_begin && point < left_end) - int(center == left);
+    if (!sign) continue;
+    const int mixed_sign =
+        sign * (int(point >= right_begin && point < right_end) - int(center == right));
+    for (unsigned jet = 0; jet < 4; ++jet) {
+      const auto entry = jet * panel + index;
+      const auto first_jet = geometry_ad::cartesian_first_index(jet, left_axis);
+      const auto left_value = sign * motion.spatial[first_jet * panel + index];
+      value += first[entry] * left_value + left_coeff[entry] * left_value;
+      if (mixed_sign) {
+        const auto mixed_jet = geometry_ad::cartesian_mixed_index(jet, left_axis, right_axis);
+        value += second[entry] * (mixed_sign * motion.spatial[mixed_jet * panel + index]);
+      }
+    }
+  }
+  for (std::size_t point = start; point < shape.points; point += stride) {
+    value += right_partial[5 * shape.points + point] * motion.weights[point] +
+             base_partial[5 * shape.points + point] * motion.weights[2 * shape.points + point];
+    if (point >= left_begin && point < left_end)
+      value += right_partial[(6 + left_axis) * shape.points + point];
+  }
+  const auto sum = adjoint_sum(value);
+  if (!threadIdx.x) partials[blockIdx.x] = sum;
+}
+
+cudaError_t build_ao_adjoint(CudaWb97mvGridShape shape, const Layout& plan, double* arena,
+                             const double* density, cudaStream_t stream) {
+  const auto points = shape.points, panel = points * shape.nao;
+  auto* scratch = arena + plan.adjoint_scratch;
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  for (std::size_t begin = 0; begin < points;) {
+    const auto count = std::min(plan.adjoint_tile, points - begin);
+    const adjoints::Extents extents{shape.nao, count};
+    const auto offset = begin * shape.nao;
+    const auto* ao = arena + plan.ao + offset;
+    const auto* right = arena + plan.right_ao + offset;
+    const auto* first_partial = arena + plan.right_partial + begin;
+    const auto* second_partial = arena + plan.base_partial + begin;
+    auto* first = arena + plan.adjoint_first + offset;
+    auto* second = arena + plan.adjoint_second + offset;
+    auto* left = arena + plan.adjoint_left + offset;
+    auto error = adjoints::launch_feature_direction(
+        extents, ao, ao + panel, ao + 2 * panel, ao + 3 * panel, first_partial + points,
+        first_partial + 2 * points, first_partial + 3 * points, first_partial,
+        first_partial + 4 * points, density, first, first + panel, first + 2 * panel,
+        first + 3 * panel, scratch, plan.adjoint_bytes, status, stream);
+    if (error != cudaSuccess) return error;
+    error = adjoints::launch_feature_mixed(
+        extents, ao, ao + panel, ao + 2 * panel, ao + 3 * panel, second_partial + points,
+        second_partial + 2 * points, second_partial + 3 * points, second_partial,
+        second_partial + 4 * points, right, right + panel, right + 2 * panel, right + 3 * panel,
+        arena + plan.right_density, density, second, second + panel, second + 2 * panel,
+        second + 3 * panel, left, left + panel, left + 2 * panel, left + 3 * panel, scratch,
+        plan.adjoint_bytes, status, stream);
+    if (error != cudaSuccess) return error;
+    begin += count;
+  }
+  return cudaSuccess;
+}
+
 cudaError_t moving_features(const CudaWb97mvGridShape& shape, const Layout& plan, double* arena,
                             const double* ao, const double* density, const double* direction,
                             double* fields, cudaStream_t stream) noexcept {
@@ -1007,6 +1177,7 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
     double* potential, int* transaction_status, cudaStream_t stream) noexcept {
   nuclear_ready_ = false;
   private_nuclear_status_ = nullptr;
+  nuclear_adjoint_ready_ = false;
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   Layout plan;
@@ -1153,43 +1324,96 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_mixed(
                             transaction_status, stream);
 }
 
+bool CudaWb97mvGridResponse::admits_cartesian_mixed() const noexcept {
+  Layout plan;
+  return ready_ && layout(shape_, options_, plan) && plan.adjoint_bytes != 0;
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_private_cartesian_mixed(
+    const CudaGridGeometryCartesianView& motion, double* output, int* transaction_status,
+    cudaStream_t stream) noexcept {
+  if (!transaction_status) return cudaErrorInvalidValue;
+  return nuclear_mixed_impl(nullptr, nullptr, nullptr, nullptr, nullptr, output, transaction_status,
+                            stream, &motion);
+}
+
 cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
     const double* left_ao, const double* mixed_ao, const double* left_weights,
     const double* mixed_weights, const double* left_points, double* output, int* transaction_status,
-    cudaStream_t stream) noexcept {
+    cudaStream_t stream, const CudaGridGeometryCartesianView* cartesian) noexcept {
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   if (!nuclear_ready_ || (private_nuclear_status_ && private_nuclear_status_ != transaction_status))
     return cudaErrorInvalidResourceHandle;
   Layout plan;
   if (!layout(shape_, options_, plan) || work_.nuclear_contractions == UINT64_MAX ||
-      work_.nuclear_graph_replays == UINT64_MAX ||
-      plan.mixed_work > UINT64_MAX - work_.nuclear_affine_terms)
+      work_.nuclear_graph_replays == UINT64_MAX)
     return cudaErrorInvalidValue;
-  error = nuclear_buffers(shape_, plan, reference_, workspace_,
-                          {{left_ao, plan.ao_elements},
-                           {mixed_ao, plan.ao_elements},
-                           {left_weights, shape_.points},
-                           {mixed_weights, shape_.points},
-                           {left_points, 3 * shape_.points}},
-                          output, 1);
+  const bool use_adjoint = transaction_status && plan.adjoint_bytes != 0;
+  const auto build_work = use_adjoint && !nuclear_adjoint_ready_ ? plan.adjoint_build_work : 0;
+  const auto contract_work = use_adjoint ? plan.adjoint_dot_work : plan.mixed_work;
+  if (build_work > UINT64_MAX - work_.nuclear_affine_terms ||
+      contract_work > UINT64_MAX - work_.nuclear_affine_terms - build_work)
+    return cudaErrorInvalidValue;
+  if (cartesian) {
+    if (!use_adjoint || private_nuclear_status_ != transaction_status ||
+        cartesian->basis != reference_.basis || cartesian->atoms != shape_.atoms ||
+        cartesian->left / 3 >= shape_.atoms || cartesian->right / 3 >= shape_.atoms)
+      return cudaErrorInvalidValue;
+    error = nuclear_buffers(
+        shape_, plan, reference_, workspace_,
+        {{cartesian->spatial, 5 * plan.ao_elements}, {cartesian->weights, 3 * shape_.points}},
+        output, 1);
+  } else {
+    error = nuclear_buffers(shape_, plan, reference_, workspace_,
+                            {{left_ao, plan.ao_elements},
+                             {mixed_ao, plan.ao_elements},
+                             {left_weights, shape_.points},
+                             {mixed_weights, shape_.points},
+                             {left_points, 3 * shape_.points}},
+                            output, 1);
+  }
   if (error != cudaSuccess) return error;
   auto* arena = static_cast<double*>(workspace_);
   auto* status = reinterpret_cast<int*>(arena + plan.status);
   if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess)
     return drain(error, stream);
-  for (const auto& [input, count] : {std::pair{left_ao, plan.ao_elements},
-                                     {mixed_ao, plan.ao_elements},
-                                     {left_weights, shape_.points},
-                                     {mixed_weights, shape_.points},
-                                     {left_points, 3 * shape_.points}}) {
-    maps::finite_input<<<maps::blocks(count), 128, 0, stream>>>(input, count, status);
-    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  }
+  if (!cartesian)
+    for (const auto& [input, count] : {std::pair{left_ao, plan.ao_elements},
+                                       {mixed_ao, plan.ao_elements},
+                                       {left_weights, shape_.points},
+                                       {mixed_weights, shape_.points},
+                                       {left_points, 3 * shape_.points}}) {
+      maps::finite_input<<<maps::blocks(count), 128, 0, stream>>>(input, count, status);
+      if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+    }
   if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
     return error;
-  work_.nuclear_affine_terms += plan.mixed_work;
-  if (plan.replay) {
+  work_.nuclear_affine_terms += build_work + contract_work;
+  if (use_adjoint) {
+    if (!nuclear_adjoint_ready_) {
+      error = build_ao_adjoint(shape_, plan, arena, reference_.density, stream);
+      if (error != cudaSuccess) return drain(error, stream);
+      nuclear_adjoint_ready_ = true;
+      ++work_.nuclear_adjoint_builds;
+    }
+    if (cartesian)
+      contract_cartesian_ao_adjoint<<<adjoint_blocks, 128, 0, stream>>>(
+          shape_, *cartesian, arena + plan.adjoint_first, arena + plan.adjoint_second,
+          arena + plan.adjoint_left, arena + plan.base_partial, arena + plan.right_partial,
+          arena + plan.adjoint_partials, status);
+    else
+      contract_ao_adjoint<<<adjoint_blocks, 128, 0, stream>>>(
+          plan.ao_elements, shape_.points, arena + plan.adjoint_first, arena + plan.adjoint_second,
+          arena + plan.adjoint_left, arena + plan.base_partial, arena + plan.right_partial, left_ao,
+          mixed_ao, left_weights, mixed_weights, left_points, arena + plan.adjoint_partials,
+          status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+    finish_ao_adjoint<<<1, 128, 0, stream>>>(arena + plan.adjoint_partials, arena + plan.scalar,
+                                             status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  }
+  if (plan.replay && !use_adjoint) {
     for (const auto& [input, offset, count] :
          {std::tuple{left_ao, plan.staged_left_ao, plan.ao_elements},
           std::tuple{mixed_ao, plan.staged_mixed_ao, plan.ao_elements},
@@ -1208,9 +1432,10 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
   }
   // Capture only immutable arithmetic/storage bindings. Authentication, input
   // validation and transactional publication remain outside the replay graph.
-  error = nuclear_graph_ ? cudaGraphLaunch(nuclear_graph_, stream)
-                         : enqueue_nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights,
-                                                 left_points, stream);
+  if (!use_adjoint)
+    error = nuclear_graph_ ? cudaGraphLaunch(nuclear_graph_, stream)
+                           : enqueue_nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights,
+                                                   left_points, stream);
   if (error != cudaSuccess) return drain(error, stream);
   if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
     return error;
@@ -1227,6 +1452,7 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
   if (error == cudaSuccess) {
     ++work_.nuclear_contractions;
     if (nuclear_graph_) ++work_.nuclear_graph_replays;
+    if (use_adjoint) ++work_.nuclear_adjoint_contractions;
   }
   return error;
 }

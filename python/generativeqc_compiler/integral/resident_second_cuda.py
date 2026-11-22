@@ -15,7 +15,9 @@ from .second_derivatives import build_second_derivative_kernel
 from .second_derivatives_native import emit_second_derivative_primitive
 
 
-def emit_resident_second(integral: Any, indices: tuple[int, ...]) -> str:
+def emit_resident_second(
+    integral: Any, indices: tuple[int, ...], *, batched: bool = False
+) -> str:
     """Lower selected raw AO components with unit cotangents before scalar AD."""
     if not indices or len(indices) > 16 or len(set(indices)) != len(indices):
         raise ValueError(
@@ -38,7 +40,9 @@ def emit_resident_second(integral: Any, indices: tuple[int, ...]) -> str:
     evaluate = (
         "double unit = 1; switch (component) {" + "".join(cases) + "} return false;"
     )
-    return _runtime("\n".join(sources), evaluate, exponents, centers, len(indices))
+    return _runtime(
+        "\n".join(sources), evaluate, exponents, centers, len(indices), batched=batched
+    )
 
 
 def emit_resident_df_second(
@@ -61,19 +65,48 @@ def emit_resident_df_second(
 
 
 def _runtime(
-    source: str, evaluate: str, exponents: int, centers: int, components: int
+    source: str,
+    evaluate: str,
+    exponents: int,
+    centers: int,
+    components: int,
+    *,
+    batched: bool = False,
 ) -> str:
     outputs = 1 + 6 * centers
     stride = exponents + 3 * centers + 1
+    if batched:
+        descriptor = "generativeqc::dft::hessian_aot::FactorizedIntegralBatch"
+        include = '#include "dft/factorized_hessian_integral.hpp"\n'
+        parameter = f", const {descriptor}* batches"
+        scalar_argument = ", nullptr"
+        batch_binding = """  if (batches) {
+    const auto& batch = batches[blockIdx.y];
+    records = batch.records; count = batch.count; atoms = batch.atoms; output = batch.output;
+  }
+"""
+        batch_launch = f"""
+extern "C" int generativeqc_resident_integral_batch(double omega,
+    const {descriptor}* batches, size_t count, const double* direction,
+    long long frozen_atom, int* status, cudaStream_t stream) {{
+  if (omega != 0 || frozen_atom >= 0 || !batches || !count || count > 65535 ||
+      !direction || !status) return static_cast<int>(cudaErrorInvalidValue);
+  resident_integral_kernel<<<dim3({components}, count),64,0,stream>>>(
+      nullptr,0,nullptr,direction,nullptr,status,batches);
+  return static_cast<int>(cudaGetLastError());
+}}
+"""
+    else:
+        include = parameter = scalar_argument = batch_binding = batch_launch = ""
     return (
         source
         + f"""
 #include <cuda_runtime.h>
-__device__ bool resident_evaluate(int component, const double* record,
+{include}__device__ bool resident_evaluate(int component, const double* record,
     const double* direction, double* output) {{ {evaluate} }}
 __global__ void resident_integral_kernel(const double* records, size_t count,
-    const long long* atoms, const double* molecular_direction, double* output, int* status) {{
-  const int component = blockIdx.x;
+    const long long* atoms, const double* molecular_direction, double* output, int* status{parameter}) {{
+{batch_binding}  const int component = blockIdx.x;
   if (component >= {components}) return;
   __shared__ double terms[{outputs}][64];
   double direction[{3 * centers}];
@@ -112,8 +145,8 @@ __global__ void resident_integral_kernel(const double* records, size_t count,
 }}
 extern "C" int generativeqc_resident_integral(const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status, cudaStream_t stream) {{
-  resident_integral_kernel<<<{components},64,0,stream>>>(records,count,atoms,direction,output,status);
+  resident_integral_kernel<<<{components},64,0,stream>>>(records,count,atoms,direction,output,status{scalar_argument});
   return static_cast<int>(cudaGetLastError());
 }}
-"""
+{batch_launch}"""
     )

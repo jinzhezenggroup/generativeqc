@@ -16,6 +16,10 @@ struct Layout {
       products{}, exponents{}, zero{}, status{}, panel{}, basis_elements{}, point_pairs{},
       ao_primitive_terms{}, replay_terms{}, point_directions{}, resident_points{}, replay_points{};
 };
+struct PartitionPair {
+  ad::Jet distance;
+  double adjustment;
+};
 bool product(std::size_t first, std::size_t second, std::size_t& result) {
   if (second && first > SIZE_MAX / second) return false;
   result = first * second;
@@ -65,7 +69,7 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
   if (plan.basis_elements > SIZE_MAX / sizeof(double)) return false;
   std::size_t count{};
   if (!append(plan, moving, plan.candidate_ao) || !product(3, shape.points, count) ||
-      !append(plan, count, plan.candidate_weights) || !product(4, matrix, count) ||
+      !append(plan, count, plan.candidate_weights) || !product(5, matrix, count) ||
       !append(plan, count, plan.pairs) || !product(4, tile, count) ||
       !append(plan, count, plan.distances) || !append(plan, count, plan.products) ||
       !append(plan, tile, plan.exponents) || !append(plan, atomic, plan.zero) ||
@@ -138,6 +142,14 @@ __device__ double maximum(ad::Jet jet) {
   return fmax(fmax(fabs(jet.value), fabs(jet.left)), fmax(fabs(jet.right), fabs(jet.mixed)));
 }
 __device__ ad::Jet scale(ad::Jet jet, int exponent) {
+  // The same representable binary factor applies to all four lanes. A
+  // normal FP64 factor preserves ldexp rounding, including subnormal
+  // results, without four independent exponent-decomposition paths.
+  if (exponent == 0) return jet;
+  if (exponent >= -1022 && exponent <= 1023) {
+    const auto factor = __hiloint2double((exponent + 1023) << 20, 0);
+    return {jet.value * factor, jet.left * factor, jet.right * factor, jet.mixed * factor};
+  }
   return {ldexp(jet.value, exponent), ldexp(jet.left, exponent), ldexp(jet.right, exponent),
           ldexp(jet.mixed, exponent)};
 }
@@ -148,8 +160,11 @@ __device__ bool normalize(ad::Jet& jet, long long& exponent) {
     exponent = 0;
     return true;
   }
-  int shift{};
-  (void)frexp(magnitude, &shift);
+  // For a normal finite positive binary64, frexp's exponent is the stored
+  // exponent minus 1022. Let libdevice handle subnormal inputs.
+  const auto biased = static_cast<int>(__double_as_longlong(magnitude) >> 52);
+  int shift = biased - 1022;
+  if (!biased) (void)frexp(magnitude, &shift);
   jet = scale(jet, -shift);
   exponent += shift;
   return true;
@@ -242,7 +257,8 @@ __global__ void validate_basis(CudaGridGeometryShape shape, const double* basis,
 }
 __global__ void pair_geometry(const double* centers, const double* left, const double* right,
                               const generativeqc_grid_pair_geometry::CenterPair* prepared,
-                              std::size_t atoms, double tolerance, ad::Jet* pairs, int* status) {
+                              const double* radii, std::size_t atoms, double tolerance,
+                              PartitionPair* pairs, int* status) {
   if (atomicAdd(status, 0)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < atoms * atoms;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
@@ -265,7 +281,14 @@ __global__ void pair_geometry(const double* centers, const double* left, const d
       distance = ad::norm(coordinates[0], coordinates[1], coordinates[2]);
     }
     if (!finite(distance) || distance.value <= tolerance) atomicExch(status, 1);
-    pairs[index] = distance;
+    // Treutler's radius adjustment depends only on the two elements, not the
+    // grid point or its motion. Compute it once per pair for this dispatch.
+    double adjustment = 0;
+    if (radii) {
+      const double ratio = sqrt(radii[second] / radii[first]);
+      adjustment = fmax(-0.5, fmin(0.5, 0.25 * (ratio - 1 / ratio)));
+    }
+    pairs[index] = {distance, adjustment};
   }
 }
 /** Prefix metadata is fixed under nuclear motion; no density pruning or
@@ -292,19 +315,28 @@ __global__ void validate_grid_topology(CudaGridGeometryShape shape, const std::u
       atomicExch(status, 1);
   }
 }
+template <bool block_local>
 __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometryOptions options,
                                    const double* centers, const double* points,
                                    const double* weights, const double* atomic_weights,
                                    const std::uint64_t* offsets, const double* radii,
-                                   const double* left, const double* right, const ad::Jet* pairs,
-                                   std::size_t begin, std::size_t count, ad::Jet* distances,
-                                   ad::Jet* products, long long* exponents, double* output,
-                                   int* status) {
+                                   const double* left, const double* right,
+                                   const PartitionPair* pairs, std::size_t begin, std::size_t count,
+                                   ad::Jet* distances, ad::Jet* products, long long* exponents,
+                                   double* output, int* status) {
   if (atomicAdd(status, 0)) return;
+  if constexpr (block_local) {
+    extern __shared__ double scratch_words[];
+    const auto jets = shape.atoms * blockDim.x;
+    distances = reinterpret_cast<ad::Jet*>(scratch_words);
+    products = distances + jets;
+    exponents = reinterpret_cast<long long*>(products + jets);
+  }
+  const auto stride = block_local ? blockDim.x : std::size_t{1};
   for (std::size_t local = blockIdx.x * blockDim.x + threadIdx.x; local < count;
        local += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     const auto point = begin + local, owner = grid_owner(shape, offsets, point);
-    const auto scratch = local * shape.atoms;
+    const auto scratch = block_local ? threadIdx.x : local * shape.atoms;
     auto result = ad::Jet{1, 0, 0, 0};
     bool valid = isfinite(atomic_weights[point]) && isfinite(weights[point]);
     if (shape.atoms > 1) {
@@ -314,10 +346,11 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
           coordinates[axis] = {points[3 * point + axis] - centers[3 * atom + axis],
                                left[3 * owner + axis] - left[3 * atom + axis],
                                right[3 * owner + axis] - right[3 * atom + axis], 0};
-        distances[scratch + atom] = ad::norm(coordinates[0], coordinates[1], coordinates[2]);
-        valid = valid && finite(distances[scratch + atom]) && distances[scratch + atom].value > 0;
-        products[scratch + atom] = {1, 0, 0, 0};
-        exponents[scratch + atom] = 0;
+        const auto slot = scratch + atom * stride;
+        distances[slot] = ad::norm(coordinates[0], coordinates[1], coordinates[2]);
+        valid = valid && finite(distances[slot]) && distances[slot].value > 0;
+        products[slot] = {1, 0, 0, 0};
+        exponents[slot] = 0;
       }
       if (!valid) {
         atomicExch(status, 1);
@@ -325,28 +358,29 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
       }
       for (std::size_t first = 0; first < shape.atoms; ++first)
         for (std::size_t second = 0; second < first; ++second) {
-          auto coordinate =
-              ad::ratio(ad::subtract(distances[scratch + first], distances[scratch + second]),
-                        pairs[first * shape.atoms + second]);
+          const auto first_slot = scratch + first * stride;
+          const auto second_slot = scratch + second * stride;
+          const auto& geometry = pairs[first * shape.atoms + second];
+          auto coordinate = ad::ratio(ad::subtract(distances[first_slot], distances[second_slot]),
+                                      geometry.distance);
           if (radii) {
             if (coordinate.value <= -1)
               coordinate = {-1, 0, 0, 0};
             else if (coordinate.value >= 1)
               coordinate = {1, 0, 0, 0};
-            const double ratio = sqrt(radii[second] / radii[first]);
-            const double adjustment = fmax(-0.5, fmin(0.5, 0.25 * (ratio - 1 / ratio)));
-            coordinate = ad::treutler_adjust(coordinate, {adjustment, 0, 0, 0});
+            coordinate = ad::treutler_adjust(coordinate, {geometry.adjustment, 0, 0, 0});
           }
           const auto pair = becke(coordinate, options.partition_iterations);
           valid = valid && finite(coordinate) && finite(pair);
-          valid = multiply(products[scratch + first], exponents[scratch + first], pair) && valid;
-          valid = multiply(products[scratch + second], exponents[scratch + second],
-                           ad::complement(pair)) &&
+          valid = multiply(products[first_slot], exponents[first_slot], pair) && valid;
+          valid = multiply(products[second_slot], exponents[second_slot], ad::complement(pair)) &&
                   valid;
         }
       long long common = LLONG_MIN;
-      for (std::size_t atom = 0; atom < shape.atoms; ++atom)
-        if (maximum(products[scratch + atom])) common = max(common, exponents[scratch + atom]);
+      for (std::size_t atom = 0; atom < shape.atoms; ++atom) {
+        const auto slot = scratch + atom * stride;
+        if (maximum(products[slot])) common = max(common, exponents[slot]);
+      }
       if (!valid || common == LLONG_MIN) {
         atomicExch(status, 1);
         continue;
@@ -355,9 +389,10 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
       // A common exponent keeps every component of the normalized quotient in
       // one unit. Never divide by a pair factor: it may round to exact zero.
       for (std::size_t atom = 0; atom < shape.atoms; ++atom) {
-        const auto difference = exponents[scratch + atom] - common;
-        const auto value = maximum(products[scratch + atom]) && difference >= -1074
-                               ? scale(products[scratch + atom], static_cast<int>(difference))
+        const auto slot = scratch + atom * stride;
+        const auto difference = exponents[slot] - common;
+        const auto value = maximum(products[slot]) && difference >= -1074
+                               ? scale(products[slot], static_cast<int>(difference))
                                : ad::Jet{};
         total = ad::add(total, value);
         if (atom == owner) numerator = value;
@@ -450,23 +485,44 @@ cudaError_t CudaGridGeometryResponse::partition(const double* left, const double
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   auto* base = static_cast<char*>(workspace_);
   auto* status = reinterpret_cast<int*>(base + plan.status);
-  auto* pairs = reinterpret_cast<ad::Jet*>(base + plan.pairs);
+  auto* pairs = reinterpret_cast<PartitionPair*>(base + plan.pairs);
   const auto stream = reference_.stream;
   pair_geometry<<<blocks(shape_.atoms * shape_.atoms), 128, 0, stream>>>(
-      reference_.basis, left, right, reference_.center_pairs, shape_.atoms,
+      reference_.basis, left, right, reference_.center_pairs, reference_.atomic_radii, shape_.atoms,
       options_.coincident_tolerance, pairs, status);
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return drain(error, stream);
+  // Full-grid dispatch only for small, default-sized plans. Each lane owns its
+  // scratch; up to 24 KiB per block stays within default shared-memory limits.
+  // Retain the same bounded arena and tiled path for larger or explicit tiles.
+  constexpr std::size_t threads = 32;
+  const auto grid = [=](std::size_t count) {
+    return std::min<std::size_t>(1 + (count - 1) / threads, 65535);
+  };
+  const auto* basis = reference_.basis;
+  auto* weights = reinterpret_cast<double*>(base + plan.candidate_weights);
+  constexpr std::size_t scratch_per_atom = threads * (2 * sizeof(ad::Jet) + sizeof(long long));
+  if (shape_.atoms <= (24 * 1024) / scratch_per_atom && shape_.points <= 8192 &&
+      options_.point_tile == CudaGridGeometryOptions{}.point_tile) {
+    const auto bytes = shape_.atoms * scratch_per_atom;
+    partition_geometry<true><<<grid(shape_.points), threads, bytes, stream>>>(
+        shape_, options_, basis, reference_.points, reference_.weights, reference_.atomic_weights,
+        reference_.atom_offsets, reference_.atomic_radii, left, right, pairs, 0, shape_.points,
+        nullptr, nullptr, nullptr, weights, status);
+    error = cudaGetLastError();
+    return error == cudaSuccess ? error : drain(error, stream);
+  }
   for (std::size_t begin = 0; begin < shape_.points;
        begin += std::min(options_.point_tile, shape_.points - begin)) {
     const auto count = std::min(options_.point_tile, shape_.points - begin);
-    partition_geometry<<<blocks(count), 128, 0, stream>>>(
-        shape_, options_, reference_.basis, reference_.points, reference_.weights,
-        reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii, left, right,
-        pairs, begin, count, reinterpret_cast<ad::Jet*>(base + plan.distances),
+    // Points are independent and each thread serially visits all center pairs.
+    // One warp per block distributes the bounded tile over more SMs.
+    partition_geometry<false><<<grid(count), threads, 0, stream>>>(
+        shape_, options_, basis, reference_.points, reference_.weights, reference_.atomic_weights,
+        reference_.atom_offsets, reference_.atomic_radii, left, right, pairs, begin, count,
+        reinterpret_cast<ad::Jet*>(base + plan.distances),
         reinterpret_cast<ad::Jet*>(base + plan.products),
-        reinterpret_cast<long long*>(base + plan.exponents),
-        reinterpret_cast<double*>(base + plan.candidate_weights), status);
+        reinterpret_cast<long long*>(base + plan.exponents), weights, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   }
   return cudaSuccess;
@@ -648,8 +704,8 @@ __global__ void record_geometry_status(const int* status, int* transaction_statu
 }  // namespace
 
 cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const double* right,
-                                                     cudaStream_t stream,
-                                                     int* transaction_status) noexcept {
+                                                     cudaStream_t stream, int* transaction_status,
+                                                     bool weights_only) noexcept {
   auto error = admit_actions(1);
   if (error != cudaSuccess) return error;
   Layout plan;
@@ -673,7 +729,7 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
   if (error != cudaSuccess) return drain(error, stream);
   auto* resident = reinterpret_cast<double*>(base + plan.spatial);
   auto* replay = resident + 20 * plan.resident_points * shape_.nao;
-  for (std::size_t begin = 0; begin < shape_.points;) {
+  for (std::size_t begin = 0; !weights_only && begin < shape_.points;) {
     const bool cached = begin < plan.resident_points;
     const auto count =
         cached ? plan.resident_points : std::min(plan.replay_points, shape_.points - begin);
@@ -698,6 +754,34 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
     return error;
   }
   return authenticate(stream);
+}
+
+cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_view(
+    const double* left, const double* right, std::size_t left_column, std::size_t right_column,
+    CudaGridGeometryCartesianView& view, int* transaction_status, cudaStream_t stream) noexcept {
+  view = {};
+  motion_ready_ = false;
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  if (!transaction_status || left_column / 3 >= shape_.atoms || right_column / 3 >= shape_.atoms)
+    return cudaErrorInvalidValue;
+  Layout plan;
+  if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
+  if (plan.resident_points != shape_.points) return cudaErrorNotSupported;
+  if ((error = evaluate_mixed(left, right, stream, transaction_status, true)) != cudaSuccess)
+    return error;
+  const auto* base = static_cast<const char*>(workspace_);
+  view = {reference_.basis,
+          reinterpret_cast<const double*>(base + plan.spatial),
+          reinterpret_cast<const double*>(base + plan.candidate_weights),
+          reference_.atom_offsets,
+          shape_.atoms,
+          shape_.points_per_atom,
+          left_column,
+          right_column};
+  ++work_.completed_actions;
+  work_.action_partition_pairs += plan.point_pairs;
+  return cudaSuccess;
 }
 
 void CudaGridGeometryResponse::finish_mixed() noexcept {

@@ -140,7 +140,7 @@ struct{unsigned published_hvps=0,published_hessians=0,completed_directions=0,cpk
 Owner(){fock.primary=&primary;}
 template<class T=double>T* at(std::size_t p){return reinterpret_cast<T*>(storage+p);}
 int admit(const double*,double*,bool,cudaStream_t){return q::reject?23:0;}
-int prepare_frozen_exact(){return 0;}
+int prepare_frozen_sources(){return 0;}
 int compute(CudaKsWb97mvHessianResult& r,bool=false,std::size_t=0,
 response::CudaCpksDenseReplay* replay=nullptr){
 if(q::throw_compute)throw std::runtime_error("child exception");

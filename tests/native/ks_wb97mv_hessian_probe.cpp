@@ -614,8 +614,10 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     options.grid.max_pair_evaluations = options.induced.grid.max_pair_evaluations = 0;
   if (mode.find("directional-exact") != std::string::npos) options.max_frozen_exact_bytes = 0;
   if (mode.find("physical-cpks") != std::string::npos) options.max_resident_cpks_bytes = 0;
-  if (mode.find("serial-one-electron") != std::string::npos)
+  if (mode.find("serial-one-electron") != std::string::npos) {
     options.one_electron.parallel_streams = 0;
+    options.max_frozen_core_bytes = 0;
+  }
   if (mode.find("serial-grid") != std::string::npos) options.grid.replay_nuclear_maps = false;
   if (mode.find("batch-chunked") != std::string::npos)
     options.exact.max_batch_projection_bytes = fitted ? 32ULL << 10 : 512;
@@ -726,7 +728,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
                 download(matrix, untouched.size()) == untouched,
             "action-only owner performed dense work or changed the caller output");
     const auto work = endpoint.work();
-    require(!work.cpks_operator_bytes && !work.frozen_exact_bytes,
+    require(!work.cpks_operator_bytes && !work.frozen_exact_bytes && !work.frozen_core_bytes,
             "action-only owner reserved repeated-RHS storage");
   }
   require(endpoint.apply(direction, direction, lease.stream, result) != cudaSuccess,
@@ -923,6 +925,8 @@ void run(bool unrestricted, const std::string& mode, bool full) {
             << ",\"frozen_exact_bytes\":" << work.frozen_exact_bytes
             << ",\"frozen_exact_columns\":" << work.frozen_exact_columns
             << ",\"frozen_exact_contractions\":" << work.frozen_exact_contractions
+            << ",\"frozen_core_bytes\":" << work.frozen_core_bytes
+            << ",\"one_electron_components\":" << work.one_electron.integrals.component_evaluations
             << ",\"parallel_one_electron_bytes\":"
             << work.one_electron.integrals.parallel_workspace_bytes
             << ",\"parallel_one_electron_actions\":" << work.one_electron.integrals.parallel_actions

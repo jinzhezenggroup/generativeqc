@@ -15,6 +15,7 @@ from generativeqc_compiler.method.spec import resolve_method
 from generativeqc_compiler.method.wb97mv_grid_response import point_field_partials
 from generativeqc_compiler.method.wb97mv_nuclear_grid import (
     nonlocal_field_program,
+    nuclear_grid_ao_adjoints,
     nuclear_grid_maps,
 )
 from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda, emit_affine_work
@@ -43,6 +44,7 @@ def _leg_variables(side: str, point: str) -> dict[str, str]:
 def generate() -> str:
     """Emit native runtime-sized maps; no numerical/runtime discovery imports."""
     programs = nuclear_grid_maps()
+    adjoints = nuclear_grid_ao_adjoints()
     extents = {"point": "points", "ao": "nao", "grid_value": "values"}
     text = [
         emit_affine_cuda(
@@ -56,6 +58,18 @@ def generate() -> str:
         ),
         emit_affine_work(
             programs, namespace="generativeqc_wb97mv_nuclear_maps", extents=extents
+        ),
+        emit_affine_cuda(
+            adjoints,
+            namespace="generativeqc_wb97mv_nuclear_ao_adjoints",
+            extents={"point": "points", "ao": "nao"},
+            fuse_elementwise=True,
+            fuse_contraction_epilogues=True,
+        ),
+        emit_affine_work(
+            adjoints,
+            namespace="generativeqc_wb97mv_nuclear_ao_adjoints",
+            extents={"point": "points", "ao": "nao"},
         ),
         "namespace generativeqc_wb97mv_nuclear_ad {",
     ]
