@@ -94,7 +94,8 @@ class CudaKsGridReference {
             binding_.weights,      binding_.atomic_weights,
             binding_.device_id,    reinterpret_cast<cudaStream_t>(binding_.stream),
             authenticate,          this,
-            binding_.atom_offsets, binding_.atomic_radii};
+            binding_.atom_offsets, binding_.atomic_radii,
+            binding_.center_pairs};
   }
 
  private:

@@ -11,9 +11,11 @@ sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
+from generativeqc_compiler.xc.grid_center_pair import emit_center_pair_layout
 from generativeqc_compiler.xc.grid_geometry_response import (
     ao_motion_program,
     local_program,
+    prepared_center_norm_program,
 )
 
 from tools.generate_df_kernels import write_if_changed
@@ -28,7 +30,13 @@ def generate(backend: str = "cuda") -> str:
     text = [
         "#pragma once",
         "#include <cstddef>" if backend == "cpu" else "#include <cuda_runtime.h>",
+        "#include <array>",
+        "#include <cstddef>",
         "#include <cmath>",
+        "#define GENERATIVEQC_GRID_HD "
+        + ("__host__ __device__" if backend == "cuda" else ""),
+        emit_center_pair_layout(),
+        "#undef GENERATIVEQC_GRID_HD",
         "namespace generativeqc_grid_geometry_ad {",
         "struct Jet { double value{}, left{}, right{}, mixed{}; };",
     ]
@@ -66,6 +74,23 @@ def generate(backend: str = "cuda") -> str:
                 "}",
             ]
         )
+    graph, roots, names = prepared_center_norm_program()
+    variables = {"prepared_distance": "pair.distance[0]"}
+    for index, name in enumerate(names):
+        variables[name] = f"pair.distance[{index + 1}]"
+        variables[f"l{name}"] = f"left[{index}]"
+        variables[f"r{name}"] = f"right[{index}]"
+    emitter = emitter_type(graph, variables)
+    emitter.emit(roots)
+    text.extend(
+        [
+            f"{qualifier} Jet prepared_center_norm(const generativeqc_grid_pair_geometry::CenterPair& pair,",
+            " const double* left, const double* right) {",
+            *emitter.lines,
+            "return {" + ", ".join(emitter.reference(root) for root in roots) + "};",
+            "}",
+        ]
+    )
     graph, roots = ao_motion_program()
     if backend == "cpu":
         roots = graph.replace_subexpressions(

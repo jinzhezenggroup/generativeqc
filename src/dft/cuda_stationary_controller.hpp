@@ -57,6 +57,9 @@ class CudaStationaryController {
       const CudaKsResidentFittedProjectionBinding* fitted_projection = nullptr,
       const CudaKsResidentOccupiedFactorBinding* occupied_factor = nullptr);
   const CudaStationaryResources& resources() const noexcept { return resources_; }
+  /** Attach the optional FP64 geometry cache to the identical live primary
+   * grid binding. Both private owners must remain exclusively borrowed. */
+  void attach_center_pairs(CudaKsResidentGridBinding& grid) const noexcept;
 
  private:
   void close() noexcept;
@@ -74,6 +77,8 @@ class CudaStationaryController {
   std::optional<runtime::DeviceProviderAllowance> grid_provider_allowance_;
   std::optional<runtime::DeviceProviderAllowance> mixed_grid_provider_allowance_;
   CudaStationaryResources resources_;
+  CudaKsResidentDensityBinding center_pair_token_;
+  std::uint64_t center_pair_epoch_{};
   struct NonlocalOwner;
   std::unique_ptr<NonlocalOwner> nonlocal_;
 };

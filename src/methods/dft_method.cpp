@@ -1084,7 +1084,13 @@ class KsPreparedState final : public KsSingleOwnerPort {
     runtime::DeviceCapacityScope capacity_scope(capacity_);
     binding = {};
 #if GENERATIVEQC_HAS_CUDA
-    if (cuda_) return cuda_->resident_final_grid(expected, binding, detail, role);
+    if (cuda_) {
+      const auto status = cuda_->resident_final_grid(expected, binding, detail, role);
+      if (status == GENERATIVEQC_STATUS_SUCCESS && role == dft::CudaKsGridRole::primary &&
+          stationary_controller_)
+        stationary_controller_->attach_center_pairs(binding);
+      return status;
+    }
 #endif
     detail = "resident basis/grid requires a native CUDA KS owner";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;

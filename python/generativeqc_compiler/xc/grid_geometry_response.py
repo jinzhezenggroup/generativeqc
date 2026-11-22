@@ -81,6 +81,30 @@ def local_program(kind: str) -> tuple[Graph, tuple[Expr, ...], tuple[str, ...]]:
 
 
 @cache
+def prepared_center_norm_program() -> tuple[Graph, tuple[Expr, ...], tuple[str, ...]]:
+    """Specialize the differentiated norm at the force owner's unit separation.
+
+    The force table already contains the distance and its Cartesian gradient
+    (the unit separation). Norm homogeneity leaves first tangents unchanged
+    and rescales the mixed Cartesian tangent by the inverse physical distance.
+    """
+    graph, roots, names = local_program("norm")
+    unit_squared = graph.sum(
+        graph.variable(name) * graph.variable(name) for name in names
+    )
+    first, second, mixed = graph.replace_subexpressions(
+        roots[1:],
+        {unit_squared: graph.constant(1)}
+        | {graph.variable(f"lr{name}"): graph.constant(0) for name in names},
+    )
+    distance = graph.variable("prepared_distance")
+    graph, roots = graph.canonicalize_associative(
+        (distance, first, second, mixed / distance)
+    )
+    return graph, roots, names
+
+
+@cache
 def ao_motion_program() -> tuple[Graph, tuple[Expr, ...]]:
     """Return left/right/mixed order-one AO jets from ordinary order-three jets.
 

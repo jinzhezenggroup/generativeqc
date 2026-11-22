@@ -80,6 +80,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   const bool split_grid = mode.find("-split-grid") != std::string::npos;
   const bool resource_ledger = mode.find("-resource-ledger") != std::string::npos;
   const bool auto_precision = mode.find("-auto-precision") != std::string::npos;
+  const bool borrow_force_centers = mode.find("-borrow-force-centers") != std::string::npos;
   const bool fitted_xc_warmup = mode.find("-fitted-xc-warmup") != std::string::npos;
   const bool split_treutler = mode.find("-split-grid-treutler") != std::string::npos;
   const bool split_budget = mode.find("-split-grid-budget") != std::string::npos;
@@ -314,7 +315,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
   descriptor.density_fitting_relative_threshold = cutoff;
   descriptor.ks_options = &ks;
   generativeqc_ks_options vv10{};
-  dft::NonlocalGridKsOptions split{};
+  generativeqc_ks_nonlocal_grid_options split{};
   if (split_grid) {
     vv10 = ks;
     vv10.radial_points = split_treutler ? 0 : 6;
@@ -322,6 +323,7 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     vv10.angular_azimuth = split_treutler ? 0 : 6;
     split.base.base = ks;
     split.base.base.struct_size = sizeof(split);
+    split.version = 1;
     split.grid = &vv10;
     descriptor.ks_options = &split.base.base;
   }
@@ -421,8 +423,33 @@ void run(bool unrestricted, const std::string& mode, bool full) {
         *batch, 0, token, 128U << 20, gradient, resources, detail);
     require(status == GENERATIVEQC_STATUS_SUCCESS, detail);
   }
+  if (borrow_force_centers) {
+    dft::CudaKsGridReference before_force(*batch, 0, token);
+    require(before_force.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    require(!before_force.geometry_reference().center_pairs,
+            "cold Hessian must not require a force allocation");
+    const auto prepare_force = [&] {
+      dft::CudaStationaryResources resources;
+      require(methods::detail::dft_cuda_native_stationary_gradient(*batch, 0, token, 128U << 20,
+                                                                   gradient, resources, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail);
+      require(resources.cached_geometry, "force fixture did not retain its center table");
+    };
+    prepare_force();
+    dft::CudaKsGridReference first_force(*batch, 0, token);
+    require(first_force.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    const auto first_geometry = first_force.geometry_reference();
+    require(first_geometry.center_pairs, "Hessian did not borrow the live force table");
+    prepare_force();
+    require(first_geometry.authenticate(first_geometry.owner) == cudaErrorInvalidResourceHandle,
+            "borrow survived a force-table reset at the same KS token");
+  }
   dft::CudaKsGridReference reference(*batch, 0, token);
   require(reference.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  if (borrow_force_centers)
+    require(reference.geometry_reference().center_pairs,
+            "Hessian did not reborrow the new force-table publication");
   const auto shape = reference.shape();
   const auto lease = reference.reference();
   dft::CudaKsGridReference vv10_reference(*batch, 0, token, dft::CudaKsGridRole::separate_nonlocal);
@@ -467,14 +494,87 @@ void run(bool unrestricted, const std::string& mode, bool full) {
           &public_batch, 0, &controls, full ? nullptr : motion.data(), full ? 0 : motion.size(),
           output.data(), output.size(), &receipt);
     };
-    ledger->limit = retained;
     std::fill(output.begin(), output.end(), 37.0);
     receipt.completed_directions = 41;
-    require(execute() == GENERATIVEQC_STATUS_OUT_OF_MEMORY && receipt.completed_directions == 41 &&
-                ledger->live == retained &&
-                std::all_of(output.begin(), output.end(), [](double value) { return value == 37; }),
+    const auto unpublished = [&] {
+      return receipt.completed_directions == 41 && ledger->live == retained &&
+             std::all_of(output.begin(), output.end(), [](double value) { return value == 37; });
+    };
+    const auto output_capacity = controls.output_bytes;
+    const auto preparation_peak = ledger->peak;
+    controls.output_bytes = 1;
+    require(execute() == GENERATIVEQC_STATUS_INVALID_ARGUMENT && unpublished() &&
+                ledger->peak == preparation_peak,
+            "short output capacity must fail before allocating device response storage");
+    controls.output_bytes = output_capacity;
+    ledger->limit = retained;
+    require(execute() == GENERATIVEQC_STATUS_OUT_OF_MEMORY && unpublished(),
             "resource rejection failed to preserve the output, receipt or SCF allocations");
     ledger->limit = limit;
+    if (benchmark_water && (lda || pbe)) {
+      auto stale_epoch = token, stale_grid = token, stale_provider = token;
+      ++stale_epoch.identity.determinant.solve_epoch;
+      ++stale_grid.identity.model.grid.partition_iterations;
+      stale_provider.identity.determinant.model.screening_tolerance *= 0.5;
+      using Failure = std::pair<const dft::CudaKsFinalStateToken*, const char*>;
+      for (const auto& [stale, source] :
+           {Failure{&stale_epoch, "solve epoch"}, Failure{&stale_grid, "grid prescription"},
+            Failure{&stale_provider, "integral provider"}}) {
+        dft::CudaKsWb97mvHessian rejected;
+        dft::CudaKsWb97mvHessianOptions policy;
+        const auto mode = full ? dft::CudaKsWb97mvHessianMode::dense_and_action
+                               : dft::CudaKsWb97mvHessianMode::action_only;
+        require(rejected.prepare(*public_batch.plan, 0, *stale, mode, policy, detail) ==
+                        GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                    rejected.work().device_bytes == 0 && unpublished(),
+                std::string("Hessian accepted or leaked storage on stale ") + source);
+      }
+      // Use a real converged CUDA determinant with the explicit host XC
+      // schedule. Its owner never allocated resident XC quadrature; a stale
+      // token or a synthetic null pointer would test a different boundary.
+      {
+        auto host_xc = ks;
+        host_xc.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_HOST_UNFUSED;
+        auto host_xc_descriptor = descriptor;
+        host_xc_descriptor.ks_options = &host_xc;
+        generativeqc_context missing_context;
+        generativeqc_batch missing_batch;
+        missing_batch.context = &missing_context;
+        missing_batch.resource_ledger = ledger;
+        missing_batch.atom_counts = public_batch.atom_counts;
+        {
+          runtime::DeviceResourceScope scope(ledger);
+          missing_batch.plan =
+              methods::prepare_batch(context, {system}, host_xc_descriptor, flags, nullptr);
+          const auto solved = missing_batch.plan->execute(methods::Coordinates(1), false);
+          require(solved.size() == 1 && solved[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+                      solved[0].calculation.convergence.converged,
+                  "host-unfused CUDA SCF did not converge");
+        }
+        dft::CudaKsFinalStateToken missing_token;
+        require(methods::detail::dft_final_state_token(*missing_batch.plan, 0, missing_token,
+                                                       detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    missing_token.strict_physical_fock,
+                "missing-grid fixture needs an accepted strict CUDA token: " + detail);
+        const auto missing_live = ledger->live;
+        const auto missing_status = generativeqc_ks_hessian_cuda_v2(
+            &missing_batch, 0, &controls, full ? nullptr : motion.data(), full ? 0 : motion.size(),
+            output.data(), output.size(), &receipt);
+        require(
+            missing_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                missing_context.last_detail.find("device-fused CUDA XC owner") !=
+                    std::string::npos &&
+                ledger->live == missing_live,
+            "missing resident XC primitive did not fail closed: " + missing_context.last_detail);
+      }
+      require(unpublished(), "missing resident XC primitive published output or leaked storage");
+      const auto convergent = controls;
+      controls.max_iterations = controls.restart = 1;
+      controls.absolute_tolerance = controls.relative_tolerance = 1e-30;
+      require(execute() == GENERATIVEQC_STATUS_NOT_CONVERGED && unpublished(),
+              "truncated CPKS solve published output or leaked device storage");
+      controls = convergent;
+    }
     require(execute() == GENERATIVEQC_STATUS_SUCCESS, public_context.last_detail);
     require(receipt.completed_directions == (full ? coordinates : 1) && receipt.device_bytes &&
                 ledger->peak >= retained + receipt.device_bytes && ledger->live == retained &&
@@ -680,11 +780,13 @@ void run(bool unrestricted, const std::string& mode, bool full) {
     check(cudaMemcpyAsync(matrix, matrix_sentinel.data(), matrix_sentinel.size() * sizeof(double),
                           cudaMemcpyHostToDevice, lease.stream));
     const auto matrix_status = endpoint.hessian(matrix, lease.stream, result);
-    require((matrix_status != cudaSuccess || !result.converged()) &&
+    require((matrix_status != cudaSuccess || !result.converged()) && result.response.converged() &&
+                result.completed_directions < coordinates &&
                 download(matrix, matrix_sentinel.size()) == matrix_sentinel,
             "undefined cutoff Hessian changed the caller output");
     const auto work = endpoint.work();
-    require(!work.published_hvps && !work.published_hessians,
+    require(!work.published_hvps && !work.published_hessians &&
+                work.completed_directions == result.completed_directions,
             "undefined cutoff reported a published result");
     std::cout << "{\"hard_cutoff_preserves_output\":true}\n";
     return;

@@ -215,6 +215,9 @@ function(generativeqc_add_hessian_aot target inventory)
     target_link_libraries(${target} PUBLIC CUDA::cudart)
   endif()
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
+  # The mixed Becke consumer reads the force owner's shared std::array layout.
+  set_property(SOURCE "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu" APPEND
+    PROPERTY COMPILE_OPTIONS --expt-relaxed-constexpr)
   set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
     CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON CUDA_SEPARABLE_COMPILATION OFF)
   if(GENERATIVEQC_BUILD_TESTS)

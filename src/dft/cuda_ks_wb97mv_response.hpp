@@ -72,18 +72,24 @@ class CudaKsWb97mvResponse {
   cudaError_t apply(const double* direction, double* output, cudaStream_t stream) noexcept;
   /** Last action's static failure stage; null after a successful publication. */
   const char* failure_check() const noexcept;
+  /** Read aggregate audited action counts once at the outer publication fence. */
+  cudaError_t collect_work() noexcept;
   CudaKsWb97mvResponseWork work() const noexcept;
   /** Optional post-preparation admission, before the first action. Composite
    * owners call this only after all mandatory consumers have reserved storage.
    * The additional-byte cap includes extra provider metadata, not just values.
    * A resource refusal keeps the exact replay; numerical/device faults fail. */
   generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, std::string& detail);
-  /** Directly compatible with solve_cuda_cpks, passing this owner as context. */
+  /** Enqueue into CPKS's private output; audit failure poisons the panel.
+   * CPKS owns stream completion and failure draining. Do not expose this panel
+   * without checking it. Call collect_work at the outer endpoint boundary. */
   static cudaError_t induced_fock(void* context, const double* direction, double* output,
                                   const response::CudaCpksShape& shape,
                                   cudaStream_t stream) noexcept;
 
  private:
+  cudaError_t apply_impl(const double* direction, double* output, cudaStream_t stream,
+                         bool private_panel) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

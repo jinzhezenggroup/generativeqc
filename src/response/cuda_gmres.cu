@@ -52,12 +52,48 @@ cudaError_t settle(cudaStream_t stream, cudaError_t error) noexcept {
   const auto completion = cudaStreamSynchronize(stream);
   return error == cudaSuccess ? completion : error;
 }
+
+struct IterationGraph {
+  cudaGraph_t graph{};
+  cudaGraphExec_t execution{};
+  ~IterationGraph() {
+    if (execution) (void)cudaGraphExecDestroy(execution);
+    if (graph) (void)cudaGraphDestroy(graph);
+  }
+};
+
+struct Panels {
+  Panels(std::size_t dimension, const CudaGmresOptions& options, void* workspace) noexcept
+      : restart(std::min({dimension, options.restart, options.max_iterations})),
+        leading(restart + 1),
+        grid(blocks(dimension)),
+        state(static_cast<State*>(workspace)),
+        base(reinterpret_cast<double*>(static_cast<unsigned char*>(workspace) + state_bytes)),
+        residual(base + dimension),
+        work(residual + dimension),
+        candidate(work + dimension),
+        image(candidate + dimension),
+        basis(image + dimension),
+        directions(basis + leading * dimension),
+        hessenberg(directions + restart * dimension),
+        cosine(hessenberg + leading * restart),
+        sine(cosine + restart),
+        target(sine + restart),
+        coefficients(target + leading) {}
+
+  std::size_t restart, leading;
+  unsigned grid;
+  State* state;
+  double *base, *residual, *work, *candidate, *image, *basis, *directions, *hessenberg, *cosine,
+      *sine, *target, *coefficients;
+};
 }  // namespace
 
 cudaError_t cuda_gmres_workspace(std::size_t dimension, const CudaGmresOptions& options,
                                  std::size_t& bytes) noexcept {
   bytes = 0;
   if (!options.restart || !options.max_iterations ||
+      options.max_iterations > (std::numeric_limits<std::size_t>::max() - 1) / 2 ||
       (options.reorthogonalizations != 1 && options.reorthogonalizations != 2) ||
       !std::isfinite(options.relative_tolerance) || options.relative_tolerance < 0 ||
       options.relative_tolerance >= 1 || !std::isfinite(options.absolute_tolerance) ||
@@ -81,13 +117,12 @@ cudaError_t cuda_gmres_workspace(std::size_t dimension, const CudaGmresOptions& 
   return cudaSuccess;
 }
 
-cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& options,
-                             CudaGmresAction action, void* context, const double* rhs,
-                             const double* diagonal, double* solution, void* workspace,
-                             std::size_t workspace_bytes, cudaStream_t stream,
-                             CudaGmresResult& result, const double* initial_guess) noexcept {
-  result = {};
-  std::size_t required{}, vector_bytes{}, end{};
+namespace {
+bool admit(std::size_t dimension, const CudaGmresOptions& options, CudaGmresAction action,
+           const double* rhs, const double* diagonal, double* solution, void* workspace,
+           std::size_t workspace_bytes, const double* initial_guess,
+           std::size_t& required) noexcept {
+  std::size_t vector_bytes{}, end{};
   if (cuda_gmres_workspace(dimension, options, required) != cudaSuccess ||
       workspace_bytes < required || !multiply_size(dimension, sizeof(double), vector_bytes) ||
       (dimension && !action) || !interval(workspace, workspace_bytes, end) ||
@@ -102,142 +137,214 @@ cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& opti
                           overlap(solution, vector_bytes, initial_guess, vector_bytes)))) ||
       overlap(solution, vector_bytes, rhs, vector_bytes) ||
       (diagonal && overlap(solution, vector_bytes, diagonal, vector_bytes)))
-    return cudaErrorInvalidValue;
-  result.workspace_bytes = required;
+    return false;
+  return true;
+}
 
-  const auto restart = std::min({dimension, options.restart, options.max_iterations});
-  const auto leading = restart + 1;
-  const unsigned grid = blocks(dimension);
-  auto* state = static_cast<State*>(workspace);
-  auto* base = reinterpret_cast<double*>(static_cast<unsigned char*>(workspace) + state_bytes);
-  auto* residual = base + dimension;
-  auto* work = residual + dimension;
-  auto* candidate = work + dimension;
-  auto* image = candidate + dimension;
-  auto* basis = image + dimension;
-  auto* directions = basis + leading * dimension;
-  auto* hessenberg = directions + restart * dimension;
-  auto* cosine = hessenberg + leading * restart;
-  auto* sine = cosine + restart;
-  auto* target = sine + restart;
-  auto* coefficients = target + leading;
-
-  auto error = cudaMemsetAsync(workspace, 0, required, stream);
-  if (error != cudaSuccess) return settle(stream, error);
+cudaError_t initialize(const Panels& panels, std::size_t required, std::size_t dimension,
+                       const CudaGmresOptions& options, CudaGmresAction action, void* context,
+                       const double* rhs, const double* diagonal, const double* initial_guess,
+                       const int* upstream_status, cudaStream_t stream) noexcept {
+  const auto vector_bytes = dimension * sizeof(double);
+  auto error = cudaMemsetAsync(panels.state, 0, required, stream);
+  if (error != cudaSuccess) return error;
   if (dimension) {
-    error = cudaMemcpyAsync(residual, rhs, vector_bytes, cudaMemcpyDeviceToDevice, stream);
-    if (error != cudaSuccess) return settle(stream, error);
+    error = cudaMemcpyAsync(panels.residual, rhs, vector_bytes, cudaMemcpyDeviceToDevice, stream);
+    if (error != cudaSuccess) return error;
   }
-  kernels::validate<<<grid, kernels::threads, 0, stream>>>(rhs, diagonal, dimension,
-                                                           options.diagonal_floor, state);
-  kernels::norm<<<1, kernels::threads, 0, stream>>>(rhs, dimension, &state->rhs_norm, state,
-                                                    CudaGmresStatus::nonfinite_input);
+  kernels::validate<<<panels.grid, kernels::threads, 0, stream>>>(
+      rhs, diagonal, dimension, options.diagonal_floor, upstream_status, panels.state);
+  kernels::norm<<<1, kernels::threads, 0, stream>>>(rhs, dimension, &panels.state->rhs_norm,
+                                                    panels.state, CudaGmresStatus::nonfinite_input);
   const bool seeded = initial_guess && dimension;
   if (seeded) {
-    error = cudaMemcpyAsync(base, initial_guess, vector_bytes, cudaMemcpyDeviceToDevice, stream);
-    if (error != cudaSuccess) return settle(stream, error);
-    error = action(context, base, image, dimension, stream);
-    ++result.operator_actions;
-    if (error != cudaSuccess) return settle(stream, error);
+    error =
+        cudaMemcpyAsync(panels.base, initial_guess, vector_bytes, cudaMemcpyDeviceToDevice, stream);
+    if (error != cudaSuccess) return error;
+    if ((error = action(context, panels.base, panels.image, dimension, stream)) != cudaSuccess)
+      return error;
+    kernels::residual<<<panels.grid, kernels::threads, 0, stream>>>(
+        rhs, panels.image, panels.residual, dimension, panels.state);
+    kernels::norm<<<1, kernels::threads, 0, stream>>>(panels.residual, dimension,
+                                                      &panels.state->residual_norm, panels.state,
+                                                      CudaGmresStatus::nonfinite_operator);
+  }
+  kernels::initial<<<1, 1, 0, stream>>>(panels.state, options.relative_tolerance,
+                                        options.absolute_tolerance, seeded);
+  return cudaGetLastError();
+}
+
+cudaError_t build_iteration_graph(const Panels& panels, std::size_t dimension,
+                                  const CudaGmresOptions& options, CudaGmresAction action,
+                                  void* context, const double* rhs, const double* diagonal,
+                                  cudaStream_t stream, bool device_gate,
+                                  IterationGraph& loop) noexcept {
+  auto error = cudaGraphCreate(&loop.graph, 0);
+  if (error != cudaSuccess) return error;
+  cudaGraphConditionalHandle condition{};
+  error = cudaGraphConditionalHandleCreate(&condition, loop.graph, device_gate ? 0 : 1,
+                                           cudaGraphCondAssignDefault);
+  if (error != cudaSuccess) return error;
+  cudaGraphNode_t gate{};
+  if (device_gate) {
+    auto* state = panels.state;
+    void* arguments[]{&state, &condition};
+    cudaKernelNodeParams launch{};
+    launch.func = reinterpret_cast<void*>(kernels::start_iteration);
+    launch.gridDim = launch.blockDim = dim3(1);
+    launch.kernelParams = arguments;
+    error = cudaGraphAddKernelNode(&gate, loop.graph, nullptr, 0, &launch);
+    if (error != cudaSuccess) return error;
+  }
+  cudaGraphNodeParams parameters{};
+  parameters.type = cudaGraphNodeTypeConditional;
+  parameters.conditional.handle = condition;
+  parameters.conditional.type = cudaGraphCondTypeWhile;
+  parameters.conditional.size = 1;
+  cudaGraphNode_t iteration{};
+  error = cudaGraphAddNode(&iteration, loop.graph, device_gate ? &gate : nullptr,
+                           device_gate ? 1 : 0, &parameters);
+  if (error != cudaSuccess) return error;
+  const auto body = parameters.conditional.phGraph_out[0];
+  error = cudaStreamBeginCaptureToGraph(stream, body, nullptr, nullptr, 0,
+                                        cudaStreamCaptureModeThreadLocal);
+  if (error != cudaSuccess) return error;
+  const auto record = [&]() noexcept {
+    const auto [restart, leading, grid, state, base, residual, work, candidate, image, basis,
+                directions, hessenberg, cosine, sine, target, coefficients] = panels;
+    // Action bindings are invariant across restart columns. The old A*x panel
+    // is dead after the residual is formed, so it can stage the next A*z input.
+    kernels::cycle<<<1, 1, 0, stream>>>(state, target);
+    kernels::prepare_direction<<<grid, kernels::threads, 0, stream>>>(
+        residual, basis, base, candidate, diagonal, directions, image, dimension, state);
+    auto status = cudaGetLastError();
+    if (status != cudaSuccess) return status;
+    if ((status = action(context, image, work, dimension, stream)) != cudaSuccess) return status;
+    kernels::norm<<<1, kernels::threads, 0, stream>>>(work, dimension, &state->norm_before, state,
+                                                      CudaGmresStatus::nonfinite_operator);
+    kernels::orthogonalize<<<1, kernels::threads, 0, stream>>>(
+        basis, work, hessenberg, dimension, leading, options.reorthogonalizations, state);
+    kernels::norm<<<1, kernels::threads, 0, stream>>>(work, dimension, &state->norm_after, state,
+                                                      CudaGmresStatus::numerical_failure);
+    kernels::arnoldi<<<1, 1, 0, stream>>>(hessenberg, leading, state,
+                                          options.breakdown_relative_tolerance);
+    kernels::normalize<<<grid, kernels::threads, 0, stream>>>(work, basis, dimension, state);
+    kernels::rotate<<<1, 1, 0, stream>>>(hessenberg, cosine, sine, target, coefficients, leading,
+                                         state);
+    kernels::candidate<<<grid, kernels::threads, 0, stream>>>(base, directions, coefficients,
+                                                              candidate, dimension, state);
+    if ((status = cudaGetLastError()) != cudaSuccess) return status;
+    if ((status = action(context, candidate, image, dimension, stream)) != cudaSuccess)
+      return status;
     kernels::residual<<<grid, kernels::threads, 0, stream>>>(rhs, image, residual, dimension,
                                                              state);
     kernels::norm<<<1, kernels::threads, 0, stream>>>(residual, dimension, &state->residual_norm,
                                                       state, CudaGmresStatus::nonfinite_operator);
+    kernels::complete_iteration<<<1, 1, 0, stream>>>(state, restart, options.max_iterations,
+                                                     condition);
+    return cudaGetLastError();
+  };
+  error = record();
+  cudaGraph_t recorded{};
+  const auto captured = cudaStreamEndCapture(stream, &recorded);
+  if (error != cudaSuccess) return error;
+  if (captured != cudaSuccess) return captured;
+  if (recorded != body) return cudaErrorInvalidResourceHandle;
+  return cudaGraphInstantiate(&loop.execution, loop.graph);
+}
+}  // namespace
+
+CudaGmresReplay::~CudaGmresReplay() {
+  if (execution_) (void)cudaGraphExecDestroy(execution_);
+}
+
+cudaError_t CudaGmresReplay::prepare(std::size_t dimension, const CudaGmresOptions& options,
+                                     CudaGmresAction action, void* context, const double* rhs,
+                                     const double* diagonal, double* solution, void* workspace,
+                                     std::size_t workspace_bytes, cudaStream_t stream) noexcept {
+  std::size_t required{};
+  if (receipt_ || !admit(dimension, options, action, rhs, diagonal, solution, workspace,
+                         workspace_bytes, nullptr, required))
+    return cudaErrorInvalidValue;
+  const Panels panels(dimension, options, workspace);
+  if (dimension) {
+    IterationGraph loop;
+    const auto error = build_iteration_graph(panels, dimension, options, action, context, rhs,
+                                             diagonal, stream, true, loop);
+    if (error != cudaSuccess) return error;
+    execution_ = loop.execution;
+    loop.execution = nullptr;
   }
-  kernels::initial<<<1, 1, 0, stream>>>(state, options.relative_tolerance,
-                                        options.absolute_tolerance, seeded);
+  stream_ = stream;
+  options_ = options;
+  rhs_ = rhs;
+  diagonal_ = diagonal;
+  solution_ = solution;
+  workspace_ = workspace;
+  dimension_ = dimension;
+  required_ = required;
+  receipt_ = static_cast<const CudaGmresDeviceReceipt*>(panels.state);
+  return cudaSuccess;
+}
+
+cudaError_t CudaGmresReplay::enqueue(const int* upstream_status) const noexcept {
+  if (!receipt_) return cudaErrorInvalidResourceHandle;
+  const Panels panels(dimension_, options_, workspace_);
+  auto error = initialize(panels, required_, dimension_, options_, nullptr, nullptr, rhs_,
+                          diagonal_, nullptr, upstream_status, stream_);
+  if (error != cudaSuccess || !dimension_) return error;
+  if ((error = cudaGraphLaunch(execution_, stream_)) != cudaSuccess) return error;
+  kernels::copy_converged<<<panels.grid, kernels::threads, 0, stream_>>>(
+      panels.base, panels.candidate, solution_, dimension_, panels.state);
+  return cudaGetLastError();
+}
+
+cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& options,
+                             CudaGmresAction action, void* context, const double* rhs,
+                             const double* diagonal, double* solution, void* workspace,
+                             std::size_t workspace_bytes, cudaStream_t stream,
+                             CudaGmresResult& result, const double* initial_guess) noexcept {
+  result = {};
+  std::size_t required{};
+  if (!admit(dimension, options, action, rhs, diagonal, solution, workspace, workspace_bytes,
+             initial_guess, required))
+    return cudaErrorInvalidValue;
+  result.workspace_bytes = required;
+  const Panels panels(dimension, options, workspace);
+  auto error = initialize(panels, required, dimension, options, action, context, rhs, diagonal,
+                          initial_guess, nullptr, stream);
+  if (initial_guess && dimension) ++result.operator_actions;
+  if (error != cudaSuccess) return settle(stream, error);
 
   int checkpoint{};
-  auto inspect = [&]() noexcept {
-    auto status = cudaGetLastError();
-    if (status != cudaSuccess) return settle(stream, status);
-    status = cudaMemcpyAsync(&checkpoint, &state->code, sizeof(checkpoint), cudaMemcpyDeviceToHost,
-                             stream);
-    result.checkpoint_bytes += sizeof(checkpoint);
-    return settle(stream, status);
-  };
-  auto finish = [&](const double* accepted) noexcept {
-    State terminal{};
-    auto status =
-        cudaMemcpyAsync(&terminal, state, sizeof(terminal), cudaMemcpyDeviceToHost, stream);
-    status = settle(stream, status);
-    if (status != cudaSuccess) return status;
-    result.status = terminal.code ? static_cast<CudaGmresStatus>(terminal.code)
-                                  : CudaGmresStatus::iteration_limit;
-    result.rhs_norm = terminal.rhs_norm;
-    result.residual_norm = terminal.residual_norm;
-    result.tolerance = terminal.tolerance;
-    if (result.converged() && dimension) {
-      status = cudaMemcpyAsync(solution, accepted, vector_bytes, cudaMemcpyDeviceToDevice, stream);
-      return settle(stream, status);
-    }
-    return cudaSuccess;
-  };
-
-  error = inspect();
-  if (error != cudaSuccess) return error;
-  if (checkpoint) return finish(base);
-
-  while (result.iterations < options.max_iterations) {
-    error = cudaMemsetAsync(hessenberg, 0, (leading * restart + 4 * restart + 1) * sizeof(double),
-                            stream);
-    if (error != cudaSuccess) return settle(stream, error);
-    kernels::cycle<<<1, 1, 0, stream>>>(state, target);
-    kernels::normalize<<<grid, kernels::threads, 0, stream>>>(residual, basis, dimension,
-                                                              &state->beta, state, false);
-    for (std::size_t column = 0; column < restart && result.iterations < options.max_iterations;
-         ++column) {
-      auto* direction = directions + column * dimension;
-      kernels::precondition<<<grid, kernels::threads, 0, stream>>>(
-          basis + column * dimension, diagonal, direction, dimension, state);
-      error = cudaGetLastError();
-      if (error != cudaSuccess) return settle(stream, error);
-      error = action(context, direction, work, dimension, stream);
-      ++result.operator_actions;
-      if (diagonal) ++result.preconditioner_actions;
-      if (error != cudaSuccess) return settle(stream, error);
-      kernels::norm<<<1, kernels::threads, 0, stream>>>(work, dimension, &state->norm_before, state,
-                                                        CudaGmresStatus::nonfinite_operator);
-      for (unsigned pass = 0; pass < options.reorthogonalizations; ++pass) {
-        for (std::size_t row = 0; row <= column; ++row) {
-          kernels::dot<<<1, kernels::threads, 0, stream>>>(basis + row * dimension, work, dimension,
-                                                           state);
-          kernels::orthogonalize<<<grid, kernels::threads, 0, stream>>>(basis + row * dimension,
-                                                                        work, dimension, state);
-          kernels::accumulate<<<1, 1, 0, stream>>>(hessenberg + column * leading + row, state);
-        }
-      }
-      kernels::norm<<<1, kernels::threads, 0, stream>>>(work, dimension, &state->norm_after, state,
-                                                        CudaGmresStatus::numerical_failure);
-      kernels::arnoldi<<<1, 1, 0, stream>>>(hessenberg + column * leading + column + 1, state,
-                                            options.breakdown_relative_tolerance);
-      kernels::normalize<<<grid, kernels::threads, 0, stream>>>(
-          work, basis + (column + 1) * dimension, dimension, &state->norm_after, state, true);
-      kernels::rotate<<<1, 1, 0, stream>>>(hessenberg, cosine, sine, target, coefficients, leading,
-                                           column, state);
-      kernels::candidate<<<grid, kernels::threads, 0, stream>>>(
-          base, directions, coefficients, candidate, dimension, column + 1, state);
-      error = cudaGetLastError();
-      if (error != cudaSuccess) return settle(stream, error);
-      error = action(context, candidate, image, dimension, stream);
-      ++result.operator_actions;
-      if (error != cudaSuccess) return settle(stream, error);
-      kernels::residual<<<grid, kernels::threads, 0, stream>>>(rhs, image, residual, dimension,
-                                                               state);
-      kernels::norm<<<1, kernels::threads, 0, stream>>>(residual, dimension, &state->residual_norm,
-                                                        state, CudaGmresStatus::nonfinite_operator);
-      kernels::accept<<<1, 1, 0, stream>>>(state);
-      ++result.iterations;
-      error = inspect();
-      if (error != cudaSuccess) return error;
-      if (checkpoint) return finish(candidate);
-    }
-    if (result.iterations < options.max_iterations) {
-      error = cudaMemcpyAsync(base, candidate, vector_bytes, cudaMemcpyDeviceToDevice, stream);
-      if (error != cudaSuccess) return settle(stream, error);
-      ++result.restarts;
-    }
+  error = cudaMemcpyAsync(&checkpoint, &panels.state->code, sizeof(checkpoint),
+                          cudaMemcpyDeviceToHost, stream);
+  result.checkpoint_bytes += sizeof(checkpoint);
+  if ((error = settle(stream, error)) != cudaSuccess) return error;
+  IterationGraph loop;
+  if (!checkpoint &&
+      ((error = build_iteration_graph(panels, dimension, options, action, context, rhs, diagonal,
+                                      stream, false, loop)) != cudaSuccess ||
+       (error = cudaGraphLaunch(loop.execution, stream)) != cudaSuccess))
+    return settle(stream, error);
+  CudaGmresDeviceReceipt terminal{};
+  error = cudaMemcpyAsync(&terminal, static_cast<const CudaGmresDeviceReceipt*>(panels.state),
+                          sizeof(terminal), cudaMemcpyDeviceToHost, stream);
+  if ((error = settle(stream, error)) != cudaSuccess) return error;
+  result.status = terminal.code ? static_cast<CudaGmresStatus>(terminal.code)
+                                : CudaGmresStatus::iteration_limit;
+  result.rhs_norm = terminal.rhs_norm;
+  result.residual_norm = terminal.residual_norm;
+  result.tolerance = terminal.tolerance;
+  result.iterations = terminal.iterations;
+  result.restarts = terminal.restarts;
+  result.operator_actions += 2 * terminal.iterations;
+  result.preconditioner_actions = diagonal ? terminal.iterations : 0;
+  if (result.converged() && dimension) {
+    error = cudaMemcpyAsync(solution, checkpoint ? panels.base : panels.candidate,
+                            dimension * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+    return settle(stream, error);
   }
-  return finish(candidate);
+  return cudaSuccess;
 }
 }  // namespace generativeqc::response

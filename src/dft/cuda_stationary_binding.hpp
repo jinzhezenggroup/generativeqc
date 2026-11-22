@@ -8,6 +8,10 @@
 #include "dft/generated_semilocal_compositions.hpp"
 #include "scf/cuda_derivative_sources.hpp"
 
+namespace generativeqc_grid_pair_geometry {
+struct CenterPair;
+}
+
 namespace generativeqc::dft {
 struct CudaXcPointProgram;
 struct GridTaskView;
@@ -76,6 +80,9 @@ struct CudaStationaryBinding {
   const char* consumer_profile{};
   /** Charged tile bytes and cumulative point launches/evaluations, when staged. */
   int (*point_metrics)(void*, std::uint64_t*, std::size_t){};
+  /** Read-only FP64 triangular geometry; the controller authorizes borrowing
+   * it only after terminal completion and revokes the lease before reset. */
+  const generativeqc_grid_pair_geometry::CenterPair* (*center_pairs)(const void*){};
 };
 
 /** Return only statically linked profiles, or nullptr for an unavailable one. */

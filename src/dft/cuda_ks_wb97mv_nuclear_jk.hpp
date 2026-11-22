@@ -34,6 +34,10 @@ class CudaKsWb97mvNuclearJk {
                               const CudaWb97mvJkOptions& options, std::string& detail);
   cudaError_t apply(const double* direction, const double* delta_density,
                     const CudaWb97mvJkOutput& output, cudaStream_t stream) noexcept;
+  /** Write a fresh private column under the same live density lease as apply. */
+  cudaError_t enqueue_private_fresh(const double* direction, const double* delta_density,
+                                    const CudaWb97mvJkOutput& output, int* transaction_status,
+                                    cudaStream_t stream) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:

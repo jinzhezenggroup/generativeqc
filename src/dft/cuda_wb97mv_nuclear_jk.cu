@@ -700,6 +700,16 @@ __global__ void compare_direction(const double* current, const double* saved, st
   for (std::size_t index = threadIdx.x; index < count; index += blockDim.x)
     if (current[index] != saved[index]) atomicExch(different, 1);
 }
+__global__ void accumulate_failure(const int* status, int* transaction_status) {
+  if (*status) atomicOr(transaction_status, 1);
+}
+__global__ void publish_private_panel(const double* candidate, double* output, std::size_t count,
+                                      const int* status) {
+  if (*status) return;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
+    output[index] = candidate[index];
+}
 __global__ void finite_values(const double* values, std::size_t count, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
@@ -1254,6 +1264,20 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
                                        const double* delta_density,
                                        const CudaWb97mvJkOutput& output,
                                        cudaStream_t stream) noexcept {
+  return apply_impl(direction, density, delta_density, output, nullptr, stream);
+}
+
+cudaError_t CudaWb97mvNuclearJk::enqueue_private_fresh(
+    const double* direction, const double* density, const double* delta_density,
+    const CudaWb97mvJkOutput& output, int* transaction_status, cudaStream_t stream) noexcept {
+  if (!transaction_status) return cudaErrorInvalidValue;
+  return apply_impl(direction, density, delta_density, output, transaction_status, stream);
+}
+
+cudaError_t CudaWb97mvNuclearJk::apply_impl(const double* direction, const double* density,
+                                            const double* delta_density,
+                                            const CudaWb97mvJkOutput& output,
+                                            int* transaction_status, cudaStream_t stream) noexcept {
   auto& state = *impl_;
   if (state.work.attempted_actions == UINT64_MAX) return cudaErrorInvalidValue;
   ++state.work.attempted_actions;
@@ -1269,14 +1293,26 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
                        output.hvp};
   const std::size_t output_counts[] = {1, plan.panels, plan.panels, 3 * shape.atoms,
                                        3 * shape.atoms};
+  if (transaction_status) {
+    if ((error = device_buffer(transaction_status, reference.device_id)) != cudaSuccess)
+      return error;
+    if (!disjoint(state.workspace, plan.bytes, transaction_status, sizeof(int)))
+      return cudaErrorInvalidValue;
+  }
   for (unsigned index = 0; index < 4; ++index) {
     if (!disjoint(state.workspace, plan.bytes, inputs[index], input_counts[index] * sizeof(double)))
+      return cudaErrorInvalidValue;
+    if (transaction_status && !disjoint(inputs[index], input_counts[index] * sizeof(double),
+                                        transaction_status, sizeof(int)))
       return cudaErrorInvalidValue;
     if ((error = device_buffer(inputs[index], reference.device_id)) != cudaSuccess) return error;
   }
   for (unsigned index = 0; index < 5; ++index) {
     if (!disjoint(state.workspace, plan.bytes, outputs[index],
                   output_counts[index] * sizeof(double)))
+      return cudaErrorInvalidValue;
+    if (transaction_status && !disjoint(outputs[index], output_counts[index] * sizeof(double),
+                                        transaction_status, sizeof(int)))
       return cudaErrorInvalidValue;
     for (unsigned input = 0; input < 4; ++input)
       if (!disjoint(outputs[index], output_counts[index] * sizeof(double), inputs[input],
@@ -1308,13 +1344,14 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
       error = cudaGetLastError();
     }
   bool reuse{};
-  if (error == cudaSuccess && state.resident_valid) {
+  if (error == cudaSuccess && state.resident_valid && !transaction_status) {
     compare_direction<<<1, 128, 0, stream>>>(
         direction, reinterpret_cast<const double*>(base + plan.resident_direction), 3 * shape.atoms,
         status + 1);
     error = cudaGetLastError();
   }
-  error = error == cudaSuccess ? gate(status, stream, &reuse) : drain(error, stream);
+  if (!transaction_status)
+    error = error == cudaSuccess ? gate(status, stream, &reuse) : drain(error, stream);
   if (error != cudaSuccess) return error;
   reuse = reuse && state.resident_valid;
   state.resident_valid = false;
@@ -1447,23 +1484,34 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
                                                                     status);
     error = cudaGetLastError();
   }
-  error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
-  if (error == cudaSuccess && plan.resident_bytes)
+  if (!transaction_status)
+    error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
+  if (error == cudaSuccess && plan.resident_bytes && !transaction_status)
     error = cudaMemcpyAsync(base + plan.resident_direction, direction,
                             3 * shape.atoms * sizeof(double), cudaMemcpyDeviceToDevice, stream);
   if (error == cudaSuccess) error = state.authenticate(stream);
-  if (error != cudaSuccess) return drain(error, stream);
+  if (error != cudaSuccess) return transaction_status ? error : drain(error, stream);
+  if (transaction_status) {
+    accumulate_failure<<<1, 1, 0, stream>>>(status, transaction_status);
+    error = cudaGetLastError();
+  }
   std::size_t offset{};
   for (unsigned index = 0; index < 5 && error == cudaSuccess; ++index) {
-    error =
-        cudaMemcpyAsync(outputs[index], candidate + offset, output_counts[index] * sizeof(double),
-                        cudaMemcpyDeviceToDevice, stream);
+    if (transaction_status) {
+      publish_private_panel<<<blocks(output_counts[index]), 128, 0, stream>>>(
+          candidate + offset, outputs[index], output_counts[index], status);
+      error = cudaGetLastError();
+    } else {
+      error =
+          cudaMemcpyAsync(outputs[index], candidate + offset, output_counts[index] * sizeof(double),
+                          cudaMemcpyDeviceToDevice, stream);
+    }
     offset += output_counts[index];
   }
-  error = drain(error, stream);
+  if (!transaction_status) error = drain(error, stream);
   if (error == cudaSuccess) {
     ++state.work.completed_actions;
-    state.resident_valid = plan.resident_bytes != 0;
+    state.resident_valid = !transaction_status && plan.resident_bytes != 0;
   }
   return error;
 }

@@ -171,6 +171,15 @@ void run(const char* input_path, const char* output_path) {
   if (header[5] == 4) options.parallel_streams = 2;
   std::size_t bytes{};
   check(cuda_one_electron_workspace(shape, shells, options, bytes));
+  auto scalar = options;
+  scalar.parallel_streams = 0;
+  std::size_t minimum_bytes{};
+  check(cuda_one_electron_workspace(shape, shells, scalar, minimum_bytes));
+  // Supply enough memory for the mandatory schedule but not the optional graph.
+  if (header[5] == 5) {
+    require(minimum_bytes < bytes, "capacity fallback fixture has no parallel schedule");
+    bytes = minimum_bytes;
+  }
   std::vector<double> charges;
   for (const auto& atom : system.atoms) charges.push_back(atom.ionic_charge());
   // Poison only after the actual native normalizer and AoBasis owner have packed
@@ -204,9 +213,9 @@ void run(const char* input_path, const char* output_path) {
   CudaOneElectronResponse response;
   require(response.apply(motion, source, output, storage.stream) == cudaErrorInvalidResourceHandle,
           "unprepared source action succeeded");
-  require(response.prepare(shape, shells, options, reference, arena, bytes - 1) ==
+  require(response.prepare(shape, shells, options, reference, arena, minimum_bytes - 1) ==
               cudaErrorInvalidValue,
-          "short arena admitted");
+          "arena smaller than the scalar minimum admitted");
   const auto prepared = response.prepare(shape, shells, options, reference, arena, bytes);
   if (header[4]) {
     require(prepared == cudaErrorInvalidValue &&
@@ -243,6 +252,15 @@ void run(const char* input_path, const char* output_path) {
       require(download(pointers[index], counts[index]) == std::vector<double>(counts[index], 27),
               "failed source action published partial output");
   };
+  auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
+  const auto private_status = [&] {
+    check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
+    check(response.enqueue_private(motion, source, output, transaction, storage.stream));
+    check(cudaStreamSynchronize(storage.stream));
+    int status{};
+    check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+    return status;
+  };
   sentinel();
   require(response.apply(motion, source, output, nullptr) == cudaErrorInvalidResourceHandle,
           "foreign stream admitted");
@@ -271,8 +289,19 @@ void run(const char* input_path, const char* output_path) {
   require(response.apply(motion, source, output, storage.stream) == cudaErrorInvalidValue,
           "nonfinite direction admitted");
   unchanged();
+  require(private_status(), "private one-electron action lost the failed audit");
+  unchanged();
   check(cudaMemcpy(motion, direction.data(), direction.size() * sizeof(double),
                    cudaMemcpyHostToDevice));
+  require(!private_status(), "private one-electron failure contaminated valid replay");
+  std::array<std::vector<double>, 6> private_output;
+  for (unsigned index = 0; index < 6; ++index)
+    private_output[index] = download(pointers[index], counts[index]);
+  check(response.apply(motion, source, output, storage.stream));
+  for (unsigned index = 0; index < 6; ++index)
+    require(private_output[index] == download(pointers[index], counts[index]),
+            "private one-electron replay disagrees with checked output");
+  sentinel();
   for (unsigned panel = 0; panel < 4; ++panel) {
     check(cudaMemcpy(panels + panel * matrix, &nan, sizeof(double), cudaMemcpyHostToDevice));
     require(response.apply(motion, source, output, storage.stream) == cudaErrorInvalidValue,
@@ -311,7 +340,7 @@ void run(const char* input_path, const char* output_path) {
   check(response.prepare(shape, shells, options, reference, arena, bytes));
   check(response.apply(motion, source, output, storage.stream));
   require(
-      response.prepare(shape, shells, options, reference, arena, bytes - 1) ==
+      response.prepare(shape, shells, options, reference, arena, minimum_bytes - 1) ==
               cudaErrorInvalidValue &&
           response.apply(motion, source, output, storage.stream) == cudaErrorInvalidResourceHandle,
       "failed reprepare retained a live source");

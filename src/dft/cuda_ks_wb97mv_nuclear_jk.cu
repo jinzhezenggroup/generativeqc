@@ -153,6 +153,17 @@ cudaError_t CudaKsWb97mvNuclearJk::apply(const double* direction, const double* 
   if (!lease.density) return cudaErrorInvalidResourceHandle;
   return impl_->response.apply(direction, lease.density, delta_density, output, stream);
 }
+cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_fresh(const double* direction,
+                                                         const double* delta_density,
+                                                         const CudaWb97mvJkOutput& output,
+                                                         int* transaction_status,
+                                                         cudaStream_t stream) noexcept {
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  const auto lease = impl_->grid.reference();
+  if (!lease.density) return cudaErrorInvalidResourceHandle;
+  return impl_->response.enqueue_private_fresh(direction, lease.density, delta_density, output,
+                                               transaction_status, stream);
+}
 const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept {
   static const CudaWb97mvJkWork empty;
   return impl_ ? impl_->response.work() : empty;

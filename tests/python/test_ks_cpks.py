@@ -404,6 +404,7 @@ def test_native_coupled_cpks_against_displaced_scf(
         "alias-workspace",
         "alias-output",
         "zero-gap",
+        "upstream-reject",
     ],
 )
 def test_failure_does_not_publish(cpks_probe: Path, mode: str) -> None:
@@ -416,6 +417,15 @@ def test_failure_does_not_publish(cpks_probe: Path, mode: str) -> None:
         assert result["actions"] == 0
     if mode == "stale-publish":
         assert result["authentications"] == 2 and result["actions"] > 0
+
+
+def test_successful_replay_after_rejected_upstream_audit(cpks_probe: Path) -> None:
+    model = _model(4, (2, 1))
+    expected = _native(cpks_probe, model)
+    replay = _native(cpks_probe, model, mode="upstream-replay")
+    assert replay["converged"] and expected["converged"]
+    for panel in ("density", "weights"):
+        np.testing.assert_allclose(replay[panel], expected[panel], atol=2e-12, rtol=0)
 
 
 def test_exhaustion_and_budget_do_not_publish(cpks_probe: Path) -> None:
@@ -568,3 +578,16 @@ def test_cached_operator_checks_physical_not_just_materialized_residual(
     assert result["physical_checks"] == 1
     assert np.all(np.array(result["density"]) == 9817)
     assert np.all(np.array(result["weights"]) == -3277)
+
+
+def test_cached_operator_rebuilds_after_physical_residual_rejection(
+    cpks_probe: Path,
+) -> None:
+    model = _model(4, (2, 1))
+    expected = _native(cpks_probe, model, mode="cached-reuse")
+    replay = _native(cpks_probe, model, mode="cached-nonlinear-replay")
+    assert replay["cuda_error"] == 0 and replay["converged"]
+    for field in ("density", "weights"):
+        np.testing.assert_allclose(
+            replay[field], expected[field], rtol=2e-12, atol=2e-12
+        )

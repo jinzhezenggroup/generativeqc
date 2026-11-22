@@ -22,6 +22,7 @@ from generativeqc_compiler.common.source_cache import cache_source
 from generativeqc_compiler.dft.grid import checked_int
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 
+from .grid_center_pair import emit_center_pair_layout
 from .grid_response import grid_response_program
 
 _GRID_ADJOINT_SOURCE = r"""#include <algorithm>
@@ -37,7 +38,10 @@ _GRID_ADJOINT_SOURCE = r"""#include <algorithm>
 #define GENERATIVEQC_GRID_HD
 #endif
 
+@CENTER_PAIR_LAYOUT@
 namespace generativeqc_grid_adjoint {
+using generativeqc_grid_pair_geometry::CenterPair;
+using generativeqc_grid_pair_geometry::center_pair_index;
 GENERATIVEQC_GRID_HD inline double portable_abs(double value) { return value < 0.0 ? -value : value; }
 GENERATIVEQC_GRID_HD inline float portable_abs(float value) { return value < 0.0f ? -value : value; }
 GENERATIVEQC_GRID_HD inline float portable_exp(float value) { return ::expf(value); }
@@ -76,16 +80,6 @@ GENERATIVEQC_GRID_HD std::array<Arithmetic, 4> distance(const double* a, const d
   return result;
 }
 
-// Exact triangular geometry storage. The ratio fields are emitted from the same
-// local AD graph, not a separately implemented force formula.
-struct CenterPair {
-  std::array<double, 4> distance;
-  std::array<double, 2> ratio;
-};
-static_assert(sizeof(CenterPair) == 6 * sizeof(double));
-GENERATIVEQC_GRID_HD inline size_t center_pair_index(size_t a, size_t b) {
-  return a * (a - 1) / 2 + b; // canonical a > b orientation
-}
 template <class Norm, class PrepareRatio>
 GENERATIVEQC_GRID_HD bool prepare_center_geometry(const double* centers, size_t na,
                                                   double tolerance, CenterPair* pairs,
@@ -592,7 +586,9 @@ def emit_grid_adjoint() -> str:
                 ]
             )
         )
-    return _GRID_ADJOINT_SOURCE.replace("@TREUTLER_ADJUSTMENT@", "\n".join(functions))
+    return _GRID_ADJOINT_SOURCE.replace(
+        "@CENTER_PAIR_LAYOUT@", emit_center_pair_layout()
+    ).replace("@TREUTLER_ADJUSTMENT@", "\n".join(functions))
 
 
 def _emit_prepared_ratio(

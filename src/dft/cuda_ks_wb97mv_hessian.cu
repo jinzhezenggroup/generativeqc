@@ -72,6 +72,7 @@ __global__ void finite(const double* input, std::size_t count, int* status) {
 }
 __global__ void symmetric(const double* input, std::size_t count, double absolute, double relative,
                           int* status) {
+  if (atomicAdd(status, 0)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count * count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     const auto value = input[index], other = input[index % count * count + index / count];
@@ -197,8 +198,23 @@ __global__ void gather_atom(const double* first, const double* second, std::size
     incidences[index] = (atom < other ? first : second)[axis * pairs + pair];
   }
 }
+struct DenseAssemblyAudit {
+  std::size_t completed;
+  int failed;
+  response::CudaCpksDenseReceipt cpks;
+};
+
 __global__ void store_column(const double* vector, std::size_t count, std::size_t column,
-                             double* matrix) {
+                             const int* column_status, double* matrix, DenseAssemblyAudit* audit) {
+  const bool failed = *column_status != 0;
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    // One writer per column on the owner stream, before its status is reused.
+    if (failed)
+      audit->failed = 1;
+    else
+      ++audit->completed;
+  }
+  if (failed) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     matrix[index * count + column] = vector[index];
@@ -243,8 +259,9 @@ struct CudaKsWb97mvHessian::Impl {
   bool frozen_exact_ready{};
   std::size_t bytes{}, remaining{}, matrix{}, panels{}, coordinates{}, pairs{}, range_vector{};
   std::size_t map_offset{}, map_bytes{}, cpks_offset{}, cpks_bytes{}, geometry_offset{},
-      geometry_bytes{}, grid_offset{}, grid_bytes{}, status_offset{}, vv10_geometry_offset{},
-      vv10_geometry_bytes{}, vv10_grid_offset{}, vv10_grid_bytes{}, vv10_direction{};
+      geometry_bytes{}, grid_offset{}, grid_bytes{}, status_offset{}, dense_audit_offset{},
+      vv10_geometry_offset{}, vv10_geometry_bytes{}, vv10_grid_offset{}, vv10_grid_bytes{},
+      vv10_direction{};
   std::size_t zero{}, weights{}, delta_density{}, delta_weights{}, totals{}, delta_totals{}, core{},
       overlap{}, core_direction{}, overlap_direction{}, exact_energy{}, exact_fock{},
       exact_direction{}, xc_direction{}, rhs{}, ecp_values{}, vectors{}, scratch_gradient{},
@@ -485,11 +502,14 @@ struct CudaKsWb97mvHessian::Impl {
     frozen_exact_ready = false;
     if (!frozen_exact) return cudaSuccess;
     auto error = authenticate();
+    auto* status = at<int>(status_offset);
+    if (error == cudaSuccess) error = cudaMemsetAsync(status, 0, sizeof(*status), stream);
     for (std::size_t column = 0; column < coordinates && error == cudaSuccess; ++column) {
       unit<<<maps::blocks(coordinates), 128, 0, stream>>>(at(direction), coordinates, column);
       error = cudaGetLastError();
       if (error == cudaSuccess)
-        error = exact.apply(at(direction), at(zero), exact_output(), stream);
+        error =
+            exact.enqueue_private_fresh(at(direction), at(zero), exact_output(), status, stream);
       if (error == cudaSuccess)
         error = cudaMemcpyAsync(frozen_exact + column * panels, at(exact_direction),
                                 panels * sizeof(double), cudaMemcpyDeviceToDevice, stream);
@@ -499,31 +519,36 @@ struct CudaKsWb97mvHessian::Impl {
                             coordinates * sizeof(double), cudaMemcpyDeviceToDevice, stream);
       if (error == cudaSuccess) ++receipt.frozen_exact_columns;
     }
-    const auto completed = cudaStreamSynchronize(stream);
-    if (error == cudaSuccess) error = completed;
+    if (error == cudaSuccess) error = gate();
     if (error == cudaSuccess) error = authenticate();
     frozen_exact_ready = error == cudaSuccess;
     return error;
   }
   cudaError_t compute(CudaKsWb97mvHessianResult& result, bool repeated_rhs = false,
-                      std::size_t column = SIZE_MAX) {
+                      std::size_t column = SIZE_MAX,
+                      response::CudaCpksDenseReplay* cpks_replay = nullptr) {
     ++receipt.attempted_directions;
     result.failure_check = "stationary Hessian direction validation";
     auto error = authenticate();
     if (error != cudaSuccess) return error;
     if ((error = cudaMemsetAsync(at<int>(status_offset), 0, sizeof(int), stream)) != cudaSuccess)
       return error;
-    finite<<<maps::blocks(coordinates), 128, 0, stream>>>(at(direction), coordinates,
-                                                          at<int>(status_offset));
-    if ((error = cudaGetLastError()) != cudaSuccess || (error = gate()) != cudaSuccess)
-      return error;
+    // Dense directions are unit vectors generated on this stream. Only a
+    // caller-supplied HVP direction needs a separate finite-input gate.
+    if (!repeated_rhs) {
+      finite<<<maps::blocks(coordinates), 128, 0, stream>>>(at(direction), coordinates,
+                                                            at<int>(status_offset));
+      if ((error = cudaGetLastError()) != cudaSuccess || (error = gate()) != cudaSuccess)
+        return error;
+    }
     if ((error = cudaMemsetAsync(at(delta_totals), 0, 2 * matrix * sizeof(double), stream)) !=
         cudaSuccess)
       return error;
     const integrals::CudaOneElectronWeights frozen{at(totals), at(delta_totals),
                                                    at(totals) + matrix, at(delta_totals) + matrix};
     result.failure_check = "frozen one-electron Hessian action";
-    if ((error = one_electron.apply(at(direction), frozen, core_output(), stream)) != cudaSuccess)
+    if ((error = one_electron.enqueue_private(at(direction), frozen, core_output(),
+                                              at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     result.failure_check = "frozen Direct J/K Hessian action";
     const bool cached_exact = repeated_rhs && frozen_exact_ready && column < coordinates;
@@ -561,25 +586,28 @@ struct CudaKsWb97mvHessian::Impl {
     // Mixed contractions below reuse AO jets and the cached bilateral VV10 JVP.
     result.failure_check = "moving-grid CPKS right-hand side";
     CudaGridGeometryMixedView motion, vv10_motion;
-    if ((error = geometry.mixed_view(at(direction), at(direction), motion, stream)) != cudaSuccess)
+    if ((error = geometry.enqueue_private_mixed_view(
+             at(direction), at(direction), motion, at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     const auto shape = grid_reference.shape();
     const auto ao_panel = 4 * shape.points * shape.nao;
     const auto vv10_shape = vv10_reference.shape();
     const auto vv10_panel = 4 * vv10_shape.points * vv10_shape.nao;
     const bool separate = expected.identity.model.nonlocal_grid.has_value();
-    if (separate && (error = vv10_geometry.mixed_view(at(direction), at(direction), vv10_motion,
-                                                      stream)) != cudaSuccess)
+    if (separate && (error = vv10_geometry.enqueue_private_mixed_view(
+                         at(direction), at(direction), vv10_motion, at<int>(status_offset),
+                         stream)) != cudaSuccess)
       return error;
-    if ((error = grid.prepare_nuclear_direction(motion.ao + ao_panel, motion.weights + shape.points,
-                                                motion.point_directions + 3 * shape.points,
-                                                at(zero), at(xc_direction), stream)) != cudaSuccess)
+    if ((error = grid.enqueue_private_nuclear_direction(
+             motion.ao + ao_panel, motion.weights + shape.points,
+             motion.point_directions + 3 * shape.points, at(zero), at(xc_direction),
+             at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     if (separate) {
-      if ((error = vv10_grid.prepare_nuclear_direction(
+      if ((error = vv10_grid.enqueue_private_nuclear_direction(
                vv10_motion.ao + vv10_panel, vv10_motion.weights + vv10_shape.points,
                vv10_motion.point_directions + 3 * vv10_shape.points, at(zero), at(vv10_direction),
-               stream)) != cudaSuccess)
+               at<int>(status_offset), stream)) != cudaSuccess)
         return error;
       add_fitted_range<<<maps::blocks(panels), 128, 0, stream>>>(at(xc_direction),
                                                                  at(vv10_direction), panels);
@@ -589,13 +617,14 @@ struct CudaKsWb97mvHessian::Impl {
                              at(ecp_values) + 3 * matrix, at(exact_direction),
                              at(full_df.direction), at(xc_direction), at(rhs), at(map_offset),
                              map_bytes, at<int>(status_offset), stream);
-    if (error != cudaSuccess || (error = gate()) != cudaSuccess) return error;
+    if (error != cudaSuccess) return error;
     result.failure_check = "stationary CPKS solve and physical response audit";
     error = response::solve_cuda_cpks(
         cpks_reference.shape(), options.cpks, cpks_reference.reference(), at(rhs),
         at(overlap_direction), CudaKsWb97mvResponse::induced_fock, &induced, at(delta_density),
         at(delta_weights), at(cpks_offset), cpks_bytes, stream, result.response,
-        repeated_rhs && operator_matrix ? &cpks_operator : nullptr);
+        repeated_rhs && operator_matrix ? &cpks_operator : nullptr, at<int>(status_offset),
+        cpks_replay);
     if (error != cudaSuccess) {
       if (const char* check = induced.failure_check()) result.failure_check = check;
       return error;
@@ -605,15 +634,18 @@ struct CudaKsWb97mvHessian::Impl {
     if (!repeated_rhs || !operator_matrix ||
         options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp32_proposal)
       receipt.cpks_strict_iterations += result.response.gmres.iterations;
-    if (!result.response.converged()) {
+    if (!result.response.converged() &&
+        !(cpks_replay && result.response.status == response::CudaCpksStatus::running)) {
       result.status = CudaKsWb97mvHessianStatus::response_not_converged;
       return cudaSuccess;
     }
     result.failure_check = "response one-electron Hessian action";
-    if ((error = sum_weights(at(delta_density), at(delta_weights), delta_totals)) != cudaSuccess ||
-        (error = gate()) != cudaSuccess)
+    // The weight reduction and private contractions share the sticky assembly
+    // audit. The final gate covers their failures before any result is exposed.
+    if ((error = sum_weights(at(delta_density), at(delta_weights), delta_totals)) != cudaSuccess)
       return error;
-    if ((error = one_electron.apply(at(direction), frozen, core_output(), stream)) != cudaSuccess)
+    if ((error = one_electron.enqueue_private(at(direction), frozen, core_output(),
+                                              at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     result.failure_check = "response Direct J/K Hessian action";
     if (cached_exact) {
@@ -655,32 +687,35 @@ struct CudaKsWb97mvHessian::Impl {
                                          stream)) != cudaSuccess)
       return error;
     result.failure_check = "moving-grid response Hessian contraction";
-    if ((error = grid.prepare_nuclear_direction(motion.ao + ao_panel, motion.weights + shape.points,
-                                                motion.point_directions + 3 * shape.points,
-                                                at(delta_density), at(xc_direction), stream)) !=
-        cudaSuccess)
+    if ((error = grid.enqueue_private_nuclear_direction(
+             motion.ao + ao_panel, motion.weights + shape.points,
+             motion.point_directions + 3 * shape.points, at(delta_density), at(xc_direction),
+             at<int>(status_offset), stream)) != cudaSuccess)
       return error;
-    if (separate && (error = vv10_grid.prepare_nuclear_direction(
+    if (separate && (error = vv10_grid.enqueue_private_nuclear_direction(
                          vv10_motion.ao + vv10_panel, vv10_motion.weights + vv10_shape.points,
                          vv10_motion.point_directions + 3 * vv10_shape.points, at(delta_density),
-                         at(vv10_direction), stream)) != cudaSuccess)
+                         at(vv10_direction), at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
       unit<<<maps::blocks(coordinates), 128, 0, stream>>>(at(left), coordinates, coordinate);
       if ((error = cudaGetLastError()) != cudaSuccess ||
-          (error = geometry.mixed_view(at(left), at(direction), motion, stream)) != cudaSuccess)
+          (error = geometry.enqueue_private_mixed_view(
+               at(left), at(direction), motion, at<int>(status_offset), stream)) != cudaSuccess)
         return error;
-      if ((error = grid.nuclear_mixed(motion.ao, motion.ao + 2 * ao_panel, motion.weights,
-                                      motion.weights + 2 * shape.points, motion.point_directions,
-                                      vector(5) + coordinate, stream)) != cudaSuccess)
+      if ((error = grid.enqueue_private_nuclear_mixed(
+               motion.ao, motion.ao + 2 * ao_panel, motion.weights,
+               motion.weights + 2 * shape.points, motion.point_directions, vector(5) + coordinate,
+               at<int>(status_offset), stream)) != cudaSuccess)
         return error;
       if (separate) {
-        if ((error = vv10_geometry.mixed_view(at(left), at(direction), vv10_motion, stream)) !=
+        if ((error = vv10_geometry.enqueue_private_mixed_view(at(left), at(direction), vv10_motion,
+                                                              at<int>(status_offset), stream)) !=
                 cudaSuccess ||
-            (error = vv10_grid.nuclear_mixed(
+            (error = vv10_grid.enqueue_private_nuclear_mixed(
                  vv10_motion.ao, vv10_motion.ao + 2 * vv10_panel, vv10_motion.weights,
                  vv10_motion.weights + 2 * vv10_shape.points, vv10_motion.point_directions,
-                 at(vv10_direction), stream)) != cudaSuccess)
+                 at(vv10_direction), at<int>(status_offset), stream)) != cudaSuccess)
           return error;
         add_fitted_range<<<1, 1, 0, stream>>>(vector(5) + coordinate, at(vv10_direction), 1);
         if ((error = cudaGetLastError()) != cudaSuccess) return error;
@@ -692,10 +727,13 @@ struct CudaKsWb97mvHessian::Impl {
                              vector(5), vector(6), at(candidate), at(map_offset), map_bytes,
                              at<int>(status_offset), stream);
     if (error != cudaSuccess || (error = correction_direction()) != cudaSuccess ||
-        (error = gate()) != cudaSuccess || (error = authenticate()) != cudaSuccess)
+        (!repeated_rhs && (error = gate()) != cudaSuccess) ||
+        (error = authenticate()) != cudaSuccess)
       return error;
-    ++receipt.completed_directions;
-    ++result.completed_directions;
+    if (!repeated_rhs) {
+      ++receipt.completed_directions;
+      ++result.completed_directions;
+    }
     result.failure_check = nullptr;
     result.status = CudaKsWb97mvHessianStatus::converged;
     return cudaSuccess;
@@ -925,8 +963,10 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->scratch_gradient = layout.reserve(product(2, coordinates));
     for (auto* offset : {&owner->direction, &owner->left, &owner->candidate})
       *offset = layout.reserve(coordinates);
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action)
+    if (mode == CudaKsWb97mvHessianMode::dense_and_action) {
       owner->complete = layout.reserve(product(coordinates, coordinates));
+      owner->dense_audit_offset = layout.reserve(1, sizeof(DenseAssemblyAudit));
+    }
     owner->charges = layout.reserve(shape.atoms);
     owner->pair_atoms = layout.reserve(product(2, owner->pairs), sizeof(std::size_t));
     owner->pair_fields = layout.reserve(product(14, owner->pairs));
@@ -1227,6 +1267,11 @@ cudaError_t CudaKsWb97mvHessian::apply(const double* direction, double* output, 
     if (error != cudaSuccess || (error = owner.compute(result)) != cudaSuccess ||
         !result.converged())
       return error;
+    if ((error = owner.induced.collect_work()) != cudaSuccess) {
+      result.status = CudaKsWb97mvHessianStatus::failed;
+      result.failure_check = "induced Fock work receipt";
+      return error;
+    }
     error = cudaMemcpyAsync(output, owner.at(owner.candidate), owner.coordinates * sizeof(double),
                             cudaMemcpyDeviceToDevice, stream);
     if (error == cudaSuccess) error = cudaStreamSynchronize(stream);
@@ -1261,30 +1306,80 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
       result.failure_check = "dense Hessian exceeds the nonlocal-grid AO replay work budget";
       return error;
     }
+    auto* audit = owner.at<DenseAssemblyAudit>(owner.dense_audit_offset);
+    response::CudaCpksDenseReplay cpks_replay{&audit->cpks, owner.at<int>(owner.status_offset), {}};
+    const bool deferred_cpks =
+        owner.options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64 &&
+        !owner.has_df && !owner.has_ecp && !owner.fock.correction &&
+        !owner.fock.primary->strategy().spec.exchange.present &&
+        !owner.expected.identity.model.nonlocal_grid && owner.frame.spins == 1 &&
+        owner.fock.primary->system().basis_representation == core::kCartesianBasis;
+    if (deferred_cpks && owner.coordinates > SIZE_MAX / 2 / owner.options.cpks.gmres.max_iterations)
+      return cudaErrorInvalidValue;
+    // Drain before destroying the graph or releasing its captured arena.
     DrainOnFailure drain{stream};
     if ((error = owner.prepare_frozen_exact()) != cudaSuccess) return error;
+    if ((error = cudaMemsetAsync(audit, 0, sizeof(*audit), stream)) != cudaSuccess) return error;
+    const auto collect_columns = [&](cudaError_t pending) {
+      DenseAssemblyAudit columns{};
+      auto read = cudaMemcpyAsync(&columns, audit, sizeof(columns), cudaMemcpyDeviceToHost, stream);
+      if (read == cudaSuccess) read = cudaStreamSynchronize(stream);
+      if (read != cudaSuccess) return pending == cudaSuccess ? read : pending;
+      result.completed_directions = columns.completed;
+      owner.receipt.completed_directions += columns.completed;
+      if (deferred_cpks && columns.cpks.last.code) {
+        owner.cpks_operator.collect_dense(columns.cpks);
+        if (!owner.operator_matrix) owner.receipt.cpks_strict_iterations += columns.cpks.iterations;
+        const auto& last = columns.cpks.last;
+        auto& gmres = result.response.gmres;
+        gmres.status = static_cast<response::CudaGmresStatus>(last.code);
+        gmres.rhs_norm = last.rhs_norm;
+        gmres.residual_norm = last.residual_norm;
+        gmres.tolerance = last.tolerance;
+        gmres.iterations = last.iterations;
+        gmres.restarts = last.restarts;
+        gmres.operator_actions = 2 * last.iterations;
+        gmres.preconditioner_actions = last.iterations;
+        if (columns.cpks.failure != response::CudaCpksStatus::running) {
+          result.response.status = columns.cpks.failure;
+          result.status = CudaKsWb97mvHessianStatus::response_not_converged;
+          result.failure_check = "stationary CPKS solve and physical response audit";
+          return pending;
+        }
+        result.response.status = response::CudaCpksStatus::converged;
+      }
+      if (!columns.failed) return pending;
+      result.status = CudaKsWb97mvHessianStatus::failed;
+      result.failure_check = "nonfinite or nonsymmetric assembled Hessian";
+      return pending == cudaSuccess ? cudaErrorInvalidValue : pending;
+    };
     for (std::size_t coordinate = 0; coordinate < owner.coordinates; ++coordinate) {
       result.status = CudaKsWb97mvHessianStatus::failed;
       unit<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(owner.at(owner.direction),
                                                                 owner.coordinates, coordinate);
       if ((error = cudaGetLastError()) != cudaSuccess ||
-          (error = owner.compute(result, true, coordinate)) != cudaSuccess || !result.converged())
-        return error;
+          (error = owner.compute(result, true, coordinate,
+                                 deferred_cpks ? &cpks_replay : nullptr)) != cudaSuccess ||
+          !result.converged())
+        return collect_columns(error);
       result.status = CudaKsWb97mvHessianStatus::failed;
       store_column<<<maps::blocks(owner.coordinates), 128, 0, stream>>>(
-          owner.at(owner.candidate), owner.coordinates, coordinate, owner.at(owner.complete));
-      if ((error = cudaGetLastError()) != cudaSuccess) return error;
+          owner.at(owner.candidate), owner.coordinates, coordinate,
+          owner.at<int>(owner.status_offset), owner.at(owner.complete), audit);
+      if ((error = cudaGetLastError()) != cudaSuccess) return collect_columns(error);
     }
     result.status = CudaKsWb97mvHessianStatus::failed;
     symmetric<<<maps::blocks(owner.coordinates * owner.coordinates), 128, 0, stream>>>(
         owner.at(owner.complete), owner.coordinates, owner.options.symmetry_absolute_tolerance,
-        owner.options.symmetry_relative_tolerance, owner.at<int>(owner.status_offset));
-    if ((error = cudaGetLastError()) != cudaSuccess) return error;
-    if ((error = owner.gate()) != cudaSuccess) {
-      result.failure_check = "nonfinite or nonsymmetric assembled Hessian";
+        owner.options.symmetry_relative_tolerance, &audit->failed);
+    if ((error = collect_columns(cudaGetLastError())) != cudaSuccess) return error;
+    if (result.status == CudaKsWb97mvHessianStatus::response_not_converged) return cudaSuccess;
+    if (result.completed_directions != owner.coordinates) return cudaErrorInvalidValue;
+    if ((error = owner.authenticate()) != cudaSuccess) return error;
+    if ((error = owner.induced.collect_work()) != cudaSuccess) {
+      result.failure_check = "induced Fock work receipt";
       return error;
     }
-    if ((error = owner.authenticate()) != cudaSuccess) return error;
     error = cudaMemcpyAsync(output, owner.at(owner.complete),
                             owner.coordinates * owner.coordinates * sizeof(double),
                             cudaMemcpyDeviceToDevice, stream);

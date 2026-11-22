@@ -241,18 +241,29 @@ __global__ void validate_basis(CudaGridGeometryShape shape, const double* basis,
   }
 }
 __global__ void pair_geometry(const double* centers, const double* left, const double* right,
+                              const generativeqc_grid_pair_geometry::CenterPair* prepared,
                               std::size_t atoms, double tolerance, ad::Jet* pairs, int* status) {
   if (atomicAdd(status, 0)) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < atoms * atoms;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     const auto first = index / atoms, second = index % atoms;
     if (second >= first) continue;
-    ad::Jet coordinates[3];
-    for (unsigned axis = 0; axis < 3; ++axis)
-      coordinates[axis] = {centers[3 * first + axis] - centers[3 * second + axis],
-                           left[3 * first + axis] - left[3 * second + axis],
-                           right[3 * first + axis] - right[3 * second + axis], 0};
-    const auto distance = ad::norm(coordinates[0], coordinates[1], coordinates[2]);
+    double left_delta[3], right_delta[3];
+    for (unsigned axis = 0; axis < 3; ++axis) {
+      left_delta[axis] = left[3 * first + axis] - left[3 * second + axis];
+      right_delta[axis] = right[3 * first + axis] - right[3 * second + axis];
+    }
+    ad::Jet distance;
+    if (prepared) {
+      const auto pair = generativeqc_grid_pair_geometry::center_pair_index(first, second);
+      distance = ad::prepared_center_norm(prepared[pair], left_delta, right_delta);
+    } else {
+      ad::Jet coordinates[3];
+      for (unsigned axis = 0; axis < 3; ++axis)
+        coordinates[axis] = {centers[3 * first + axis] - centers[3 * second + axis],
+                             left_delta[axis], right_delta[axis], 0};
+      distance = ad::norm(coordinates[0], coordinates[1], coordinates[2]);
+    }
     if (!finite(distance) || distance.value <= tolerance) atomicExch(status, 1);
     pairs[index] = distance;
   }
@@ -442,7 +453,8 @@ cudaError_t CudaGridGeometryResponse::partition(const double* left, const double
   auto* pairs = reinterpret_cast<ad::Jet*>(base + plan.pairs);
   const auto stream = reference_.stream;
   pair_geometry<<<blocks(shape_.atoms * shape_.atoms), 128, 0, stream>>>(
-      reference_.basis, left, right, shape_.atoms, options_.coincident_tolerance, pairs, status);
+      reference_.basis, left, right, reference_.center_pairs, shape_.atoms,
+      options_.coincident_tolerance, pairs, status);
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return drain(error, stream);
   for (std::size_t begin = 0; begin < shape_.points;
@@ -494,6 +506,15 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
       if (!disjoint(workspace, plan.bytes / sizeof(double), metadata, count))
         return cudaErrorInvalidValue;
     }
+  }
+  if (reference.center_pairs) {
+    const auto error = device_buffer(reference.center_pairs, reference.device_id);
+    if (error != cudaSuccess) return error;
+    const auto pairs = shape.atoms * (shape.atoms - 1) / 2;
+    constexpr auto words = sizeof(*reference.center_pairs) / sizeof(double);
+    if (!pairs ||
+        !disjoint(workspace, plan.bytes / sizeof(double), reference.center_pairs, words * pairs))
+      return cudaErrorInvalidValue;
   }
   shape_ = shape;
   options_ = options;
@@ -585,6 +606,13 @@ cudaError_t CudaGridGeometryResponse::mixed(const double* left, const double* ri
         return cudaErrorInvalidValue;
     }
   }
+  if (reference_.center_pairs) {
+    const auto pairs = shape_.atoms * (shape_.atoms - 1) / 2;
+    constexpr auto words = sizeof(*reference_.center_pairs) / sizeof(double);
+    if (!disjoint(ao_output, 12 * plan.panel, reference_.center_pairs, words * pairs) ||
+        !disjoint(weight_output, 3 * shape_.points, reference_.center_pairs, words * pairs))
+      return cudaErrorInvalidValue;
+  }
   if (!disjoint(ao_output, 12 * plan.panel, weight_output, 3 * shape_.points))
     return cudaErrorInvalidValue;
   for (const auto* pointer : {ao_output, weight_output})
@@ -613,8 +641,15 @@ cudaError_t CudaGridGeometryResponse::admit_actions(std::size_t actions) noexcep
   return cudaSuccess;
 }
 
+namespace {
+__global__ void record_geometry_status(const int* status, int* transaction_status) {
+  if (*status) atomicOr(transaction_status, 1);
+}
+}  // namespace
+
 cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const double* right,
-                                                     cudaStream_t stream) noexcept {
+                                                     cudaStream_t stream,
+                                                     int* transaction_status) noexcept {
   auto error = admit_actions(1);
   if (error != cudaSuccess) return error;
   Layout plan;
@@ -656,7 +691,12 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
     begin += count;
   }
-  if ((error = gate(status, stream)) != cudaSuccess) return error;
+  if (transaction_status) {
+    record_geometry_status<<<1, 1, 0, stream>>>(status, transaction_status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  } else if ((error = gate(status, stream)) != cudaSuccess) {
+    return error;
+  }
   return authenticate(stream);
 }
 
@@ -674,11 +714,32 @@ void CudaGridGeometryResponse::finish_mixed() noexcept {
 cudaError_t CudaGridGeometryResponse::mixed_view(const double* left, const double* right,
                                                  CudaGridGeometryMixedView& view,
                                                  cudaStream_t stream) noexcept {
+  return mixed_view_impl(left, right, view, nullptr, stream);
+}
+
+cudaError_t CudaGridGeometryResponse::enqueue_private_mixed_view(const double* left,
+                                                                 const double* right,
+                                                                 CudaGridGeometryMixedView& view,
+                                                                 int* transaction_status,
+                                                                 cudaStream_t stream) noexcept {
+  if (!transaction_status) {
+    view = {};
+    motion_ready_ = false;
+    return cudaErrorInvalidValue;
+  }
+  return mixed_view_impl(left, right, view, transaction_status, stream);
+}
+
+cudaError_t CudaGridGeometryResponse::mixed_view_impl(const double* left, const double* right,
+                                                      CudaGridGeometryMixedView& view,
+                                                      int* transaction_status,
+                                                      cudaStream_t stream) noexcept {
   view = {};
   motion_ready_ = false;
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
-  if ((error = evaluate_mixed(left, right, stream)) != cudaSuccess) return error;
+  if ((error = evaluate_mixed(left, right, stream, transaction_status)) != cudaSuccess)
+    return error;
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   const auto* base = static_cast<const char*>(workspace_);
@@ -686,6 +747,7 @@ cudaError_t CudaGridGeometryResponse::mixed_view(const double* left, const doubl
           reinterpret_cast<const double*>(base + plan.candidate_weights),
           reinterpret_cast<const double*>(base + plan.point_directions)};
   finish_mixed();
+  if (transaction_status) motion_ready_ = false;
   return cudaSuccess;
 }
 

@@ -85,11 +85,11 @@ cudaError_t induced(void* context, const double* density, double* fock,
   if (owner.mode == "fail-provider" || (owner.mode == "late-provider" && owner.actions >= 3))
     return cudaErrorLaunchFailure;
   const auto dimension = shape.nao * shape.nao * shape.spins;
-  const int failure = owner.mode == "nan-provider"          ? 1
-                      : owner.mode == "asymmetric-provider" ? 2
-                      : owner.mode == "partial-provider"    ? 3
-                      : owner.mode == "cached-nonlinear"    ? 4
-                                                            : 0;
+  const int failure = owner.mode == "nan-provider"                 ? 1
+                      : owner.mode == "asymmetric-provider"        ? 2
+                      : owner.mode == "partial-provider"           ? 3
+                      : owner.mode.starts_with("cached-nonlinear") ? 4
+                                                                   : 0;
   linear_fock<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
       owner.operation, density, fock, dimension, failure);
   return cudaGetLastError();
@@ -189,23 +189,49 @@ void solve(int argc, char** argv) {
   }
   auto* selected_workspace = owner.mode == "alias-workspace" ? density : workspace;
   auto* selected_weights = owner.mode == "alias-output" ? density : weights;
+  int* upstream_status{};
+  if (owner.mode.starts_with("upstream-")) {
+    upstream_status = reinterpret_cast<int*>(storage.allocate(1));
+    require(cudaMemsetAsync(upstream_status, 1, sizeof(int), stream));
+  }
   if (reference_only && owner.mode == "alias-workspace") selected_workspace = device_coefficients;
   if (reference_only && owner.mode == "alias-output") selected_weights = device_coefficients;
   if (owner.mode == "misaligned-workspace")
     selected_workspace = reinterpret_cast<double*>(reinterpret_cast<char*>(workspace) + 1);
   if (owner.mode == "capture") require(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
-  auto error =
-      admitted != cudaSuccess ? admitted
-      : reference_only
-          ? response::cuda_cpks_reference_weights(
-                shape, options, reference, selected_weights, selected_workspace,
-                owner.mode == "short-workspace" ? required - 1 : required,
-                owner.mode == "wrong-stream" ? nullptr : stream)
-          : response::solve_cuda_cpks(
-                shape, options, reference, device_frozen, device_overlap, induced, &owner, density,
-                selected_weights, selected_workspace,
-                owner.mode == "short-workspace" ? required - 1 : required,
-                owner.mode == "wrong-stream" ? nullptr : stream, result, cached ? &cache : nullptr);
+  auto error = admitted != cudaSuccess ? admitted
+               : reference_only
+                   ? response::cuda_cpks_reference_weights(
+                         shape, options, reference, selected_weights, selected_workspace,
+                         owner.mode == "short-workspace" ? required - 1 : required,
+                         owner.mode == "wrong-stream" ? nullptr : stream)
+                   : response::solve_cuda_cpks(
+                         shape, options, reference, device_frozen, device_overlap, induced, &owner,
+                         density, selected_weights, selected_workspace,
+                         owner.mode == "short-workspace" ? required - 1 : required,
+                         owner.mode == "wrong-stream" ? nullptr : stream, result,
+                         cached ? &cache : nullptr, upstream_status);
+  if (owner.mode == "upstream-replay") {
+    if (error != cudaSuccess || result.status != response::CudaCpksStatus::numerical_failure ||
+        result.gmres.iterations)
+      throw std::runtime_error("rejected upstream audit reached GMRES");
+    require(cudaMemsetAsync(upstream_status, 0, sizeof(int), stream));
+    error = response::solve_cuda_cpks(shape, options, reference, device_frozen, device_overlap,
+                                      induced, &owner, density, weights, workspace, required,
+                                      stream, result, nullptr, upstream_status);
+  }
+  if (owner.mode == "cached-nonlinear-replay") {
+    if (error != cudaSuccess || result.status != response::CudaCpksStatus::linear_solve_failed ||
+        !cache.physical_checks())
+      throw std::runtime_error("invalid cached operator did not reach the physical residual gate");
+    const auto rejected_columns = cache.columns();
+    owner.mode = "cached-linear";
+    error = response::solve_cuda_cpks(shape, options, reference, device_frozen, device_overlap,
+                                      induced, &owner, density, weights, workspace, required,
+                                      stream, result, &cache);
+    if (error == cudaSuccess && result.converged() && cache.columns() <= rejected_columns)
+      throw std::runtime_error("physical residual rejection left the cached operator authorized");
+  }
   if (owner.mode == "cached-reuse" && error == cudaSuccess && result.converged())
     error = response::solve_cuda_cpks(shape, options, reference, device_frozen, device_overlap,
                                       induced, &owner, density, weights, workspace, required,

@@ -63,6 +63,26 @@ struct CudaCpksResult {
   bool converged() const noexcept { return status == CudaCpksStatus::converged; }
 };
 
+/** Sticky receipt for one dense transaction. A caller zeroes this device
+ * storage before submission and reads it once with the outer assembly audit. */
+struct CudaCpksDenseReceipt {
+  CudaGmresDeviceReceipt last;
+  std::size_t iterations, cached_actions, physical_checks;
+  CudaCpksStatus failure;
+  int revoke_cache;
+};
+
+/** Registered by the dense owner for private FP64 output only. Every solve
+ * must use the same reference, provider, stream, workspace, options and panel
+ * addresses. On failure the outer status becomes sticky for that column.
+ * No published storage may be bound here. The owner drains all queued work
+ * before releasing any captured buffers or the aggregate receipt. */
+struct CudaCpksDenseReplay {
+  CudaCpksDenseReceipt* receipt;
+  int* column_status;
+  CudaGmresReplay solver;
+};
+
 /** Optional bounded representation of one immutable, linear CPKS operator.
  * The caller owns the device storage and keeps the exact reference/provider
  * alive and unchanged. Reset explicitly before changing either source. Columns
@@ -86,6 +106,11 @@ class CudaCpksOperatorCache {
   std::size_t columns() const noexcept { return columns_; }
   std::size_t actions() const noexcept { return actions_; }
   std::size_t physical_checks() const noexcept { return checks_; }
+  void collect_dense(const CudaCpksDenseReceipt& receipt) noexcept {
+    actions_ += receipt.cached_actions;
+    checks_ += receipt.physical_checks;
+    if (receipt.revoke_cache) ready_ = false;
+  }
 
  private:
   void* values_{};
@@ -100,7 +125,8 @@ class CudaCpksOperatorCache {
                                      const CudaCpksReference&, const double*, const double*,
                                      CudaCpksInducedFock, void*, double*, double*, void*,
                                      std::size_t, cudaStream_t, CudaCpksResult&,
-                                     CudaCpksOperatorCache*) noexcept;
+                                     CudaCpksOperatorCache*, const int*,
+                                     CudaCpksDenseReplay*) noexcept;
 };
 
 /** Host-only storage requirement; zero denotes an empty rotation space. */
@@ -141,6 +167,11 @@ cudaError_t cuda_cpks_reference_weights(const CudaCpksShape& shape, const CudaCp
  * Ordinary noncapturing streams only; capture is rejected before submission.
  * Synchronizes at failure/convergence gates. Numerical or CUDA/provider failure
  * never publishes candidates; both outputs remain unchanged before publication.
+ * If supplied, upstream_status is an aligned, disjoint device audit on stream.
+ * A nonzero value rejects the RHS at the existing setup checkpoint.
+ * The internal dense_replay mode defers numerical validation and publication
+ * to the private transaction receipt. In that mode a successful return means
+ * submitted, not converged, and the CPU result contains only setup metadata.
  * A CUDA failure during the final copies invalidates BOTH outputs. This is a
  * response component, not an advertised complete molecular Hessian endpoint.
  */
@@ -150,7 +181,8 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
                             void* context, double* density_direction,
                             double* weighted_density_direction, void* workspace,
                             std::size_t workspace_bytes, cudaStream_t stream,
-                            CudaCpksResult& result,
-                            CudaCpksOperatorCache* operator_cache = nullptr) noexcept;
+                            CudaCpksResult& result, CudaCpksOperatorCache* operator_cache = nullptr,
+                            const int* upstream_status = nullptr,
+                            CudaCpksDenseReplay* dense_replay = nullptr) noexcept;
 
 }  // namespace generativeqc::response

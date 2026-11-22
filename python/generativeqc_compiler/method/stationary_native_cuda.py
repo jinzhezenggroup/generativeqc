@@ -228,6 +228,9 @@ def emit_native_stationary_profile_cuda(
         re.findall(r"\bstationary_[A-Za-z0-9_]+\b", wrapper + runtime + transport)
     )
     identifiers.update(re.findall(r"\bgenerativeqc_grid_[A-Za-z0-9_]+\b", wrapper))
+    # Only implementation namespaces are profile-local. The center table
+    # crosses the fixed transport binding under one C++ type.
+    identifiers.discard("generativeqc_grid_pair_geometry")
     identifiers.update(
         ("generativeqc_stationary_cuda", "StationaryPointValue", "ao_pullback")
     )
@@ -372,7 +375,8 @@ const CudaStationaryBinding& native_stationary_profile_{profile_name}() {{
       {json.dumps(source_identity)}, nullptr,
       {"native_bind_point" if shared else "nullptr"},
       {json.dumps(source_identity) if shared else "nullptr"},
-      {json.dumps(profile_name)}, {"native_point_metrics" if shared else "nullptr"}
+      {json.dumps(profile_name)}, {"native_point_metrics" if shared else "nullptr"},
+      native_center_pairs
   }};
   return binding;
 }}

@@ -217,6 +217,32 @@ void evaluate(const std::string& mode) {
     check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
   const auto prepared =
       grid.prepare(shape, options, reference, workspace, mode == "short-arena" ? bytes - 1 : bytes);
+  if (mode == "private-replay") {
+    check(prepared);
+    require(shape.nao > 1, "private replay needs an off-diagonal AO pair");
+    const auto matrix_bytes = matrices * sizeof(double);
+    std::vector<double> expected(matrices), replay(matrices);
+    check(grid.apply(moving, output, stream));
+    check(cudaMemcpy(expected.data(), output, matrix_bytes, cudaMemcpyDeviceToHost));
+    direction[1] += 0.1;
+    const auto* asymmetric = storage.upload(direction);
+    check(grid.enqueue_private_response(asymmetric, output, stream));
+    check(cudaStreamSynchronize(stream));
+    check(cudaMemcpy(replay.data(), output, matrix_bytes, cudaMemcpyDeviceToHost));
+    require(
+        std::all_of(replay.begin(), replay.end(), [](double value) { return std::isnan(value); }),
+        "unchecked response did not propagate the device audit failure");
+    check(grid.enqueue_private_response(moving, output, stream));
+    check(cudaStreamSynchronize(stream));
+    check(cudaMemcpy(replay.data(), output, matrix_bytes, cudaMemcpyDeviceToHost));
+    for (std::size_t index = 0; index < matrices; ++index)
+      require(std::abs(expected[index] - replay[index]) <= 2e-13 * (1 + std::abs(expected[index])),
+              "private replay disagrees with the checked response");
+    std::cout << "{\"private_replay\":true}\n";
+    check(cudaStreamDestroy(other));
+    check(cudaStreamDestroy(stream));
+    return;
+  }
   if (mode == "capture-prepare") {
     cudaGraph_t graph{};
     check(cudaStreamEndCapture(stream, &graph));
@@ -286,6 +312,7 @@ void evaluate(const std::string& mode) {
     array(scalar, 1);
     require(grid.work().nuclear_response_pairs == pair_work,
             "left nuclear contraction repeated the VV10 pairs");
+    const auto measured_work = grid.work();
     const auto sentinel = [&] {
       const std::vector<double> values(matrices, 91.25);
       const double value = 91.25;
@@ -313,7 +340,59 @@ void evaluate(const std::string& mode) {
     check(cudaMemcpy(left_weights, &nan, sizeof(double), cudaMemcpyHostToDevice));
     require(mixed() == cudaErrorInvalidValue, "nuclear contraction accepted nonfinite motion");
     unchanged();
+    auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
+    const auto private_mixed = [&] {
+      check(grid.enqueue_private_nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights,
+                                               left_points, scalar, transaction, stream));
+      check(cudaStreamSynchronize(stream));
+    };
+    check(cudaMemsetAsync(transaction, 0, sizeof(int), stream));
+    private_mixed();
+    int status{};
+    double candidate{};
+    check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+    check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+    require(status && std::isnan(candidate), "private mixed audit was lost");
     check(cudaMemcpy(left_weights, &original, sizeof(double), cudaMemcpyHostToDevice));
+    check(cudaMemsetAsync(transaction, 0, sizeof(int), stream));
+    private_mixed();
+    check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+    check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+    require(!status && std::isfinite(candidate), "failed private mixed action contaminated replay");
+    check(mixed());
+    double checked{};
+    check(cudaMemcpy(&checked, scalar, sizeof(checked), cudaMemcpyDeviceToHost));
+    require(std::abs(checked - candidate) <= 2e-13 * (1 + std::abs(checked)),
+            "private mixed replay disagrees with checked output");
+    const auto checked_pair_count = grid.work().nuclear_response_pairs;
+    const auto private_direction = [&] {
+      check(cudaMemsetAsync(transaction, 0, sizeof(int), stream));
+      check(grid.enqueue_private_nuclear_direction(right_ao, right_weights, right_points, moving,
+                                                   output, transaction, stream));
+      require(mixed() == cudaErrorInvalidResourceHandle,
+              "checked action consumed an unverified right cache");
+      check(cudaStreamSynchronize(stream));
+      check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+    };
+    check(cudaMemcpy(right_weights, &nan, sizeof(double), cudaMemcpyHostToDevice));
+    private_direction();
+    require(status, "private direction did not report a failed audit");
+    private_mixed();
+    check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+    require(std::isnan(candidate), "failed private direction escaped into a mixed result");
+    check(cudaMemsetAsync(right_weights, 0, shape.points * sizeof(double), stream));
+    private_direction();
+    require(!status, "failed private direction contaminated valid replay");
+    std::vector<double> replayed_direction(matrices), checked_direction(matrices);
+    check(cudaMemcpy(replayed_direction.data(), output, matrices * sizeof(double),
+                     cudaMemcpyDeviceToHost));
+    check(arm());
+    check(cudaMemcpy(checked_direction.data(), output, matrices * sizeof(double),
+                     cudaMemcpyDeviceToHost));
+    require(replayed_direction == checked_direction,
+            "private right replay disagrees with the checked direction");
+    const auto injected_pair_count = grid.work().nuclear_response_pairs - checked_pair_count;
+    sentinel();
     require(grid.prepare_nuclear_direction(right_ao, right_weights, right_points, moving, moving,
                                            stream) == cudaErrorInvalidValue &&
                 mixed() == cudaErrorInvalidResourceHandle,
@@ -352,12 +431,14 @@ void evaluate(const std::string& mode) {
     unchanged();
     const auto& work = grid.work();
     std::cout << ",\"nuclear_reference_pairs\":" << work.nuclear_reference_pairs
-              << ",\"nuclear_response_pairs\":" << work.nuclear_response_pairs
+              << ",\"nuclear_response_pairs\":" << work.nuclear_response_pairs - injected_pair_count
               << ",\"active_nonlocal_points\":" << work.active_nonlocal_points
               << ",\"fixed_response_pairs\":" << work.response_pairs
               << ",\"nuclear_affine_terms\":" << work.nuclear_affine_terms
-              << ",\"nuclear_contractions\":" << work.nuclear_contractions
-              << ",\"nuclear_graph_replays\":" << work.nuclear_graph_replays
+              << ",\"nuclear_contractions\":" << measured_work.nuclear_contractions
+              << ",\"nuclear_graph_replays\":" << measured_work.nuclear_graph_replays
+              << ",\"private_mixed_replay\":true"
+              << ",\"private_direction_replay\":true"
               << ",\"nuclear_lifecycle\":true}\n";
     check(cudaStreamDestroy(other));
     check(cudaStreamDestroy(stream));

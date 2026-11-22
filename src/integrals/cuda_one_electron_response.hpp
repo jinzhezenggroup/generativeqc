@@ -106,9 +106,18 @@ class CudaOneElectronResponse {
                       std::size_t workspace_bytes) noexcept;
   cudaError_t apply(const double* direction, const CudaOneElectronWeights& weights,
                     const CudaOneElectronOutput& output, cudaStream_t stream) noexcept;
+  /** Enqueue into private device panels and accumulate failures into a
+   * disjoint, initialized device status. The enclosing transaction owns
+   * stream completion and must reject publication on failure. */
+  cudaError_t enqueue_private(const double* direction, const CudaOneElectronWeights& weights,
+                              const CudaOneElectronOutput& output, int* transaction_status,
+                              cudaStream_t stream) noexcept;
   const CudaOneElectronWork& work() const noexcept;
 
  private:
+  cudaError_t apply_impl(const double* direction, const CudaOneElectronWeights& weights,
+                         const CudaOneElectronOutput& output, int* transaction_status,
+                         cudaStream_t stream) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

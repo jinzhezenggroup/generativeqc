@@ -83,7 +83,7 @@ def _native(
         [executable, str(source), str(result)],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
         timeout=120,
         env={
             **os.environ,
@@ -91,6 +91,7 @@ def _native(
             "PYTHONPATH": str(tmp_path / "missing"),
         },
     )
+    assert process.returncode == 0, process.stderr
     receipt = json.loads(process.stdout)
     if reject:
         assert receipt == {"prepare_rejected": True}
@@ -236,7 +237,7 @@ def test_native_radial_tiles_and_rigid_translation(
     np.testing.assert_allclose(response[1], 0, atol=3e-12, rtol=0)
 
 
-@pytest.mark.parametrize("schedule", [1, 2, 3, 4])
+@pytest.mark.parametrize("schedule", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("spherical", [False, True])
 def test_parallel_ordered_one_electron_and_bounded_fallback(
     schedule: int, spherical: bool, tmp_path: Path
