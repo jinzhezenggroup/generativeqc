@@ -268,8 +268,8 @@ class Calculator:
         ``ks_options`` snapshots the electronic composition, GridSpec and XC
         tile schedule. ``dispersion_memory_budget_bytes`` independently bounds
         the retained correction owner. Admitted complete native D3/D4 programs
-        contribute their retained host/device capacity to the global ResourceBudget;
-        composite gCP planning remains fail-closed.
+        contribute their retained host/device capacity to the global ResourceBudget,
+        including the native gCP inventory for canonical CUDA r2SCAN-3c.
         """
         if target_accuracy is not None and not isinstance(
             target_accuracy, TargetAccuracy
@@ -777,6 +777,8 @@ class Calculator:
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
+            from ._named_ks import cuda_r2scan3c_resource_graph
+
             correction_nodes = tuple(
                 node
                 for node in self._dispersion_method_ir.primitives
@@ -785,9 +787,14 @@ class Calculator:
             if (
                 len(correction_nodes) != 1
                 or not isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
-                or any(
-                    isinstance(node, GeometricCounterpoisePrimitive)
-                    for node in self._dispersion_method_ir.primitives
+                or (
+                    any(
+                        isinstance(node, GeometricCounterpoisePrimitive)
+                        for node in self._dispersion_method_ir.primitives
+                    )
+                    and not cuda_r2scan3c_resource_graph(
+                        self._dispersion_method_ir, device
+                    )
                 )
             ):
                 raise NotImplementedError(
@@ -1338,6 +1345,25 @@ class Calculator:
         fitted_budget = fitted_scf_budget_admitted(
             self, self._application_precision_budget
         )
+        fitted_pbe_auto = False
+        if (
+            self._device_name == "cuda"
+            and self._precision_mode == _native.PRECISION_AUTO
+            and density_fitting_mode
+            in (_native.DENSITY_FITTING_CUDA, _native.DENSITY_FITTING_AUTO)
+            and not basis_has_ecp
+            and self._application_precision_budget is None
+            and self._dispersion_method_ir is None
+            and self._automatic_libxc_name is None
+            and self._ks_options is not None
+            and not self._ks_options.uses_host_xc_schedule
+        ):
+            from generativeqc_compiler.method import resolve_method
+
+            fitted_pbe_auto = (
+                self._ks_options.method_ir.identity
+                == resolve_method("PBE", spin="unpolarized").identity
+            )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
             and (self._precision_mode == _native.PRECISION_FP64 or fitted_budget)
@@ -1432,6 +1458,8 @@ class Calculator:
         )
         from .ks import (
             composite_stationary_second_order_eligible,
+            cuda_pbe_range_stationary_second_order_eligible,
+            cuda_semilocal_stationary_second_order_eligible,
             full_range_stationary_second_order_eligible,
         )
 
@@ -1452,6 +1480,133 @@ class Calculator:
                 )
             )
         )
+        self._cuda_r2scan_stationary = False
+        self._cuda_pbe_range_stationary = False
+        self._cuda_split_hybrid_stationary: tuple[str, str] | None = None
+        self._cuda_direct_hybrid_energy_plan = False
+        cuda_named_correction = False
+        cuda_intrinsic_pbe_d4 = False
+        if (
+            self._device_name == "cuda"
+            and self._precision_mode == _native.PRECISION_FP64
+            and self._ks_options is not None
+            and not self._ks_options.uses_host_xc_schedule
+            and self._application_precision_budget is None
+            and self._automatic_libxc_name is None
+            and (
+                self._ks_options.grid is None
+                or self._ks_options.grid.partition_iterations == 3
+            )
+        ):
+            from generativeqc_compiler.method import resolve_method
+
+            from ._named_ks import select_named_program
+            from ._native_hessian import (
+                canonical_cuda_split_hybrid_domain,
+                has_cuda_r2scan_stationary_domain,
+            )
+            from .ks import is_canonical_r2scan_rvv10
+
+            graph = self.method_ir
+            electronic = self._ks_options.method_ir
+            self._cuda_pbe_range_stationary = (
+                self._dispersion_method_ir is None
+                and density_fitting_mode
+                in (
+                    _native.DENSITY_FITTING_NONE,
+                    _native.DENSITY_FITTING_CUDA,
+                )
+                and hasattr(self._library, "generativeqc_resource_ks_cuda_rebuild_v1")
+                and cuda_pbe_range_stationary_second_order_eligible(electronic)
+            )
+            self._cuda_direct_hybrid_energy_plan = (
+                density_fitting_mode == _native.DENSITY_FITTING_NONE
+                and self._dispersion_method_ir is None
+                and bool(self._ks_options.coefficients[2])
+                and cuda_semilocal_stationary_second_order_eligible(electronic)
+            )
+            split_domain = canonical_cuda_split_hybrid_domain(self._library, graph)
+            if (
+                split_domain is not None
+                and self._dispersion_method_ir is None
+                and (
+                    density_fitting_mode == _native.DENSITY_FITTING_NONE
+                    or (
+                        density_fitting_mode == _native.DENSITY_FITTING_CUDA
+                        and self._auxiliary_basis is not None
+                    )
+                )
+            ):
+                self._cuda_split_hybrid_stationary = (graph.identifier, split_domain)
+            variational_available = has_cuda_r2scan_stationary_domain(self._library)
+            canonical_r2scan = variational_available and (
+                electronic.semantic_payload()
+                == resolve_method("R2SCAN", spin=electronic.spin).semantic_payload()
+            )
+            canonical_composite = (
+                variational_available
+                and graph.identifier.casefold() == "r2scan-3c"
+                and graph.semantic_payload()
+                == resolve_method("R2SCAN-3c", spin=graph.spin).semantic_payload()
+            )
+            if self._dispersion_method_ir is not None and (
+                canonical_r2scan
+                or cuda_semilocal_stationary_second_order_eligible(electronic)
+            ):
+                # The linked endpoint cannot see standalone Python correction
+                # owners. Admit only an exact catalog-backed full graph.
+                cuda_named_correction = (
+                    select_named_program(self._library, graph, _native.BACKEND_CUDA)
+                    is not None
+                )
+            cuda_intrinsic_pbe_d4 = self._method == _native.METHOD_PBE_D4_RKS and (
+                graph.semantic_payload()
+                == resolve_method(
+                    "PBE-D4(BJ-EEQ-ATM)", spin="unpolarized"
+                ).semantic_payload()
+            )
+            self._cuda_r2scan_stationary = (
+                canonical_composite
+                or (
+                    canonical_r2scan
+                    and (self._dispersion_method_ir is None or cuda_named_correction)
+                )
+                or (
+                    variational_available
+                    and self._dispersion_method_ir is None
+                    and is_canonical_r2scan_rvv10(electronic)
+                    and (
+                        self._ks_options.nonlocal_grid is None
+                        or self._ks_options.nonlocal_grid.partition_iterations == 3
+                    )
+                )
+            )
+        self._cuda_intrinsic_pbe_d4 = cuda_intrinsic_pbe_d4
+        self._cuda_named_correction = cuda_named_correction
+        self._cuda_rks_second_order = (
+            self._device_name == "cuda"
+            and self._ks_options is not None
+            and (
+                self._composite_rks_second_order
+                or (
+                    density_fitting_mode
+                    in (
+                        _native.DENSITY_FITTING_NONE,
+                        _native.DENSITY_FITTING_CUDA,
+                        _native.DENSITY_FITTING_AUTO,
+                    )
+                    and (
+                        self._cuda_r2scan_stationary
+                        or self._cuda_pbe_range_stationary
+                        or self._cuda_split_hybrid_stationary is not None
+                        or cuda_intrinsic_pbe_d4
+                        or cuda_semilocal_stationary_second_order_eligible(
+                            self._ks_options.method_ir
+                        )
+                    )
+                )
+            )
+        )
         self._d3_second_order_spec = None
         if (
             self._dispersion_method_ir is not None
@@ -1462,31 +1617,71 @@ class Calculator:
             from .d3_hessian import second_order_spec
 
             self._d3_second_order_spec = second_order_spec(self._dispersion_method_ir)
+        # AUTO is only a preconvergence policy. The native Hessian requires
+        # proof of a fresh FP64 Fock from the accepted SCF generation.
+        auto_cuda_second_order = (
+            self._device_name == "cuda"
+            and self._cuda_rks_second_order
+            and self._precision_mode == _native.PRECISION_AUTO
+            and (
+                density_fitting_mode == _native.DENSITY_FITTING_NONE or fitted_pbe_auto
+            )
+            and not basis_has_ecp
+            and self._application_precision_budget is None
+            and self._dispersion_method_ir is None
+            and not cuda_intrinsic_pbe_d4
+            and self._method != _native.METHOD_PBE_D4_RKS
+            and not self._ks_options.uses_host_xc_schedule
+        )
         public_rks_second_order = (
-            (self._device_name == "cpu" or self._composite_rks_second_order)
-            and (not basis_has_ecp or self._composite_rks_second_order)
+            (self._device_name == "cpu" or self._cuda_rks_second_order)
+            and (
+                self._cuda_rks_second_order
+                or not self._ks_options
+                or not self._ks_options.has_separate_nonlocal_grid
+            )
+            and (
+                not basis_has_ecp
+                or self._composite_rks_second_order
+                or self._cuda_rks_second_order
+            )
             and (
                 density_fitting_mode == _native.DENSITY_FITTING_NONE
                 or self._composite_rks_second_order
+                or self._cuda_rks_second_order
             )
-            and self._precision_mode == _native.PRECISION_FP64
+            and (
+                self._precision_mode == _native.PRECISION_FP64 or auto_cuda_second_order
+            )
             and (
                 self._representation_name == "cartesian"
                 or self._composite_rks_second_order
+                or self._cuda_rks_second_order
             )
             and self._automatic_libxc_name is None
             and (
                 self._dispersion_method_ir is None
                 or self._d3_second_order_spec is not None
+                or self._cuda_r2scan_stationary
+                or cuda_named_correction
             )
             and second_order_basis
             and self._ks_options is not None
             and (
                 stationary_second_order_eligible(self._ks_options.method_ir)
                 or self._composite_rks_second_order
+                or self._cuda_rks_second_order
             )
         )
-        if public_rks_second_order:
+        self._cuda_hessian_package_error = None
+        if public_rks_second_order and self._device_name == "cuda":
+            from ._native_hessian import cuda_hessian_bridge
+
+            try:
+                cuda_hessian_bridge(self._library)
+            except NotImplementedError as error:
+                self._cuda_hessian_package_error = str(error)
+        if public_rks_second_order and self._cuda_hessian_package_error is None:
             self._capabilities = replace(
                 self._capabilities,
                 supported_second_order=frozenset(("hvp", "hessian")),
@@ -1521,7 +1716,9 @@ class Calculator:
                 # DF changes the Hamiltonian. Keep its backend explicit; the
                 # stationary force consumer is admitted only through the
                 # token-bound auxiliary/metric-response provider above.
-                if self._precision_mode != _native.PRECISION_FP64 and not fitted_budget:
+                if self._precision_mode != _native.PRECISION_FP64 and not (
+                    fitted_budget or fitted_pbe_auto
+                ):
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
                     )
@@ -1619,6 +1816,11 @@ class Calculator:
         compare the full canonical manifest as well as its public name.
         Other corrected DF methods remain energy-only until qualified.
         """
+        # The legacy PBE-D4 selector owns dispersion even though it has no
+        # separate MethodIR correction. Do not send that full graph through
+        # the electronic-only split-hybrid force predicate.
+        if self._method == _native.METHOD_PBE_D4_RKS:
+            return False
         graph = self._dispersion_method_ir
         if graph is None:
             return True
@@ -1776,6 +1978,13 @@ class Calculator:
             _native.ABI_VERSION,
             self._device_id,
             self._backend,
+        )
+
+    def _supports_fitted_ecp_basis(self) -> bool:
+        """Recognize electronic models with a qualified fitted ECP provider."""
+        return self._composite_rks_second_order or (
+            self._cuda_rks_second_order
+            and self._precision_mode == _native.PRECISION_FP64
         )
 
     def _method_descriptor(
@@ -2622,7 +2831,7 @@ class Calculator:
                 if (
                     source.has_ecp
                     and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                    and not self._composite_rks_second_order
+                    and not self._supports_fitted_ecp_basis()
                     and self._method not in _CORRELATED_METHODS
                 ):
                     raise NotImplementedError(
@@ -2692,7 +2901,7 @@ class Calculator:
         if ecp_terms:
             if (
                 self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                and not self._composite_rks_second_order
+                and not self._supports_fitted_ecp_basis()
                 and self._method not in _CORRELATED_METHODS
             ):
                 raise NotImplementedError(
@@ -2788,6 +2997,14 @@ class Calculator:
             )
         return (request, native_program) if _include_native_program else request
 
+    def _resource_dispersion_graph(self) -> typing.Any:
+        """Use the identical catalog program for budgeted intrinsic CUDA PBE-D4."""
+        if self._cuda_intrinsic_pbe_d4:
+            # The intrinsic C ABI has a fixed D4 allowance. The named ABI
+            # transports the caller's correction cap and global device ledger.
+            return self.method_ir
+        return self._dispersion_method_ir
+
     def _base_resource_request(
         self,
         systems: typing.Any,
@@ -2799,25 +3016,69 @@ class Calculator:
     ) -> typing.Any:
         """Resolve this calculator's active scientific controls without executing."""
         if self._capabilities.family == "density_functional":
-            if self._density_fitting_mode != _native.DENSITY_FITTING_NONE:
+            fitted = self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
+            if (
+                self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not fitted
+            ):
                 raise NotImplementedError(
                     "DFT density-fitting resource plans are not qualified; "
                     "use density_fitting_memory_budget_bytes for the native DF provider"
                 )
             from ._cpu_force_resources import qualified_direct_semilocal_context
+            from ._named_ks import has_d4_correction
+            from .ks import (
+                composite_stationary_second_order_eligible,
+                electronic_method_ir,
+                resolve_ks_options,
+            )
             from .resources_ks import ks_resource_request
 
             requested = self._resource_properties(properties)
+            options = self._ks_options if ks_options is None else ks_options
+            method = self._method_name
+            if self._cuda_intrinsic_pbe_d4:
+                if "forces" in requested:
+                    raise NotImplementedError(
+                        "budgeted CUDA pbe-d4-rks supports energy and second derivatives, not forces"
+                    )
+                method = "pbe-rks"
+                options = resolve_ks_options(
+                    method,
+                    replace(
+                        options,
+                        functional=None,
+                        composition=electronic_method_ir(options.method_ir),
+                    ),
+                )
+            named_cuda_correction = self._device_name == "cuda" and (
+                self._cuda_named_correction
+                or has_d4_correction(self._resource_dispersion_graph())
+            )
+            cuda_output_aware = (
+                named_cuda_correction
+                or self._cuda_split_hybrid_stationary is not None
+                or self._cuda_direct_hybrid_energy_plan
+                or self._cuda_pbe_range_stationary
+            )
+            output_aware = qualified_direct_semilocal_context(self) or (
+                self._device_name == "cuda"
+                and (
+                    fitted
+                    or cuda_output_aware
+                    or composite_stationary_second_order_eligible(options.method_ir)
+                )
+            )
             planned = (
                 requested
-                if qualified_direct_semilocal_context(self)
+                if output_aware
                 else self._capabilities.supported_properties | requested
             )
             return ks_resource_request(
                 systems,
                 charges=charges,
                 multiplicities=multiplicities,
-                method=self._method_name,
+                method=method,
                 basis=self._basis,
                 backend=self._device_name,
                 precision={
@@ -2830,10 +3091,20 @@ class Calculator:
                 energy_tolerance=self._energy_tolerance,
                 density_tolerance=self._density_tolerance,
                 screening_tolerance=self._screening_tolerance,
-                ks_options=self._ks_options if ks_options is None else ks_options,
+                ks_options=options,
                 device_id=self._device_id,
                 library=self._library,
                 include_forces="forces" in planned,
+                _cuda_energy_only=cuda_output_aware and "forces" not in planned,
+                _fitted=(
+                    (
+                        self._auxiliary_basis,
+                        self._density_fitting_memory_budget_bytes,
+                        self._density_fitting_relative_threshold,
+                    )
+                    if fitted
+                    else None
+                ),
                 _application_precision_budget=getattr(
                     self, "_application_precision_budget", None
                 ),
@@ -2878,8 +3149,6 @@ class Calculator:
             library=self._library,
         )
         if request.identity.backend == "cpu":
-            from dataclasses import replace
-
             query = getattr(
                 self._library, "generativeqc_cpu_resource_inventory_version_v1", None
             )
@@ -2899,9 +3168,11 @@ class Calculator:
         electronic_request: typing.Any,
         *,
         _native_ks: bool | None = None,
+        _native_ks_required: bool = False,
     ) -> typing.Any:
         """Present the native correction inventory for an admitted global plan."""
-        if self._dispersion_method_ir is None:
+        graph = self._resource_dispersion_graph()
+        if graph is None:
             return None
 
         from generativeqc_compiler.method import (
@@ -2913,28 +3184,33 @@ class Calculator:
 
         corrections = tuple(
             node
-            for node in self._dispersion_method_ir.primitives
+            for node in graph.primitives
             if isinstance(node, DispersionCorrectionPrimitive)
         )
+        has_gcp = any(
+            isinstance(node, GeometricCounterpoisePrimitive)
+            for node in graph.primitives
+        )
+        from ._named_ks import cuda_r2scan3c_resource_graph, select_resource_program
+
         if (
             len(corrections) != 1
             or not isinstance(corrections[0].specification, (D3Spec, D4Spec))
-            or any(
-                isinstance(node, GeometricCounterpoisePrimitive)
-                for node in self._dispersion_method_ir.primitives
-            )
+            or (has_gcp and not cuda_r2scan3c_resource_graph(graph, self._device_name))
         ):
             raise NotImplementedError(
-                "global ResourcePlan supports individual D3/D4 corrections; composite gCP is unavailable"
+                "global ResourcePlan supports individual D3/D4 or native CUDA r2SCAN-3c corrections"
             )
-
-        from ._named_ks import select_resource_program
 
         native_ks = (
             select_resource_program(self, electronic_request) is not None
             if _native_ks is None
             else _native_ks
         )
+        if _native_ks_required and not native_ks:
+            raise NotImplementedError(
+                "CUDA Hessian requires dispersion capacity owned by the native KS batch"
+            )
         if isinstance(corrections[0].specification, D4Spec):
             if not native_ks:
                 raise NotImplementedError(
@@ -2949,7 +3225,7 @@ class Calculator:
             request = d3_resource_request
         return request(
             tuple(tuple(atom.atomic_number for atom in system) for system in systems),
-            method=self._dispersion_method_ir,
+            method=graph,
             backend=self._device_name,
             device_id=self._device_id,
             maximum_bytes=self._dispersion_memory_budget_bytes,
@@ -3052,8 +3328,9 @@ class Calculator:
         """Dry-run the active scientific inputs; no solve or warm-state mutation.
 
         Optional direct all-electron CPU semilocal forces reserve their workspace
-        only when explicitly requested in ``properties``. Other contexts retain
-        their existing conservative capacity allowance.
+        only when explicitly requested in ``properties``. Qualified named CUDA
+        corrections and hybrids can plan energy separately from forces; their
+        energy-only prepared batches cannot replay forces.
         """
         from generativeqc_compiler.common.resources import ResourceBudget
 
@@ -3106,6 +3383,7 @@ class Calculator:
         inactive_eigensolver_profiling: bool = False,
         ks_export: bool = True,
         resource_plan: typing.Any = None,
+        _hessian_request: typing.Any = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
         """Prepare a persistent native ragged batch for repeated execution.
 
@@ -3144,6 +3422,7 @@ class Calculator:
             inactive_eigensolver_profiling=inactive_eigensolver_profiling,
             ks_export=ks_export,
             resource_plan=resource_plan,
+            _hessian_request=_hessian_request,
         )
 
     def batch_singlepoint(
@@ -3178,11 +3457,17 @@ class Calculator:
         multiplicity: int,
         endpoint: str,
     ) -> tuple[Atom, ...]:
-        if self._ks_options is not None and self._ks_options.has_separate_nonlocal_grid:
+        if (
+            self._ks_options is not None
+            and self._ks_options.has_separate_nonlocal_grid
+            and not self._cuda_rks_second_order
+        ):
             raise NotImplementedError(
-                "independent XC/VV10 grids do not yet support Hessians or HVPs"
+                "independent XC/VV10 Hessians and HVPs require native CUDA"
             )
         if endpoint not in self._capabilities.supported_second_order:
+            if self._cuda_hessian_package_error is not None:
+                raise NotImplementedError(self._cuda_hessian_package_error)
             graph = self.method_ir
             method = self._method_name if graph is None else graph.identifier
             raise NotImplementedError(
@@ -3192,11 +3477,17 @@ class Calculator:
                 "Cartesian/spherical PBE0 RKS or B3LYP RKS/UKS compositions with "
                 "full-range exchange in (0, 1], optionally with uncut two-body "
                 "D3(BJ); canonical linked CPU B3LYP RKS/UKS also admits scalar "
-                "ECPs; or canonical FP64 WB97M-V RKS/UKS with "
-                "CPU/CUDA, Cartesian/spherical, full-rank DF and scalar ECPs"
+                "ECPs; CUDA FP64 LDA/PBE/PBE0/B3LYP RKS/UKS with direct "
+                "or cutoff-separated CUDA DF integrals, with or without scalar ECP; "
+                "CUDA FP64 variational r2SCAN, r2SCAN-3c, r2SCAN+rVV10 "
+                "and qualified catalog D3/D4; opt-in CUDA FP64 "
+                "PBE plus explicit range-separated HF; "
+                "variational M06-2X or MN15 RKS/UKS with orbital shells through f; "
+                "or canonical FP64 WB97M-V RKS/UKS with "
+                "CPU/CUDA, Cartesian/spherical, admitted DF and scalar ECPs"
             )
         if multiplicity != 1 and not (
-            self._composite_rks_second_order
+            (self._composite_rks_second_order or self._cuda_rks_second_order)
             and self._ks_options.method_ir.spin == "polarized"
         ):
             raise NotImplementedError(
@@ -3206,6 +3497,28 @@ class Calculator:
         native_atoms = tuple(Atom.from_value(atom) for atom in atoms)
         if not native_atoms:
             raise ValueError("at least one atom is required")
+        if self._cuda_split_hybrid_stationary is not None:
+            # The molecular qualification covers spherical polarization; the
+            # native endpoint separately admits the linked derivative leaves.
+            basis_limits = [(None, 3, "orbital", "f")]
+            if self._density_fitting_mode == _native.DENSITY_FITTING_CUDA:
+                basis_limits.append((self._auxiliary_basis, 4, "auxiliary", "g"))
+            for basis, limit, role, label in basis_limits:
+                selected = self._basis_for_atoms(native_atoms, basis)
+                spherical = (
+                    selected.representation == "spherical"
+                    if isinstance(selected, BasisSet)
+                    else self._basis_representation == _native.BASIS_SPHERICAL
+                )
+                if any(
+                    shell.angular_momentum > (limit if spherical else 1)
+                    for shell in self._shells_for_atoms(native_atoms, basis)
+                ):
+                    raise NotImplementedError(
+                        f"CUDA split-hybrid Hessian/HVP requires {role} shells "
+                        f"through {label} "
+                        "(spherical for d and higher)"
+                    )
         return native_atoms
 
     def _run_public_rks_second_order(
@@ -3347,7 +3660,11 @@ class Calculator:
     ) -> typing.Any:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
-        LDA/PBE require CPU direct all-electron Cartesian closed-shell FP64.
+        CPU LDA/PBE require direct all-electron Cartesian closed-shell FP64.
+        CUDA admits canonical FP64 LDA/PBE/PBE0/B3LYP RKS/UKS with direct
+        integrals or cutoff-separated CUDA DF, with or without scalar ECP.
+        Cartesian or spherical AOs require a matching linked AOT inventory.
+        Qualified catalog D3/D4 models add their native analytic corrections.
         Qualified PBE0 RKS and B3LYP RKS/UKS compositions also admit spherical
         AOs on CPU with direct all-electron FP64 and full-range exchange in (0, 1].
         Their uncut two-body D3(BJ) correction is added exactly once, without
@@ -3361,9 +3678,11 @@ class Calculator:
         With ``solver_options=None`` its physical
         response gates are rtol=1e-10 and atol=1e-12; explicit solver options are
         honored without weakening their gates. ``cache`` is unused by this path.
-        Canonical WB97M-V also admits UKS, CUDA, spherical AOs, full-rank DF
-        and scalar semilocal ECPs. CUDA Hessian numerics, including grid/DF/ECP
-        AD and coupled response, remain in linked native C++/CUDA code. A
+        Canonical WB97M-V also admits UKS, CUDA, spherical AOs, DF and scalar
+        semilocal ECPs. CUDA differentiates the actual primary and fitted-LR
+        metric branches, including separated rank truncations; CPU DF still
+        requires full rank and exact LR exchange. CUDA Hessian numerics,
+        including grid/DF/ECP AD and coupled response, remain in linked native C++/CUDA code. A
         build-time Hessian AOT package is required; Python, CuPy and runtime
         compilation are not numerical dependencies. ``cache`` is retained for
         other CPU/development implementations and is unused by CUDA AOT.
@@ -3429,7 +3748,7 @@ class Calculator:
                 grid_budget_bytes=grid_budget_bytes,
                 solver_options=solver_options,
             )
-        if self._composite_rks_second_order and self._device_name == "cuda":
+        if self._cuda_rks_second_order:
             from ._native_hessian import run_native_cuda
 
             return run_native_cuda(
@@ -3495,6 +3814,7 @@ class Calculator:
         max_map_terms: int | None = None,
         numeric_budget_bytes: int | None = None,
         response_budget_bytes: int | None = None,
+        response_cache_precision: str = "fp64",
     ) -> typing.Any:
         """Assemble a bounded raw analytic semilocal or hybrid Cartesian Hessian.
 
@@ -3502,7 +3822,7 @@ class Calculator:
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
 
-        PBE0 RKS and B3LYP RKS/UKS require CPU direct all-electron FP64;
+        The CPU PBE0 RKS and B3LYP RKS/UKS paths require direct all-electron FP64;
         Cartesian/spherical AOs and full-range exchange in (0, 1] are admitted.
         Uncut two-body D3(BJ) is an additive source with no extra CPKS solve.
         Corrected output budgets must hold three dense matrices (the detached
@@ -3528,7 +3848,7 @@ class Calculator:
         response subreservation (defaults 512 and 128 MiB). Additional space
         can admit reusable coordinate sources without changing work limits.
 
-        WB97M-V uses compiler automatic differentiation and implicit CPKS, not
+        The native CUDA endpoint uses compiler automatic differentiation and implicit CPKS, not
         displaced SCFs. Its RKS/UKS owner assembles scalar columns
         (``block_size=None`` or ``1``). The default strategy resolves to native
         ``"scalar"`` on CUDA and ``"recycled"`` on CPU; explicitly requesting
@@ -3536,7 +3856,9 @@ class Calculator:
         CUDA returns an aggregate native result: intermediate/source-component
         panels remain on device rather than being exported for Python assembly.
         ``grid_budget_bytes`` bounds its numeric AO/grid/pair workspace;
-        ``max_nonlocal_pairs`` independently caps ordered VV10 pairs per action.
+        ``max_nonlocal_pairs`` independently caps ordered nonlocal pairs per action.
+        CUDA's optional ``response_cache_precision="fp32-proposal"`` compresses
+        the repeated-column CPKS operator; FP64 physical CPKS still gates the result.
         Tight SCF/response tolerances and a converged grid remain necessary.
 
         Return a detached result record with a ``matrix`` of shape
@@ -3564,6 +3886,12 @@ class Calculator:
             raise NotImplementedError(
                 "numeric_budget_bytes and response_budget_bytes require the linked native CPU Hessian owner"
             )
+        if response_cache_precision not in ("fp64", "fp32-proposal"):
+            raise ValueError(
+                "response_cache_precision must be 'fp64' or 'fp32-proposal'"
+            )
+        if response_cache_precision != "fp64" and not self._cuda_rks_second_order:
+            raise NotImplementedError("fp32-proposal response cache requires CUDA")
         if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
             raise ValueError("output_budget_bytes must be a positive int64 byte count")
         coordinates = 3 * len(native_atoms)
@@ -3603,7 +3931,7 @@ class Calculator:
                 numeric_budget_bytes=numeric_budget_bytes,
                 response_budget_bytes=response_budget_bytes,
             )
-        if self._composite_rks_second_order and self._device_name == "cuda":
+        if self._cuda_rks_second_order:
             from ._native_hessian import run_native_cuda
 
             if block_size is not None and (
@@ -3624,6 +3952,7 @@ class Calculator:
                 grid_budget_bytes=grid_budget_bytes,
                 max_nonlocal_pairs=max_nonlocal_pairs,
                 solver_options=solver_options,
+                response_cache_precision=response_cache_precision,
             )
         if self._composite_rks_second_order:
             from .composite_rks_hessian import composite_rks_hessian

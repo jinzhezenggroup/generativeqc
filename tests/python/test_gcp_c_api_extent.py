@@ -1,29 +1,21 @@
 """The real gCP C entrypoint must reject unrepresentable extents before execution."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_gcp_c_api_rejects_wrapped_and_signed_coordinate_extents(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     headers = {
-        "generativeqc/generativeqc.h": """
-#pragma once
-#include <cstdint>
-using generativeqc_status = int;
-constexpr int GENERATIVEQC_STATUS_SUCCESS=0, GENERATIVEQC_STATUS_INVALID_ARGUMENT=1;
-constexpr int GENERATIVEQC_STATUS_NOT_IMPLEMENTED=2, GENERATIVEQC_STATUS_NUMERICAL_FAILURE=3;
-constexpr int GENERATIVEQC_STATUS_INTERNAL_ERROR=4;
-""",
         "api/error.hpp": """
 #pragma once
 #include "generativeqc/generativeqc.h"
@@ -92,24 +84,17 @@ int main() {
 }
 """
     )
-    executable = tmp_path / "gcp_extent"
-    subprocess.run(
-        [
-            compiler,
+    executable = native_cxx.build_executable(
+        [driver],
+        tmp_path / "gcp_extent",
+        compile_args=(
             "-std=c++17",
             "-Wall",
             "-Wextra",
             "-Werror",
-            "-I",
-            str(tmp_path),
-            str(driver),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+            f"-I{tmp_path}",
+            f"-I{ROOT / 'include'}",
+        ),
     )
     result = subprocess.run(
         [str(executable)], check=False, capture_output=True, text=True, timeout=10

@@ -65,7 +65,9 @@ def oracle(name: str, atoms: Any = None) -> dict[str, Any]:
     }
 
 
-def check(result: Any, expected: dict[str, Any], *, mixed: bool = True) -> None:
+def check(
+    result: Any, expected: dict[str, Any], *, mixed: bool = True, backend: str = "cuda"
+) -> None:
     """Check the complete endpoint as well as each unchanged correction source."""
     assert result.converged
     assert abs(result.energy - expected["energy"]) < 1e-7
@@ -74,7 +76,7 @@ def check(result: Any, expected: dict[str, Any], *, mixed: bool = True) -> None:
     assert np.sqrt(np.mean(difference**2)) < 3e-6
     np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
     assert result.dispersion.ok and result.dispersion.d4.ok and result.dispersion.gcp.ok
-    assert result.dispersion.backend == "cuda+cpu"
+    assert result.dispersion.backend == backend
     assert abs(result.dispersion.energy - expected["correction_energy"]) < 1e-10
     np.testing.assert_allclose(
         result.dispersion.gradient, expected["correction_gradient"], atol=1e-9, rtol=0
@@ -107,14 +109,24 @@ def test_r2scan3c_public_fast_complete_independent_endpoint(name: str) -> None:
         check(baseline, expected, mixed=False)
         strict.clear_cache()
         candidate = fast.singlepoint(atoms)
-        check(candidate, expected)
-        assert candidate.precision_validation.status == "qualified_mixed_gradient"
+        check(candidate, expected, backend="cuda+cpu")
+        # The public status prioritizes a qualified budgeted Fock over the
+        # separately qualified mixed gradient checked by check().
+        status = candidate.precision_validation.status
+        assert status in ("qualified_mixed_gradient", "qualified_budget_fock")
+        if status == "qualified_budget_fock":
+            assert candidate.precision["mixed_stage_fock_builds"] > 0
+            assert candidate.precision["strict_stage_fock_builds"] >= 2
+            assert candidate.precision["final_residual_audits"] > 0
+        assert baseline.ks_diagnostic.scf_domain != candidate.ks_diagnostic.scf_domain
         assert candidate.precision_validation.solve_count == 1
         assert (
             candidate.precision_validation.gradient_admission
             == "r2scan-3c-rks-budget-fp32-v1"
         )
-        assert candidate.dispersion.energy == baseline.dispersion.energy
+        assert candidate.dispersion.energy == pytest.approx(
+            baseline.dispersion.energy, abs=1e-13, rel=0
+        )
         np.testing.assert_allclose(
             candidate.dispersion.gradient,
             baseline.dispersion.gradient,

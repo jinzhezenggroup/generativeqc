@@ -1,7 +1,7 @@
 #pragma once
 
-// Host-only queued CUDA/provider doubles. The physical controller and all of
-// its generated affine arithmetic are compiled unchanged apart from launch syntax.
+// Host-only queued CUDA/provider doubles. The physical controller and its
+// small-matrix scalar affine kernels run with deferred launch semantics.
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -31,6 +31,8 @@ struct cudaPointerAttributes {
   int type, device;
 };
 #define __global__
+#define __host__
+#define __device__
 struct QueueDimension {
   unsigned x;
 };
@@ -105,6 +107,12 @@ inline cudaError_t cudaFree(void* pointer) {
   return cudaSuccess;
 }
 inline const char* cudaGetErrorString(cudaError_t) { return "injected CUDA launch rejection"; }
+namespace generativeqc::runtime {
+inline auto resource_cuda_malloc(void** pointer, std::size_t bytes) {
+  return cudaMalloc(pointer, bytes);
+}
+inline auto resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+}  // namespace generativeqc::runtime
 inline int atomicAdd(int* pointer, int value) {
   const int old = *pointer;
   *pointer += value;
@@ -115,13 +123,18 @@ inline int atomicExch(int* pointer, int value) {
   *pointer = value;
   return old;
 }
-template <class Function>
-void queue_kernel(unsigned blocks, unsigned threads, Function function) {
+inline int atomicOr(int* pointer, int value) {
+  const int old = *pointer;
+  *pointer |= value;
+  return old;
+}
+template <class Function, class... Args>
+void queue_kernel(unsigned blocks, unsigned threads, Function function, Args... args) {
   queue_test::pending.emplace_back([=] {
     gridDim.x = blocks;
     blockDim.x = threads;
     for (blockIdx.x = 0; blockIdx.x < blocks; ++blockIdx.x)
-      for (threadIdx.x = 0; threadIdx.x < threads; ++threadIdx.x) function();
+      for (threadIdx.x = 0; threadIdx.x < threads; ++threadIdx.x) function(args...);
   });
 }
 
@@ -146,6 +159,8 @@ struct Correlation {
 }  // namespace nlc
 namespace scf {
 enum class FockBackend { Cuda };
+enum class FockPrecision { Float64 };
+enum class FockSchedule { CudaIndependent };
 enum class FockSpin { Restricted, Unrestricted };
 enum class FockOperator { FullRange, LongRange };
 enum class FockApproximation { Exact, DensityFitted };
@@ -166,6 +181,9 @@ struct FockBuildSpec {
 struct ResolvedFockBuild {
   FockBackend backend{FockBackend::Cuda};
   FockBuildSpec spec{};
+  FockPrecision precision{FockPrecision::Float64};
+  FockSchedule schedule{FockSchedule::CudaIndependent};
+  double screening_tolerance{}, metric_relative_threshold{};
   bool operator==(const ResolvedFockBuild&) const = default;
 };
 struct CudaDensityFittingIntegralSource {};
@@ -177,6 +195,7 @@ struct PreparedFockPlan {
     static core::System system;
     return system;
   }
+  bool matches_system(const core::System& other) const { return &other == &system(); }
   const CudaDensityFittingJkPlan* cuda_fitted_source() const {
     static CudaDensityFittingJkPlan plan;
     return &plan;
@@ -201,6 +220,25 @@ struct CudaDfReadonlySource {
   bool operator==(const CudaDfReadonlySource&) const = default;
   explicit operator bool() const { return integrals != nullptr; }
 };
+struct CudaDfReadonlyMetric {
+  std::size_t naux{};
+  std::uint64_t identity{};
+  double relative_threshold{};
+  explicit operator bool() const { return false; }
+  bool operator==(const CudaDfReadonlyMetric&) const = default;
+};
+struct CudaDfReadonlyBasis {
+  double range_omega{};
+  explicit operator bool() const { return false; }
+  bool operator==(const CudaDfReadonlyBasis&) const = default;
+};
+inline CudaDfReadonlyMetric cuda_density_fitting_readonly_metric(const CudaDensityFittingJkPlan*) {
+  return {};
+}
+inline CudaDfReadonlyBasis cuda_density_fitting_readonly_basis(
+    const CudaDensityFittingIntegralSource*) {
+  return {};
+}
 inline CudaDfReadonlySource cuda_density_fitting_readonly_source(const CudaDensityFittingJkPlan*) {
   static CudaDensityFittingIntegralSource integral;
   return {0, queue_test::stream, &integral, queue_test::metadata.data() + 160, 2, 3, 1};
@@ -310,7 +348,28 @@ inline generativeqc_status enqueue_cuda_direct_jk_compensated_device(
 }
 }  // namespace scf
 namespace dft {
-enum class SemilocalFamily { Wb97mv };
+enum class SemilocalFamily { Wb97mv, Pbe, R2scan };
+struct Family {
+  SemilocalFamily family;
+  unsigned domain_version;
+};
+inline const Family* semilocal_family_metadata_from_code(unsigned code) {
+  static constexpr Family wb97mv{SemilocalFamily::Wb97mv, 1};
+  return code == 1 ? &wb97mv : nullptr;
+}
+// This queue fixture supplies only the WB97M-V electronic model.
+inline unsigned cuda_split_hybrid_variational_domain(unsigned) { return 0; }
+inline bool cuda_hessian_canonical_semilocal(SemilocalFamily, double, double, double) {
+  return false;
+}
+template <class... Args>
+bool r2scan_rvv10_model_matches(Args&&...) {
+  return false;
+}
+template <class... Args>
+bool cuda_split_hybrid_variational_model(Args&&...) {
+  return false;
+}
 inline int semilocal_family_domain_version(SemilocalFamily) { return 1; }
 inline int semilocal_family_code(SemilocalFamily) { return 1; }
 struct Model {
@@ -319,11 +378,19 @@ struct Model {
   int device{};
   double semilocal_exchange_scale{1}, semilocal_correlation_scale{1};
   std::optional<nlc::Correlation> nonlocal_correlation{nlc::Correlation{}};
-  std::optional<int> nonlocal_grid;
+  struct Grid {
+    unsigned partition_iterations{3};
+    int identity{1};
+    Grid() = default;
+    Grid(int identity) : identity(identity) {}
+    bool operator==(const Grid&) const = default;
+  } grid;
+  std::optional<Grid> nonlocal_grid;
   nlc::Vv10DensityDomain nonlocal_density_domain{nlc::Vv10DensityDomain::MolecularV1};
   std::optional<scf::ResolvedFockBuild> range_correction;
 };
 struct CudaKsFinalStateToken {
+  bool strict_physical_fock{true}, relaxed_stationarity{};
   struct Identity {
     Model model;
     struct Determinant {
@@ -337,10 +404,20 @@ struct CudaKsResidentOrbitalFrameBinding {
   const double* density{queue_test::metadata.data() + 32};
   const double* overlap{queue_test::metadata.data() + 40};
 };
+enum class CudaWb97mvGridComponent { combined, semilocal_only, vv10_only };
 struct CudaWb97mvGridOptions {
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
+  unsigned functional_code{};
+  double exchange_scale{}, correlation_scale{};
+  std::optional<nlc::Correlation> revised_nonlocal;
+  CudaWb97mvGridComponent component{CudaWb97mvGridComponent::combined};
+  std::size_t max_pair_evaluations{};
+  std::size_t max_workspace_bytes{std::numeric_limits<std::size_t>::max()};
 };
-struct CudaWb97mvGridWork {};
+struct CudaWb97mvGridWork {
+  bool pair_budget_exceeded{};
+  std::size_t active_nonlocal_points{};
+};
 struct CudaWb97mvGridShape {
   std::size_t atoms{1}, primitives{1}, nao{2}, points{1};
   unsigned spins{queue_test::spins};
@@ -408,8 +485,11 @@ inline generativeqc_status dft_cuda_resident_orbital_frame(
 }  // namespace detail
 }  // namespace methods
 namespace dft {
+enum class CudaKsGridRole { separate_nonlocal };
 struct CudaKsGridReference {
   CudaKsGridReference(methods::PreparedBatch&, std::size_t, CudaKsFinalStateToken) {}
+  CudaKsGridReference(methods::PreparedBatch&, std::size_t, CudaKsFinalStateToken, CudaKsGridRole) {
+  }
   generativeqc_status prepare(std::string&) { return GENERATIVEQC_STATUS_SUCCESS; }
   CudaWb97mvGridReference reference() const { return {}; }
   CudaWb97mvGridShape shape() const { return {}; }

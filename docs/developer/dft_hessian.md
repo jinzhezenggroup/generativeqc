@@ -35,8 +35,9 @@ operator's immutable omega and generate separate SR/LR density-weight JVPs.
 The meta-GGA rule includes `tau`; the VV10 rule declares both pair legs' feature,
 point and quadrature-weight response. The ECP envelope adds independent local
 and projector sources. Full-rank DF uses compiler-generated three-center/metric
-cotangents and their response JVPs. rVV10 remains unsupported at this planning
-boundary. A compiled source rule does not qualify a molecular endpoint.
+cotangents and their response JVPs. This general planner does not lower rVV10;
+the qualified native r²SCAN+rVV10 binding below uses the separate CUDA
+stationary controller. A compiled source rule does not qualify a molecular endpoint.
 
 Molecular execution is a separate method-neutral layer. Its canonical installed
 owner is `generativeqc.second_order`; repository Hessian tools import this owner
@@ -1556,7 +1557,7 @@ RKS/UKS plan to one converged native state for CPU/development consumers. It reu
 installed implicit CPKS nuclear-response solver. Its low-level CUDA development
 owner in `generativeqc.cuda_composite_hessian` is not the production public CUDA
 route. The public route enters `generativeqc._native_hessian`, which calls
-`generativeqc_ks_hessian_cuda_v1` without creating/exporting a KS snapshot or
+`generativeqc_ks_hessian_cuda_v2` without creating/exporting a KS snapshot or
 constructing Python AO/CPKS providers. None of these paths differentiates SCF
 iterations, reconverges displaced geometries, or calls a reference engine.
 
@@ -1584,16 +1585,18 @@ The binding audits its reconstructed Fock against the native SCF Fock before
 response. Density and energy-weighted-density relaxation feed the generated
 integral-weight JVPs and overlap/Pulay source exactly once. SR/LR second
 integrals use the existing geometry-factored integral AD with modified Boys
-moments and fixed omega, not a full-Coulomb substitution.
+moments, not a full-Coulomb substitution. The factorized four-center, metric
+and three-center leaves bind omega from the accepted operator and hold it
+fixed during geometry differentiation. The expanded schedules remain fixed
+to the omega advertised by their leaf signatures.
 
 Public `Calculator.hessian_vector_product()` and `Calculator.hessian()` admit
-the canonical WB97M-V graph with RKS or UKS, CPU or CUDA, direct or full-rank
-DF with exact LR exchange, all-electron or scalar semilocal ECP Hamiltonians,
-and Cartesian or real spherical AOs through f in strict FP64. Combinations use the same stationary
-endpoint. For DF, explicitly set `GENERATIVEQC_DF_RANGE_EXCHANGE=direct` before
-preparation: default/automatic LR fitting qualifies energy and first derivatives,
-not fitted-LR Hessians. A fitted LR source is rejected rather than substituted
-by exact-LR second-order equations. The full-matrix owner uses scalar columns
+the canonical WB97M-V graph with RKS or UKS, CPU or CUDA, direct or DF,
+all-electron or scalar semilocal ECP Hamiltonians, and Cartesian or real
+spherical AOs through f in strict FP64. CPU DF requires full rank and exact LR
+exchange. On CUDA, the fitted response follows the actual primary and LR
+providers of the accepted SCF state; an inadmissible fit is never replaced
+by an exact integral model. The full-matrix owner uses scalar columns
 (`block_size=None` or `1`). The default `strategy=None` resolves to native
 `"scalar"` on CUDA and `"recycled"` on CPU. Explicit recycling/block requests
 on CUDA fail rather than mislabeling independent solves. The raw matrix is
@@ -1617,15 +1620,52 @@ are explicitly unsupported, not silently discarded. Response storage plus
 caller device input/output has an independent 2 GiB endpoint cap. Host staging
 and immutable publication share the output budget. `cache` remains a CPU/development
 compatibility argument and does not activate compilation on CUDA.
-These response arenas are not yet integrated into the global `ResourceBudget`
-planner; supplying that planner with this CUDA endpoint fails explicitly before
-SCF rather than claiming that its SCF-only estimate covers Hessian resources.
+The native Hessian bridge respects a device ledger already owned by its prepared
+batch. Response allocations share that ledger with the retained SCF buffers;
+the endpoint also keeps its independent limits and cannot consume capacity
+promised to another native provider. The public `ResourceBudget` planner does
+compose SCF and Hessian requests for models already covered by the CUDA KS
+inventory. It conservatively overlaps the declared SCF peak with the host
+direction, output staging/publication and a hard device response allowance
+that includes terminal input/output. The allowance is bounded by the effective
+aggregate and per-device budgets as well as the independent endpoint cap.
+Native admission still checks the actual response workspace against that
+allowance. Successful calls report the plan and native allocation ledger in
+`diagnostics["resources"]`; these are not measurements of total process RSS,
+CUDA context memory or library-private storage. Models without a qualified KS
+inventory and libraries without the shared Hessian ledger ABI reject a public
+budget before SCF. The fitted Hessian budget domain covers canonical strict-FP64
+LDA, PBE, PBE0, B3LYP, and r²SCAN RKS/UKS with `density_fitting="cuda"` and
+device-fused XC. The planner admits orbital shells through f, including
+scalar-semilocal orbital ECPs, and auxiliary shells through g, subject to the
+linked stationary package. The native ECP inventory bounds one-electron setup
+before the fitted source becomes live. A supplied auxiliary basis must have no
+ECP terms and is supported for a single system. This energy-only preparation
+inventory does not expand the domain of budgeted force requests.
+Full-range hybrids reserve their K matrices and, for RKS, the fitted occupied
+projection.
+
+The nonlocal inventory covers Direct and fitted r²SCAN+rVV10 and WB97M-V with
+orbital bases through f and fitted auxiliary bases through g, subject to the
+linked stationary package. Both models admit scalar-semilocal orbital ECPs;
+the auxiliary basis has no ECP potential. Shared and independent order-3 grids
+retain the native `nonlocal_memory_budget_bytes` check against the actual CUDA
+VV10 arena.
+For WB97M-V and explicit range-separated PBE, Direct SCF shares its Fock
+owner across radial operators. With fitted SCF, the LR provider is constructed
+later, while the primary provider and grids remain live. The planner charges
+one-electron setup in both radial construction phases, including ECP setup
+where supported, and reserves any late excess separately. The fitted/Direct
+LR policy is part of the plan identity; `auto` bounds both the dual-fitted
+transaction and its fully retired exact-LR retry without charging them as
+simultaneous owners. These energy-only inventories do not authorize force
+requests.
 
 Auxiliary g preparation uses a source-only KS DF handle for **values**, not a
 generic g orbital/HF/first-derivative capability. The native stationary owner
-separately authenticates canonical WB97M-V, the live accepted state, actual DF
-provider and complete linked derivative selectors. Neither this role nor a
-successful SCF authorizes a missing derivative package.
+separately authenticates the canonical composition, live accepted state,
+actual DF provider and complete linked derivative selectors. Neither this role
+nor a successful SCF authorizes a missing derivative package.
 
 ### Native AOT package selection
 
@@ -1742,8 +1782,20 @@ matvec residual alone cannot qualify a solution. The cache borrows the exact
 live frame/provider/device/stream and must be reset before replacing them.
 `max_resident_cpks_bytes` defaults to 128 KiB and remains subordinate to the
 existing response and aggregate budgets. Zero, insufficient capacity or an
-optional allocation failure retains ordinary physical GMRES. Standalone HVPs
-do not build this repeated-RHS cache.
+optional allocation failure retains ordinary physical GMRES. Standalone native
+HVP frontends prepare an action-only owner: it reserves neither a dense private
+candidate nor repeated-RHS storage. It still stages and validates each vector
+before publication. A dense call on that owner is rejected without starting
+response work or modifying output.
+
+The opt-in `fp32-proposal` layout encodes each FP64 unit-rotation action into
+one float column. Only the resident operator coefficients narrow; matvec
+accumulations, Krylov vectors, induced Fock and curvature stay FP64. The
+projected solve can spend at most half the configured iteration limit, capped
+at twelve iterations, before handing off a private seed (or no seed) to the
+physical operator. The original RHS determines strict tolerance in both the
+seeded and zero-start cases. After convergence, the reconstructed derivative
+density still passes the full physical stationarity check before publication.
 
 The one-electron owner can replay independent precompiled primitive chains on
 bounded internal CUDA streams, then fold their results in the original order.
@@ -1834,20 +1886,26 @@ Exact J/K and LR actions use an independent, unscreened canonical Direct source
 on the borrowed producer stream, with caller-owned compensation and census
 planes. Geometry-only screening makes the operator linear for arbitrary signed
 directions. The primary SCF source's scratch/caches are not replayed or mutated.
-For admitted single-system, full-rank DF sources, a read-only source seam borrows
+For admitted single-system DF sources, a read-only source seam borrows
 the immutable raw-integral source and actual whitening operator. Raw values are
 generated directly into separate response storage without device switching or
-revoking occupied-projection leases. The compiler forms W-transpose-W in the
-source's declared layout, then reuses the **density VJP of the existing fitted
-energy**. It does not fit LR exchange, substitute full exchange or apply an
-occupied-factor RI-K formula to an indefinite density direction. Missing raw
-sources or device whitening, rank-truncated metrics, and mixed primary
-approximations fail closed.
+revoking occupied-projection leases. For pure Coulomb, the compiler contracts
+the spin-summed density with raw three-centers, applies `W` and `W^T` to that
+auxiliary vector, then projects it back into AO space. At fixed geometry this
+also works with the accepted truncated `W`. The exchange maps instead reuse
+prewhitened AO-pair panels for the density VJP of the fitted energy. Fitted LR
+exchange, when selected, uses its own erf source and whitening; it is never
+substituted by full-range exchange. The maps accept indefinite density
+directions without an occupied-factor approximation. Missing raw sources or
+device whitening and mixed primary approximations fail closed.
 
-This correctness schedule materializes raw three-centers, inverse and affine
-intermediates. Device bytes, conservative Direct ERI work and compiler-enumerated
-IR scalar-term visits have separate checked bounds; the latter include retained
-AD primal validation dependencies. Optional canonical Direct storage is an
+Device bytes, conservative Direct ERI work, scalar IR visits and padded
+FP64 matrix-product slots have separate checked bounds. The compiler lowers
+eligible two-panel contractions to shared-memory CUDA tiles and charges the
+padded shape, including tail tiles. Small contractions use the scalar map;
+both schedules include their AD primal validation dependencies. Temporary
+slots are reused after their last stream consumer; published results stay
+live until the final finite-value gate. Optional canonical Direct storage is an
 explicit admission requirement, not permission for a density-screened fallback.
 No endpoint performance claim follows from this schedule. Preparation allocates;
 actions do not allocate, compile, run Python/CPU contractions or switch devices.
@@ -1857,6 +1915,14 @@ action and CPKS D/W responses with Python/compiler paths unavailable. Independen
 PySCF raw/full-range/LR integrals, Libxc/VV10 potential differences and displaced
 generalized-eigenprojector dense solves provide numerical acceptance; the
 synthetic displaced-SCF tests remain separate regression coverage.
+
+The standalone CUDA grid response can also take explicit rVV10 parameters.
+Its fixed and moving schedules differentiate the same ordered-pair energy,
+including the kappa-dependent Gaussian prefactor, both pair legs and the local
+beta term. The molecular active set and ordered-pair cap have the same contract
+as for VV10. An explicit standalone parameter set does not authorize a new
+molecular composition. The native r²SCAN+rVV10 binding below authenticates
+the accepted SCF model and its actual quadrature before setting these options.
 
 `src/dft/cuda_grid_geometry.hpp` supplies the separate native moving-grid
 **geometry source**. It caches ordinary AO spatial jets through order three
@@ -1884,9 +1950,11 @@ small AO outputs alone do not bound contraction cost. Packed basis indices,
 primitive ranges/exponents and supported polynomial records are device-validated
 before the existing trusted AO leaf or nuclear-direction indexing executes.
 
-The caller supplies one arena and disjoint AO/weight outputs. Both are staged,
-finite-checked and reauthenticated before publication on the original ordinary
-stream. Capture, coincident centers, multiatom point-center norm singularities,
+The caller supplies one arena. The standalone `mixed()` path stages disjoint
+AO/weight outputs, finite-checks them and reauthenticates before publication on
+the original ordinary stream. The stationary Hessian borrows the same checked
+panels on that stream instead of allocating and copying a second set. Capture,
+coincident centers, multiatom point-center norm singularities,
 invalid primal measures/weights and revoked owners reject. One-atom quadratures
 need no norm differentiation and allow a point at the center. A CUDA error
 during final publication invalidates both outputs. Independent polynomial
@@ -1894,9 +1962,21 @@ Gaussian and displaced extended-precision Becke-value tests cover mixed
 derivatives, translation/swap symmetry and actual native RKS/UKS Direct/DF
 grid ownership with Python/compiler paths unavailable.
 
-The last successful geometry action also lends `[left/right,point,xyz]` motion
-gathered from the actual owner-atom directions on CUDA. Any prepare/mixed
-attempt, including a rejected attempt, expires that motion lease.
+The mixed action also lends `[left/right,point,xyz]` motion gathered from the
+actual owner-atom directions on CUDA. Any prepare/mixed attempt, including a
+rejected attempt, expires the borrowed panels and motion lease.
+
+If all order-three AO jets do not fit, the moving-geometry arena can retain
+an immutable prefix of grid points and use the same generated evaluator for
+the remaining points in contiguous replay tiles. The full mixed output still
+has to fit. When an independent VV10 geometry owner shares the budget, the
+first geometry retains either the full jets or only replay scratch, leaving
+the unused bytes available to the second owner. Before the action, the
+endpoint admits all `3N+1` mixed passes for an HVP (or `3N*(3N+1)` for the
+full matrix) against a separate `2^33` conservative primitive/polynomial
+bound, charging only the points that are replayed. There is no host or
+lower-precision fallback. The CLI reports arena bytes and separate resident
+preparation and replay work bounds; these are not measured flop counts.
 
 `CudaWb97mvGridResponse` now has an opt-in `nuclear_response` arena layout.
 `prepare_nuclear_direction` consumes AO, measure, point and signed RKS/UKS
@@ -1989,8 +2069,8 @@ allocate nothing, execute no Python and perform no CPU numerical contractions.
 
 The native source additionally admits an optional last-direction resident jet
 pool, bounded by `CudaWb97mvJkOptions.max_resident_integral_bytes` (64 MiB by
-default) and the existing arena/aggregate device budgets. Zero disables it;
-insufficient capacity retains the original bounded shell-quartet streaming path.
+default) and the existing arena/aggregate device budgets. Zero disables the
+persistent pool; insufficient capacity can select canonical tiled streaming.
 All mandatory DF/ECP storage is reserved before this optional pool. Reuse requires
 an authenticated immutable basis lease and an exact device comparison of every
 right-direction coordinate. Pointer equality is insufficient: jets include the
@@ -1998,7 +2078,7 @@ right-direction HVP. Current D/dD are always reprojected, so frozen-density RHS
 and relaxed contractions can share jets without sharing density-dependent
 results. The pool stores one source per ERI eightfold shell-symmetry class;
 projection permutes both Cartesian component strides and gradient/HVP center
-slots back to each ordered group. Streaming retains the fully ordered source.
+slots back to each ordered group. Per-quartet streaming retains the fully ordered source.
 Work admission remains conservative against the ordered upper bound, while
 receipts count the actually selected builds. Reprepare or a failed cache rebuild
 invalidates reuse. One CTA performs
@@ -2025,25 +2105,66 @@ and actual RKS/UKS Direct/DF owner lifetimes;
 injected CUDA-free closure tests additionally check largest through-f storage
 and work admission, not through-f integral numerics.
 
-`src/dft/cuda_wb97mv_df_response.hpp` supplies native full-rank fitted-primary
-algebra from the incumbent stationary DF TensorIR AD. Reference maps return
+`src/dft/cuda_wb97mv_df_response.hpp` supplies native fitted radial
+algebra from the stationary DF TensorIR programs. Reference maps return
 energy, spin Fock and raw three-center/metric cotangents. Response maps return
-frozen-D Fock motion and source-weight JVPs retaining dD, dA and the implicit
-inverse motion `-V^-1 dV V^-1`. The physical inverse respects the actual
-whitening orientation `W^T W`; no occupied-density, frozen-metric or symmetric-W
-assumption is made. Generic compiler contraction planning runs before both
+frozen-D Fock motion and source-weight JVPs retaining dD, dA and dM. Full-rank
+pure Coulomb retains only the fitted auxiliary charge `x = M^-1 (A:D)` in
+addition to raw values and weights. The frozen-density tangent applies
+`W^T W` to `dA:D - dM x`; the source-weight tangent also includes `A:dD` in
+the solve and differentiates the external density leg. There is no explicit
+inverse or fitted AO-pair panel on this path.
+
+For exchange the native arena retains the fitted panel `B = A M^-1` and spin
+panels `D B`. Its full-rank tangent uses `dB = (dA - B dM) M^-1`, rather than
+forming the dense inverse tangent. The exchange Fock tangent reuses the same residual, and
+the metric-weight tangent contracts one leg of the differentiated auxiliary
+Gram and adds its transpose. The full-rank schedule consumes the residual in
+the frozen Fock before building the dressed fitted tangent, reducing the number
+of large live buffers. The physical inverse respects the actual whitening
+orientation `W^T W`; no occupied-density, frozen-metric or symmetric-W assumption
+is made. Generic compiler contraction planning runs before both
 emission and work counting: all scheduled nodes, including AD validation
 dependencies, avoid quartic-orbital or quartic-auxiliary contraction work and
-quartic intermediates. Explicit arena and scalar-term bounds fail before work.
+quartic intermediates. Preparation and action terms are counted separately;
+the retained panels and the largest map's scratch are both charged to the arena.
+Arena, scalar-term, and tiled-product bounds fail before work.
+
+For a separated truncated branch, define `V = f(M)` with `f(λ) = 1/λ`
+on the retained roots and `f(λ) = 0` on the discarded roots. The induced
+density response still uses the fixed `V = W^T W`. The nuclear direction uses
+`δV = Df(M)[δM]`; fitted maps supply `G = ∂E/∂V` and `δG`. The raw metric
+weight is `Df(M)[G]`, and its direction is `Df(M)[δG] + D²f(M)[δM,G]`.
+The spectral maps reuse the SCF frame and analytic first and second divided
+differences. They include rotation between retained and discarded eigenspaces,
+without inverse gaps between roots in the same branch. For pure Coulomb,
+`G = (A:D)(A:D)^T/2` is rank one: apply `δV` directly to `A:D` and reuse
+the rotated `δM` for the metric pullback. The two ordered contributions to
+`D²f(M)[δM,G]` are transposes, so both paths contract one leg and add its
+transpose in the eigenbasis before rotating back. Exchange caches `QᵀGQ`,
+shares `QᵀδM Q` with the inverse tangent, and combines the two terms of the
+moving pullback before one return rotation. The dense rotations use the
+generated matrix-product schedule. The `δB = δA V + A δV` solve acts on
+unique, symmetrized AO pairs; the result expands to both AO orientations
+before the spin contractions. In the exchange three-center cotangent the
+two density-motion legs are transposes, so one leg plus its transpose
+supplies both. Computing the dependencies of `δG` first and allowing
+lane-local adds to overwrite dead scratch operands reduces the arena
+without publishing partial outputs. No dense spectral derivative tensor
+or new eigendecomposition is formed. Admission charges packing, expansion,
+scalar visits and padded matrix products to their respective bounds.
 
 `src/dft/cuda_ks_wb97mv_df_response.hpp` borrows actual accepted D, raw integral
-source, whitening and ascending metric eigenvalues, and binds them to the
-complete native WB97M-V DF model. It prepares retained raw public A on the
+source, whitening and the accepted sorted eigensystem for each fitted radial
+provider. It prepares retained raw public A on the
 original stream without borrowing or revoking occupied-projection/J/K scratch.
 The single device-byte bound includes retained A and all algebra storage.
-Device-side numerical admission requires the smallest metric eigenvalue to
-exceed `max(1.1 * relative_cutoff, 64 * eps) * largest_eigenvalue`; truncated or
-cutoff-unstable metrics fail without Direct substitution. Signed symmetric dD
+Full-rank admission requires the smallest metric eigenvalue to exceed
+`max(1.1 * relative_cutoff, 64 * eps) * largest_eigenvalue`. For a truncated
+source each normalized eigenvalue must be separated from the relative cutoff
+by more than `max(0.1 * relative_cutoff, 128 * eps)`; roots below
+`-128 * eps` times the largest root are rejected. Cutoff-unstable metrics fail
+without Direct substitution. Signed symmetric dD
 is accepted. Immutable reference weights are retained; actions allocate nothing,
 use no Python/CPU numerical contraction and reauthenticate before all seven
 outputs are published. Raw dA/dV are supplied by a separate integral consumer;
@@ -2087,6 +2208,21 @@ Cartesian libcint sources and independently applied Cartesian/spherical
 projections. Its actual RKS/UKS source/inverse/moving-weight chain remains a
 component test, not a stationary Hessian.
 
+The default Hessian AOT inventory includes fitted long-range leaves. To include
+them in an explicit inventory, add `--df-long-range` to
+`tools/complete_hessian_aot_inventory.py` with both DF families selected.
+This adds fixed `omega=0.3 bohr^-1` erf-Coulomb metric and three-center tiles
+alongside the full-range tiles. The raw two-pass consumer checks the requested
+range against the borrowed DF source and exact linked closure. Set
+`GENERATIVEQC_HESSIAN_TEST_LONG_RANGE_DF=1` in the raw-probe Slurm tests to run
+the independent long-range s/p and f/g checks. The fitted response component
+also has exchange-only compiler graphs for RKS/UKS; they do not introduce a
+second Coulomb contribution. `test_fitted_long_range_stationary_hessian`
+independently rebuilds both metrics at every displaced geometry and reconverges
+the determinant before taking energy differences. The optional displaced-force
+test also requires linked `wb97mv_rks` and `wb97mv_uks` stationary force profiles
+and `GENERATIVEQC_HESSIAN_TEST_WB97MV_FORCES=1`.
+
 `src/integrals/cuda_ecp_nuclear_response.hpp` supplies a separately bounded
 residual-ECP nuclear source. Build-only `integral.ecp_fixed_grid` freezes the
 incumbent coarse/refined quadratures; radial potentials and the sixteen real
@@ -2094,10 +2230,14 @@ s/p/d/f projectors retain the existing compiler graphs. Each ECP-center radial
 layer collocates ten spatial AO jets once and retains their fixed harmonic
 projections. Compiler AO Taylor AD and the stationary AO bilinear VJP/JVP supply
 local/nonlocal matrices, frozen-density geometry directions, total-density
-gradients and joint geometry/density HVPs. Left nuclear coordinates reuse these
-jets and cotangents, without replaying collocation or retaining a global
-coordinate-major derivative tensor. The Coulomb tail remains in the separate
-effective-charge attraction and nuclear-repulsion sources.
+gradients and joint geometry/density HVPs. The weighted pullback reduces
+quadrature rows by AO and Cartesian axis, then gathers the compact gradient
+and HVP contributions with opposite signs to the ECP center and AO owner.
+An AO on the ECP center has no relative motion. This uses six doubles per AO
+and a fixed FP64 reduction order, without replaying the jet contraction for
+each left atom or retaining a coordinate-major derivative tensor. The Coulomb
+tail remains in the separate effective-charge attraction and nuclear-repulsion
+sources.
 
 `src/dft/cuda_ks_wb97mv_ecp_nuclear.hpp` binds this residual source to actual
 accepted WB97M-V RKS/UKS Direct/DF owners. It borrows normalized native AO basis
@@ -2124,7 +2264,8 @@ Hessians or complete-endpoint speed measurements.
 ### Native stationary composition and CLI
 
 `CudaKsWb97mvHessian` binds the actual accepted native state and composes H/S,
-exact or fitted-primary plus exact LR J/K, residual ECP, moving XC/VV10/Becke
+exact or fitted primary J/K, its accepted exact or separately fitted LR correction,
+residual ECP, moving XC/VV10/Becke
 and nuclear-repulsion sources around one native coupled-spin CPKS solve per
 right direction. Reference W reuses the primal of `method.ks_cpks`'s existing W
 JVP. Compiler TensorIR owns physical D/W spin totals, negative overlap weights,
@@ -2142,10 +2283,24 @@ normalization, shell/AO projections and global workspace contract are unchanged.
 The frozen pass uses zero density/weight motion. After converged CPKS, the
 second source pass includes solved dD/dW. DF retains dA/dV across that boundary,
 reruns the full inverse/source-weight AD with dD, then contracts the raw source.
-It never substitutes Direct J/K for a fitted primary. Nuclear grid preparation
+With fitted LR, the second radial owner retains its own raw panels, inverse,
+cutoff and weights across that boundary. Both fitted frozen Fock derivatives
+enter the same CPKS RHS; both moving-weight contractions enter the same HVP.
+Neither fitted source is replaced with Direct J/K. Nuclear grid preparation
 traverses VV10 pairs once per right density direction; left-coordinate mixed
 contractions reuse its retained JVP and cached spatial AO jets. Pair incidence
 gathering uses O(atoms squared) work rather than scanning all pairs per atom.
+
+For independent XC/VV10 meshes, the linked Hessian authenticates both SCF
+quadrature leases against the same canonical density. The semilocal owner
+does not allocate or traverse the pair domain. The VV10 owner moves its own
+AO jets, weights and point coordinates, with the bilateral active set frozen
+at the central state. The fixed-density nuclear Fock panels are summed before
+CPKS, the two induced panels are summed at each trial density, and the mixed
+contractions are summed after the same solved density response. No second
+CPKS solve is introduced. Both owners fit within the aggregate device budget;
+the two geometry layouts share the geometry cap, and the two XC layouts share
+the grid-response cap. Admit mandatory tiles before growing optional storage.
 
 Full Hessians may additionally retain frozen exact J/K Fock derivatives and
 frozen HVP columns under `max_frozen_exact_bytes` and the aggregate byte budget.
@@ -2158,7 +2313,10 @@ or optional allocation failure preserves the original directional source passes.
 DF uses this cache only for its exact LR correction; fitted-primary AD is unchanged.
 
 The exact nuclear source admits a bounded canonical-source tiled schedule when
-the complete ordered schedule exceeds its group, work or arena bound. Each tile
+the complete ordered schedule exceeds its group, work or arena bound, or when
+requested last-direction residency does not fit and tiling reduces primitive work.
+When the tiled plan cannot satisfy its budgets, a legal per-quartet streaming
+plan remains available; no host numerical fallback is introduced. Each tile
 expands the distinct eightfold shell permutations with explicit Cartesian and
 derivative-slot mappings, using the same linked compiler-AD leaves. Only one
 tile resides on device. Adaptive subdivision preserves source reuse rather than
@@ -2189,9 +2347,13 @@ owner; CPU and low-level development APIs remain separate consumers.
 and direct-space VV10 values at two displacement steps. The native child has
 interpreter/compiler discovery paths unavailable; other tests exercise actual
 compiled CLI input/publication. These small-grid gates are not grid convergence,
-complete high-angular shell coverage or GPU4PySCF endpoint-speed evidence.
-Practical complete high-angular ERI/DF AOT closure and broad molecular/benchmark
-qualification remain required before claiming the full migration complete.
+exhaustive molecular coverage or GPU4PySCF endpoint-speed evidence. The default
+Hessian AOT package supplies the factorized orbital-f/auxiliary-g integral
+closure, including both Coulomb and erf DF sources. The
+`test_fitted_long_range_f_g_ecp_full_hessian` regression tests complete
+WB97M-V matrices at that combined angular boundary, not just directional
+actions or leaf availability. It does not qualify higher shell orders or
+establish that the high-angular endpoint is fast at production sizes.
 
 For a source build with a verified compiler-cache launcher configured:
 
@@ -2287,15 +2449,105 @@ DF keeps bounded dense three-center and metric sources, never a global
 coordinate Jacobian or a fitted four-center tensor. `integral_budget_bytes`
 also bounds these sources and remaining TensorIR execution workspace;
 compiler/library/metadata and borrowed native-provider storage remain separate.
-The auxiliary AO adapter currently supports through f. Rank-truncated metrics
+The CPU auxiliary AO adapter currently supports through f. Rank-truncated metrics
 and metrics within 10% of the native relative cutoff fail explicitly: freezing
 retained eigenvectors or silently using exact integrals is not permitted.
 
 ### ECP and CUDA ownership
 
+The native CUDA stationary owner and public frontends admit canonical
+LDA/PBE/PBE0/B3LYP for both spin layouts: Direct or cutoff-separated CUDA DF, each
+with all-electron or scalar semilocal ECP integrals. The owner authenticates
+the converged semilocal model and the Coulomb-only or full-range hybrid Fock
+operator before binding the fixed and moving grid response and the matching
+compiler-generated nuclear source.
+The grid reuses the scaled LDA/PBE SCF point evaluator and its directional
+response. B3LYP differentiates the existing production potential over the
+physical density/gradient inputs, with an exact tangent specialization for
+an empty spin block. These branches differentiate the quadrature measure
+without allocating or traversing VV10 pairs. The fully fitted model has no
+exact nuclear quartet source: the fitted TensorIR maps use the live Fock
+model's exchange fraction, or a Coulomb-only schedule for a pure functional.
+With an ECP, the fitted primary still supplies only the two-electron response;
+the effective-charge core and residual scalar ECP responses enter separately,
+just as in the Direct model. Noncanonical global hybrid compositions are not
+admitted. A linked inventory must cover the actual basis and operators; small
+independent molecular fixtures make no performance or grid-convergence claim.
+
+Canonical r²SCAN and r²SCAN-3c use an energy-derived continuation for admitted
+fused, strict-FP64 NVIDIA CUDA calculations when native stationary force
+support is built. Selection takes place before SCF, independent of the requested
+properties or whether the Hessian package is present. It requires three Becke
+partition iterations and the native force orbital inventory (through d for
+Direct, through f for DF). AUTO, application precision budgets and host-unfused
+execution retain the incumbent point policy. The separate SCF domain
+(`0x52325302`, `r2scan-energy-derived-c2-v1`) binds the matching force and grid
+Hessian action; an incumbent r²SCAN state is not interchangeable. The legacy
+Python bridge can export variational arrays and quadrature explicitly for
+reference comparisons but cannot evaluate derivatives in that domain.
+
+The canonical r²SCAN+rVV10 composition selects the same variational
+semilocal domain before SCF and additionally binds the MolecularV1 active
+set to the shared or independent nonlocal quadrature. The accepted state pins
+the rVV10 variant, damping constants and weight, with no exact or range
+exchange. The fixed-density response and moving-grid Hessian both consume
+that full identity. Scalar semilocal ECPs use the same effective-charge core
+and residual-ECP response as bare r²SCAN; they do not change the rVV10 active
+set policy. Host-unfused and mixed-precision execution are not admitted, and
+the composition does not inherit the bare r²SCAN force binding.
+
+With `GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=ON`, the Python and `hessian`/`hvp`
+CLI entry points admit canonical RKS/UKS, Direct or cutoff-separated CUDA DF. The
+complete named r²SCAN-3c path checks its method-owned spherical basis and
+stages D4-BJ/ATM/EEQ and gCP Hessian actions before publication. The Python
+`ResourceBudget` accounts for the retained D4 and gCP owners alongside the
+SCF and stationary response. The correction-specific cap must also cover
+both owners; gCP action scratch uses the Hessian arena, not a second gCP plan.
+This requires a native CUDA gCP inventory and does not enable CPU composite
+budgeting. The CLI reports
+`correction_directions` and the actual SCF domain version. Build
+`generativeqc_ks_wb97mv_hessian_probe` and run `test_native_wb97mv_stationary.py
+-k 'r2scan_cuda_molecular_hessian or r2scan3c_cuda_complete_hessian'` under finite
+Slurm `srun` with `GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE` pointing to the probe.
+The independent oracle reconverges the projected energy at each geometry and
+adds independent D4 and gCP energies for the composite. PySCF, Libxc and the
+upstream `dftd4` Python binding are test dependencies, not runtime fallbacks.
+For both frontends run `test_wb97mv_hessian_cli_cuda.py -k r2scan`, with
+`GENERATIVEQC_LIBRARY` and `GENERATIVEQC_WB97MV_CLI` selecting the matching
+library and executable and `GENERATIVEQC_WB97MV_HESSIAN_CUDA_TEST=1`.
+
+The native stationary endpoint also borrows D3 tables and atomic numbers from
+the authenticated primal owner. Each direction runs three ordered device
+phases: coordination and reference-weight derivatives, pair/ATM response and
+CN cotangents, then the CN pullback and composition with the private electronic
+candidate. The Hessian arena holds only linear D3 scratch and a single action,
+not D3 pair tables per molecule or a separate dense Hessian. The numerical
+publication gate rejects a hard cutoff boundary or nonfinite response. For
+the public component oracle run `test_wb97mv_hessian_cli_cuda.py -k d3_cuda_complete_hessian`
+with the upstream `dftd3` Python binding and the same Slurm setup. Subtracting
+the bare electronic matrix isolates D3 for comparison with independent
+displaced D3 gradients; it does not independently requalify the electronic part.
+
+Standard D4(BJ-EEQ-ATM) correction admission follows the same separation:
+authenticate the converged electronic provider first, then borrow the native
+standard-profile D4 plan and its actual total molecular charge. Neither the
+spin occupation convention nor the exchange approximation changes this
+geometry-only action. The separate r²SCAN-3c profile still requires the
+method-owned basis, matching variational SCF domain, and native gCP provider.
+Run `test_wb97mv_hessian_cli_cuda.py -k named_d4_cuda_complete_hessian` with
+`dftd4` for the standard-profile component oracle.
+
+The CUDA Hessian owner requires the accepted token's strict physical Fock
+proof. This proof excludes lower-precision operator phases, retained mixed
+proposals, and provisional nonlocal targets. The configured integral-provider
+precision is not proof of how the final operator was built. Once a compatible
+AUTO solve produces a fresh strict frame, generation and model authentication
+are the same as for an explicitly strict solve. No extra SCF or model switch
+is performed in the response endpoint.
+
 The C++ executable provides native `hessian`/`hvp` commands. Their Python-free
 runtime, linked AOT build selection, controls and examples are
-owned by [the native CLI guide](../user/native_cli.md#compiler-ad-wb97m-v-hessian-and-hvp).
+owned by [the native CLI guide](../user/native_cli.md#compiler-ad-dft-hessian-and-hvp).
 
 The linked native owner amortizes fixed-geometry induced Fock actions with
 optional, independently owned strict FP64 full-range/LR integral sources. Radial
@@ -2390,8 +2642,9 @@ CUDA execution. Finite differences and reference evaluators are test oracles onl
 ## Qualified execution boundary
 
 LDA/PBE retain their CPU direct all-electron Cartesian closed-shell domain.
+Canonical CUDA LDA/PBE/PBE0/B3LYP use the native RKS/UKS domain above.
 Canonical WB97M-V additionally admits the spin, representation, backend,
-fitting and ECP domains described here, subject to their resource, full-rank,
-quadrature and fixed-branch gates. Other functional families, truncated DF
-metrics and mixed precision are not inferred
-from generated component kernels.
+fitting and ECP domains described here, subject to their resource, quadrature
+and fixed-branch gates. The CPU fitted path still requires full rank. Other
+functional families and mixed precision are not inferred from generated
+component kernels.

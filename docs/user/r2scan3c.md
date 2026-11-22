@@ -36,6 +36,9 @@ once and invalidates receipts after a failed calculation.
 
 ## Current limits
 
+- Analytic Hessians and Hessian-vector products are available for admitted
+  [strict-FP64 NVIDIA CUDA contexts](hessians.md#supported-methods), including
+  both D4 and gCP. CPU and precision-budget derivatives stop at first order.
 - CPU and CUDA Direct forces use packaged s/p/d derivatives. Density-fitted
   forces require a supported orbital and auxiliary basis. Native CUDA FP64
   requires three partition iterations. Query the prepared calculation for

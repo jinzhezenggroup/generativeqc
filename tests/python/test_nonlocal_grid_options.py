@@ -89,9 +89,12 @@ def test_nonlocal_grid_on_semilocal_only_model_is_not_silently_ignored() -> None
 @pytest.mark.parametrize("endpoint", ("hvp", "hessian"))
 def test_split_grid_second_order_is_rejected_before_native_work(endpoint: str) -> None:
     calculator = SimpleNamespace(
-        _ks_options=KsOptions(grid=PRIMARY, nonlocal_grid=SECONDARY)
+        _ks_options=KsOptions(grid=PRIMARY, nonlocal_grid=SECONDARY),
+        _cuda_rks_second_order=False,
     )
-    with pytest.raises(NotImplementedError, match="Hessians or HVPs"):
+    with pytest.raises(
+        NotImplementedError, match="Hessians and HVPs require native CUDA"
+    ):
         Calculator._checked_rks_second_order_atoms(
             calculator, (), multiplicity=1, endpoint=endpoint
         )

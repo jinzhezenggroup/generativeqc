@@ -30,17 +30,18 @@ generativeqc::dft::CudaKsFinalStateToken configure(unsigned spins, bool fitted) 
   token.identity.model.range_correction = scf::correction;
   return token;
 }
-void run(unsigned spins, bool fitted) {
+void run(unsigned spins, bool fitted, bool separate) {
   using namespace generativeqc;
-  const auto token = configure(spins, fitted);
+  auto token = configure(spins, fitted);
+  if (separate) token.identity.model.nonlocal_grid.emplace(2);
   methods::PreparedBatch batch;
   dft::CudaKsWb97mvResponse owner;
   std::string detail;
   queue_test::reset_action();
-  auto independent = token;
-  independent.identity.model.nonlocal_grid = 2;
-  expect(owner.prepare(batch, 0, independent, {}, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-         "independent-grid coupled response must fail closed");
+  auto mismatched = token;
+  mismatched.identity.model.nonlocal_correlation.reset();
+  expect(owner.prepare(batch, 0, mismatched, {}, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+         "response without the accepted nonlocal model must fail closed");
   expect(queue_test::pending.empty(), "unsupported response queued numerical work");
   queue_test::valid_fock_binding = false;
   expect(owner.prepare(batch, 0, token, {}, detail) != GENERATIVEQC_STATUS_SUCCESS,
@@ -88,7 +89,7 @@ void run(unsigned spins, bool fitted) {
          "captured stream was accepted");
   expect(queue_test::fences == 0 && queue_test::pending.empty(), "capture rejection fenced");
   queue_test::capturing = false;
-  std::cout << "PASS spins=" << spins << " fitted=" << fitted
+  std::cout << "PASS spins=" << spins << " fitted=" << fitted << " separate=" << separate
             << " launch_failure_points=" << launch_count << '\n';
 }
 void run_resident(unsigned spins, queue_test::ResidentFailure failure) {
@@ -153,7 +154,8 @@ void run_resident(unsigned spins, queue_test::ResidentFailure failure) {
 int main() {
   try {
     for (unsigned spins : {1U, 2U})
-      for (bool fitted : {false, true}) run(spins, fitted);
+      for (bool fitted : {false, true})
+        for (bool separate : {false, true}) run(spins, fitted, separate);
     for (unsigned spins : {1U, 2U})
       for (auto failure :
            {queue_test::ResidentFailure::none, queue_test::ResidentFailure::canonical_oom,

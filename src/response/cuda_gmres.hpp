@@ -69,6 +69,10 @@ cudaError_t cuda_gmres_workspace(std::size_t dimension, const CudaGmresOptions& 
  * The workspace must be double-aligned, resident on the current CUDA device,
  * and disjoint from rhs, diagonal and solution. The solution must be disjoint
  * from inputs. It is modified ONLY after a true-residual convergence gate.
+ * An optional initial guess is copied into private workspace before solving;
+ * it may exactly alias solution. Tolerance is still relative to the original
+ * RHS and the initial residual uses the supplied operator, not the guess's
+ * original proposal operator.
  * This call synchronizes the borrowed stream at checkpoints and before return;
  * the enclosing owner must not use these panels concurrently on other streams.
  * Numerical failure is reported in result; CUDA/contract failure is the return
@@ -79,6 +83,7 @@ cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& opti
                              CudaGmresAction action, void* context, const double* rhs,
                              const double* diagonal, double* solution, void* workspace,
                              std::size_t workspace_bytes, cudaStream_t stream,
-                             CudaGmresResult& result) noexcept;
+                             CudaGmresResult& result,
+                             const double* initial_guess = nullptr) noexcept;
 
 }  // namespace generativeqc::response

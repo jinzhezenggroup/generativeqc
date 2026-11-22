@@ -49,6 +49,68 @@ def calculator(device: str = "cpu", **kwargs: Any) -> Calculator:
     )
 
 
+@pytest.mark.parametrize("functional", ("PBE", "PBE0", "B3LYP", "R2SCAN", "pbe-d4-rks"))
+@pytest.mark.parametrize("fitting", ("none", "cuda"))
+def test_cuda_named_d4_energy_resource_admission(
+    library: Any, functional: str, fitting: str
+) -> None:
+    """Preflight an exact catalog graph without creating a CUDA context."""
+    query = library.generativeqc_resource_quadrature_cuda_v1
+    query.argtypes = [ct.c_size_t, ct.c_size_t, ct.POINTER(ct.c_uint64)]
+    query.restype = ct.c_int
+    capacity = ct.c_uint64()
+    status = query(1, 1, ct.byref(capacity))
+    if status == 2:
+        pytest.skip("requires the CUDA inventory build, but not a GPU")
+    assert status == 0 and capacity.value
+    intrinsic = functional == "pbe-d4-rks"
+    settings = {
+        "method": functional
+        if intrinsic
+        else resolve_method(f"{functional}-D4(BJ-EEQ-ATM)"),
+        "device": "cuda",
+        "density_fitting": fitting,
+        "initial_guess": None,
+    }
+    calc = Calculator(**settings)
+    atoms = systems()[1]
+    plan = calc.estimate_resources([atoms], properties=("energy",))
+    plan.require_feasible()
+    requests = {request.name: request for request in plan.requests}
+    assert requests["ks"].identity.observables == ("energy",)
+    assert any(
+        row.name == "D4 retained CUDA owner" and row.bytes for row in plan.estimates
+    )
+    if fitting == "cuda" and functional == "PBE":
+        with pytest.raises(NotImplementedError, match="qualified electronic ownership"):
+            calc.estimate_resources([atoms], properties=("energy", "forces"))
+    if intrinsic:
+        inventory = resources_d4._ks_d4_inventory((len(atoms),), "cuda", library)
+        minimum = inventory["minimum_maximum_bytes"]
+        for delta in (-1, 0):
+            bounded = Calculator(
+                **settings, dispersion_memory_budget_bytes=minimum + delta
+            )
+            plan = bounded.estimate_resources([atoms], properties=("energy",))
+            assert plan.status == ("feasible" if delta == 0 else "infeasible")
+
+
+def test_cuda_named_d4_energy_only_batch_rejects_force_replay() -> None:
+    """A complete energy owner must not create a compatibility force peer."""
+    if os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
+        pytest.skip("requires a finite scheduler CUDA allocation")
+    assert os.environ.get("SLURM_JOB_ID")
+    calc = calculator("cuda")
+    fleet = [systems()[1]]
+    plan = calc.estimate_resources(fleet, properties=("energy",)).require_feasible()
+    with calc.prepare_batch(fleet, resource_plan=plan) as batch:
+        with pytest.raises(NotImplementedError, match="energy-only resource plans"):
+            batch.execute(properties=("energy", "forces"))
+        result = batch.execute(properties=("energy",), strict=True).items[0]
+        assert result.converged and result.dispersion is not None
+        assert result.forces is None and result.dispersion.gradient is None
+
+
 @pytest.mark.parametrize(
     "control,value",
     [
@@ -349,12 +411,50 @@ def test_native_preparation_refusal_does_not_retry_corrections(
         calc.prepare_batch(systems(), resource_plan=plan)
 
 
-def test_composite_gcp_remains_outside_global_inventory() -> None:
+def test_cpu_composite_gcp_remains_outside_global_inventory() -> None:
     with pytest.raises(NotImplementedError, match="gCP"):
         Calculator(
             method=resolve_method("R2SCAN-3c"),
             resource_budget=ResourceBudget(host_bytes=1 << 30),
         )
+
+
+def test_cuda_composite_budget_includes_gcp_and_an_equal_share_cap(
+    library: Any,
+) -> None:
+    """Charge immutable gCP storage per item and retain a separate D4 receipt."""
+    query = library.generativeqc_resource_ks_gcp_cuda_v1
+    query.argtypes = [ct.c_uint32, ct.POINTER(ct.c_uint64), ct.c_size_t]
+    query.restype = ct.c_int
+    output = (ct.c_uint64 * 2)(123, 456)
+    assert query(0, output, len(output)) == _native.STATUS_INVALID_ARGUMENT
+    assert tuple(output) == (123, 456)
+    status = query(3, output, len(output))
+    if status == _native.STATUS_NOT_IMPLEMENTED:
+        pytest.skip("native library has no CUDA gCP owner")
+    assert status == 0
+    large = tuple(output)
+    assert query(2, output, len(output)) == 0
+    small = tuple(output)
+    counts = (2, 3)
+    d4 = resources_d4._ks_d4_inventory(counts, "cuda", library)
+    minimum = d4["minimum_maximum_bytes"] + 2 * sum(large)
+    controls = {
+        "method": resolve_method("R2SCAN-3c"),
+        "backend": "cuda",
+        "library": library,
+        "_native_ks": True,
+    }
+    numbers = ((1, 1), (8, 1, 1))
+    tight = resources_d4.d4_resource_request(
+        numbers, maximum_bytes=minimum - 1, **controls
+    )
+    assert tight.infeasible_reason and not tight.candidates
+    exact = resources_d4.d4_resource_request(numbers, maximum_bytes=minimum, **controls)
+    estimates = {row.name: row.bytes for row in exact.candidates[0].estimates}
+    assert estimates["gCP host staging"] == small[0] + large[0]
+    assert estimates["gCP retained CUDA owner"] == small[1] + large[1]
+    assert estimates["D4 retained CUDA owner"] == d4["device_bytes"]
 
 
 @pytest.mark.parametrize("optional_protocol", [True, False])

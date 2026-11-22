@@ -151,6 +151,10 @@ std::unique_ptr<D3Plan> D3Plan::prepare(generativeqc_backend backend, int device
 
 D3Plan::~D3Plan() { destroy_d3_cuda_owner(cuda_); }
 
+#if !GENERATIVEQC_HAS_CUDA
+D3CudaDirectionSource D3Plan::cuda_direction_source() const noexcept { return {}; }
+#endif
+
 generativeqc_status D3Plan::execute(std::span<const double> packed_coordinates,
                                     std::span<const std::uint8_t> active,
                                     std::span<const std::uint8_t> want_gradient,

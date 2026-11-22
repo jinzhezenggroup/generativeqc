@@ -50,6 +50,13 @@ def main() -> None:
         "--profiles", nargs="*", choices=NATIVE_STATIONARY_CUDA_PROFILES
     )
     parser.add_argument("--fused-profiles", nargs="*", default=[])
+    parser.add_argument("--include-variational-r2scan", action="store_true")
+    parser.add_argument(
+        "--include-variational-split-hybrid",
+        choices=("M06-2X", "MN15"),
+        action="append",
+        default=[],
+    )
     parser.add_argument(
         "--functional",
         action="append",
@@ -143,7 +150,10 @@ def main() -> None:
             parser.error("--all-profiles requires unique qualified native graphs")
         try:
             sources = native_stationary_package_sources(
-                profiles, fused_profiles=tuple(args.fused_profiles)
+                profiles,
+                fused_profiles=tuple(args.fused_profiles),
+                include_variational_r2scan=args.include_variational_r2scan,
+                variational_split_hybrids=tuple(args.include_variational_split_hybrid),
             )
         except ValueError as error:
             parser.error(str(error))
@@ -166,6 +176,10 @@ def main() -> None:
                     profile,
                     staged_point=filename.startswith("native_shared_"),
                     source_cache=args.source_cache,
+                    variational_r2scan=profile.startswith("r2scan_")
+                    and filename.endswith("_variational.cu"),
+                    variational_split_hybrid=profile.startswith(("m06_2x_", "mn15_"))
+                    and filename.endswith("_variational.cu"),
                 ),
             )
         return
@@ -175,10 +189,15 @@ def main() -> None:
         parser.error("generation requires --output")
     source = (
         emit_native_stationary_profile_cuda(
-            args.profile, source_cache=args.source_cache
+            args.profile,
+            source_cache=args.source_cache,
         )
         if args.profile
-        else emit_native_stationary_registry_cpp(tuple(args.registry))
+        else emit_native_stationary_registry_cpp(
+            tuple(args.registry),
+            include_variational_r2scan=args.include_variational_r2scan,
+            variational_split_hybrids=tuple(args.include_variational_split_hybrid),
+        )
     )
     write_if_changed(args.output, source)
 

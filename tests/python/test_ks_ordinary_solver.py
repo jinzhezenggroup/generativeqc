@@ -128,7 +128,9 @@ def test_large_ks_solver_energy_replay_geometry_and_final_state(
             charge=charge,
             multiplicity=multiplicity,
         ) as basis:
-            state = StationaryKsState.from_native(batch, basis)
+            state = StationaryKsState.from_native(
+                batch, basis, allow_reference_domain=True
+            )
             assert state.density.shape == ((2 if unrestricted else 1), 24, 24)
             assert state.physical_residual < 1e-9
             state._source.close()

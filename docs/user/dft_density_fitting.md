@@ -84,11 +84,13 @@ force or reference eigensystem participates in this decision. Use explicit `df`
 or `direct` when reproducibility requires the same approximation across separate
 preparations with different initial geometries or resource availability.
 
-This automatic LR admission qualifies energies and analytic first derivatives,
-not fitted-LR second-order response. WB97M-V Hessians and HVPs still require
-`GENERATIVEQC_DF_RANGE_EXCHANGE=direct` with a full-rank primary fitting metric.
-A fitted LR owner is rejected by those consumers, never differentiated with the
-exact-LR response equations. See [DF Hessian contracts](../developer/dft_hessian.md).
+The native CUDA WB97M-V Hessian and HVP use the actual LR provider selected by
+SCF, including an erf-fitted provider with a separated, rank-truncated metric.
+The primary and LR metrics must each pass the second-order cutoff and resource
+gates. If a fitted source fails those gates, the derivative fails rather than
+switching to exact LR exchange. CPU fitted WB97M-V second derivatives still
+require a full-rank primary metric and exact LR exchange. See
+[DF Hessian contracts](../developer/dft_hessian.md).
 
 For automatic CUDA packed storage, the fitted LR owner may rebalance bounded
 value staging to retain immutable Hermite geometry for its raw three-center

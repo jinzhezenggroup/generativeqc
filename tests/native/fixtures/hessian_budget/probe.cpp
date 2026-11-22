@@ -2,28 +2,60 @@ int main() {
   using namespace generativeqc;
   methods::PreparedBatch batch;
   dft::CudaKsFinalStateToken token;
+  using Mode = dft::CudaKsWb97mvHessianMode;
+  {
+    dft::CudaKsWb97mvHessian owner;
+    std::string detail;
+    assert(owner.prepare(batch, 0, token, Mode::action_only, {}, detail) ==
+           GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    assert(stub::allocation_attempts == 0);
+  }
+  token.strict_physical_fock = true;
   std::size_t controls{};
   for (const auto points : {8U, 32U, 256U})
     for (const auto spins : {1U, 2U})
-      for (const auto df : {false, true}) {
+      for (const auto fitted_sources : {0, 1, 2}) {
+        const bool df = fitted_sources != 0;
         stub::points = points;
         stub::spins = spins;
-        stub::df = stub::ecp = df;
+        stub::df = df;
+        stub::range_df = fitted_sources == 2;
         dft::primary.data.ecp_terms.resize(df ? 1 : 0);
         dft::CudaKsWb97mvHessianOptions serial;
         serial.max_frozen_exact_bytes = 0;
         serial.max_resident_cpks_bytes = 0;
         serial.one_electron.parallel_streams = 0;
         serial.grid.replay_nuclear_maps = false;
-        std::size_t baseline{};
+        std::size_t baseline{}, mandatory_allocations{};
         std::string detail;
         {
           dft::CudaKsWb97mvHessian owner;
-          assert(owner.prepare(batch, 0, token, serial, detail) == GENERATIVEQC_STATUS_SUCCESS);
+          stub::allocation_attempts = 0;
+          assert(owner.prepare(batch, 0, token, Mode::dense_and_action, serial, detail) ==
+                 GENERATIVEQC_STATUS_SUCCESS);
+          mandatory_allocations = stub::allocation_attempts;
           baseline = owner.work().device_bytes;
           assert(baseline == stub::live_bytes);
         }
         assert(stub::live_bytes == 0);
+        {
+          // Fit a standalone action at a budget that rejects even a dense
+          // owner with both optional caches disabled. Leave both caches
+          // enabled for the action to exercise mode selection, not cap=0.
+          dft::CudaKsWb97mvHessian owner;
+          auto action = serial;
+          action.max_resident_cpks_bytes = 128ULL << 10;
+          action.max_frozen_exact_bytes = 8ULL << 20;
+          action.max_device_bytes = baseline - 1;
+          stub::peak_bytes = 0;
+          assert(owner.prepare(batch, 0, token, Mode::action_only, action, detail) ==
+                 GENERATIVEQC_STATUS_SUCCESS);
+          const auto work = owner.work();
+          assert(work.device_bytes == stub::live_bytes &&
+                 stub::peak_bytes <= action.max_device_bytes);
+          assert(!work.cpks_operator_bytes && !work.frozen_exact_bytes);
+        }
+        assert(stub::live_bytes == 0 && stub::allocations.empty());
         auto options = serial;
         options.one_electron.parallel_streams = 32;
         options.grid.replay_nuclear_maps = true;
@@ -37,7 +69,8 @@ int main() {
           stub::peak_bytes = 0;
           {
             dft::CudaKsWb97mvHessian owner;
-            const auto status = owner.prepare(batch, 0, token, options, detail);
+            const auto status =
+                owner.prepare(batch, 0, token, Mode::dense_and_action, options, detail);
             if (status != GENERATIVEQC_STATUS_SUCCESS) {
               std::cerr << "lost scalar request: points=" << points << " spins=" << spins
                         << " df=" << df << " surplus=" << delta << " " << detail << '\n';
@@ -62,23 +95,34 @@ int main() {
         options.max_device_bytes = baseline - 1;
         {
           dft::CudaKsWb97mvHessian owner;
-          assert(owner.prepare(batch, 0, token, options, detail) != GENERATIVEQC_STATUS_SUCCESS);
+          assert(owner.prepare(batch, 0, token, Mode::dense_and_action, options, detail) !=
+                 GENERATIVEQC_STATUS_SUCCESS);
         }
         assert(stub::live_bytes == 0);
         options.max_device_bytes = baseline + extra + 1024;
-        for (int failure = 1; failure <= (df ? 6 : 3); ++failure) {
+        using stub::Provider;
+        auto providers = std::vector{Provider::core, Provider::induced};
+        if (df)
+          providers.insert(providers.end(), {Provider::raw_df, Provider::fitted, Provider::ecp});
+        else
+          providers.push_back(Provider::exact);
+        if (stub::range_df)
+          providers.insert(providers.end(), {Provider::raw_df_range, Provider::fitted_range});
+        for (const auto failure : providers) {
           stub::reject_provider = failure;
           dft::CudaKsWb97mvHessian owner;
-          assert(owner.prepare(batch, 0, token, options, detail) != GENERATIVEQC_STATUS_SUCCESS);
+          assert(owner.prepare(batch, 0, token, Mode::dense_and_action, options, detail) !=
+                 GENERATIVEQC_STATUS_SUCCESS);
         }
-        stub::reject_provider = 0;
+        stub::reject_provider = Provider::none;
         assert(stub::live_bytes == 0);
-        for (std::size_t failure = 1; failure <= (df ? 7U : 4U); ++failure) {
+        for (std::size_t failure = 1; failure <= mandatory_allocations; ++failure) {
           stub::allocation_attempts = 0;
           stub::fail_allocation = failure;
           {
             dft::CudaKsWb97mvHessian owner;
-            assert(owner.prepare(batch, 0, token, options, detail) != GENERATIVEQC_STATUS_SUCCESS);
+            assert(owner.prepare(batch, 0, token, Mode::dense_and_action, serial, detail) !=
+                   GENERATIVEQC_STATUS_SUCCESS);
           }
           assert(stub::live_bytes == 0);
         }
@@ -89,7 +133,8 @@ int main() {
           if (invalid == 1) rejected.grid.max_nuclear_affine_terms = 1;
           if (invalid == 2) rejected.max_assembly_terms = 1;
           dft::CudaKsWb97mvHessian owner;
-          assert(owner.prepare(batch, 0, token, rejected, detail) != GENERATIVEQC_STATUS_SUCCESS);
+          assert(owner.prepare(batch, 0, token, Mode::dense_and_action, rejected, detail) !=
+                 GENERATIVEQC_STATUS_SUCCESS);
         }
         assert(stub::live_bytes == 0);
       }

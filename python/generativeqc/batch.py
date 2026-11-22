@@ -232,6 +232,7 @@ class PreparedBatch:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         _cold_rks_fock: _native.RksColdFockOptions | None = None,
+        _hessian_request: typing.Any = None,
     ) -> None:
         """Prepare native systems and method resources for repeated batch evaluation.
 
@@ -255,6 +256,10 @@ class PreparedBatch:
         ):
             raise ValueError("ks_export=False requires a CPU DFT calculator")
         self._ks_export = ks_export
+        if _hessian_request is not None and resource_plan is None:
+            raise ValueError(
+                "native Hessian capacity requires its composed resource plan"
+            )
         self._last_statuses = None
         self._dispersion_batch: typing.Any = None
         self._native_dispersion: typing.Any = None
@@ -323,12 +328,13 @@ class PreparedBatch:
         self._cuda_d4_resource_replay = None
         dispersion_request = None
         resource_native_name = None
+        native_graph = calculator._dispersion_method_ir
         if resource_plan is not None or calculator._resource_budget is not None:
             from ._named_ks import select_resource_program
 
+            native_graph = calculator._resource_dispersion_graph()
             share_native_program = (
-                calculator._device_name == "cuda"
-                and calculator._dispersion_method_ir is not None
+                calculator._device_name == "cuda" and native_graph is not None
             )
             request = calculator._resource_request(
                 self._systems,
@@ -384,15 +390,30 @@ class PreparedBatch:
             if request.identity.backend == "cuda":
                 from .resources_native import NativeDeviceLedger
 
+                components = (
+                    (dispersion_request.name,)
+                    if resource_native_name is not None
+                    and dispersion_request is not None
+                    else ()
+                )
+                if _hessian_request is not None:
+                    from ._hessian_resources import HESSIAN_RESOURCE_OWNER
+
+                    if not any(
+                        component.name == HESSIAN_RESOURCE_OWNER
+                        and component == _hessian_request
+                        for component in self.resource_plan.requests
+                    ):
+                        raise ValueError(
+                            "Hessian request does not match its resource plan"
+                        )
+                    components = (*components, HESSIAN_RESOURCE_OWNER)
                 self._resource_ledger = NativeDeviceLedger(
                     self._library,
                     self.resource_plan,
                     owner=request.name,
                     prepared_kind="batch",
-                    component_owners=(dispersion_request.name,)
-                    if resource_native_name is not None
-                    and dispersion_request is not None
-                    else (),
+                    component_owners=components,
                 )
                 self._resource_prepare = self._resource_ledger.prepared_call
             if request.identity.backend == "cuda" and (
@@ -482,13 +503,14 @@ class PreparedBatch:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
             native_name = resource_native_name
-            # Packed values require the named preparation ABI even when the
-            # electronic MethodIR has no geometry-only correction.
-            named_graph = calculator._dispersion_method_ir
             if calculator._cpu_packed_eri_maximum_bytes:
-                named_graph = calculator.method_ir
+                native_graph = calculator.method_ir
+            if native_name is not None and calculator._cuda_intrinsic_pbe_d4:
+                # Native catalog admission checks the electronic carrier and
+                # replaces the scientific terms with the certified full graph.
+                method.method = _native.METHOD_PBE_RKS
             if (
-                named_graph is not None
+                native_graph is not None
                 and self.resource_plan is None
                 and calculator._precision_mode == _native.PRECISION_FP64
             ):
@@ -496,7 +518,7 @@ class PreparedBatch:
 
                 native_name = select_named_program(
                     self._library,
-                    named_graph,
+                    native_graph,
                     _native.BACKEND_CUDA
                     if calculator._device_name == "cuda"
                     else _native.BACKEND_CPU_REFERENCE,
@@ -520,7 +542,7 @@ class PreparedBatch:
                         flags,
                         ctypes.byref(self._batch),
                         native_name,
-                        named_graph,
+                        native_graph,
                         calculator._dispersion_memory_budget_bytes,
                         resources=(
                             self._resource_ledger.handle
@@ -595,9 +617,7 @@ class PreparedBatch:
             if native_name is not None and calculator._dispersion_method_ir is not None:
                 from ._named_ks import NativeKsDispersion
 
-                self._native_dispersion = NativeKsDispersion(
-                    self, calculator._dispersion_method_ir
-                )
+                self._native_dispersion = NativeKsDispersion(self, native_graph)
                 self._intrinsic_dispersion_energy = True
             if (
                 calculator._dispersion_method_ir is not None
@@ -679,6 +699,12 @@ class PreparedBatch:
                 )
                 planned = dict(candidate.decisions)
                 diagnostic = self.dispersion_diagnostic
+                from .dispersion import R2SCAN3CRuntimeDiagnostic
+
+                if isinstance(diagnostic, R2SCAN3CRuntimeDiagnostic):
+                    # The D4 sub-plan has an exact typed receipt; gCP's native
+                    # allocations are charged by the same device ledger.
+                    diagnostic = diagnostic.d4
                 actual = {
                     "plan_host_bytes": diagnostic.plan_host_bytes,
                     "execution_host_bytes": diagnostic.execution_host_bytes,
@@ -1296,6 +1322,16 @@ class PreparedBatch:
             expected.identity.observables
         ):
             return expected, self.resource_plan
+        if expected.identity.backend == "cuda" and (
+            self._native_dispersion is not None
+            or calculator._cuda_split_hybrid_stationary is not None
+            or calculator._cuda_direct_hybrid_energy_plan
+            or calculator._cuda_pbe_range_stationary
+        ):
+            raise NotImplementedError(
+                "CUDA KS energy-only resource plans cannot replay forces; "
+                "prepare a new batch with qualified force capacity"
+            )
         candidate = self.resource_plan
         current = calculator._resource_request(
             self._systems, **options, properties=properties

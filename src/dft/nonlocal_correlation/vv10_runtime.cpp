@@ -22,8 +22,14 @@ std::uint64_t checked_array_bytes(std::uint32_t points, std::uint64_t arrays) {
   return arrays * bytes * n;
 }
 
-Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t point_count,
-                                 std::uint32_t tile_points, std::uint64_t maximum_bytes) {
+}  // namespace
+
+Vv10ResourceUsage Vv10Plan::resource_usage(generativeqc_backend backend, std::uint32_t point_count,
+                                           std::uint32_t tile_points, std::uint64_t maximum_bytes) {
+  if ((backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+      !point_count || !tile_points || !maximum_bytes ||
+      point_count > std::numeric_limits<std::uint32_t>::max() / 3u)
+    throw std::invalid_argument("invalid VV10 resource shape");
   const auto n = static_cast<std::uint64_t>(point_count);
   const auto tile = static_cast<std::uint64_t>(std::min(tile_points, point_count));
   const auto host =
@@ -54,6 +60,8 @@ Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t poi
                            n * n,       (n + tile - 1u) / tile,
                            point_count, static_cast<std::uint32_t>(tile)};
 }
+
+namespace {
 
 using PairValues = generated::PairValues;
 

@@ -14,6 +14,10 @@ if TYPE_CHECKING:
     from conftest import NativeCxx
 
 import pytest
+from test_ks_point_batch_resources import (
+    _configure_stationary_domains,
+    _generate_stationary_nlc_parameters,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
@@ -27,6 +31,10 @@ PREFIX = r"""
 #include <string>
 #include <vector>
 #include "dft/global_hybrid_fock.hpp"
+#include "dft/r2scan_rvv10_model.hpp"
+using generativeqc::dft::kCudaR2scanVariational;
+using generativeqc::dft::kCudaR2scanVariationalDomain;
+using generativeqc::dft::r2scan_rvv10_model_matches;
 using generativeqc::dft::SemilocalFamily;
 using generativeqc::dft::global_hybrid_composition;
 using generativeqc::dft::cuda_global_hybrid_jk_match;
@@ -41,7 +49,10 @@ struct AutomaticLibxcEntry {
 };
 AutomaticLibxcEntry automatic_libxc_entry(std::uint32_t) noexcept { return {}; }
 }
-namespace nlc { enum class Vv10DensityDomain { MolecularV1 }; }
+namespace nlc {
+using generativeqc::dft::nlc::Vv10Parameters;
+enum class Vv10DensityDomain { MolecularV1 };
+}
 namespace scf {
 using generativeqc::scf::FockBackend;
 using generativeqc::scf::FockSpin;
@@ -50,24 +61,28 @@ using generativeqc::scf::FockApproximation;
 using generativeqc::scf::FockOperator;
 using Spec = generativeqc::scf::FockBuildSpec;
 struct Fock {FockBackend backend=FockBackend::Cuda;FockPrecision precision=FockPrecision::Float64;
- Spec spec;double screening_tolerance=1e-12;};
+ Spec spec;double screening_tolerance=1e-12,metric_relative_threshold=1e-10;};
 // Preserve the basic finite-coefficient contract of the independent validator.
 void validate_resolved_fock_build(const Fock& f) {
  if(!std::isfinite(f.spec.exchange.coefficient))throw std::invalid_argument("coefficient");
 }
-void require_wb97mv_composition(const Fock&,const Fock&,int) {throw std::invalid_argument("not this scope");}
+void require_wb97mv_composition(const Fock&,const Fock&,const nlc::Vv10Parameters&) {throw std::invalid_argument("not this scope");}
 }
+struct Grid {
+ unsigned partition_iterations=3;
+ bool operator==(const Grid&) const = default;
+};
 struct Model {unsigned version=1,functional=1,scf_domain_version=1,tile_points=257,owner=1,spins=1;
- int device=0,grid=1;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;
+ int device=0; Grid grid;double semilocal_exchange_scale=1,semilocal_correlation_scale=1;
  std::optional<scf::Fock> range_correction;
- std::optional<int> nonlocal_correlation;
- std::optional<int> nonlocal_grid;
+ std::optional<nlc::Vv10Parameters> nonlocal_correlation;
+ std::optional<Grid> nonlocal_grid;
  nlc::Vv10DensityDomain nonlocal_density_domain=nlc::Vv10DensityDomain::MolecularV1;};
 struct KsFinalStateIdentity {
  Model model;
  struct {scf::Fock model;std::vector<unsigned> occupied{1};} determinant;
 };
-void validate_grid_spec(int grid) {if(grid!=1)throw std::invalid_argument("grid");}
+void validate_grid_spec(Grid grid) {if(!grid.partition_iterations)throw std::invalid_argument("grid");}
 """
 DRIVER = r"""
 int main(int argc,char** argv) {
@@ -108,7 +123,7 @@ int main(int argc,char** argv) {
  else if(mode=="df-k")f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
  else if(mode=="range-k")f.spec.exchange.op=scf::FockOperator::LongRange;
  else if(mode=="range-decoration")state.model.range_correction=scf::Fock{};
- else if(mode=="nlc-decoration")state.model.nonlocal_correlation=1;
+ else if(mode=="nlc-decoration")state.model.nonlocal_correlation.emplace();
  else if(mode=="scale-x")state.model.semilocal_exchange_scale=0.73;
  else if(mode=="scale-c")state.model.semilocal_correlation_scale=0.5;
  else if(mode=="pbe0")state.model.semilocal_exchange_scale=0.75;
@@ -120,7 +135,7 @@ int main(int argc,char** argv) {
    else if(mode=="pbe0-df-mixed-j")f.spec.coulomb.approximation=scf::FockApproximation::Exact;
    else if(mode=="pbe0-df-mixed-k")f.spec.exchange.approximation=scf::FockApproximation::Exact;
    else if(mode=="pbe0-df-range")state.model.range_correction=scf::Fock{};
-   else if(mode=="pbe0-df-nlc")state.model.nonlocal_correlation=1;
+   else if(mode=="pbe0-df-nlc")state.model.nonlocal_correlation.emplace();
    else if(mode=="pbe0-df-scale-x")state.model.semilocal_exchange_scale=0.8;
    else if(mode=="pbe0-df-scale-c")state.model.semilocal_correlation_scale=0.9;
  }
@@ -131,14 +146,14 @@ int main(int argc,char** argv) {
    state.model.semilocal_exchange_scale=0.75;state.model.range_correction=scf::Fock{};
  }
  else if(mode=="pbe0-nlc-decoration") {
-   state.model.semilocal_exchange_scale=0.75;state.model.nonlocal_correlation=1;
+   state.model.semilocal_exchange_scale=0.75;state.model.nonlocal_correlation.emplace();
  }
  else if(mode=="positive-k")f.spec.exchange.coefficient=0.25;
  else if(mode=="nan-k")f.spec.exchange.coefficient=std::nan("");
  else if(mode=="float32")f.precision=static_cast<scf::FockPrecision>(1);
  else if(mode=="wrong-device")state.model.device=-1;
  else if(mode=="derivative")f.spec.derivative_order=1;
- else if(mode=="bad-grid")state.model.grid=0;
+ else if(mode=="bad-grid")state.model.grid.partition_iterations=0;
  else if(mode=="bad-spins")state.determinant.occupied.clear();
  else if(mode=="wrong-domain")state.model.scf_domain_version=2;
  if(mode.rfind("rsh",0)==0) {
@@ -159,7 +174,7 @@ int main(int argc,char** argv) {
    else if(mode=="rsh-screening")correction.screening_tolerance=1e-8;
    else if(mode=="rsh-df")correction.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
    else if(mode=="rsh-scaled")state.model.semilocal_exchange_scale=0.75;
-   else if(mode=="rsh-nonlocal")state.model.nonlocal_correlation=1;
+   else if(mode=="rsh-nonlocal")state.model.nonlocal_correlation.emplace();
    state.model.range_correction=correction;
  }
  if(valid_model(state)!=expected) {std::cerr<<mode<<" functional="<<functional<<" spins="<<spins;return 1;}
@@ -175,6 +190,8 @@ def model_probe(
     start = source.index("bool valid_model(")
     end = source.index("bool finite_components(", start)
     directory = tmp_path_factory.mktemp("ks-exchange-model")
+    _configure_stationary_domains(directory)
+    _generate_stationary_nlc_parameters(directory)
     unit, executable = directory / "probe.cpp", directory / "probe"
     unit.write_text(PREFIX + source[start:end] + DRIVER)
     native_cxx.build_executable(
@@ -184,6 +201,7 @@ def model_probe(
             "-std=c++20",
             "-O2",
             "-fsanitize=undefined",
+            f"-I{directory}",
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ),

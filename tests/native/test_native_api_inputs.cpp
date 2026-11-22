@@ -11,8 +11,8 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "api/ks_hessian.hpp"
 #include "api/native_method_inputs.hpp"
+#include "generativeqc/ks_hessian.h"
 
 namespace {
 using namespace generativeqc;
@@ -306,11 +306,16 @@ void ks_auxiliary_roles(generativeqc_context* context) {
           "KS-only CUDA auxiliary entered another provider");
 
   double published = 7;
-  generativeqc_ks_hessian_options_v1 policy;
-  generativeqc_ks_hessian_receipt_v1 receipt;
+  generativeqc_ks_hessian_options_v2 policy{};
+  require(generativeqc_ks_hessian_default_options_v2(&policy) == GENERATIVEQC_STATUS_SUCCESS,
+          "could not initialize CUDA Hessian controls");
+  generativeqc_ks_hessian_receipt_v2 receipt{};
+  receipt.struct_size = sizeof(receipt);
+  receipt.abi_version = GENERATIVEQC_ABI_VERSION;
   receipt.completed_directions = 99;
-  require(generativeqc_ks_hessian_cuda_version_v1() <= 1, "unknown native Hessian bridge version");
-  require(generativeqc_ks_hessian_cuda_v1(nullptr, 0, &policy, nullptr, 0, &published, 1,
+  const auto version = generativeqc_ks_hessian_cuda_version_v2();
+  require(version == 0 || version == 2, "unknown native Hessian bridge version");
+  require(generativeqc_ks_hessian_cuda_v2(nullptr, 0, &policy, nullptr, 0, &published, 1,
                                           &receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
               published == 7 && receipt.completed_directions == 99,
           "rejected Hessian call modified caller publication");
@@ -325,7 +330,7 @@ void ks_auxiliary_roles(generativeqc_context* context) {
   (void)batch_energy(batch.get());
   std::array<double, 36> matrix;
   matrix.fill(7);
-  require(generativeqc_ks_hessian_cuda_v1(batch.get(), 0, &policy, nullptr, 0, matrix.data(),
+  require(generativeqc_ks_hessian_cuda_v2(batch.get(), 0, &policy, nullptr, 0, matrix.data(),
                                           matrix.size(),
                                           &receipt) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               receipt.completed_directions == 99,

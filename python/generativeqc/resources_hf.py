@@ -179,6 +179,8 @@ def _basis_record(
     *,
     derivative_order: typing.Any = 1,
     library: typing.Any = None,
+    operator: str = "eri",
+    consumer: str | None = None,
 ) -> typing.Any:
     selected = _snapshot_basis(basis, representation)
     mode = (
@@ -190,10 +192,11 @@ def _basis_record(
         selected,
         atoms,
         backend=backend,
-        operator="eri",
+        operator=operator,
         derivative_order=derivative_order,
         representation=mode,
         role=role,
+        consumer=consumer,
     )
     shells = selected.shells_for(atoms) if isinstance(selected, BasisSet) else selected
     metadata = resolved_basis_metadata(

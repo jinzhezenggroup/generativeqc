@@ -4,6 +4,7 @@
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_wb97mv_df_nuclear.hpp"
 #include "dft/cuda_ks_wb97mv_model.hpp"
+#include "runtime/resource_cuda.cuh"
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/fock_prepared.hpp"
 
@@ -13,6 +14,7 @@ void require(bool condition, const char* message) {
   if (!condition) throw std::invalid_argument(message);
 }
 void check(cudaError_t error) {
+  if (error == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
 }  // namespace
@@ -22,6 +24,7 @@ struct CudaKsWb97mvDfNuclear::Impl {
   CudaKsFinalStateToken expected;
   CudaKsGridReference grid;
   CudaKsResidentFockBinding fock;
+  const scf::PreparedFockPlan* provider{};
   scf::CudaDfReadonlySource fitted;
   scf::CudaDfReadonlyBasis basis;
   integrals::CudaDfNuclearShape shape{};
@@ -32,7 +35,7 @@ struct CudaKsWb97mvDfNuclear::Impl {
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
-    if (arena) (void)cudaFree(arena);
+    if (arena) (void)runtime::resource_cuda_free(arena);
   }
   static cudaError_t authenticate(void* context) noexcept {
     auto& self = *static_cast<Impl*>(context);
@@ -42,8 +45,8 @@ struct CudaKsWb97mvDfNuclear::Impl {
       if (methods::detail::dft_cuda_resident_fock_sources(self.batch, self.item, self.expected,
                                                           current,
                                                           detail) != GENERATIVEQC_STATUS_SUCCESS ||
-          current != self.fock || !cuda_ks_wb97mv_model_matches(self.expected, current) ||
-          scf::cuda_density_fitting_readonly_source(current.primary->cuda_fitted_source()) !=
+          current != self.fock || !cuda_ks_hessian_model_matches(self.expected, current) ||
+          scf::cuda_density_fitting_readonly_source(self.provider->cuda_fitted_source()) !=
               self.fitted ||
           scf::cuda_density_fitting_readonly_basis(self.fitted.integrals) != self.basis)
         return cudaErrorInvalidResourceHandle;
@@ -70,29 +73,33 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     status =
         methods::detail::dft_cuda_resident_fock_sources(batch, item, expected, owner->fock, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    require(cuda_ks_wb97mv_model_matches(expected, owner->fock) &&
+    require(cuda_ks_hessian_model_matches(expected, owner->fock) &&
                 owner->fock.primary->strategy().spec.coulomb.approximation ==
                     scf::FockApproximation::DensityFitted,
             "raw DF nuclear source requires the complete native WB97M-V fitted model");
+    owner->provider = options.range_omega == 0 ? owner->fock.primary : owner->fock.fitted_range;
+    require(owner->provider, "raw DF nuclear source has no matching radial provider");
     owner->fitted =
-        scf::cuda_density_fitting_readonly_source(owner->fock.primary->cuda_fitted_source());
+        scf::cuda_density_fitting_readonly_source(owner->provider->cuda_fitted_source());
     require(static_cast<bool>(owner->fitted), "raw DF nuclear source requires live fitted sources");
     owner->basis = scf::cuda_density_fitting_readonly_basis(owner->fitted.integrals);
     const auto lease = owner->grid.reference();
     const auto grid_shape = owner->grid.shape();
-    require(
-        owner->basis && owner->basis.nao == grid_shape.nao &&
-            owner->basis.atoms == grid_shape.atoms && owner->basis.nao == owner->fitted.nao &&
-            owner->basis.naux == owner->fitted.naux && owner->basis.device_id == lease.device_id &&
-            owner->fitted.device_id == lease.device_id && owner->fitted.stream == lease.stream &&
-            owner->fock.stream == reinterpret_cast<void*>(lease.stream),
-        "raw DF nuclear source differs from its actual canonical KS owners");
+    require(owner->basis && owner->basis.nao == grid_shape.nao &&
+                owner->basis.atoms == grid_shape.atoms && owner->basis.nao == owner->fitted.nao &&
+                owner->basis.naux == owner->fitted.naux &&
+                owner->basis.device_id == lease.device_id &&
+                owner->basis.range_omega == options.range_omega &&
+                owner->fitted.device_id == lease.device_id &&
+                (options.range_omega != 0 || owner->fitted.stream == lease.stream) &&
+                owner->fock.stream == reinterpret_cast<void*>(lease.stream),
+            "raw DF nuclear source differs from its actual canonical KS owners");
     owner->stream = lease.stream;
     cudaStreamCaptureStatus capture{};
     check(cudaStreamIsCapturing(owner->stream, &capture));
     require(capture == cudaStreamCaptureStatusNone, "raw DF nuclear preparation cannot capture");
-    const auto& orbital_system = owner->fock.primary->system();
-    const auto* auxiliary_system = owner->fock.primary->auxiliary_system();
+    const auto& orbital_system = owner->provider->system();
+    const auto* auxiliary_system = owner->provider->auxiliary_system();
     require(auxiliary_system && scf::cuda_density_fitting_integral_source_geometry_matches(
                                     owner->fitted.integrals, 0, orbital_system, *auxiliary_system),
             "DF topology lacks its actual normalized source identity");
@@ -119,7 +126,7 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
                     owner->basis.naux,  owner->basis.cartesian_nao, owner->basis.cartesian_naux};
     std::size_t bytes{};
     check(integrals::cuda_df_nuclear_workspace(owner->shape, orbital, auxiliary, options, bytes));
-    check(cudaMalloc(&owner->arena, bytes));
+    check(runtime::resource_cuda_malloc(&owner->arena, bytes));
     const integrals::CudaDfNuclearReference reference{owner->basis, owner->stream,
                                                       Impl::authenticate, owner.get()};
     check(owner->response.prepare(owner->shape, orbital, auxiliary, options, reference,

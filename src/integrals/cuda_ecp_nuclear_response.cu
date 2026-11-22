@@ -18,6 +18,10 @@ namespace maps = generativeqc_ecp_response_maps;
 namespace quadrature = generativeqc_ecp_quadrature;
 namespace ad = generativeqc_nuclear_integral_ad;
 namespace source = generativeqc::generated;
+constexpr unsigned local_pullback_threads = 128;
+constexpr unsigned projector_pullback_threads = 32;
+constexpr unsigned local_channel = 1, nonlocal_channel = 2, both_channels = 3;
+constexpr int hard_failure = 1;
 bool add(std::size_t& value, std::size_t increment) {
   if (increment > SIZE_MAX - value) return false;
   value += increment;
@@ -33,9 +37,11 @@ struct Grid {
 };
 struct Layout {
   std::size_t bytes{}, basis_count{}, matrix{}, vector{}, candidates{}, map_bytes{}, centers{},
-      points{}, jets{}, projected{}, motion{}, measure{}, map_output{}, map_arena{}, coarse{},
-      fine{}, potential{}, seed{}, status{};
-  std::array<Grid, 2> grids{};
+      points{}, jets{}, projected{}, motion{}, measure{}, map_output{}, map_arena{}, pullback{},
+      coarse{}, fine{}, potential{}, seed{}, status{};
+  std::array<Grid, 3> grids{};
+  unsigned value_validation{}, contraction_validation{};
+  std::array<CudaEcpNuclearWork, 4> ceilings{};
   CudaEcpNuclearWork work{};
   bool reserve(std::size_t count, std::size_t size, std::size_t& offset) {
     offset = bytes;
@@ -46,8 +52,9 @@ struct Layout {
     return true;
   }
 };
-cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> centers,
-                   const CudaEcpNuclearOptions& options, Layout& plan) {
+cudaError_t layout_for_channels(const CudaEcpNuclearShape& shape, std::span<const unsigned> centers,
+                                const CudaEcpNuclearOptions& options, unsigned validation,
+                                Layout& plan) {
   plan = {};
   if (!shape.atoms || !shape.primitives || !shape.nao || !shape.terms || centers.empty() ||
       shape.atoms > INT32_MAX || shape.primitives > INT32_MAX || shape.nao > INT32_MAX ||
@@ -68,17 +75,24 @@ cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> c
   if (!add(plan.basis_count, 2 * shape.primitives) || !add(plan.basis_count, 16 * shape.nao))
     return cudaErrorInvalidValue;
   std::size_t max_points{}, ao_lanes{}, projection_terms{}, reduction_terms{}, extra{};
-  for (unsigned index = 0; index < 2; ++index) {
+  for (unsigned index = 0; index < (validation ? 3u : 2u); ++index) {
     const auto& grid = quadrature::grids[index];
+    const auto channels = index == 2 ? validation : both_channels;
     max_points = std::max(max_points, grid.points);
-    std::size_t layers{}, evaluations{}, projections{}, reductions{}, matrix_sums{};
+    std::size_t layers{}, evaluations{}, projections{}, reductions{}, matrix_sums{}, scatter{};
+    // Two FP64 sums per axis and AO on both channels, including tree merges.
+    // Only the compact AO results are gathered into molecular coordinates.
+    const auto pullback_terms =
+        (channels & local_channel ? grid.points + local_pullback_threads - 1 : 0) +
+        (channels & nonlocal_channel ? 16 + projector_pullback_threads - 1 : 0);
+    const auto panels = channels == both_channels ? 4 : 2;
     if (!multiply(centers.size(), grid.radial_count, layers) ||
         !multiply(layers, grid.points, evaluations) ||
         !multiply(evaluations, shape.nao, evaluations) ||
-        !multiply(evaluations, 160, projections) ||
-        !multiply(grid.points + 16, shape.nao, reductions) ||
-        !multiply(reductions, 2 * plan.vector, reductions) || !add(reductions, 4 * plan.vector) ||
-        !multiply(plan.matrix, 4, matrix_sums))
+        !multiply(evaluations, channels & nonlocal_channel ? 160 : 0, projections) ||
+        !multiply(pullback_terms, shape.nao, reductions) || !multiply(reductions, 6, reductions) ||
+        !multiply(panels * plan.vector, shape.nao, scatter) || !add(reductions, scatter) ||
+        !add(reductions, panels * plan.vector) || !multiply(plan.matrix, panels, matrix_sums))
       return cudaErrorInvalidValue;
     reductions = std::max(reductions, matrix_sums);
     if (!add(reductions, shape.terms) || !multiply(reductions, layers, reductions) ||
@@ -86,7 +100,9 @@ cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> c
         !add(plan.work.ao_evaluations_per_action, evaluations) ||
         !add(projection_terms, projections) || !add(reduction_terms, reductions))
       return cudaErrorInvalidValue;
-    for (const auto points : {grid.points, std::size_t{16}}) {
+    for (unsigned channel = 0; channel < 2; ++channel) {
+      if (!(channels & (1u << channel))) continue;
+      const auto points = channel ? std::size_t{16} : grid.points;
       const maps::Extents extents{shape.nao, points};
       std::size_t bytes{}, terms{};
       if (maps::workspace_matrix(extents, bytes) != cudaSuccess ||
@@ -110,8 +126,6 @@ cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> c
   plan.work.projection_terms_per_action = projection_terms;
   plan.work.reduction_terms_bound = reduction_terms;
   if (plan.work.ao_evaluations_per_action > options.max_ao_evaluations ||
-      plan.work.matrix_affine_terms > options.max_affine_terms ||
-      plan.work.contraction_affine_terms > options.max_affine_terms ||
       reduction_terms > options.max_reduction_terms || !multiply(max_points, shape.nao, ao_lanes) ||
       !multiply(plan.matrix, 4, plan.candidates) || !multiply(plan.vector, 4, extra))
     return cudaErrorInvalidValue;
@@ -124,7 +138,8 @@ cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> c
       !plan.reserve(max_points, sizeof(double), plan.measure) ||
       !multiply(std::max(plan.matrix, ao_lanes), 2, extra) ||
       !plan.reserve(extra, sizeof(double), plan.map_output) ||
-      !plan.reserve(plan.map_bytes, 1, plan.map_arena) ||
+      !plan.reserve(plan.map_bytes, 1, plan.map_arena) || !multiply(shape.nao, 6, extra) ||
+      !plan.reserve(extra, sizeof(double), plan.pullback) ||
       !plan.reserve(plan.candidates, sizeof(double), plan.coarse) ||
       !plan.reserve(plan.candidates, sizeof(double), plan.fine) ||
       !plan.reserve(5, sizeof(double), plan.potential) ||
@@ -133,6 +148,40 @@ cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> c
     return cudaErrorInvalidValue;
   plan.work.workspace_bytes = plan.bytes;
   plan.work.centers = centers.size();
+  return cudaSuccess;
+}
+cudaError_t layout(const CudaEcpNuclearShape& shape, std::span<const unsigned> centers,
+                   const CudaEcpNuclearOptions& options, Layout& plan) {
+  auto error = layout_for_channels(shape, centers, options, 0, plan);
+  if (error != cudaSuccess) return error;
+  const auto baseline = plan.work;
+  const auto contraction_limit =
+      std::min(options.max_contraction_affine_terms, options.max_affine_terms);
+  if (baseline.matrix_affine_terms > options.max_affine_terms ||
+      baseline.contraction_affine_terms > contraction_limit)
+    return cudaErrorInvalidValue;
+  if (!options.allow_validation) return cudaSuccess;
+
+  unsigned values{}, contractions{};
+  std::array<CudaEcpNuclearWork, 4> ceilings{};
+  for (unsigned channels = 1; channels <= both_channels; ++channels) {
+    Layout trial;
+    if (layout_for_channels(shape, centers, options, channels, trial) != cudaSuccess) continue;
+    const bool value_fits = trial.work.matrix_affine_terms <= options.max_affine_terms;
+    const bool contraction_fits = trial.work.contraction_affine_terms <= contraction_limit;
+    if (!(value_fits || contraction_fits)) continue;
+    if (value_fits) values |= 1u << channels;
+    if (contraction_fits) contractions |= 1u << channels;
+    ceilings[channels] = trial.work;
+    // All confirmation layouts reserve both sets of weights and the same
+    // buffers. Only the generated map arena can be larger for local rows.
+    if (trial.bytes >= plan.bytes) plan = trial;
+  }
+  plan.value_validation = values;
+  plan.contraction_validation = contractions;
+  plan.ceilings = ceilings;
+  plan.work = baseline;
+  plan.work.workspace_bytes = plan.bytes;
   return cudaSuccess;
 }
 struct Range {
@@ -159,10 +208,13 @@ cudaError_t drain(cudaError_t error, cudaStream_t stream) {
   const auto completed = cudaStreamSynchronize(stream);
   return error == cudaSuccess ? completed : error;
 }
+cudaError_t read_gate(int* status, cudaStream_t stream, int& failed) {
+  return drain(cudaMemcpyAsync(&failed, status, sizeof(failed), cudaMemcpyDeviceToHost, stream),
+               stream);
+}
 cudaError_t gate(int* status, cudaStream_t stream) {
   int failed{};
-  auto error = cudaMemcpyAsync(&failed, status, sizeof(failed), cudaMemcpyDeviceToHost, stream);
-  error = drain(error, stream);
+  const auto error = read_gate(status, stream, failed);
   return error == cudaSuccess && failed ? cudaErrorInvalidValue : error;
 }
 __global__ void finite(const double* values, std::size_t count, int* status) {
@@ -281,41 +333,103 @@ __global__ void accumulate_matrix(const double* values, std::size_t matrix, unsi
     candidate[(2 + channel) * matrix + index] += values[index];
   }
 }
-__global__ void contract_jets(CudaEcpNuclearShape shape, const double* basis, const double* jets,
-                              const double* direction, const double* weights, std::size_t rows,
-                              unsigned center, unsigned channel, double* candidate, int* status) {
+/** Pull back to node-relative AO coordinates once, rather than replaying the
+ * AO jet for each left atom. A block owns one orbital and Cartesian component. */
+__global__ void contract_ao_rows(CudaEcpNuclearShape shape, const double* basis, const double* jets,
+                                 const double* direction, const double* weights, std::size_t rows,
+                                 unsigned center, double* pullback, int* status) {
+  __shared__ double gradient_terms[local_pullback_threads], hvp_terms[local_pullback_threads];
+  __shared__ int prior_status;
+  if (threadIdx.x == 0) prior_status = atomicAdd(status, 0);
+  __syncthreads();
+  if (prior_status) return;
+  const auto* records = basis + 3 * shape.atoms + 2 * shape.primitives;
+  const auto components = 3 * shape.nao, lanes = rows * shape.nao;
+  for (std::size_t component = blockIdx.x; component < components; component += gridDim.x) {
+    const auto orbital = component / 3;
+    const auto atom = static_cast<std::size_t>(records[16 * orbital]);
+    if (atom == center) {
+      // The AO and node translate together, so both incidence weights vanish.
+      if (threadIdx.x == 0) pullback[component] = pullback[components + component] = 0;
+      continue;
+    }
+    double left[3]{}, right[3];
+    left[component % 3] = 1;
+    for (unsigned axis = 0; axis < 3; ++axis)
+      right[axis] = source::ecp_node_displacement(direction[3 * center + axis], 0, 0,
+                                                  direction[3 * atom + axis]);
+    double gradient{}, hvp{};
+    for (std::size_t row = threadIdx.x; row < rows; row += blockDim.x) {
+      const auto index = row * shape.nao + orbital;
+      double motion[3], result[4];
+      maps::ao_motion(jets + index, lanes, left, right, motion);
+      if (ad::contract(jets[index], motion[0], motion[2], weights[lanes + index], weights[index], 1,
+                       0, result)) {
+        gradient += result[2];
+        hvp += result[3];
+      } else {
+        atomicExch(status, 1);
+      }
+    }
+    gradient_terms[threadIdx.x] = gradient;
+    hvp_terms[threadIdx.x] = hvp;
+    __syncthreads();
+    for (unsigned stride = blockDim.x / 2; stride; stride /= 2) {
+      if (threadIdx.x < stride) {
+        gradient_terms[threadIdx.x] += gradient_terms[threadIdx.x + stride];
+        hvp_terms[threadIdx.x] += hvp_terms[threadIdx.x + stride];
+      }
+      __syncthreads();
+    }
+    if (threadIdx.x == 0) {
+      pullback[component] = gradient_terms[0];
+      pullback[components + component] = hvp_terms[0];
+    }
+    __syncthreads();
+  }
+}
+
+/** Apply the physical ECP-center minus AO-center incidence. One lane owns
+ * each output, so radial accumulation remains ordered without FP atomics. */
+__global__ void gather_ao_rows(CudaEcpNuclearShape shape, const double* basis,
+                               const double* pullback, unsigned center, unsigned channel,
+                               double* candidate, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto* records = basis + 3 * shape.atoms + 2 * shape.primitives;
-  const auto coordinates = 3 * shape.atoms, lanes = rows * shape.nao;
+  const auto coordinates = 3 * shape.atoms, components = 3 * shape.nao;
   for (std::size_t coordinate = blockIdx.x * blockDim.x + threadIdx.x; coordinate < coordinates;
        coordinate += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     double gradient{}, hvp{};
-    for (std::size_t index = 0; index < lanes; ++index) {
-      const auto atom = static_cast<std::size_t>(records[16 * (index % shape.nao)]);
-      double left[3]{}, right[3], motion[3], result[4];
-      left[coordinate % 3] =
-          source::ecp_node_displacement(center == coordinate / 3, 0, 0, atom == coordinate / 3);
-      for (unsigned axis = 0; axis < 3; ++axis)
-        right[axis] = source::ecp_node_displacement(direction[3 * center + axis], 0, 0,
-                                                    direction[3 * atom + axis]);
-      maps::ao_motion(jets + index, lanes, left, right, motion);
-      if (!ad::contract(jets[index], motion[0], motion[2], weights[lanes + index], weights[index],
-                        1, 0, result))
-        atomicExch(status, 1);
-      gradient += result[2];
-      hvp += result[3];
+    const auto left_atom = coordinate / 3, axis = coordinate % 3;
+    for (std::size_t orbital = 0; orbital < shape.nao; ++orbital) {
+      const auto atom = static_cast<std::size_t>(records[16 * orbital]);
+      if (atom == center) continue;
+      const auto component = 3 * orbital + axis;
+      if (left_atom == center) {
+        gradient += pullback[component];
+        hvp += pullback[components + component];
+      } else if (left_atom == atom) {
+        gradient -= pullback[component];
+        hvp -= pullback[components + component];
+      }
     }
     candidate[channel * coordinates + coordinate] += gradient;
     candidate[(2 + channel) * coordinates + coordinate] += hvp;
   }
 }
 __global__ void convergence(const double* coarse, const double* fine, std::size_t extent,
-                            bool derivatives, int* status) {
+                            bool derivatives, unsigned channels, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < 4 * extent;
-       index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
-    if (!source::ecp_grid_pair_accepted(coarse[index], fine[index],
-                                        derivatives || index >= 2 * extent))
-      atomicExch(status, 1);
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+    const auto channel = 1u << (index / extent % 2);
+    if (!(channels & channel)) continue;
+    const auto baseline = coarse[index], candidate = fine[index];
+    if (!isfinite(baseline) || !isfinite(candidate) || !isfinite(baseline - candidate))
+      atomicOr(status, hard_failure);
+    else if (!source::ecp_grid_pair_accepted(baseline, candidate,
+                                             derivatives || index >= 2 * extent))
+      atomicOr(status, static_cast<int>(channel << 1));
+  }
 }
 }  // namespace
 
@@ -378,13 +492,21 @@ struct CudaEcpNuclearResponse::Impl {
         {weights.density, Contract ? plan.matrix * sizeof(double) : 0},
         {weights.direction_density, Contract ? plan.matrix * sizeof(double) : 0}};
     if ((error = buffers(inputs, outputs)) != cudaSuccess) return error;
-    const auto work_terms =
-        Contract ? plan.work.contraction_affine_terms : plan.work.matrix_affine_terms;
-    if (receipt.radial_layers > UINT64_MAX - plan.work.radial_layers_per_action ||
-        receipt.ao_evaluations > UINT64_MAX - plan.work.ao_evaluations_per_action ||
-        receipt.projection_terms > UINT64_MAX - plan.work.projection_terms_per_action ||
-        receipt.affine_terms > UINT64_MAX - work_terms)
-      return cudaErrorInvalidValue;
+    const auto can_count = [&](const CudaEcpNuclearWork& bound, bool validation) {
+      const auto layers = bound.radial_layers_per_action;
+      const auto evaluations = bound.ao_evaluations_per_action;
+      const auto projections = bound.projection_terms_per_action;
+      const auto affine = Contract ? bound.contraction_affine_terms : bound.matrix_affine_terms;
+      if (receipt.radial_layers > UINT64_MAX - layers ||
+          receipt.ao_evaluations > UINT64_MAX - evaluations ||
+          receipt.projection_terms > UINT64_MAX - projections ||
+          receipt.affine_terms > UINT64_MAX - affine)
+        return false;
+      const auto& extra = receipt.validation;
+      return !validation ||
+             (extra.reduction_terms_bound <= UINT64_MAX - bound.reduction_terms_bound);
+    };
+    if (!can_count(plan.work, false)) return cudaErrorInvalidValue;
     auto* status = at<int>(plan.status);
     error = cudaMemsetAsync(status, 0, sizeof(int), stream);
     if (error == cudaSuccess) {
@@ -404,10 +526,10 @@ struct CudaEcpNuclearResponse::Impl {
     error = cudaMemsetAsync(at(plan.coarse), 0, plan.candidates * sizeof(double), stream);
     if (error == cudaSuccess)
       error = cudaMemsetAsync(at(plan.fine), 0, plan.candidates * sizeof(double), stream);
-    for (unsigned grid_index = 0; grid_index < 2 && error == cudaSuccess; ++grid_index) {
+    const auto evaluate = [&](unsigned grid_index, unsigned channels, double* candidate) {
+      auto* extra = grid_index == 2 ? &receipt.validation : nullptr;
       const auto& grid = quadrature::grids[grid_index];
       const auto& device = plan.grids[grid_index];
-      auto* candidate = at(grid_index ? plan.fine : plan.coarse);
       for (const auto center : centers) {
         for (std::size_t layer = 0; layer < grid.radial_count && error == cudaSuccess; ++layer) {
           nodes<<<maps::blocks(3 * grid.points), 128, 0, stream>>>(
@@ -425,15 +547,21 @@ struct CudaEcpNuclearResponse::Impl {
                                                 at(plan.jets), status, stream);
             ++receipt.radial_layers;
             receipt.ao_evaluations += grid.points * shape.nao;
+            if (extra) {
+              ++extra->radial_layers;
+              extra->ao_evaluations += grid.points * shape.nao;
+            }
           }
-          if (error == cudaSuccess) {
+          if (error == cudaSuccess && (channels & nonlocal_channel)) {
             project<<<maps::blocks(160 * shape.nao), 128, 0, stream>>>(
                 at(plan.jets), at(device.projector), grid.points, shape.nao, at(plan.projected),
                 status);
             error = cudaGetLastError();
             receipt.projection_terms += 160 * shape.nao * grid.points;
+            if (extra) extra->projection_terms += 160 * shape.nao * grid.points;
           }
           for (unsigned channel = 0; channel < 2 && error == cudaSuccess; ++channel) {
+            if (!(channels & (1u << channel))) continue;
             const auto rows = channel ? std::size_t{16} : grid.points;
             const auto* jets = at(channel ? plan.projected : plan.jets);
             channel_inputs<<<maps::blocks(rows * shape.nao), 128, 0, stream>>>(
@@ -451,9 +579,16 @@ struct CudaEcpNuclearResponse::Impl {
                                        at(plan.map_output), at(plan.map_output) + rows * shape.nao,
                                        at(plan.map_arena), plan.map_bytes, status, stream);
               if (error == cudaSuccess) {
-                contract_jets<<<maps::blocks(plan.vector), 128, 0, stream>>>(
+                const auto threads = channel ? projector_pullback_threads : local_pullback_threads;
+                const auto blocks = std::min<std::size_t>(3 * shape.nao, 65535);
+                contract_ao_rows<<<blocks, threads, 0, stream>>>(
                     shape, reference.basis, jets, direction, at(plan.map_output), rows, center,
-                    channel, candidate, status);
+                    at(plan.pullback), status);
+                error = cudaGetLastError();
+              }
+              if (error == cudaSuccess) {
+                gather_ao_rows<<<maps::blocks(plan.vector), 128, 0, stream>>>(
+                    shape, reference.basis, at(plan.pullback), center, channel, candidate, status);
                 error = cudaGetLastError();
               }
             } else {
@@ -469,27 +604,64 @@ struct CudaEcpNuclearResponse::Impl {
               }
             }
             receipt.affine_terms += terms;
+            if (extra) extra->affine_terms += terms;
           }
         }
         if (error != cudaSuccess) break;
       }
-    }
+    };
+    if (error == cudaSuccess) evaluate(0, both_channels, at(plan.coarse));
+    if (error == cudaSuccess) evaluate(1, both_channels, at(plan.fine));
     const auto extent = Contract ? plan.vector : plan.matrix;
-    if (error == cudaSuccess) {
-      convergence<<<maps::blocks(4 * extent), 128, 0, stream>>>(at(plan.coarse), at(plan.fine),
-                                                                extent, Contract, status);
-      error = cudaGetLastError();
-    }
-    if constexpr (!Contract)
-      for (std::size_t index = 0; index < 4 && error == cudaSuccess; ++index) {
-        symmetric<<<maps::blocks(plan.matrix), 128, 0, stream>>>(
-            at(plan.fine) + index * plan.matrix, shape.nao, options.symmetry_absolute_tolerance,
-            options.symmetry_relative_tolerance, status);
+    const auto compare = [&](const double* first, const double* second, unsigned channels) {
+      if (error == cudaSuccess) {
+        convergence<<<maps::blocks(4 * extent), 128, 0, stream>>>(first, second, extent, Contract,
+                                                                  channels, status);
         error = cudaGetLastError();
       }
-    if (error == cudaSuccess) error = gate(status, stream);
-    error = drain(error, stream);
-    if (error != cudaSuccess) return error;
+      if constexpr (!Contract) {
+        for (std::size_t index = 0; index < 4 && error == cudaSuccess; ++index) {
+          if (!(channels & (1u << (index % 2)))) continue;
+          symmetric<<<maps::blocks(plan.matrix), 128, 0, stream>>>(
+              second + index * plan.matrix, shape.nao, options.symmetry_absolute_tolerance,
+              options.symmetry_relative_tolerance, status);
+          error = cudaGetLastError();
+        }
+      }
+    };
+    compare(at(plan.coarse), at(plan.fine), both_channels);
+    int failed{};
+    if (error != cudaSuccess) return drain(error, stream);
+    if ((error = read_gate(status, stream, failed)) != cudaSuccess) return error;
+    if (failed) {
+      const auto channels = static_cast<unsigned>(failed) >> 1;
+      const auto allowed = Contract ? plan.contraction_validation : plan.value_validation;
+      if ((failed & hard_failure) || !channels || channels > both_channels ||
+          !(allowed & (1u << channels)))
+        return cudaErrorInvalidValue;
+      // Only the fine candidate survives publication. Reuse the spent coarse
+      // panel, leaving the validated channel (and its numerical policy) intact.
+      auto extra_bound = plan.ceilings[channels];
+      extra_bound.radial_layers_per_action -= plan.work.radial_layers_per_action;
+      extra_bound.ao_evaluations_per_action -= plan.work.ao_evaluations_per_action;
+      extra_bound.projection_terms_per_action -= plan.work.projection_terms_per_action;
+      extra_bound.matrix_affine_terms -= plan.work.matrix_affine_terms;
+      extra_bound.contraction_affine_terms -= plan.work.contraction_affine_terms;
+      extra_bound.reduction_terms_bound -= plan.work.reduction_terms_bound;
+      if (!can_count(extra_bound, true)) return cudaErrorInvalidValue;
+      if ((error = authenticate(stream)) != cudaSuccess) return error;
+      receipt.validation.local_attempts += (channels & local_channel) != 0;
+      receipt.validation.nonlocal_attempts += (channels & nonlocal_channel) != 0;
+      receipt.validation.reduction_terms_bound += extra_bound.reduction_terms_bound;
+      error = cudaMemsetAsync(status, 0, sizeof(int), stream);
+      if (error == cudaSuccess)
+        error = cudaMemsetAsync(at(plan.coarse), 0, plan.candidates * sizeof(double), stream);
+      if (error == cudaSuccess) evaluate(2, channels, at(plan.coarse));
+      compare(at(plan.fine), at(plan.coarse), channels);
+      if (error != cudaSuccess) return drain(error, stream);
+      if ((error = gate(status, stream)) != cudaSuccess) return error;
+      ++receipt.validation.passed_actions;
+    }
     if ((error = authenticate(stream)) != cudaSuccess) return error;
     for (std::size_t index = 0; index < outputs.size() && error == cudaSuccess; ++index)
       error =
@@ -526,7 +698,9 @@ cudaError_t CudaEcpNuclearResponse::prepare(const CudaEcpNuclearShape& shape,
   impl_.reset();
   try {
     auto state = std::make_unique<Impl>();
-    auto error = layout(shape, centers, options, state->plan);
+    auto effective = options;
+    effective.max_workspace_bytes = std::min(options.max_workspace_bytes, workspace_bytes);
+    auto error = layout(shape, centers, effective, state->plan);
     if (error != cudaSuccess) return error;
     if (!reference.basis || !reference.terms || reference.device_id < 0 || !reference.stream ||
         !reference.authenticate || !reference.owner || !workspace ||
@@ -555,7 +729,8 @@ cudaError_t CudaEcpNuclearResponse::prepare(const CudaEcpNuclearShape& shape,
     if (error == cudaSuccess)
       error = cudaMemcpyAsync(state->at(plan.seed), &seed, sizeof(seed), cudaMemcpyHostToDevice,
                               reference.stream);
-    for (unsigned index = 0; index < 2 && error == cudaSuccess; ++index) {
+    const auto grid_count = plan.value_validation || plan.contraction_validation ? 3u : 2u;
+    for (unsigned index = 0; index < grid_count && error == cudaSuccess; ++index) {
       const auto& grid = quadrature::grids[index];
       const auto& device = plan.grids[index];
       const std::array<std::pair<const double*, std::size_t>, 4> arrays{

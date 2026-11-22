@@ -149,10 +149,14 @@ GENERATIVEQC_POINT_AD_HD inline PointJet<DerivativeCount, Arithmetic> cube_root(
   PointJet<DerivativeCount, Arithmetic> result;
   result.v = point_cbrt(left.v);
   if constexpr (DerivativeCount > 0) {
-  const Arithmetic v0 = Arithmetic{1.0} / left.v;
+  const Arithmetic v0 = result.v + result.v;
+  const Arithmetic v1 = result.v * v0;
+  const Arithmetic v2 = result.v * result.v;
+  const Arithmetic v3 = v1 + v2;
+  const Arithmetic v4 = Arithmetic{1.0} / v3;
   for (unsigned index = 0; index < DerivativeCount; ++index) {
-  const Arithmetic v1 = Arithmetic{0.33333333333333331} * result.v * v0 * left.d[index];
-  result.d[index] = v1;
+  const Arithmetic v5 = left.d[index] / v3;
+  result.d[index] = v5;
   }
   }
   return result;

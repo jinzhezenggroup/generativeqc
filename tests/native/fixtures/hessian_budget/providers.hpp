@@ -7,21 +7,39 @@
 #include <stdexcept>
 #include <vector>
 
+#include "dft/cuda_ks_resident_grid.hpp"
 #include "dft/cuda_ks_wb97mv_hessian.hpp"
+#include "dft/dispersion/d3_response.hpp"
+#include "dft/dispersion/d3_runtime.hpp"
+#include "dft/dispersion/d4_runtime.hpp"
+#include "dft/dispersion/d4_second_order.hpp"
 #include "dft/hessian_aot.hpp"
+#include "generated_dispersion_scalar.hpp"
+
+namespace generativeqc::runtime {
+/** Route the owner's ledger-aware allocation calls through the same instrumented
+ * host CUDA double as its mocked providers. Real ledger admission is tested
+ * separately at the public CUDA endpoint. */
+template <class T>
+inline cudaError_t resource_cuda_malloc(T** output, std::size_t bytes) {
+  return cudaMalloc(reinterpret_cast<void**>(output), bytes);
+}
+inline cudaError_t resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+}  // namespace generativeqc::runtime
 
 namespace stub {
 inline std::size_t points = 8;
 inline unsigned spins = 1;
-inline bool df = false, ecp = false;
-inline int reject_provider = 0;
+inline bool df = false, range_df = false;
+enum class Provider { none, core, induced, exact, raw_df, fitted, raw_df_range, fitted_range, ecp };
+inline Provider reject_provider = Provider::none;
 inline std::size_t grid_scalar() { return 21600 + (points - 8) * 128; }
 inline std::size_t grid_parallel() { return grid_scalar() + 21 * points * sizeof(double); }
 inline constexpr std::size_t core_scalar = 272, core_parallel = 528;
 struct Storage {
   void* arena{};
   ~Storage() { cudaFree(arena); }
-  generativeqc_status allocate(std::size_t bytes, std::size_t cap, int provider) {
+  generativeqc_status allocate(std::size_t bytes, std::size_t cap, Provider provider) {
     if (reject_provider == provider || bytes > cap) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     return cudaMalloc(&arena, bytes) == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS
                                                     : GENERATIVEQC_STATUS_OUT_OF_MEMORY;
@@ -36,12 +54,12 @@ struct Source {
   std::size_t nao = 2, naux = 3;
   explicit operator bool() const { return true; }
 };
-inline Source cuda_density_fitting_readonly_source(int) { return {}; }
+inline Source cuda_density_fitting_readonly_source(const void*) { return {}; }
 }  // namespace generativeqc::scf
 namespace generativeqc::dft {
-struct Primary {
+struct FockPlanStub {
   core::System data;
-  Primary() {
+  FockPlanStub() {
     data.atoms.resize(2);
     data.shells.resize(2);
     for (unsigned index = 0; index < 2; ++index) {
@@ -52,20 +70,27 @@ struct Primary {
   }
   const core::System& system() const { return data; }
   struct Strategy {
-    struct Spec {
-      struct Coulomb {
-        scf::FockApproximation approximation;
-      } coulomb;
-    } spec;
+    scf::FockBuildSpec spec;
   };
   Strategy strategy() const {
-    return {{{stub::df ? scf::FockApproximation::DensityFitted : scf::FockApproximation::Exact}}};
+    Strategy result;
+    result.spec.coulomb.approximation =
+        stub::df ? scf::FockApproximation::DensityFitted : scf::FockApproximation::Exact;
+    return result;
   }
-  int cuda_fitted_source() const { return 0; }
+  const void* cuda_fitted_source() const { return this; }
 };
-inline Primary primary;
+}  // namespace generativeqc::dft
+namespace generativeqc::scf {
+using PreparedFockPlan = dft::FockPlanStub;
+}  // namespace generativeqc::scf
+namespace generativeqc::dft {
+inline FockPlanStub primary, fitted_range;
 struct CudaKsResidentFockBinding {
-  Primary* primary = &dft::primary;
+  FockPlanStub* primary = &dft::primary;
+  FockPlanStub::Strategy correction_model{};
+  const FockPlanStub::Strategy* correction{};
+  FockPlanStub* fitted_range{};
 };
 struct CudaKsResidentOrbitalFrameBinding {
   std::size_t nao = 2;
@@ -74,13 +99,15 @@ struct CudaKsResidentOrbitalFrameBinding {
   int device_id{};
   void* stream{};
 };
-inline bool cuda_ks_wb97mv_model_matches(const CudaKsFinalStateToken&,
-                                         const CudaKsResidentFockBinding&) {
+inline bool cuda_ks_hessian_model_matches(const CudaKsFinalStateToken&,
+                                          const CudaKsResidentFockBinding&,
+                                          CudaWb97mvGridOptions*) {
   return true;
 }
 class CudaKsGridReference {
  public:
-  CudaKsGridReference(methods::PreparedBatch&, std::size_t, const CudaKsFinalStateToken&) {}
+  CudaKsGridReference(methods::PreparedBatch&, std::size_t, const CudaKsFinalStateToken&,
+                      CudaKsGridRole = CudaKsGridRole::primary) {}
   generativeqc_status prepare(std::string&) { return GENERATIVEQC_STATUS_SUCCESS; }
   CudaWb97mvGridShape shape() const { return {2, 4, 2, stub::points, stub::spins}; }
   CudaWb97mvGridReference reference() const {
@@ -113,9 +140,10 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   return cudaSuccess;
 }
 cudaError_t cuda_grid_geometry_workspace(const CudaGridGeometryShape& shape,
-                                         const CudaGridGeometryOptions& options,
-                                         std::size_t& bytes) noexcept {
+                                         const CudaGridGeometryOptions& options, std::size_t& bytes,
+                                         std::size_t* minimum) noexcept {
   bytes = 4096 + shape.points * shape.nao * 160;
+  if (minimum) *minimum = bytes;
   return bytes <= options.max_workspace_bytes ? cudaSuccess : cudaErrorInvalidValue;
 }
 cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape,
@@ -148,7 +176,7 @@ generativeqc_status CudaKsOneElectronResponse::prepare(
   impl_ = std::make_unique<Impl>();
   const auto bytes = cuda_ks_one_electron_workspace(primary.data, {}, options);
   impl_->work.device_bytes = bytes;
-  return impl_->allocate(bytes, options.max_workspace_bytes, 1);
+  return impl_->allocate(bytes, options.max_workspace_bytes, stub::Provider::core);
 }
 CudaKsOneElectronWork CudaKsOneElectronResponse::work() const noexcept { return impl_->work; }
 struct CudaKsWb97mvResponse::Impl : stub::Storage {
@@ -163,7 +191,7 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch&, std::
   assert(options.defer_resident_integrals);
   impl_ = std::make_unique<Impl>();
   impl_->work.device_bytes = 1200;
-  return impl_->allocate(1200, options.max_device_bytes, 2);
+  return impl_->allocate(1200, options.max_device_bytes, stub::Provider::induced);
 }
 CudaKsWb97mvResponseWork CudaKsWb97mvResponse::work() const noexcept { return impl_->work; }
 generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::string&) {
@@ -183,23 +211,60 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::str
     return impl_->allocate(BYTES, options.max_workspace_bytes, ID);                        \
   }                                                                                        \
   WORK REF CLASS::work() const noexcept { return impl_->work; }
-STUB_PROVIDER(CudaKsWb97mvNuclearJk, CudaWb97mvJkOptions, CudaWb97mvJkWork, 1700, 3, const&)
+STUB_PROVIDER(CudaKsWb97mvNuclearJk, CudaWb97mvJkOptions, CudaWb97mvJkWork, 1700,
+              stub::Provider::exact, const&)
 STUB_PROVIDER(CudaKsWb97mvDfNuclear, integrals::CudaDfNuclearOptions, integrals::CudaDfNuclearWork,
-              700, 4, const&)
-STUB_PROVIDER(CudaKsWb97mvDfResponse, CudaWb97mvDfOptions, CudaWb97mvDfWork, 900, 5, )
+              700, options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df,
+              const&)
+STUB_PROVIDER(CudaKsWb97mvDfResponse, CudaWb97mvDfOptions, CudaWb97mvDfWork, 900,
+              options.coulomb ? stub::Provider::fitted : stub::Provider::fitted_range, )
 STUB_PROVIDER(CudaKsWb97mvEcpNuclear, integrals::CudaEcpNuclearOptions,
-              integrals::CudaEcpNuclearWork, 1100, 6, const&)
+              integrals::CudaEcpNuclearWork, 1100, stub::Provider::ecp, const&)
 #undef STUB_PROVIDER
+std::size_t CudaKsWb97mvEcpNuclear::mandatory_workspace(const core::System&,
+                                                        const CudaWb97mvGridShape&,
+                                                        integrals::CudaEcpNuclearOptions) {
+  return 1100;
+}
 std::size_t CudaKsWb97mvEcpNuclear::device_bytes() const noexcept {
   return impl_->work.workspace_bytes;
 }
 }  // namespace generativeqc::dft
+namespace generativeqc::dft::dispersion {
+class GcpCudaPlan;
+inline D3CudaDirectionSource D3Plan::cuda_direction_source() const noexcept {
+  std::abort();  // D3 numerics are not exercised by the electronic resource controls.
+}
+inline D4Tables eeq_d4_host_tables(D4EEQProfile) {
+  throw std::logic_error("unexpected D4 table load in electronic resource controls");
+}
+inline EEQTables eeq2019_host_tables() {
+  throw std::logic_error("unexpected EEQ table load in electronic resource controls");
+}
+}  // namespace generativeqc::dft::dispersion
+
 namespace generativeqc::methods::detail {
+struct KsHessianCorrections {
+  const dft::dispersion::D3Plan* d3{};
+  const dft::dispersion::D4Plan* d4{};
+  const dft::dispersion::GcpCudaPlan* gcp{};
+};
+inline generativeqc_status borrow_dft_hessian_corrections(PreparedBatch&, std::size_t,
+                                                          const dft::CudaKsFinalStateToken&,
+                                                          KsHessianCorrections& out, std::string&) {
+  out = {};
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 inline generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch&, std::size_t,
                                                           const dft::CudaKsFinalStateToken&,
                                                           dft::CudaKsResidentFockBinding& out,
                                                           std::string&) {
   out = {};
+  if (stub::range_df) {
+    out.fitted_range = &dft::fitted_range;
+    out.correction_model.spec.exchange.omega = 0.3;
+    out.correction = &out.correction_model;
+  }
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 inline generativeqc_status dft_cuda_resident_orbital_frame(
@@ -224,7 +289,7 @@ cudaError_t cuda_cpks_workspace(const CudaCpksShape&, const CudaCpksOptions& opt
 }
 cudaError_t cuda_cpks_operator_workspace(const CudaCpksShape&, const CudaCpksOptions&,
                                          std::size_t& bytes) noexcept {
-  bytes = 0;
+  bytes = 128;
   return cudaSuccess;
 }
 cudaError_t cuda_cpks_reference_weights(const CudaCpksShape&, const CudaCpksOptions&,

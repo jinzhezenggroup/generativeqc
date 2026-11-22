@@ -6,12 +6,15 @@
 #include <string_view>
 
 #include "dft/global_hybrid_fock.hpp"
+#include "dft/r2scan_rvv10_model.hpp"
 #include "dft/semilocal_family.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "r2scan_cuda_domain.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
+#include "dft/split_hybrid_cuda_selection.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #endif
@@ -29,8 +32,17 @@ bool valid_model(const KsFinalStateIdentity& identity) {
   const auto& fock = identity.determinant.model;
 #if GENERATIVEQC_HAS_CUDA
   const bool split_hybrid = generated::split_hybrid_registered(model.functional);
+  const auto variational_domain = cuda_split_hybrid_variational_domain(model.functional);
+  const bool variational =
+      variational_domain && model.scf_domain_version == variational_domain &&
+      !model.range_correction && !model.nonlocal_correlation && !model.nonlocal_grid &&
+      cuda_split_hybrid_variational_model(model.functional, fock, model.spins, model.grid,
+                                          model.semilocal_exchange_scale,
+                                          model.semilocal_correlation_scale);
+  const auto split_domain = variational ? variational_domain : 4U;
 #else
   const bool split_hybrid = false;
+  constexpr std::uint32_t split_domain = 4U;
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
@@ -67,7 +79,12 @@ bool valid_model(const KsFinalStateIdentity& identity) {
                           : (automatic_libxc ? SemilocalFamily::Lda : family_metadata->family);
   const bool scalable_semilocal =
       family_metadata && family_metadata->component_coefficients_are_native_scales;
-  const bool molecular_nonlocal = family_metadata && family_metadata->molecular_nonlocal_domain;
+  const bool wb97mv = family_metadata && family == SemilocalFamily::Wb97mv;
+  const bool revised =
+      family_metadata && model.nonlocal_correlation &&
+      r2scan_rvv10_model_matches(family, *model.nonlocal_correlation,
+                                 model.semilocal_exchange_scale, model.semilocal_correlation_scale,
+                                 fock.spec.exchange.present || model.range_correction.has_value());
   const auto hybrid = global_hybrid_composition(model.functional);
   const bool canonical_global_hybrid = hybrid.present && hybrid.fixed_semilocal;
   // CPU authenticates the physical K coefficient in the determinant's immutable
@@ -93,17 +110,20 @@ bool valid_model(const KsFinalStateIdentity& identity) {
                          fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
                          fock.spec.exchange.approximation == scf::FockApproximation::Exact));
   const bool cuda_range_exchange = [&] {
-    if (!family_metadata || !family_metadata->native_range_exchange || molecular_nonlocal ||
+    if (!family_metadata || !family_metadata->native_range_exchange || wb97mv ||
         fock.backend != scf::FockBackend::Cuda || !model.range_correction ||
         model.nonlocal_correlation || model.semilocal_exchange_scale != 1.0 ||
         model.semilocal_correlation_scale != 1.0)
       return false;
     const auto& correction = *model.range_correction;
-    // The ordinary RSH owner can lend a matched DF J/K primary plus a
-    // separately prepared exact LR correction. Authenticate that same pair
-    // here; requiring Direct J incorrectly rejects its converged snapshot.
-    // This does not admit mixed primary J/K approximations or fitted LR.
+    // A separate fitted LR owner must use the same cutoff convention as the
+    // fitted primary. Its factorization and actual rank are independent.
     const auto primary = fock.spec.coulomb.approximation;
+    const auto range = correction.spec.exchange.approximation;
+    const bool fitted_range =
+        family == SemilocalFamily::Pbe && primary == scf::FockApproximation::DensityFitted &&
+        range == scf::FockApproximation::DensityFitted &&
+        correction.metric_relative_threshold == fock.metric_relative_threshold;
     return (primary == scf::FockApproximation::Exact ||
             primary == scf::FockApproximation::DensityFitted) &&
            (!fock.spec.exchange.present ||
@@ -112,14 +132,19 @@ bool valid_model(const KsFinalStateIdentity& identity) {
            correction.backend == scf::FockBackend::Cuda && correction.spec.spin == fock.spec.spin &&
            correction.spec.derivative_order == 0 && !correction.spec.coulomb.present &&
            correction.spec.exchange.present &&
-           correction.spec.exchange.approximation == scf::FockApproximation::Exact &&
+           (range == scf::FockApproximation::Exact || fitted_range) &&
            correction.spec.exchange.op == scf::FockOperator::LongRange &&
            correction.spec.exchange.omega > 0.0 &&
            correction.screening_tolerance == fock.screening_tolerance;
   }();
   const std::uint32_t expected_domain_version =
       automatic_libxc ? automatic_entry.program->domain_version
-                      : (split_hybrid ? 4U : semilocal_family_domain_version(family));
+      : split_hybrid  ? split_domain
+      : (kCudaR2scanVariational && fock.backend == scf::FockBackend::Cuda &&
+         family == SemilocalFamily::R2scan &&
+         model.scf_domain_version == kCudaR2scanVariationalDomain)
+          ? kCudaR2scanVariationalDomain
+          : semilocal_family_domain_version(family);
   if (model.version != 1 || model.scf_domain_version != expected_domain_version ||
       (split_hybrid && fock.backend != scf::FockBackend::Cuda) || !model.tile_points ||
       !model.owner || (model.spins != 1 && model.spins != 2) ||
@@ -144,11 +169,16 @@ bool valid_model(const KsFinalStateIdentity& identity) {
          fock.spec.exchange.approximation != scf::FockApproximation::DensityFitted) ||
         fock.spec.exchange.coefficient >= 0)) ||
       (family_metadata && model.nonlocal_correlation &&
-       !family_metadata->native_nonlocal_correlation) ||
+       !family_metadata->native_nonlocal_correlation && !revised) ||
       (family_metadata && model.range_correction && !family_metadata->native_range_exchange) ||
       (family_metadata && fock.backend == scf::FockBackend::Cuda && model.nonlocal_correlation &&
-       !family_metadata->cuda_nonlocal_correlation) ||
-      (!canonical_global_hybrid && !molecular_nonlocal &&
+       !family_metadata->cuda_nonlocal_correlation && !revised) ||
+      (revised && (fock.backend != scf::FockBackend::Cuda ||
+                   model.scf_domain_version != kCudaR2scanVariationalDomain ||
+                   model.nonlocal_density_domain != nlc::Vv10DensityDomain::MolecularV1 ||
+                   model.grid.partition_iterations != 3 ||
+                   (model.nonlocal_grid && model.nonlocal_grid->partition_iterations != 3))) ||
+      (!canonical_global_hybrid && !wb97mv &&
        (!scalable_semilocal || (fock.backend == scf::FockBackend::Cuda &&
                                 !cuda_scaled_global_hybrid && !cuda_range_exchange)) &&
        (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
@@ -164,7 +194,7 @@ bool valid_model(const KsFinalStateIdentity& identity) {
         (fock.backend == scf::FockBackend::Cuda && !cuda_matched_global_hybrid))))
     return false;
   try {
-    if (molecular_nonlocal) {
+    if (wb97mv) {
       if (!model.range_correction || !model.nonlocal_correlation ||
           model.nonlocal_density_domain != nlc::Vv10DensityDomain::MolecularV1 ||
           model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)

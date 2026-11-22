@@ -26,28 +26,36 @@ struct Shape {
   std::size_t atoms{}, shells{}, primitives{}, public_aos{}, cartesian_aos{};
   std::size_t system_bytes{}, identity_bytes{};
 };
+inline Shape shape(std::size_t atoms, std::size_t shells, std::size_t primitives,
+                   std::size_t public_aos, std::size_t cartesian_aos, std::size_t ecp_terms = 0) {
+  auto system_bytes = add(sizeof(core::System), mul(atoms, sizeof(core::Atom)));
+  system_bytes = add(system_bytes, mul(shells, sizeof(core::Shell)));
+  system_bytes = add(system_bytes, mul(ecp_terms, sizeof(core::EcpTerm)));
+  system_bytes = add(system_bytes, mul(primitives, sizeof(core::Primitive)));
+  const auto words = add(add(4, mul(5, atoms)), add(mul(3, shells), mul(2, primitives)));
+  return {atoms,
+          shells,
+          primitives,
+          public_aos,
+          cartesian_aos,
+          system_bytes,
+          mul(words, sizeof(std::uint64_t))};
+}
+
 inline Shape shape(const core::System& system) {
-  Shape p;
-  p.atoms = system.atoms.size();
-  p.shells = system.shells.size();
-  p.system_bytes = add(sizeof(core::System), mul(p.atoms, sizeof(core::Atom)));
-  p.system_bytes = add(p.system_bytes, mul(p.shells, sizeof(core::Shell)));
-  p.system_bytes = add(p.system_bytes, mul(system.ecp_terms.size(), sizeof(core::EcpTerm)));
+  std::size_t primitives = 0, public_aos = 0, cartesian_aos = 0;
   for (const auto& shell : system.shells) {
     if (shell.angular_momentum > 5)
       throw std::invalid_argument("DF source capacity supports basis metadata through h");
     const auto l = static_cast<std::size_t>(shell.angular_momentum);
     const auto cart = (l + 1) * (l + 2) / 2;
-    p.cartesian_aos = add(p.cartesian_aos, cart);
-    p.public_aos =
-        add(p.public_aos, system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart);
-    p.primitives = add(p.primitives, shell.primitives.size());
+    cartesian_aos = add(cartesian_aos, cart);
+    public_aos =
+        add(public_aos, system.basis_representation == core::kSphericalBasis ? 2 * l + 1 : cart);
+    primitives = add(primitives, shell.primitives.size());
   }
-  p.system_bytes = add(p.system_bytes, mul(p.primitives, sizeof(core::Primitive)));
-  // BasisGeometryIdentity's two-pass immutable word inventory.
-  p.identity_bytes = mul(add(add(4, mul(5, p.atoms)), add(mul(3, p.shells), mul(2, p.primitives))),
-                         sizeof(std::uint64_t));
-  return p;
+  return shape(system.atoms.size(), system.shells.size(), primitives, public_aos, cartesian_aos,
+               system.ecp_terms.size());
 }
 
 struct ObjectSizes {
@@ -123,6 +131,10 @@ inline Plan plan(const Shape& orbital, const Shape& auxiliary, ObjectSizes sizes
 inline Plan plan(const core::System& orbital, const core::System& auxiliary, ObjectSizes sizes) {
   return plan(shape(orbital), shape(auxiliary), sizes);
 }
+
+/** Host share of the combined source packing envelope, using concrete source
+ * object sizes without exposing the private CUDA packing types to Fock. */
+std::size_t prepared_host_bytes(const Shape& orbital, const Shape& auxiliary);
 
 /** Reserve the upload inventory once. HostBatch is kept a template here so
  * this planner and its overflow checks remain usable without CUDA headers.

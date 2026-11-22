@@ -300,6 +300,27 @@ GENERATIVEQC_D4_EEQ_HD inline bool solve_response(int n, Layout w, const int* pi
 
 }  // namespace eeq_stage
 
+namespace eeq_detail {
+/** Factor the same augmented EEQ system used by the cooperative force provider.
+ * Inputs have already passed shape, table and coordinate validation. */
+GENERATIVEQC_D4_EEQ_HD inline D4Status factor_charge_system(int atoms, const std::int32_t* numbers,
+                                                            const double* xyz, double total_charge,
+                                                            EEQTables tables, double* raw_cn,
+                                                            double* rhs_slope, double* lu,
+                                                            double* charges, int* pivots) {
+  const int extent = atoms + 1;
+  for (int atom = 0; atom < atoms; ++atom) raw_cn[atom] = 0;
+  for (std::size_t index = 0; index < static_cast<std::size_t>(extent) * extent; ++index)
+    lu[index] = 0;
+  const auto status = eeq_stage::assemble(atoms, numbers, xyz, total_charge, tables,
+                                          {extent, raw_cn, rhs_slope, lu, charges, nullptr});
+  if (status != D4Status::success) return status;
+  return lu_factor(lu, extent, pivots) && lu_solve(lu, extent, pivots, charges)
+             ? D4Status::success
+             : D4Status::numerical_failure;
+}
+}  // namespace eeq_detail
+
 // Molecular, nonperiodic EEQ2019 charge provider from pinned multicharge.
 // dqdr layout is [coordinate=(3*atom+axis)][charge_atom], i.e.
 // dqdr[(3*k+axis)*n+i] = dq_i / dR_{k,axis}.

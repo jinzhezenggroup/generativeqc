@@ -184,6 +184,67 @@ def test_retained_r2scan_oracle_matches_independent_libxc() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "minority_density", (2e-11, 2e-12), ids=("interior", "clamped")
+)
+def test_r2scan_libxc_work_policy_energy_potential(minority_density: float) -> None:
+    """Distinguish the pinned Libxc EC density derivative from its clamped vxc.
+
+    This tests the independent work model, not a requirement that GenerativeQC
+    keep the same nonvariational continuation in any future stationary model.
+    """
+    libxc = pytest.importorskip("pyscf.dft.libxc")
+    if libxc.__version__ != "7.0.0":
+        pytest.skip("the work-domain counterexample is pinned to Libxc 7.0.0")
+    from tools.generate_libxc_boundary_reference import _configure, evaluate_reference
+
+    library = libxc._itrf
+    _configure(library)
+    names = bulk_feature_names("mgga", "polarized")
+    majority_x, minority_x = 1e-16, 3e-17
+    remaining_features = (
+        majority_x**2,
+        majority_x * minority_x,
+        minority_x**2,
+        0.0,
+        0.0,
+        2e-18,
+        1e-19,
+    )
+
+    def energy_and_minority_potential(density: float) -> np.ndarray:
+        result = np.zeros(2)
+        for name, identifier in (("MGGA_X_R2SCAN", 497), ("MGGA_C_R2SCAN", 498)):
+            value = evaluate_reference(
+                library,
+                {"name": name, "id": identifier, "family": "mgga"},
+                "polarized",
+                names,
+                (4e-10, density, *remaining_features),
+            )
+            assert value["oracle_finite"]
+            result += np.asarray(value["expected"])[[0, 2]]
+        return result
+
+    _, potential = energy_and_minority_potential(minority_density)
+    energy_derivatives = np.array(
+        [
+            (
+                energy_and_minority_potential(minority_density + step)[0]
+                - energy_and_minority_potential(minority_density - step)[0]
+            )
+            / (2 * step)
+            for step in (2e-14, 1e-14, 5e-15)
+        ]
+    )
+    assert np.ptp(energy_derivatives) < 5e-10
+    if minority_density == 2e-11:
+        np.testing.assert_allclose(energy_derivatives, potential, atol=1e-10, rtol=0)
+    else:
+        # The mismatch is orders of magnitude larger than the stencil error.
+        assert np.all(np.abs(energy_derivatives - potential) > 5e-4)
+
+
 def test_boundary_qualification_does_not_replace_compiler_packages() -> None:
     # Import the test module as pytest collection does, in a clean interpreter.
     # Loading the generator module here used to replace package exports with stubs.

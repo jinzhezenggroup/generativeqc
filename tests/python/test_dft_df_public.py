@@ -231,7 +231,9 @@ def test_df_force_matches_independent_response(
             representation=calc._representation_name,
             multiplicity=multiplicity,
         ) as basis:
-            state = StationaryKsState.from_native(batch, basis)
+            state = StationaryKsState.from_native(
+                batch, basis, allow_reference_domain=True
+            )
             try:
                 coulomb, exchange, threshold = state._source.fock_provider_proof()
                 assert coulomb == "density-fitted"
@@ -356,7 +358,7 @@ def test_df_rejects_unqualified_precision_and_resource_consumers(
         calc.estimate_resources([WATER])
     if device == "cuda":
         with pytest.raises(NotImplementedError, match="fp64"):
-            calculator(device, precision="auto")
+            calculator(device, method="pbe0-rks", precision="auto")
         with pytest.raises(ValueError, match="backend must match"):
             Calculator(method="pbe-rks", device=device, density_fitting="cpu")
 
@@ -417,7 +419,9 @@ def test_df_cuda_semilocal_force_matches_independent_response(
             representation=calc._representation_name,
             multiplicity=multiplicity,
         ) as basis:
-            state = StationaryKsState.from_native(batch, basis)
+            state = StationaryKsState.from_native(
+                batch, basis, allow_reference_domain=True
+            )
             try:
                 coulomb, exchange, threshold = state._source.fock_provider_proof()
                 assert coulomb == "density-fitted" and exchange is None

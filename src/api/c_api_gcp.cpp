@@ -5,6 +5,10 @@
 #include "dft/dispersion/gcp_r2scan3c.hpp"
 #include "generativeqc/generativeqc.h"
 
+#if GENERATIVEQC_HAS_CUDA
+#include "dft/dispersion/gcp_cuda.hpp"
+#endif
+
 namespace {
 
 generativeqc_status public_status(generativeqc::dft::dispersion::GCPStatus status) {
@@ -28,6 +32,28 @@ generativeqc_status public_status(generativeqc::dft::dispersion::GCPStatus statu
 extern "C" {
 
 const char* generativeqc_r2scan3c_gcp_provider_identity(void) { return "r2scan3c-gcp-cpu-v1"; }
+
+/** Private shape-only query for one retained native CUDA gCP owner.
+ * Hessian staging belongs to the response ledger, not this primal layout. */
+GENERATIVEQC_API generativeqc_status generativeqc_resource_ks_gcp_cuda_v1(std::uint32_t atoms,
+                                                                          std::uint64_t* output,
+                                                                          std::size_t count) {
+  if (!output || count != 2 || !atoms || atoms > INT_MAX / 3)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_CUDA
+  try {
+    using namespace generativeqc::dft::dispersion;
+    const auto device_bytes = GcpCudaPlan::numeric_bytes(atoms);
+    output[0] = r2scan3c_gcp_host_bytes(atoms);
+    output[1] = device_bytes;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception();
+  }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+}
 
 generativeqc_status generativeqc_r2scan3c_gcp_evaluate(const int32_t* atomic_numbers,
                                                        uint32_t atom_count,

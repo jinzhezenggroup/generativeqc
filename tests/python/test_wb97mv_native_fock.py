@@ -21,12 +21,16 @@ from test_wb97mv_native_grid import _independent_potential, _signed_density_libx
 
 
 @pytest.mark.parametrize("spins", (1, 2))
-def test_compiler_fock_maps_against_signed_density_integrals(spins: int) -> None:
+@pytest.mark.parametrize("rank", (2, 3))
+def test_compiler_fock_maps_against_signed_density_integrals(
+    spins: int, rank: int
+) -> None:
     """Nonsymmetric whitening distinguishes W^T W from a guessed W W^T."""
     random = np.random.default_rng(825 + spins)
     raw = random.normal(size=(2, 2, 3))
     raw = (raw + raw.transpose(1, 0, 2)) / 2
     whitening = random.normal(size=(3, 3))
+    whitening[rank:] = 0
     inverse = whitening.T @ whitening
     density = np.array([[[0.3, 0.2], [0.2, -0.4]]] * spins)
     eri = np.einsum("ijp,pq,klq->ijkl", raw, inverse, raw)
@@ -35,28 +39,60 @@ def test_compiler_fock_maps_against_signed_density_integrals(spins: int) -> None
     expected = coulomb - 0.15 / (2 if spins == 1 else 1) * exchange
     programs = fock_maps()
     prefix = "rks" if spins == 1 else "uks"
-    computed = execute(programs["inverse"], {"whitening": whitening}).outputs["inverse"]
-    np.testing.assert_allclose(computed, inverse, atol=2e-15)
+    whitened = execute(
+        programs["whiten"], {"whitening": whitening, "three_center": raw}
+    ).outputs["whitened"]
+    np.testing.assert_allclose(whitened, raw @ whitening.T, atol=2e-15)
+    charge_fock = execute(
+        programs[f"{prefix}_fitted_coulomb"],
+        {"density": density, "three_center": raw, "whitening": whitening},
+    ).outputs["primary"]
+    np.testing.assert_allclose(
+        charge_fock, np.broadcast_to(coulomb, density.shape), atol=3e-14
+    )
     for kind, feeds, output in (
-        ("exact", {"coulomb": coulomb, "exchange": exchange}, "primary"),
+        (
+            "exact",
+            {
+                "coulomb": coulomb,
+                "exchange": exchange,
+                "exchange_coefficient": np.array(-0.15 / (2 if spins == 1 else 1)),
+            },
+            "primary",
+        ),
         (
             "fitted",
             {
                 "density": density,
-                "three_center": raw,
-                "inverse": inverse,
+                "whitened": whitened,
                 "bar_energy": np.array(1.0),
+                "exchange_fraction": np.array(0.15),
             },
             "bar_density",
         ),
     ):
         actual = execute(programs[f"{prefix}_{kind}"], feeds).outputs[output]
         np.testing.assert_allclose(actual, expected, atol=3e-14)
+    fitted_exchange = execute(
+        programs[f"{prefix}_fitted_range"],
+        {
+            "density": density,
+            "whitened": whitened,
+            "bar_energy": np.array(1.0),
+        },
+    ).outputs["bar_density"]
+    np.testing.assert_allclose(fitted_exchange, exchange, atol=3e-14)
     hcore = random.normal(size=(2, 2))
     grid, long_range = random.normal(size=(2, spins, 2, 2))
     assembled = execute(
         programs[f"{prefix}_assemble"],
-        {"primary": expected, "grid": grid, "long_range": long_range, "hcore": hcore},
+        {
+            "primary": expected,
+            "grid": grid,
+            "long_range": long_range,
+            "hcore": hcore,
+            "range_coefficient": np.array(-0.85 / (2 if spins == 1 else 1)),
+        },
     ).outputs["fock"]
     np.testing.assert_allclose(
         assembled,
@@ -109,6 +145,8 @@ def _native(spins: int, fitted: bool) -> dict:
             PATH="/nonexistent",
             PYTHONHOME="/nonexistent",
             PYTHONPATH="/nonexistent",
+            # Match the oracle's exact erf correction and exercise the Direct work cap.
+            GENERATIVEQC_DF_RANGE_EXCHANGE="direct",
         ),
     )
     return json.loads(process.stdout)
@@ -310,10 +348,12 @@ def test_live_physical_fock_and_cpks_against_independent_oracles(
         assert errors[1] <= max(2e-10, errors[0] * 0.4)
     assert result["capacity_alias_finite_gates"]
     assert result["fock_actions"] > 0 and result["cpks_actions"] > 0
-    assert (
-        result["reference_eris"] > 0
-        and result["response_eris"] > result["reference_eris"]
-    )
+    # Cached Direct values count when prepared, not on each Fock traversal.
+    if result["resident_integral_bytes"]:
+        assert result["resident_source_evaluations"] > 0
+        assert result["resident_integral_bytes"] <= 64 << 20
+    else:
+        assert result["response_eris"] > result["reference_eris"] > 0
     assert 0 < result["fock_device_bytes"] <= 512 << 20
     assert (
         0

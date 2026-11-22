@@ -1,0 +1,23 @@
+#pragma once
+
+#include <cstdint>
+
+#cmakedefine01 GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
+#cmakedefine01 GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT
+
+namespace generativeqc::dft {
+
+inline constexpr bool kCudaM062XVariational = GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT;
+inline constexpr bool kCudaMN15Variational = GENERATIVEQC_ENABLE_MN15_STATIONARY_POINT;
+
+/** Private launcher key and state provenance for the energy-derived point.
+ * The public split-hybrid functional code remains unchanged. */
+inline constexpr std::uint32_t kCudaM062XVariationalDomain = 0x4d363202U;
+inline constexpr std::uint32_t kCudaMN15VariationalDomain = 0x4d4e1502U;
+
+inline constexpr bool is_linked_cuda_split_hybrid_point(std::uint32_t point) noexcept {
+  return (kCudaM062XVariational && point == kCudaM062XVariationalDomain) ||
+         (kCudaMN15Variational && point == kCudaMN15VariationalDomain);
+}
+
+}  // namespace generativeqc::dft

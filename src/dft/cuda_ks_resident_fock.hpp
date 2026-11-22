@@ -25,6 +25,9 @@ struct CudaKsResidentFockBinding {
   unsigned spins{};
   void* stream{};
   std::uint64_t owner{}, solve_epoch{}, generation{};
+  /** Separate immutable erf-DF provider. The accepted KS stream has joined
+   * its producer stream; this does not grant access to provider scratch. */
+  const scf::PreparedFockPlan* fitted_range{};
 
   bool operator==(const CudaKsResidentFockBinding&) const = default;
 

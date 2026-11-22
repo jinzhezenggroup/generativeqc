@@ -8,8 +8,15 @@ These are resource/lifetime controls, not real-device numerical qualification.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from generativeqc_compiler.geometry.dispersion_scalar import (
+    emit_dispersion_scalar_header,
+)
+
+from tools.generativeqc_d3.generate_native_data import render as render_d3_tables
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -62,6 +69,20 @@ def test_hessian_reserves_every_mandatory_consumer(
     source = ROOT / "src/dft/cuda_ks_wb97mv_hessian.cu"
     fixture = tmp_path / "hessian_budget.cpp"
     fixture.write_text(_translation_unit(source.read_text()))
+    (tmp_path / "generated_dispersion_scalar.hpp").write_text(
+        emit_dispersion_scalar_header()
+    )
+    (tmp_path / "d3_data.hpp").write_text(render_d3_tables())
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/generate_method_parameters.py"),
+            "--cpp-output",
+            str(tmp_path / "generated_method_parameters.hpp"),
+        ],
+        check=True,
+        capture_output=True,
+    )
     executable = native_cxx.build_executable(
         [fixture],
         tmp_path / "probe",
@@ -69,6 +90,7 @@ def test_hessian_reserves_every_mandatory_consumer(
             "-std=c++20",
             "-O0",
             f"-I{FIXTURE}",
+            f"-I{tmp_path}",
             f"-I{ROOT / 'src'}",
             f"-I{ROOT / 'include'}",
         ),

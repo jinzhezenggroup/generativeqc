@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.integral.hessian_aot import (
+    DF_FAMILIES,
     FAMILIES,
     RADIALS,
     IntegralRequest,
@@ -36,6 +37,7 @@ def complete_inventory(
     components_per_tile: int = 16,
     radials: tuple[str, ...] = RADIALS,
     max_auxiliary_angular: int | None = None,
+    df_long_range: bool = False,
 ) -> Inventory:
     """Replace selected families with non-overlapping complete ordered tiles.
 
@@ -62,6 +64,13 @@ def complete_inventory(
         raise ValueError("invalid finite Hessian AOT closure")
     requests = [item for item in inventory.integrals if item.family not in families]
     for family in families:
+        selected_radials = (
+            radials
+            if family == "eri"
+            else RADIALS[:2]
+            if df_long_range and family in DF_FAMILIES
+            else RADIALS[:1]
+        )
         slots = 4 if family == "eri" else 3 if family == "three_center_eri" else 2
         bounds = (
             (auxiliary, auxiliary)
@@ -72,7 +81,7 @@ def complete_inventory(
         )
         for angular in product(*(range(bound + 1) for bound in bounds)):
             size = prod(len(cartesian_components(order)) for order in angular)
-            for radial in radials if family == "eri" else ("full_range",):
+            for radial in selected_radials:
                 for begin in range(0, size, components_per_tile):
                     requests.append(
                         IntegralRequest(
@@ -101,7 +110,11 @@ def inventory_payload(inventory: Inventory) -> dict:
                 "family": item.family,
                 "angular": list(item.angular),
                 "components": list(item.components),
-                **({"radial": item.radial} if item.family == "eri" else {}),
+                **(
+                    {"radial": item.radial}
+                    if item.family == "eri" or item.radial != "full_range"
+                    else {}
+                ),
             }
             for item in inventory.integrals
         ],
@@ -123,6 +136,11 @@ def main() -> None:
     parser.add_argument("--integral-schedule", choices=("expanded", "factorized"))
     parser.add_argument("--components-per-tile", type=int, default=16)
     parser.add_argument("--radials", choices=RADIALS, nargs="+", default=list(RADIALS))
+    parser.add_argument(
+        "--df-long-range",
+        action="store_true",
+        help="include fixed-omega erf DF alongside full-range DF",
+    )
     args = parser.parse_args()
     original = parse_inventory(json.loads(args.inventory.read_text()))
     if args.integral_schedule:
@@ -136,6 +154,7 @@ def main() -> None:
         components_per_tile=args.components_per_tile,
         radials=tuple(args.radials),
         max_auxiliary_angular=args.max_auxiliary_angular,
+        df_long_range=args.df_long_range,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     write_if_changed(

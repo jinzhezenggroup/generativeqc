@@ -129,6 +129,13 @@ def _admit(plan: Any) -> tuple[bool, bool, str, str]:
         return False, False, "", "no complete native post-SCF correction owner"
     record = _match_curated(plan)
     if record is not None:
+        if (
+            plan.method.semantic_payload()
+            == resolve_method("R2SCAN+RVV10", spin=plan.method.spin).semantic_payload()
+        ):
+            # The CUDA variational domain is selected at native preparation;
+            # CPU r²SCAN with its legacy work-density continuation is distinct.
+            return False, bool(record["cuda_ks"]), str(record["scf_domain"]), ""
         if record["exchange_policy"] == "canonical":
             canonical = compile_ks_execution_plan(
                 resolve_method(record["canonical_method"], spin=plan.method.spin)

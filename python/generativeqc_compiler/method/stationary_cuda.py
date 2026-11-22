@@ -1358,6 +1358,8 @@ def emit_stationary_profile_aot_wrapper_cuda(
     source_cache: Path | None = None,
     include_reduction: bool = True,
     include_external: bool = False,
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> str:
     """Emit an exact-plan s/p wrapper for the shared, separably compiled primitives.
 
@@ -1376,6 +1378,8 @@ def emit_stationary_profile_aot_wrapper_cuda(
         source_cache=source_cache,
         include_reduction=include_reduction,
         include_external=include_external,
+        variational_r2scan=variational_r2scan,
+        variational_split_hybrid=variational_split_hybrid,
     )
 
 
@@ -1824,6 +1828,8 @@ def emit_stationary_wrapper_cuda(
     staged_point: bool = False,
     source_cache: Path | None = None,
     include_external: bool = False,
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> typing.Any:
     """Emit the small method-specific TU linked against cached primitive code."""
 
@@ -1840,6 +1846,8 @@ def emit_stationary_wrapper_cuda(
             include_reduction=include_reduction,
             staged_point=staged_point,
             include_external=include_external,
+            variational_r2scan=variational_r2scan,
+            variational_split_hybrid=variational_split_hybrid,
         )[0]
 
     if not isinstance(plan, StationaryGradientPlan):
@@ -1874,6 +1882,8 @@ def emit_stationary_wrapper_cuda(
             iterations=iterations,
             semilocal=semilocal,
             staged_point=staged_point,
+            variational_r2scan=variational_r2scan,
+            variational_split_hybrid=variational_split_hybrid,
         )
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr unsigned stationary_spin_blocks = {plan.spin_blocks};\n"
@@ -1932,6 +1942,8 @@ def cached_stationary_wrapper_cuda(
     include_reduction: bool = True,
     staged_point: bool = False,
     include_external: bool = False,
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> tuple[str, dict[str, typing.Any]]:
     """Reuse target-independent lowering across AOT builds and runtime JIT.
 
@@ -1956,6 +1968,8 @@ def cached_stationary_wrapper_cuda(
         # Composite range/VV10 sources change layout and reduction semantics.
         # A semilocal-only cache entry cannot satisfy the complete endpoint.
         "include_external": include_external,
+        "variational_r2scan": variational_r2scan,
+        "variational_split_hybrid": variational_split_hybrid,
     }
     recipe = {
         "dependencies": source_hashes(

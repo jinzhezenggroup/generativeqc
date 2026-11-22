@@ -26,14 +26,14 @@ function(generativeqc_resolve_hessian_aot_inventory output_variable inventory)
       COMMAND "${Python3_EXECUTABLE}" "${_completion}"
               --inventory "${_seed}"
               --families overlap kinetic nuclear_attraction eri three_center_eri coulomb_metric
-              --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized
+              --max-angular 3 --max-auxiliary-angular 4 --integral-schedule factorized --df-long-range
               --output "${_inventory}"
       WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
       RESULT_VARIABLE _result ERROR_VARIABLE _error)
     if(NOT _result EQUAL 0)
       message(FATAL_ERROR "Cannot generate complete Hessian AOT inventory: ${_error}")
     endif()
-    message(STATUS "Hessian AOT: complete factorized orbital-f/auxiliary-g closure")
+    message(STATUS "Hessian AOT: complete factorized orbital-f/auxiliary-g closure (full and erf DF)")
   endif()
   set(${output_variable} "${_inventory}" PARENT_SCOPE)
 endfunction()
@@ -139,7 +139,44 @@ function(generativeqc_add_hessian_aot target inventory)
     DEPENDS "${PROJECT_SOURCE_DIR}/src/integrals/cuda_ecp_nuclear_response.hpp"
     ARGS --output "${_ecp}" --quadrature "${_ecp_quadrature}" --density-output "${_ecp_density}"
     COMMENT "Generating compiler-AD residual ECP response and fixed quadrature")
-  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}" "${_ecp}" "${_ecp_quadrature}" "${_ecp_density}"
+  set(_b3lyp_response "${CMAKE_CURRENT_BINARY_DIR}/generated/response/b3lyp_direction.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_b3lyp_response}"
+    GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_xc_b3lyp_cuda.py"
+    DEPENDS
+      "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/xc/semilocal_codegen.py"
+      "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/xc/b3lyp_production_policy.py"
+    ARGS --response-output "${_b3lyp_response}"
+    COMMENT "Generating compiler-AD B3LYP point response from its SCF model")
+  set(_r2scan_response "${CMAKE_CURRENT_BINARY_DIR}/generated/response/r2scan_stationary.cuh")
+  generativeqc_register_generated_sources(
+    OUTPUTS "${_r2scan_response}"
+    GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_xc_r2scan_cuda.py"
+    DEPENDS "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/xc/r2scan_stationary.py"
+    ARGS --stationary-output "${_r2scan_response}"
+    COMMENT "Generating variational r2SCAN point value and response")
+  set(_split_hybrid_responses)
+  foreach(_key IN ITEMS M062X MN15)
+    if(GENERATIVEQC_ENABLE_${_key}_STATIONARY_POINT)
+      string(TOLOWER "${_key}" _stem)
+      set(_method "${_key}")
+      if(_key STREQUAL "M062X")
+        set(_method "M06-2X")
+        set(_stem "m06_2x")
+      endif()
+      set(_split_response "${CMAKE_CURRENT_BINARY_DIR}/generated/response/${_stem}_stationary.cuh")
+      generativeqc_register_generated_sources(
+        OUTPUTS "${_split_response}"
+        GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_xc_split_hybrid_stationary.py"
+        DEPENDS "${PROJECT_SOURCE_DIR}/python/generativeqc_compiler/xc/split_hybrid_stationary.py"
+        ARGS --method "${_method}" --output "${_split_response}"
+        COMMENT "Generating variational ${_method} point value and response")
+      list(APPEND _split_hybrid_responses "${_split_response}")
+    endif()
+  endforeach()
+  add_library(${target} STATIC ${_sources} "${_registry}" "${_gmres}" "${_cpks}" "${_grid}" "${_fock}" "${_geometry}" "${_nuclear}" "${_one_electron}" "${_nuclear_jk}" "${_df}" "${_ecp}" "${_ecp_quadrature}" "${_ecp_density}" "${_b3lyp_response}" "${_r2scan_response}"
+    ${_split_hybrid_responses} "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_split_hybrid_registry.cuh"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_symmetric_matrix_function.cuh"
     "${_stationary}" "${_stationary_model}" "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_hessian.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/hessian_aot.cpp"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_cpks.cu"
@@ -158,15 +195,38 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_ecp_nuclear_response.cu"
     "${PROJECT_SOURCE_DIR}/src/response/cuda_gmres.cu")
   generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_aot_compile_pool}")
+  # A standalone Hessian build must generate its dispersion headers without
+  # relying on the core library's independent consumers to build them first.
+  add_dependencies(${target}
+    generativeqc_d3_codegen
+    generativeqc_dispersion_scalar_codegen
+    generativeqc_method_parameters_codegen
+    generativeqc_nonlocal_pair_codegen)
   target_compile_features(${target} PUBLIC cxx_std_20)
   target_include_directories(${target} PUBLIC "${PROJECT_SOURCE_DIR}/src"
     PRIVATE "${PROJECT_SOURCE_DIR}/include")
   target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-  target_link_libraries(${target} PUBLIC CUDA::cudart)
+  if(GENERATIVEQC_PYTHON_WHEEL)
+    # The final wheel binaries resolve CUDA imports; a static leaf archive
+    # only needs the compiler headers and the wheel's link interface.
+    generativeqc_ensure_cuda_wheel_import_interface()
+    target_link_libraries(${target} PUBLIC generativeqc_cuda_wheel_imports)
+  else()
+    target_link_libraries(${target} PUBLIC CUDA::cudart)
+  endif()
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
   set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
     CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON CUDA_SEPARABLE_COMPILATION OFF)
   if(GENERATIVEQC_BUILD_TESTS)
+    add_executable(generativeqc_cuda_pseudoinverse_second_probe
+      "${PROJECT_SOURCE_DIR}/tests/native/cuda_pseudoinverse_second_probe.cu"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_symmetric_matrix_function.cuh")
+    target_include_directories(generativeqc_cuda_pseudoinverse_second_probe PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_link_libraries(generativeqc_cuda_pseudoinverse_second_probe PRIVATE CUDA::cudart)
+    target_compile_options(generativeqc_cuda_pseudoinverse_second_probe PRIVATE --fmad=false)
+    set_target_properties(generativeqc_cuda_pseudoinverse_second_probe PROPERTIES
+      CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
     add_executable(generativeqc_hessian_aot_probe
       "${PROJECT_SOURCE_DIR}/tests/native/hessian_aot_probe.cpp")
     target_link_libraries(generativeqc_hessian_aot_probe PRIVATE ${target})
@@ -186,6 +246,8 @@ function(generativeqc_add_hessian_aot target inventory)
       CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON)
     add_executable(generativeqc_cuda_wb97mv_grid_probe
       "${PROJECT_SOURCE_DIR}/tests/native/cuda_wb97mv_grid_probe.cpp")
+    target_include_directories(generativeqc_cuda_wb97mv_grid_probe PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_link_libraries(generativeqc_cuda_wb97mv_grid_probe PRIVATE ${target})
     add_executable(generativeqc_ks_wb97mv_grid_probe
       "${PROJECT_SOURCE_DIR}/tests/native/ks_wb97mv_grid_probe.cpp")

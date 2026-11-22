@@ -616,17 +616,21 @@ macro(generativeqc_register_host_generated_sources target)
 
   set(GENERATIVEQC_NONLOCAL_PAIR_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_nonlocal_pair_native.hpp")
+  set(GENERATIVEQC_NONLOCAL_METHOD_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_nonlocal_method_parameters.hpp")
   generativeqc_register_generated_sources(
     NAME generativeqc_nonlocal_pair_codegen
     TARGET ${target}
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_nonlocal_pair_native.py"
-    OUTPUTS "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"
+    OUTPUTS "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}" "${GENERATIVEQC_NONLOCAL_METHOD_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_pair.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_pair_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/nonlocal_correlation.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_correlation.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
     ARGS --output "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"
+         --method-parameters "${GENERATIVEQC_NONLOCAL_METHOD_HEADER}"
     COMMENT "Generating shared CPU/CUDA nonlocal correlation pair algebra")
 
   set(GENERATIVEQC_GFN2_PAIR_CPU_HEADER
@@ -1457,6 +1461,10 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_R2SCAN_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_r2scan_device.cuh")
+  set(_r2scan_domain_args)
+  if(GENERATIVEQC_CUDA_VARIATIONAL_R2SCAN)
+    list(APPEND _r2scan_domain_args --variational-value)
+  endif()
   generativeqc_register_generated_sources(
     TARGET ${target}
     ADD_TO_TARGET
@@ -1464,7 +1472,8 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_R2SCAN_CUDA_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/semilocal_codegen.py"
-    ARGS --output "${GENERATIVEQC_R2SCAN_CUDA_HEADER}")
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/r2scan_stationary.py"
+    ARGS --output "${GENERATIVEQC_R2SCAN_CUDA_HEADER}" ${_r2scan_domain_args})
 
   set(GENERATIVEQC_WB97MV_CUDA_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_wb97mv_device.cuh")
@@ -1500,6 +1509,27 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_GRID_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_grid_policy.cu")
+  set(_generativeqc_split_hybrid_point_args)
+  set(_generativeqc_split_hybrid_point_headers)
+  foreach(_key IN ITEMS M062X MN15)
+    if(GENERATIVEQC_ENABLE_${_key}_STATIONARY_POINT)
+      string(TOLOWER "${_key}" _stem)
+      set(_method "${_key}")
+      if(_key STREQUAL "M062X")
+        set(_method "M06-2X")
+        set(_stem "m06_2x")
+      endif()
+      set(_point_header "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_${_stem}_stationary_value.cuh")
+      generativeqc_register_generated_sources(
+        TARGET ${target}
+        ADD_TO_TARGET
+        GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_split_hybrid_stationary.py"
+        OUTPUTS "${_point_header}"
+        ARGS --method "${_method}" --output "${_point_header}" --value-only)
+      list(APPEND _generativeqc_split_hybrid_point_headers "${_point_header}")
+      list(APPEND _generativeqc_split_hybrid_point_args --stationary-split-hybrid "${_method}")
+    endif()
+  endforeach()
   set(_generativeqc_grid_ao_schedule_args)
   if(GENERATIVEQC_CUDA_AO_RADIAL_REUSE)
     list(APPEND _generativeqc_grid_ao_schedule_args --ao-radial-reuse)
@@ -1625,10 +1655,12 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_R2SCAN_CUDA_HEADER}"
       "${GENERATIVEQC_WB97MV_CUDA_HEADER}"
       "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
+      ${_generativeqc_split_hybrid_point_headers}
       "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY}/generated_libxc_semilocal_cuda_registry.hpp"
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
     ARGS --output "${GENERATIVEQC_GRID_SOURCE}"
-      ${_generativeqc_grid_matrix_args} ${_generativeqc_grid_ao_schedule_args})
+      ${_generativeqc_grid_matrix_args} ${_generativeqc_grid_ao_schedule_args}
+      ${_generativeqc_split_hybrid_point_args})
 
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")

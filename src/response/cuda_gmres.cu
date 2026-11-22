@@ -85,7 +85,7 @@ cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& opti
                              CudaGmresAction action, void* context, const double* rhs,
                              const double* diagonal, double* solution, void* workspace,
                              std::size_t workspace_bytes, cudaStream_t stream,
-                             CudaGmresResult& result) noexcept {
+                             CudaGmresResult& result, const double* initial_guess) noexcept {
   result = {};
   std::size_t required{}, vector_bytes{}, end{};
   if (cuda_gmres_workspace(dimension, options, required) != cudaSuccess ||
@@ -96,6 +96,10 @@ cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& opti
       overlap(workspace, workspace_bytes, rhs, vector_bytes) ||
       overlap(workspace, workspace_bytes, solution, vector_bytes) ||
       (diagonal && overlap(workspace, workspace_bytes, diagonal, vector_bytes)) ||
+      (initial_guess && (!interval(initial_guess, vector_bytes, end) ||
+                         overlap(workspace, workspace_bytes, initial_guess, vector_bytes) ||
+                         (initial_guess != solution &&
+                          overlap(solution, vector_bytes, initial_guess, vector_bytes)))) ||
       overlap(solution, vector_bytes, rhs, vector_bytes) ||
       (diagonal && overlap(solution, vector_bytes, diagonal, vector_bytes)))
     return cudaErrorInvalidValue;
@@ -128,8 +132,20 @@ cudaError_t solve_cuda_gmres(std::size_t dimension, const CudaGmresOptions& opti
                                                            options.diagonal_floor, state);
   kernels::norm<<<1, kernels::threads, 0, stream>>>(rhs, dimension, &state->rhs_norm, state,
                                                     CudaGmresStatus::nonfinite_input);
+  const bool seeded = initial_guess && dimension;
+  if (seeded) {
+    error = cudaMemcpyAsync(base, initial_guess, vector_bytes, cudaMemcpyDeviceToDevice, stream);
+    if (error != cudaSuccess) return settle(stream, error);
+    error = action(context, base, image, dimension, stream);
+    ++result.operator_actions;
+    if (error != cudaSuccess) return settle(stream, error);
+    kernels::residual<<<grid, kernels::threads, 0, stream>>>(rhs, image, residual, dimension,
+                                                             state);
+    kernels::norm<<<1, kernels::threads, 0, stream>>>(residual, dimension, &state->residual_norm,
+                                                      state, CudaGmresStatus::nonfinite_operator);
+  }
   kernels::initial<<<1, 1, 0, stream>>>(state, options.relative_tolerance,
-                                        options.absolute_tolerance);
+                                        options.absolute_tolerance, seeded);
 
   int checkpoint{};
   auto inspect = [&]() noexcept {

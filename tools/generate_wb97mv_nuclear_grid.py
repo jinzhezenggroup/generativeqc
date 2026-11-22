@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import sys
 from pathlib import Path
 
@@ -101,50 +102,61 @@ def generate() -> str:
                 "}",
             ]
         )
-    factor = float(resolve_method("WB97M-V").primitives[-1].coefficient)
-    for kind in ("pair", "local"):
-        graph, roots = nonlocal_field_program(kind)
+    canonical = float(resolve_method("WB97M-V").primitives[-1].coefficient)
+    for revised, kind in itertools.product((False, True), ("pair", "local")):
+        graph, roots = nonlocal_field_program(kind, runtime_rvv10=revised)
+        factor = "coefficient" if revised else f"{canonical:.17g}"
+        name = f"{'rvv10_' if revised else ''}{kind}{'s' if kind == 'pair' else ''}"
         variables = _leg_variables("a", "first")
         if kind == "pair":
             variables.update(_leg_variables("b", "second"))
+        variables.update(
+            damping="damping", gradient_scale="gradient_scale", beta="beta"
+        )
         emitter = CudaEmitter(graph, variables)
         emitter.emit(roots)
         if kind == "pair":
             text.extend(
                 [
-                    "__global__ void pairs(const double* fields, const double* direction,",
+                    f"__global__ void {name}(const double* fields, const double* direction,",
                     " const double* weights, const double* positions, const double* delta_weights,",
                     " const double* delta_positions, std::size_t points, unsigned spins, const std::size_t* active,",
                     " std::size_t row_begin, std::size_t column_begin, std::size_t rows, std::size_t columns,",
-                    " bool response, double* output, int* status) {",
+                    (
+                        " double damping, double gradient_scale, double coefficient,"
+                        if revised
+                        else ""
+                    )
+                    + " bool response, double* output, int* status) {",
                     " const auto lanes = rows * columns;",
                     " for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < lanes;",
                     "      lane += static_cast<std::size_t>(blockDim.x) * gridDim.x) {",
                     " const auto first = active[row_begin + lane / columns];",
                     " const auto second = active[column_begin + lane % columns];",
                     *emitter.lines,
-                    f" output[lane] = response ? 0.0 : {factor * 0.5:.17g} * {emitter.reference(roots[0])};",
+                    f" output[lane] = response ? 0.0 : ({factor} * 0.5) * {emitter.reference(roots[0])};",
                     " if (!isfinite(output[lane])) atomicExch(status, 1);",
                 ]
             )
         else:
             text.extend(
                 [
-                    "__global__ void local(const double* fields, const double* direction,",
+                    f"__global__ void {name}(const double* fields, const double* direction,",
                     " const double* weights, const double* positions, const double* delta_weights,",
                     " const double* delta_positions, std::size_t points, unsigned spins, const std::size_t* active,",
-                    " std::size_t count, bool response, double* partials, double* energy, int* status) {",
+                    (" double beta, double coefficient," if revised else "")
+                    + " std::size_t count, bool response, double* partials, double* energy, int* status) {",
                     " for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < count;",
                     "      lane += static_cast<std::size_t>(blockDim.x) * gridDim.x) {",
                     " const auto first = active[lane];",
                     *emitter.lines,
-                    f" if (!response) energy[first] += {factor:.17g} * {emitter.reference(roots[0])};",
+                    f" if (!response) energy[first] += {factor} * {emitter.reference(roots[0])};",
                     " if (!response && !isfinite(energy[first])) atomicExch(status, 1);",
                 ]
             )
         for index in range(9):
             text.append(
-                f" const double value_{index} = {factor:.17g} * (response ? {emitter.reference(roots[10 + index])} : {emitter.reference(roots[1 + index])});"
+                f" const double value_{index} = {factor} * (response ? {emitter.reference(roots[10 + index])} : {emitter.reference(roots[1 + index])});"
             )
             if kind == "pair":
                 text.append(f" output[{1 + index} * lanes + lane] = value_{index};")

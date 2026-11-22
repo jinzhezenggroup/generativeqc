@@ -91,13 +91,14 @@ def no_cpu_derivatives() -> typing.Any:
         yield
 
 
-def _calculator(method: typing.Any) -> typing.Any:
+def _calculator(method: typing.Any, *, precision: str = "fp64") -> typing.Any:
     from generativeqc import Calculator, KsOptions
     from test_dft_complete_cpu import GRID
 
     return Calculator(
         method=method,
         device="cuda",
+        precision=precision,
         ks_options=KsOptions(grid=GRID),
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
@@ -397,7 +398,11 @@ def test_complete_cuda_r2scan_independent_analytic(
     multiplicity: typing.Any,
     compiler: typing.Any,
 ) -> None:
-    """Qualify the generated tau geometry path against independent PySCF/libxc."""
+    """Qualify the incumbent generated tau path against independent PySCF/libxc.
+
+    The diagnostic uses the incumbent point evaluator, so it must not consume
+    a strict-FP64 variational final state from the same native library.
+    """
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import (
@@ -408,15 +413,21 @@ def test_complete_cuda_r2scan_independent_analytic(
     pytest.importorskip(
         "pyscf", reason="independent r2SCAN analytic reference requires PySCF"
     )
-    calc = _calculator(method)
+    calc = _calculator(method, precision="auto")
+    with no_cpu_derivatives():
+        public_result = _calculator(method).singlepoint(
+            ATOMS,
+            charge=charge,
+            multiplicity=multiplicity,
+            properties=("energy", "forces"),
+        )
     with (
         calc.prepare_batch(
             [ATOMS], charges=[charge], multiplicities=[multiplicity]
         ) as batch,
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
-        public_result = batch.execute(strict=True).items[0]
-        energy = public_result.energy
+        energy = batch.execute(strict=True, properties=("energy",)).items[0].energy
         state = StationaryKsState.from_native(batch, basis)
         assert state.identity.method == method
         result = _diagnostic(
@@ -442,6 +453,7 @@ def test_complete_cuda_r2scan_independent_analytic(
             },
         )
         assert energy_error < 2e-8
+        assert public_result.energy == pytest.approx(reference_energy, abs=2e-8)
         np.testing.assert_allclose(public_result.forces, -reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient, reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-9, rtol=0)
@@ -457,23 +469,36 @@ def test_complete_cuda_r2scan_independent_analytic(
         assert result.execution.startswith("cuda-seven-source/")
 
 
+@pytest.mark.parametrize("precision", ("auto", "fp64"))
 def test_cuda_r2scan_reconverged_directional_finite_difference(
-    compiler: typing.Any,
+    precision: str,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Detect a missing or duplicated vtau/2 contribution after full SCF relaxation."""
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
     from test_dft_complete_cpu import ATOMS
 
-    calc = _calculator("r2scan-rks")
+    calc = _calculator("r2scan-rks", precision=precision)
     xyz = np.asarray([position for _, position in ATOMS], dtype=np.float64)
     direction = np.array(
         [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
     )
     with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
-        batch.execute(strict=True)
-        state = StationaryKsState.from_native(batch, basis)
-        result = _diagnostic(state, basis, compiler)
+        if precision == "auto":
+            batch.execute(strict=True, properties=("energy",))
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                compiler = request.getfixturevalue("compiler")
+                gradient = _diagnostic(state, basis, compiler).gradient
+            finally:
+                state._source.close()
+        else:
+            with no_cpu_derivatives():
+                result = batch.execute(
+                    strict=True, properties=("energy", "forces")
+                ).items[0]
+            gradient = -result.forces
         estimates = []
         for step in (3e-4, 1e-4):
             values = []
@@ -486,9 +511,9 @@ def test_cuda_r2scan_reconverged_directional_finite_difference(
                 ]
                 values.append(calc.singlepoint(moved, properties=("energy",)).energy)
             estimates.append((values[0] - values[1]) / (2 * step))
-        actual = float(np.sum(result.gradient * direction))
+        actual = float(np.sum(gradient * direction))
         _evidence(
-            "fd-r2scan-rks-tau",
+            f"fd-r2scan-rks-tau-{precision}",
             {"steps": [3e-4, 1e-4], "estimates": estimates, "analytic": actual},
         )
         assert abs(estimates[-1] - estimates[-2]) < 2e-6
@@ -784,7 +809,7 @@ def test_public_cuda_calculator_forces_match_independent_gradient(
     )
 
     calc = _calculator(method)
-    assert calc._capabilities.supported_properties == frozenset(("energy", "forces"))
+    assert {"energy", "forces"} <= calc._capabilities.supported_properties
     public = calc.singlepoint(ATOMS, charge=charge, multiplicity=multiplicity)
     assert public.executed_backend == "cuda"
     assert public.forces is not None
@@ -797,16 +822,18 @@ def test_public_cuda_calculator_forces_match_independent_gradient(
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
         energy = batch.execute(strict=True, properties=("energy",)).items[0].energy
-        state = StationaryKsState.from_native(batch, basis)
-        if method.startswith("r2scan-"):
-            ref_energy, gradient = independent_semilocal_total_gradient(
-                basis, state, method
-            )
-        elif method.endswith("uks"):
-            ref_energy, gradient = independent_uks_gradient(basis, state, method)
-        else:
-            ref_energy, gradient, _ = independent_gradient(basis, state, method)
-        state._source.close()
+        state = StationaryKsState.from_native(batch, basis, allow_reference_domain=True)
+        try:
+            if method.startswith("r2scan-"):
+                ref_energy, gradient = independent_semilocal_total_gradient(
+                    basis, state, method
+                )
+            elif method.endswith("uks"):
+                ref_energy, gradient = independent_uks_gradient(basis, state, method)
+            else:
+                ref_energy, gradient, _ = independent_gradient(basis, state, method)
+        finally:
+            state._source.close()
     assert public.energy == pytest.approx(ref_energy, abs=2e-9)
     assert energy == pytest.approx(ref_energy, abs=2e-9)
     np.testing.assert_allclose(public.forces, -gradient, atol=1e-7, rtol=0)

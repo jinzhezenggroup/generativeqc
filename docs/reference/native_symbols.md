@@ -213,6 +213,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::operator=-copy](#native-cpp-generativeqc-batch-copy-assignment-copy)
 - [generativeqc::Batch::Batch-move](#native-cpp-generativeqc-batch-batch-move)
 - [generativeqc::Batch::size](#native-cpp-generativeqc-batch-size)
+- [generativeqc::Batch::ks_hessian](#native-cpp-generativeqc-batch-ks-hessian)
+- [generativeqc::Batch::ks_hvp](#native-cpp-generativeqc-batch-ks-hvp)
 - [generativeqc::Batch::execute](#native-cpp-generativeqc-batch-execute)
 - [generativeqc::Batch::clear_warm_starts](#native-cpp-generativeqc-batch-clear-warm-starts)
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
@@ -227,6 +229,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc::KsComposition::add_semilocal](#native-cpp-generativeqc-kscomposition-add-semilocal)
 - [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
 - [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
+- [generativeqc_ks_hessian_cuda_version_v2](#native-c-generativeqc-ks-hessian-cuda-version-v2)
+- [generativeqc_ks_hessian_default_options_v2](#native-c-generativeqc-ks-hessian-default-options-v2)
+- [generativeqc_ks_hessian_cuda_v2](#native-c-generativeqc-ks-hessian-cuda-v2)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
@@ -5688,24 +5693,68 @@ Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
 
 **Execution.** Synchronous read; serialize against lifetime changes.
 
+(native-cpp-generativeqc-batch-ks-hessian)=
+## generativeqc::Batch::ks_hessian
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_hessian_receipt_v2 ks_hessian ( std :: size_t index , std :: span < double > output , const generativeqc_ks_hessian_options_v2 * options = nullptr )
+```
+
+**Behavior.** Compute the raw CUDA KS Hessian from the item's current accepted SCF state.
+
+**Inputs.** Original input index, disjoint output span of exactly (3*N)^2 doubles, and
+optional bounded response controls. Execute the batch successfully first.
+
+**Outputs.** Row-major matrix in the span and a detached work receipt as the return value.
+
+**Errors.** Throws Error on native failure; output remains unchanged.
+
+**Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
+
+**Units.** Matrix in Hartree/Bohr^2; capacities in bytes.
+
+(native-cpp-generativeqc-batch-ks-hvp)=
+## generativeqc::Batch::ks_hvp
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_hessian_receipt_v2 ks_hvp ( std :: size_t index , std :: span < const double > direction , std :: span < double > output , const generativeqc_ks_hessian_options_v2 * options = nullptr )
+```
+
+**Behavior.** Apply the CUDA KS Hessian without constructing a dense matrix.
+
+**Inputs.** Original input index, finite direction and disjoint output spans of exactly 3*N
+doubles each, and optional bounded response controls. Execute the batch first.
+
+**Outputs.** Atom-major Cartesian action and a detached work receipt as the return value.
+
+**Errors.** Throws Error on native failure or empty direction; output remains unchanged.
+
+**Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
+
+**Units.** Hartree/Bohr^2 action on the supplied direction; capacities in bytes.
+
 (native-cpp-generativeqc-batch-execute)=
 ## generativeqc::Batch::execute
 
 Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
 
 ```cpp
-std :: vector < BatchItemResult > execute ( const std :: vector < std :: optional < std :: vector < double > > > & coordinates = { } )
+std :: vector < BatchItemResult > execute ( const std :: vector < std :: optional < std :: vector < double > > > & coordinates = { } , bool compute_forces = true )
 ```
 
 **Behavior.** Run the fleet and return input-ordered per-item results.
 
 **Inputs.** coordinates is empty to reuse all prepared geometries, or has size() optional
 vectors. nullopt selects that item's prepared geometry; a supplied vector has exactly 3*N
-Bohr values in atom/xyz order.
+Bohr values in atom/xyz order. Pass compute_forces=false for energy-only preparation.
 
-**Outputs.** Returns a vector of BatchItemResult with one status per input. The wrapper
-requests forces for every item; failures have cleared force vectors. It also queries
-per-item SCF and correlation records.
+**Outputs.** Returns a vector of BatchItemResult with one status per input. Force vectors
+are empty for energy-only calls and failures. The wrapper also queries per-item SCF
+and correlation records.
 
 **Lifetime.** Temporary coordinate buffers are borrowed during the synchronous call; returned
 vectors own all copied output.
@@ -6038,6 +6087,70 @@ Native capabilities still govern execution, including rejection of unsupported D
 
 **Units.** Grid radii/tolerances use Bohr, exchange range uses inverse Bohr, and energies use
 Hartree when the returned calculation is subsequently executed.
+
+(native-c-generativeqc-ks-hessian-cuda-version-v2)=
+## generativeqc_ks_hessian_cuda_version_v2
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cuda_version_v2 ( void ) ;
+```
+
+**Behavior.** Discover the linked CUDA Hessian ABI, independent of device initialization.
+
+**Outputs.** Returns 2 if linked, 0 otherwise. Not a per-method or per-device capability.
+
+**Execution.** Allocation-free host metadata query; no context needed.
+
+(native-c-generativeqc-ks-hessian-default-options-v2)=
+## generativeqc_ks_hessian_default_options_v2
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_default_options_v2 ( generativeqc_ks_hessian_options_v2 * options ) ;
+```
+
+**Behavior.** Initialize current bounded CUDA Hessian/HVP options, including size and ABI version.
+
+**Inputs.** Pointer to writable options storage.
+
+**Outputs.** Overwrites the descriptor. Fields can be changed before execution.
+
+**Errors.** A null pointer returns INVALID_ARGUMENT.
+
+**Execution.** Allocation-free host metadata query; works without the CUDA provider.
+
+**Units.** Capacities in bytes; response tolerances use the native FP64 residual convention.
+
+(native-c-generativeqc-ks-hessian-cuda-v2)=
+## generativeqc_ks_hessian_cuda_v2
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cuda_v2 ( generativeqc_batch * batch , size_t index , const generativeqc_ks_hessian_options_v2 * options , const double * direction , size_t direction_count , double * output , size_t output_count , generativeqc_ks_hessian_receipt_v2 * receipt ) ;
+```
+
+**Behavior.** Differentiate an accepted physical CUDA KS state for one prepared batch item.
+
+**Inputs.** Live batch, original input index, initialized options and receipt (set struct_size
+and abi_version). For N atoms, supply NULL/0 direction and exactly (3N)^2 outputs, or a
+finite 3N-entry direction and exactly 3N outputs. The four host records/panels are disjoint.
+
+**Outputs.** Raw row-major Hessian or atom-major Cartesian HVP, plus a detached work receipt.
+
+**Lifetime.** No pointers are retained. Serialize against other batch/context operations.
+
+**Errors.** Malformed requests, unqualified/stale states, failed convergence and resource
+exhaustion fail without changing either output. Missing linked providers never fall back.
+
+**Execution.** Synchronous FP64 CUDA response on the accepted SCF provider. Checks the batch's
+shared device ledger if present; downloads only the terminal derivative, not SCF panels.
+
+**Units.** Coordinates/direction in Bohr coordinate conventions; Hessian in Hartree/Bohr^2;
+HVP is the linear action in the supplied direction. Capacities in bytes.
 
 (native-c-generativeqc-precision-admission-query-v1)=
 ## generativeqc_precision_admission_query_v1

@@ -72,12 +72,15 @@ class DFSecondOrder:
         )
         self.ad_budget_bytes = budget_bytes - self.external_bytes
         try:
-            self.programs = df_second_programs(
-                orbital.public.nao,
-                auxiliary.nao,
-                self.spins,
-                Fraction(str(self.exchange)),
+            energy, sources, self.frozen_fock_program, self.fock_program = (
+                df_second_programs(
+                    orbital.public.nao,
+                    auxiliary.nao,
+                    self.spins,
+                    Fraction(str(self.exchange)),
+                )
             )
+            self.source_programs = tuple(zip(energy.outputs, sources, strict=True))
         except Exception:
             self.close()
             raise
@@ -226,17 +229,12 @@ class DFSecondOrder:
         self, direction: np.ndarray, density_direction: np.ndarray | None = None
     ) -> dict:
         moving_values, moving_metric = self._values(direction, tangent=True)
-        inverse_direction = execute(
-            self.programs[3],
-            {"inverse": self.inverse, "metric_direction": moving_metric},
-            max_bytes=self.ad_budget_bytes,
-        ).outputs["direction"]
         return {
             "density": self.state.density,
             "three_center": self.three_center,
             "inverse": self.inverse,
             "d_three_center": moving_values,
-            "d_inverse": inverse_direction,
+            "d_metric": moving_metric,
             "d_density": np.zeros_like(self.state.density)
             if density_direction is None
             else density_direction,
@@ -247,7 +245,7 @@ class DFSecondOrder:
         feeds = self._feeds(direction)
         feeds["bar_energy"] = np.asarray(1.0)
         value = execute(
-            self.programs[2], feeds, max_bytes=self.ad_budget_bytes
+            self.frozen_fock_program, feeds, max_bytes=self.ad_budget_bytes
         ).outputs["d_bar_density"]
         return value if self.spins == 2 else value[0]
 
@@ -260,7 +258,7 @@ class DFSecondOrder:
             "bar_energy": np.asarray(1.0),
         }
         value = execute(
-            self.programs[4], feeds, max_bytes=self.ad_budget_bytes
+            self.fock_program, feeds, max_bytes=self.ad_budget_bytes
         ).outputs["bar_density"]
         return value if self.spins == 2 else value[0]
 
@@ -270,9 +268,7 @@ class DFSecondOrder:
             density_direction = density_direction[None]
         feeds = self._feeds(direction, density_direction)
         result = {}
-        for name, (weights, moving_weights) in zip(
-            ("coulomb", "exchange"), self.programs[1], strict=True
-        ):
+        for name, (weights, moving_weights) in self.source_programs:
             feeds[f"bar_{name}"] = np.asarray(1.0)
             fixed = execute(weights, feeds, max_bytes=self.ad_budget_bytes).outputs
             moving = execute(

@@ -1651,11 +1651,15 @@ def test_split_hybrid_policy_uses_the_shared_auto_scf(
     assert direct.capabilities.supported_properties == {"energy", "forces"}
 
 
-@pytest.mark.parametrize("method", ("pbe-rks", "pbe0-rks", "m06-2x-rks"))
+@pytest.mark.parametrize(
+    ("method", "candidate"),
+    (("pbe-rks", "auto"), ("pbe0-rks", "fp64"), ("m06-2x-rks", "fp64")),
+)
 @pytest.mark.parametrize("profile", ("fast", "audit_auto"))
-def test_density_fitted_force_context_keeps_fp64_fallback(
-    cuda_constructor: None, method: str, profile: str
+def test_density_fitted_force_context_selects_admitted_precision(
+    cuda_constructor: None, method: str, candidate: str, profile: str
 ) -> None:
+    """Allow fitted PBE preconvergence without exposing second order on the facade."""
     calculator = PrecisionCalculator(
         method=method,
         device="cuda",
@@ -1664,8 +1668,9 @@ def test_density_fitted_force_context_keeps_fp64_fallback(
         ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
         policy=profile,
     )
-    assert calculator._candidate_precision == "fp64"
+    assert calculator._candidate_precision == candidate
     assert calculator.capabilities.supported_properties == {"energy", "forces"}
+    assert not calculator.capabilities.supported_second_order
 
 
 def test_fast_keeps_resolved_custom_ks_composition(cuda_constructor: None) -> None:

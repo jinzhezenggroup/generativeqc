@@ -17,9 +17,14 @@ from .automatic_point import emit_automatic_point
 from .automatic_semilocal import automatic_components, automatic_functional_name
 from .coefficients import jet_pullback_program
 from .grid_native import emit_grid_adjoint, emit_grid_partials
+from .r2scan_stationary import emit_r2scan_stationary_point
 from .scalar_schedule import XcScalarConsumer, select_xc_scalar_schedule
 from .semilocal_codegen import emit_polarized_semilocal, emit_r2scan_program
 from .spec import FunctionalSpec, UnsupportedXC
+from .split_hybrid_stationary import (
+    emit_split_hybrid_stationary_point,
+    split_hybrid_stationary_symbol,
+)
 from .wb97mv_maple import DENSITY_THRESHOLD, SIGMA_THRESHOLD, TAU_THRESHOLD
 
 _SPLIT_HYBRID_BY_CODE = {
@@ -189,7 +194,7 @@ def _emit_composed_point(
 
 
 def _emit_restricted_point_capability(
-    functional: int, semilocal: FunctionalSpec | None
+    functional: int, semilocal: FunctionalSpec | None, *, full_spin_only: bool = False
 ) -> str:
     """Describe mathematics, not runtime proof of an equal-spin producer.
 
@@ -208,7 +213,8 @@ def _emit_restricted_point_capability(
         == {"GGA_X_PBE": Fraction(3, 4), "GGA_C_PBE": Fraction(1)}
     )
     capable = (
-        semilocal is not None
+        not full_spin_only
+        and semilocal is not None
         and semilocal.spin == "unpolarized"
         and (functional in _REGISTERED_STATIONARY_CODES)
     )
@@ -269,6 +275,8 @@ def _emit_stationary_point(
     *,
     semilocal: FunctionalSpec | None = None,
     scalar_type: str = "double",
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> str:
     """Emit a point differential with the SCF owner's work-domain semantics.
 
@@ -285,6 +293,23 @@ def _emit_stationary_point(
     if functional in _SPLIT_HYBRID_BY_CODE:
         if not isinstance(semilocal, FunctionalSpec):
             raise ValueError("composed stationary point requires its FunctionalSpec")
+        if variational_split_hybrid:
+            method, model = _SPLIT_HYBRID_BY_CODE[functional]
+            expected = {name: Fraction(weight) for name, weight in model["components"]}
+            if (
+                dict(semilocal.components) != expected
+                or semilocal.range_omega != 0
+                or scalar_type != "double"
+            ):
+                raise ValueError(
+                    f"variational {method} requires its canonical FP64 semilocal point"
+                )
+            return _emit_energy_derived_point(
+                emit_split_hybrid_stationary_point(
+                    method, with_action=False, qualifier="__device__ inline"
+                ),
+                f"{split_hybrid_stationary_symbol(method)}_value",
+            )
         return _emit_composed_point(functional, semilocal, scalar_type=scalar_type)
     if curated is None:
         if scalar_type != "double":
@@ -446,6 +471,13 @@ def _emit_stationary_point(
         raise ValueError(
             "R2SCAN stationary geometry requires its canonical semilocal components and parameters"
         )
+    if variational_r2scan:
+        return _emit_energy_derived_point(
+            emit_r2scan_stationary_point(
+                with_action=False, qualifier="__device__ inline"
+            ),
+            "r2scan_stationary_value",
+        )
     # Use the SCF owner's component work-domain policy, including empty spins;
     # differentiating the unfloored interior graph is singular at rho_s=tau_s=0.
     body = emit_r2scan_program(
@@ -508,6 +540,44 @@ __device__ inline StationaryPointValue stationary_evaluate_point(
     )
 
 
+def _emit_energy_derived_point(program: str, evaluator: str) -> str:
+    """Map the energy derivative's physical coordinates to the force weak form."""
+    return (
+        program
+        + """
+struct StationaryPointValue {
+  double energy{}, rho[2]{}, gradient[2][3]{}, kinetic[2]{};
+  bool valid{true};
+};
+__device__ inline StationaryPointValue stationary_evaluate_point(
+    const double rho[2], const double gradient[2][3], const double tau[2]) {
+  StationaryPointValue out;
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    out.valid = out.valid && isfinite(rho[spin]) && rho[spin] >= 0.0 &&
+                isfinite(tau[spin]) && tau[spin] >= 0.0;
+    for (double value : gradient[spin]) out.valid = out.valid && isfinite(value);
+  }
+  if (!out.valid) return out;
+  const double point[] = {rho[0], rho[1], gradient[0][0], gradient[0][1], gradient[0][2],
+                          gradient[1][0], gradient[1][1], gradient[1][2], tau[0], tau[1]};
+  const auto value = ENERGY_DERIVED_POINT(point);
+  out.valid = isfinite(value.energy);
+  for (double partial : value.potential) out.valid = out.valid && isfinite(partial);
+  if (!out.valid) return out;
+  out.energy = value.energy;
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    out.rho[spin] = value.potential[spin];
+    for (unsigned axis = 0; axis < 3; ++axis)
+      out.gradient[spin][axis] = value.potential[2 + 3 * spin + axis];
+    // Geometry applies the weak-form coefficient to the unhalved AO gradient product.
+    out.kinetic[spin] = 0.5 * value.potential[8 + spin];
+  }
+  return out;
+}
+""".replace("ENERGY_DERIVED_POINT", evaluator)
+    )
+
+
 def emit_geometry_cuda(
     *,
     functional: typing.Any = None,
@@ -515,9 +585,23 @@ def emit_geometry_cuda(
     iterations: typing.Any = 3,
     semilocal: FunctionalSpec | None = None,
     staged_point: bool = False,
+    variational_r2scan: bool = False,
+    variational_split_hybrid: bool = False,
 ) -> typing.Any:
     """Lower AO bilinear AD; the caller supplies one exact semilocal selector."""
     code = _functional_code(functional, pbe)
+    if variational_r2scan and (
+        staged_point
+        or SEMILOCAL_FAMILY_BY_CODE.get(code, {}).get("stationary_kernel") != "r2scan"
+    ):
+        raise ValueError(
+            "the variational continuation requires the canonical fused r2SCAN graph"
+        )
+    if variational_split_hybrid and (staged_point or code not in _SPLIT_HYBRID_BY_CODE):
+        raise ValueError(
+            "the variational continuation requires a canonical fused split hybrid"
+        )
+    variational = variational_r2scan or variational_split_hybrid
     if semilocal is not None:
         family = (
             "mgga"
@@ -578,9 +662,16 @@ def emit_geometry_cuda(
                 if staged_point
                 else "\n".join(
                     (
-                        _emit_stationary_point(code, semilocal=semilocal),
-                        _emit_restricted_point_capability(code, semilocal),
-                        _emit_mixed_point(code, semilocal),
+                        _emit_stationary_point(
+                            code,
+                            semilocal=semilocal,
+                            variational_r2scan=variational_r2scan,
+                            variational_split_hybrid=variational_split_hybrid,
+                        ),
+                        _emit_restricted_point_capability(
+                            code, semilocal, full_spin_only=variational
+                        ),
+                        _emit_mixed_point(code, semilocal, strict_only=variational),
                     )
                 )
             ),
@@ -636,7 +727,9 @@ __device__ inline StationaryPointValue stationary_evaluate_point_fp32(
 """
 
 
-def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
+def _emit_mixed_point(
+    code: int, semilocal: FunctionalSpec | None, *, strict_only: bool = False
+) -> str:
     """Reuse typed graphs with strict tails and execution-owned work reporting.
 
     Capability means that a compiler candidate exists, not that a public method
@@ -646,7 +739,7 @@ def _emit_mixed_point(code: int, semilocal: FunctionalSpec | None) -> str:
     """
     curated = SEMILOCAL_FAMILY_BY_CODE.get(code)
     normalized = curated is not None and curated["stationary_kernel"] in ("lda", "pbe")
-    capable = code in _REGISTERED_STATIONARY_CODES
+    capable = not strict_only and code in _REGISTERED_STATIONARY_CODES
     lines = [
         f"constexpr bool stationary_fp32_point_capable = {str(capable).lower()};",
         "__device__ inline StationaryPointValue stationary_evaluate_point_fp32(",

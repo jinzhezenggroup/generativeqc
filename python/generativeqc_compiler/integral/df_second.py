@@ -10,7 +10,10 @@ from itertools import product
 
 from .cuda import CudaEmitter
 from .df_derivatives import build_df_derivative_ir, build_df_derivative_kernel
+from .range_separation import CoulombKernel, CoulombKernelFamily
 from .shell_spec import cartesian_components
+
+_FULL_COULOMB = CoulombKernel()
 
 
 @cache
@@ -20,10 +23,21 @@ def emit_df_second(
     indices: tuple[int, ...],
     *,
     backend: str = "cpu",
+    radial: CoulombKernel = _FULL_COULOMB,
 ) -> str:
-    """Emit a bounded Cartesian component tile, including the physical Boys JVP."""
+    """Bind the DF geometry graph to fixed full- or long-range Boys moments.
+
+    Omega and Gaussian exponents do not move. The same dF_n/dT = -F_(n+1)
+    rule therefore differentiates the interval moments without a boundary term.
+    """
     if backend not in ("cpu", "cuda"):
         raise ValueError("DF second-order backend must be cpu or cuda")
+    if radial.family not in (
+        CoulombKernelFamily.FULL_RANGE,
+        CoulombKernelFamily.LONG_RANGE,
+    ):
+        raise ValueError("DF second order supports full- and long-range Coulomb")
+    long_range = radial.family is CoulombKernelFamily.LONG_RANGE
     qualifier = "static" if backend == "cpu" else "__device__ __noinline__"
     integral = build_df_derivative_ir(family, angular)
     components = tuple(product(*(cartesian_components(order) for order in angular)))
@@ -67,7 +81,14 @@ def emit_df_second(
             },
         }
         argument = CudaEmitter(graph, variables)
-        argument.emit((kernel.boys_argument,))
+        moment_arguments = (
+            (kernel.boys_argument, kernel.reduced_exponent)
+            if long_range
+            else (kernel.boys_argument,)
+        )
+        argument.emit(moment_arguments)
+        reduced = argument.reference(kernel.reduced_exponent) if long_range else "1"
+        bound = "Long" if long_range else "Full"
         moments = kernel.boys_count + 1
         emitter = CudaEmitter(
             graph,
@@ -82,8 +103,8 @@ def emit_df_second(
             + "\n".join(argument.lines)
             + f"\n double boys[{moments}]{{}};\n"
             + f" if (!generativeqc::integrals::bounded_range_moments<14>({moments - 1}, "
-            + f"{argument.reference(kernel.boys_argument)}, 1, "
-            + "generativeqc::integrals::CoulombRange::Full, 0, boys)) return false;\n {\n"
+            + f"{argument.reference(kernel.boys_argument)}, {reduced}, "
+            + f"generativeqc::integrals::CoulombRange::{bound}, {radial.omega:.17g}, boys)) return false;\n {{\n"
             + "\n".join(emitter.lines)
             + "\n"
             + "\n".join(

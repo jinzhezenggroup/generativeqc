@@ -129,6 +129,71 @@ int main() {
     return 13;
   } catch (const std::bad_alloc&) {
   }
+
+  const auto bytes = GcpCudaPlan::numeric_bytes(kZ.size(), true);
+  try {
+    GcpCudaPlan bounded(0, kZ, bytes - 1, true);
+    return 14;
+  } catch (const std::bad_alloc&) {
+  }
+  std::array<double, 48> direction{}, action{};
+  for (std::size_t coordinate = 0; coordinate < direction.size(); ++coordinate)
+    direction[coordinate] = 0.25 * std::sin(0.9 * coordinate + 0.4);
+  action.fill(19);
+  try {
+    owner.apply_hessian(kXyz, direction, action);
+    return 15;
+  } catch (const std::invalid_argument&) {
+  }
+  GcpCudaPlan hessian(0, kZ, bytes, true);
+  try {
+    hessian.apply_hessian(coincident, direction, action);
+    return 16;
+  } catch (const std::exception&) {
+  }
+  if (!std::all_of(action.begin(), action.end(), [](double value) { return value == 19; }))
+    return 17;
+  hessian.apply_hessian(kXyz, direction, action);
+
+  // Independent simple-dftd3-style Python reference: Richardson-extrapolated
+  // directional slopes at displacements 2e-4 and 1e-4 along this direction.
+  constexpr double reference_curvature = 1.41315809626e-4;
+  double curvature = 0;
+  for (std::size_t coordinate = 0; coordinate < action.size(); ++coordinate)
+    curvature += action[coordinate] * direction[coordinate];
+  if (!near(curvature, reference_curvature, 2e-10)) return 18;
+
+  // Mixed central differences of the independently evaluated host energies.
+  // Use two step sizes so truncation/roundoff cannot hide a wrong sign or term.
+  const auto host_energy = [](const auto& xyz) {
+    double value{};
+    const auto status = evaluate_r2scan3c_gcp(16, kZ.data(), xyz.data(), r2scan3c_gcp_parameters(),
+                                              &value, nullptr);
+    return status == GCPStatus::success ? value : NAN;
+  };
+  double curvature_error = 0;
+  for (const double step : {1.0e-3, 5.0e-4}) {
+    for (std::size_t coordinate = 0; coordinate < action.size(); ++coordinate) {
+      double expected = 0;
+      for (const double motion_sign : {-1.0, 1.0}) {
+        for (const double axis_sign : {-1.0, 1.0}) {
+          auto displaced = kXyz;
+          for (std::size_t index = 0; index < displaced.size(); ++index)
+            displaced[index] += step * motion_sign * direction[index];
+          displaced[coordinate] += step * axis_sign;
+          expected += axis_sign * motion_sign * host_energy(displaced);
+        }
+      }
+      expected /= 4 * step * step;
+      if (!near(action[coordinate], expected, 3e-8)) return 20;
+      curvature_error = std::max(curvature_error, std::abs(action[coordinate] - expected));
+    }
+  }
+  std::printf("r2SCAN-3c gCP CUDA HVP: max energy-stencil error %.3e\n", curvature_error);
+  direction.fill(0.125);
+  hessian.apply_hessian(kXyz, direction, action);
+  if (!std::all_of(action.begin(), action.end(), [](double value) { return value == 0; }))
+    return 19;
 #endif
   return 0;
 }

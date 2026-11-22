@@ -60,7 +60,8 @@ CudaDfReadonlyBasis cuda_density_fitting_readonly_basis(
           batch.shell_primitive_offsets,
           batch.shell_direct_ao_offsets,
           owner.orbital_to_cartesian,
-          owner.auxiliary_to_cartesian};
+          owner.auxiliary_to_cartesian,
+          batch.df_range_omega};
 }
 
 namespace {

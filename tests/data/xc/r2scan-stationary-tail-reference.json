@@ -1,0 +1,155 @@
+{
+  "schema": "generativeqc.r2scan-stationary-tail/v1",
+  "points": [
+    {
+      "label": "both-density-floors",
+      "inputs": [
+        8.2e-16,
+        7.2e-16,
+        1e-18,
+        2e-18,
+        0,
+        0,
+        1e-18,
+        0,
+        1.1e-20,
+        1.4e-20
+      ],
+      "direction": [
+        1e-17,
+        2e-17,
+        1e-20,
+        0,
+        0,
+        0,
+        1e-20,
+        0,
+        2e-22,
+        -1e-22
+      ],
+      "reference": [
+        -2.6926277087962846e-21,
+        -3.1371207625579766e-22,
+        -6.071482592719644e-24
+      ]
+    },
+    {
+      "label": "lower-floor-join",
+      "inputs": [
+        1.11e-15,
+        5e-16,
+        1e-18,
+        2e-18,
+        0,
+        0,
+        1e-18,
+        0,
+        1.1e-20,
+        1.4e-20
+      ],
+      "direction": [
+        1e-17,
+        2e-17,
+        1e-20,
+        0,
+        0,
+        0,
+        1e-20,
+        0,
+        2e-22,
+        -1e-22
+      ],
+      "reference": [
+        -3.624574612336108e-21,
+        -3.348843952420189e-22,
+        3.9608035972835024e-24
+      ]
+    },
+    {
+      "label": "one-flat-floor",
+      "inputs": [
+        1.7e-15,
+        2e-16,
+        1e-18,
+        2e-18,
+        0,
+        0,
+        1e-18,
+        0,
+        1.1e-20,
+        1.4e-20
+      ],
+      "direction": [
+        1e-17,
+        2e-17,
+        1e-20,
+        0,
+        0,
+        0,
+        1e-20,
+        0,
+        2e-22,
+        -1e-22
+      ],
+      "reference": [
+        -7.459639909191485e-21,
+        -1.826829285784967e-22,
+        2.710845659137763e-23
+      ]
+    },
+    {
+      "label": "equal-spin-activation",
+      "inputs": [
+        9e-16,
+        9e-16,
+        1e-18,
+        2e-18,
+        0,
+        0,
+        1e-18,
+        0,
+        1.1e-20,
+        1.4e-20
+      ],
+      "direction": [
+        1e-17,
+        2e-17,
+        1e-20,
+        0,
+        0,
+        0,
+        1e-20,
+        0,
+        2e-22,
+        -1e-22
+      ],
+      "reference": [
+        -5.323817095430973e-21,
+        -2.3488452485578657e-22,
+        2.1894416442573386e-23
+      ]
+    }
+  ],
+  "oracle": {
+    "source": "Libxc 7.0.0 original Maple 2022 generated polarized E/vxc",
+    "archive_sha256": "8d4e343041c9cd869833822f57744872076ae709a613c118d70605539fb13a77",
+    "source_sha256": {
+      "util.h": "7679744982b3b944f3054b7d2b298612d7b4f3a1051f4f48f4fded2ef26f04b5",
+      "maple2c/mgga_exc/mgga_c_r2scan.c": "a61ab7d2dbfa3e99ea7c9a8ff18182344b9ce727af96b385804eb9cd65f7ce1d",
+      "maple2c/mgga_exc/mgga_x_r2scan.c": "230d3c7a7b2a0483e2987c23d43dcdba1861dea77ba84cca90ba6946cc6b8a13"
+    },
+    "arithmetic": "GCC __float128/libquadmath, 113 significand bits",
+    "generated_probe_sha256": "4a2de0657a5c6f03a6f27ca0156e4886ae9b1082c0f53c365e59302e1cb54e3f",
+    "regenerate": "python tools/generate_r2scan_tail_reference.py --archive /path/to/libxc-7.0.0.tar.gz --stationary",
+    "channels": [
+      "energy_density",
+      "directional_energy",
+      "directional_curvature"
+    ],
+    "tolerance": {
+      "rtol": 2e-08,
+      "atol": 0
+    },
+    "policy": "C2 continuation; Richardson stencil of widened upstream energies"
+  }
+}

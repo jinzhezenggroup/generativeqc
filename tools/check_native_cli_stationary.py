@@ -103,17 +103,34 @@ def verify_contract(cache: str, registry: str, symbol_listing: str) -> None:
             re.MULTILINE,
         )
         automatic = names[1] if names else ""
-    profiles = compiler_native_profiles(
-        selection[1] if selection else "auto", automatic
+    expected_set = set(
+        compiler_native_profiles(selection[1] if selection else "auto", automatic)
     )
-    expected_set = set(profiles)
+    # The NVIDIA distribution always links the energy-derived r²SCAN points.
+    # Experimental points add both their base and variational graph bindings,
+    # independently of the optional specialization list.
+    variational = ["r2scan"]
+    for option, profile in (
+        ("M062X", "m06_2x"),
+        ("MN15", "mn15"),
+    ):
+        if re.search(
+            rf"^GENERATIVEQC_ENABLE_{option}_STATIONARY_POINT:BOOL=ON$",
+            cache,
+            re.MULTILINE,
+        ):
+            variational.append(profile)
+    for profile in variational:
+        for spin in ("rks", "uks"):
+            base = f"{profile}_{spin}"
+            expected_set.update((base, f"{base}_variational"))
     if linked != expected_set:
         raise ValueError(
             f"native CUDA profile registry mismatch: missing={sorted(expected_set - linked)}, "
             f"unexpected={sorted(linked - expected_set)}"
         )
 
-    for profile in profiles:
+    for profile in sorted(expected_set):
         signature = f"generativeqc::dft::native_stationary_profile_{profile}()"
         if signature not in symbol_listing:
             raise ValueError(f"compiled CLI is missing native force symbol {signature}")

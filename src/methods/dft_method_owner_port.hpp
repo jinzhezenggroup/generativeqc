@@ -112,7 +112,8 @@ class KsBatchOwnerPort {
   virtual generativeqc_status resident_grid_reference(std::size_t index,
                                                       const dft::CudaKsFinalStateToken& expected,
                                                       dft::CudaKsResidentGridBinding& binding,
-                                                      std::string& detail) = 0;
+                                                      std::string& detail,
+                                                      dft::CudaKsGridRole role) = 0;
 
   virtual generativeqc_status fixed_density_profile(std::size_t index,
                                                     const dft::CudaKsFinalStateToken& expected,
@@ -155,6 +156,12 @@ class KsBatchOwnerPort {
                                                      const dft::CudaKsFinalStateToken& expected,
                                                      const core::System*& output,
                                                      std::string& detail) = 0;
+
+  virtual generativeqc_status borrow_hessian_corrections(std::size_t,
+                                                         const dft::CudaKsFinalStateToken&,
+                                                         KsHessianCorrections&, std::string&) {
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
 };
 
 }  // namespace generativeqc::methods::detail

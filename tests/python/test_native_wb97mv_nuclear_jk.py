@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 import numpy as np
 import pytest
 
-PARTS = ("exact", "primary", "correction", "coulomb", "short", "long")
+PARTS = ("exact", "primary", "correction", "coulomb", "short", "long", "full_hybrid")
 
 
 def _fixture(spins: int = 2, spherical: bool = False, angular: int = 1) -> dict:
@@ -66,6 +66,12 @@ def _write_fixture(
             np.array(radial, dtype=np.float64).tofile(output)
         np.asarray(fixture["direction"], dtype=np.float64).tofile(output)
         np.asarray(fixture["panels"], dtype=np.float64).tofile(output)
+        if part == "full_hybrid":
+            np.array([fixture.get("exchange_fraction", 0.25)], dtype=np.float64).tofile(
+                output
+            )
+        if part == "exact" and "range_exchange" in fixture:
+            np.asarray(fixture["range_exchange"], dtype=np.float64).tofile(output)
 
 
 def _native(
@@ -136,18 +142,24 @@ def _oracle(fixture: dict, part: str) -> tuple:
     def primal(centers: np.ndarray, density: np.ndarray) -> tuple:
         displaced = molecule.set_geom_(centers, unit="Bohr", inplace=False)
         full = displaced.intor("int2e", aosym="s1") / scale
-        with displaced.with_range_coulomb(0.3):
+        short_fraction, correction, omega = fixture.get(
+            "range_exchange", (0.15, 0.85, 0.3)
+        )
+        with displaced.with_range_coulomb(omega):
             long = displaced.intor("int2e", aosym="s1") / scale
         coulomb = (
-            full if part in ("exact", "primary", "coulomb") else np.zeros_like(full)
+            full
+            if part in ("exact", "primary", "coulomb", "full_hybrid")
+            else np.zeros_like(full)
         )
         exchange = {
-            "exact": 0.15 * full + 0.85 * long,
+            "exact": short_fraction * full + correction * long,
             "primary": 0.15 * full,
             "correction": 0.85 * long,
             "coulomb": np.zeros_like(full),
             "short": 0.15 * (full - long),
             "long": long,
+            "full_hybrid": fixture.get("exchange_fraction", 0.25) * full,
         }[part]
         fock = np.broadcast_to(
             np.einsum("cd,abcd->ab", density.sum(axis=0), coulomb), density.shape
@@ -228,6 +240,21 @@ def _qualify(fixture: dict, values: tuple, part: str) -> None:
 
 
 @pytest.mark.parametrize("spins", (1, 2))
+def test_native_jk_runtime_omega_batch_and_scalar(spins: int, tmp_path: Path) -> None:
+    """Compare both launch contracts against the same signed, non-WB97M-V ERIs."""
+    fixture = _fixture(spins, spherical=True)
+    fixture["range_exchange"] = (0.65, -0.45, 0.33)
+    batched, batch_work = _native(fixture, tmp_path)
+    scalar, scalar_work = _native(fixture, tmp_path, cache_mode="unbatched")
+    assert batch_work["batch_bytes"] > 0
+    assert scalar_work["batch_bytes"] == 0
+    _qualify(fixture, batched, "exact")
+    _qualify(fixture, scalar, "exact")
+    for actual, expected in zip(batched, scalar, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+
+
+@pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize("tile", (2, 64))
 def test_native_jk_batched_sources_and_ordered_budget_fallback(
     spins: int, tile: int, tmp_path: Path
@@ -243,6 +270,9 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
         "batch-budgeted",
         "projection-budgeted",
         "tiled",
+        "resident-cap-tiled",
+        "resident-cap-fallback",
+        "streamed",
     ):
         outputs[mode], receipts[mode] = _native(
             fixture, tmp_path, tile=tile, cache_mode=mode
@@ -272,10 +302,18 @@ def test_native_jk_batched_sources_and_ordered_budget_fallback(
     )
     for field in ("projection_launches", "reduction_launches"):
         assert receipts["resident"][field] < receipts["unbatched"][field]
-    assert receipts["tiled"]["streaming_tiles"] > 1
-    assert receipts["tiled"]["source_groups"] == 12
-    for actual, expected in zip(outputs["tiled"], outputs["resident"], strict=True):
-        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+    for mode in ("tiled", "resident-cap-tiled"):
+        receipt = receipts[mode]
+        assert receipt["streaming_tiles"] > 1
+        assert receipt["source_groups"] == receipts["resident"]["source_groups"]
+        assert receipt["components"] == receipts["resident"]["components"]
+        assert receipt["components"] < receipts["streamed"]["components"]
+        assert receipt["integral_launches"] < receipts["streamed"]["integral_launches"]
+        for actual, expected in zip(outputs[mode], outputs["resident"], strict=True):
+            np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+    fallback = receipts["resident-cap-fallback"]
+    assert fallback["streaming_tiles"] == fallback["resident_bytes"] == 0
+    assert fallback["components"] == receipts["streamed"]["components"]
 
 
 @pytest.mark.parametrize("spins", (1, 2))

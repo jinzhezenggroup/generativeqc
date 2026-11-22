@@ -15,8 +15,17 @@ struct CudaWb97mvDfShape {
 struct CudaWb97mvDfOptions {
   std::size_t max_workspace_bytes{512ULL << 20};
   std::size_t max_affine_term_visits{100'000'000};
+  /** Padded products in generated shared-memory tiles, charged separately. */
+  std::size_t max_matrix_terms{1'000'000'000};
   double symmetry_absolute_tolerance{1e-12};
   double symmetry_relative_tolerance{1e-10};
+  /** Same-spin exchange fraction; zero selects J only. An exchange-only
+   * LR correction stores the signed LR minus SR fraction. */
+  double exchange_fraction{};
+  /** Exchange-only radial owners must not contribute another Coulomb term. */
+  bool coulomb{true};
+  /** Differentiate a separated fixed-rank branch rather than a full inverse. */
+  bool spectral_metric{};
 };
 
 /** Immutable physical DF sources on the original owner stream. Density is
@@ -27,7 +36,8 @@ struct CudaWb97mvDfOptions {
  *
  * Full rank alone is insufficient for nuclear response: the smallest eigenvalue
  * must exceed both 1.1 times the forward relative cutoff and 64 eps times the
- * largest eigenvalue. Rank-truncated/near-cutoff metrics fail closed. */
+ * largest eigenvalue. The explicit spectral mode instead authenticates the
+ * retained and discarded eigenvectors and rejects eigenvalues near the cutoff. */
 struct CudaWb97mvDfReference {
   const double *density{}, *three_center{}, *whitening{}, *metric_eigenvalues{};
   double metric_relative_threshold{};
@@ -35,13 +45,14 @@ struct CudaWb97mvDfReference {
   cudaStream_t stream{};
   cudaError_t (*authenticate)(void*) noexcept {};
   void* owner{};
+  const double* metric_eigenvectors{};  // Column-major, required for spectral mode.
 };
 
 /** Seven jointly staged outputs. Frozen-D Fock motion includes only dA,dV;
  * source-weight motion includes dD as well. Raw metric cotangents differentiate
  * the full inverse solve, not a frozen fitting metric or whitening gauge.
- * These are fitted-primary components, excluding exact LR, XC and nuclear
- * integral derivatives. No stationary Hessian is supplied by this component. */
+ * These are individual fitted radial components, excluding exact J/K, XC and
+ * nuclear integral derivatives. This component does not supply a stationary Hessian. */
 struct CudaWb97mvDfOutput {
   double *energy{}, *fock{}, *fock_direction{}, *weight_three_center{}, *weight_metric{},
       *weight_direction_three_center{}, *weight_direction_metric{};
@@ -53,14 +64,16 @@ struct CudaWb97mvDfWork {
    * is semantic admission evidence, not FLOPs or measured endpoint timing. */
   std::size_t workspace_bytes{}, reference_terms{}, action_terms{};
   std::uint64_t attempted_actions{}, completed_actions{}, affine_terms{};
+  std::size_t matrix_reference_terms{}, matrix_action_terms{};
+  std::uint64_t matrix_terms{};
 };
 
 /** Host-only checked admission using the literal compiler-emitted schedule. */
 cudaError_t cuda_wb97mv_df_workspace(const CudaWb97mvDfShape& shape,
-                                     const CudaWb97mvDfOptions& options,
-                                     std::size_t& bytes) noexcept;
+                                     const CudaWb97mvDfOptions& options, std::size_t& bytes,
+                                     const char** detail = nullptr) noexcept;
 
-/** Native full-rank fitted-primary AD, with borrowed explicitly charged arena.
+/** Native fitted radial AD, with borrowed explicitly charged arena.
  * Preparation computes the immutable inverse and reference VJPs. Actions never
  * allocate, compile, select devices, or execute Python/CPU numerical work.
  * Arena and outputs must be disjoint from inputs and each other; signed
@@ -79,12 +92,13 @@ class CudaWb97mvDfResponse {
   CudaWb97mvDfResponse(CudaWb97mvDfResponse&&) = delete;
   CudaWb97mvDfResponse& operator=(CudaWb97mvDfResponse&&) = delete;
 
+  /** On failure, detail points to a static description of the rejected check. */
   cudaError_t prepare(const CudaWb97mvDfShape& shape, const CudaWb97mvDfOptions& options,
                       const CudaWb97mvDfReference& reference, void* workspace,
-                      std::size_t workspace_bytes) noexcept;
+                      std::size_t workspace_bytes, const char** detail = nullptr) noexcept;
   cudaError_t apply(const double* delta_density, const double* delta_three_center,
                     const double* delta_metric, const CudaWb97mvDfOutput& output,
-                    cudaStream_t stream) noexcept;
+                    cudaStream_t stream, const char** detail = nullptr) noexcept;
   const CudaWb97mvDfWork& work() const noexcept;
 
  private:

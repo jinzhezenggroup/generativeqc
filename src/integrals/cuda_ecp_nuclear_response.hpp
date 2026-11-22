@@ -20,6 +20,9 @@ struct CudaEcpNuclearOptions {
   std::uint64_t max_ao_evaluations{268'435'456}, max_affine_terms{1ULL << 34},
       max_reduction_terms{1ULL << 34};
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
+  // The stationary adapter reserves the spin-sum work only on contractions.
+  std::uint64_t max_contraction_affine_terms{UINT64_MAX};
+  bool allow_validation{true};
 };
 
 /** Actual immutable normalized AoBasis and residual Gaussian ECP terms.
@@ -51,14 +54,22 @@ struct CudaEcpNuclearVectors {
   double *gradient_local{}, *gradient_nonlocal{}, *hvp_local{}, *hvp_nonlocal{};
 };
 
+struct CudaEcpNuclearValidationWork {
+  std::uint64_t local_attempts{}, nonlocal_attempts{}, passed_actions{}, radial_layers{},
+      ao_evaluations{}, projection_terms{}, affine_terms{}, reduction_terms_bound{};
+};
+
 struct CudaEcpNuclearWork {
   std::size_t workspace_bytes{}, centers{}, radial_layers_per_action{};
   std::uint64_t ao_evaluations_per_action{}, projection_terms_per_action{}, matrix_affine_terms{},
       contraction_affine_terms{}, reduction_terms_bound{}, attempted_actions{}, value_actions{},
       contraction_actions{}, radial_layers{}, ao_evaluations{}, projection_terms{}, affine_terms{};
+  // Per-action estimates describe the incumbent pair. Cumulative receipts
+  // include any confirmation work, also broken out separately below.
+  CudaEcpNuclearValidationWork validation{};
 };
 
-/** Host-only checked storage/work/AOT admission for both fixed quadratures. */
+/** Host-only admission; returns baseline storage if confirmation cannot fit. */
 cudaError_t cuda_ecp_nuclear_workspace(const CudaEcpNuclearShape& shape,
                                        std::span<const unsigned> centers,
                                        const CudaEcpNuclearOptions& options,
@@ -69,7 +80,8 @@ cudaError_t cuda_ecp_nuclear_workspace(const CudaEcpNuclearShape& shape,
  * local nodes and nonlocal projections. Compiler AO Taylor AD and stationary
  * bilinear VJP/JVP maps own all derivatives; no left-coordinate source replay,
  * coordinate-major AO-pair tensor, Python, JIT or host numerical contraction.
- * The incumbent coarse/fine matrix/derivative gates precede joint publication.
+ * The incumbent coarse/fine gates precede joint publication of the fine grid.
+ * Only finite tolerance misses can use a budgeted third-grid confirmation.
  * Actions allocate nothing and reauthenticate the original noncapturing stream
  * and owner before publication. Earlier failures preserve every output; CUDA
  * publication faults may leave partial copies. Source/arena outlive this

@@ -28,10 +28,17 @@ def _fixture(domain: str = "sp", spherical: bool = False) -> dict:
     elif domain == "df":
         shells = [(0, 2, radial), (1, 3, [[0.7, 0.8], [0.22, -0.1]])]
     else:
-        assert domain == "multi"
+        assert domain in ("multi", "wide")
         centers = np.vstack((centers, [-0.7, 0.6, -1.2]))
         atoms = [(11, 10), (11, 10), (1, 0)]
-        shells = [(0, 0, radial), (1, 1, [[0.6, 1]]), (2, 0, [[0.7, 1]])]
+        if domain == "wide":
+            shells = [
+                (atom, angular, [[0.55 + 0.1 * atom + 0.06 * angular, 1]])
+                for atom, orders in enumerate(((0, 1, 2, 3), (0, 1, 2), (0, 2)))
+                for angular in orders
+            ]
+        else:
+            shells = [(0, 0, radial), (1, 1, [[0.6, 1]]), (2, 0, [[0.7, 1]])]
     terms = [
         [0, -1, 0, 0.9, 0.25],
         [0, -1, 2, 0.4, -0.1],
@@ -40,7 +47,7 @@ def _fixture(domain: str = "sp", spherical: bool = False) -> dict:
         [0, 2, 3, 0.7, 0.12],
         [0, 3, 4, 0.55, -0.08],
     ]
-    if domain == "multi":
+    if domain in ("multi", "wide"):
         terms += [
             [1, channel, power, exponent * 1.2, coefficient * -0.7]
             for _, channel, power, exponent, coefficient in terms.copy()
@@ -237,6 +244,14 @@ def test_native_ecp_second_source_against_independent_libcint(
         == work["contraction_actions"]
         == (2 if domain == "sp" and not spherical else 1)
     )
+
+
+def test_native_ecp_second_source_wide_multi_center(tmp_path: Path) -> None:
+    """Gather overlapping orbital owners from both local and projector kernels."""
+    fixture = _fixture("wide", spherical=True)
+    assert fixture["nao"] == 31
+    actual, work = _native(fixture, tmp_path)
+    _assert_ecp_oracle(fixture, actual, work)
 
 
 def _assert_ecp_oracle(fixture: dict, actual: dict, work: dict) -> None:

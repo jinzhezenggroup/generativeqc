@@ -177,6 +177,16 @@ void test_overflowing_damping_keeps_representable_weighted_results() {
       std::abs(tiny.derivative_over_distance - expected_tiny_response) >
           2 * std::numeric_limits<double>::denorm_min())
     throw std::runtime_error("D3(0) derivative must survive independent energy underflow");
+
+  // The limiting law is r^(alpha-power)/(6*r0^alpha). Choose binary
+  // inputs where both earlier lanes underflow but its curvature survives.
+  double jet[3];
+  generativeqc::generated::dispersion::zero_damping_second(std::ldexp(1.0, -16),
+                                                           std::ldexp(1.0, -12), 305, 6, jet);
+  const double expected_curvature = std::ldexp(299.0 * 297.0 / 6.0, 96 - 1220 + 48);
+  if (jet[0] != 0 || jet[1] != 0 || !std::isfinite(jet[2]) ||
+      std::abs(jet[2] - expected_curvature) > std::numeric_limits<double>::denorm_min())
+    throw std::runtime_error("D3(0) curvature must survive independent radial underflow");
 }
 
 void test_pair_helper_overflowing_damping_keeps_representable_results() {

@@ -22,7 +22,7 @@ struct CudaGridGeometryOptions {
   std::uint64_t max_partition_pairs{16'777'216};
   std::uint64_t max_ao_jet_values{134'217'728};
   /** Preparation work bound: 20*points*AO primitive/polynomial incidences,
-   * independent of the output/storage bound. No Gaussian replay in mixed(). */
+   * independent of the output/storage bound. Also bounds each replay pass. */
   std::uint64_t max_ao_primitive_terms{134'217'728};
   unsigned partition_iterations{3};
   double coincident_tolerance{1e-12};
@@ -30,6 +30,11 @@ struct CudaGridGeometryOptions {
    * measure. Far radial measures amplify ordinary switching roundoff. */
   double reference_absolute_tolerance{1e-15};
   double reference_relative_tolerance{3e-11};
+  /** Zero requires resident spatial jets. Otherwise, retain a budgeted prefix
+   * and replay the tail in point tiles, bounded over the requested action block. */
+  std::uint64_t max_ao_replay_terms{};
+  /** Disable prefix growth if a subsequent owner can use the shared capacity. */
+  bool retain_partial_jets{true};
 };
 
 /** Immutable normalized AoBasis and native atom-major quadrature. Legacy
@@ -57,12 +62,18 @@ struct CudaGridGeometryWork {
   std::uint64_t attempted_actions{}, completed_actions{};
   std::uint64_t prepared_ao_primitive_term_bound{};
   std::uint64_t action_point_values{};
+  std::uint64_t replayed_ao_primitive_term_bound{};
 };
 
-/** Pure host overflow/resource/work admission; does not initialize CUDA. */
+struct CudaGridGeometryMixedView {
+  const double *ao{}, *weights{}, *point_directions{};
+};
+
+/** Pure host overflow/resource/work admission. The optional minimum reserves
+ * the smallest admissible tile (or the full resident layout if replay is disabled). */
 cudaError_t cuda_grid_geometry_workspace(const CudaGridGeometryShape& shape,
-                                         const CudaGridGeometryOptions& options,
-                                         std::size_t& bytes) noexcept;
+                                         const CudaGridGeometryOptions& options, std::size_t& bytes,
+                                         std::size_t* minimum = nullptr) noexcept;
 
 /** Native first/mixed-second moving Becke and AO geometry source for Hessians.
  * Spatial jets through order three and all scalar geometry/product/ratio AD are
@@ -84,8 +95,8 @@ class CudaGridGeometryResponse {
   CudaGridGeometryResponse(CudaGridGeometryResponse&&) = delete;
   CudaGridGeometryResponse& operator=(CudaGridGeometryResponse&&) = delete;
 
-  /** Cache immutable order-three spatial jets and verify the exact partitioned
-   * reference weights against the supplied atomic measure. Failure revokes. */
+  /** Verify the exact partition weights and cache immutable order-three AO
+   * jets when resident storage fits. Failure revokes the lease. */
   cudaError_t prepare(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& options,
                       const CudaGridGeometryReference& reference, void* workspace,
                       std::size_t workspace_bytes) noexcept;
@@ -96,7 +107,14 @@ class CudaGridGeometryResponse {
    * failure; a CUDA error during the final copies invalidates BOTH outputs. */
   cudaError_t mixed(const double* left, const double* right, double* ao_output,
                     double* weight_output, cudaStream_t stream) noexcept;
-  /** Borrow [20,point,AO] ordinary spatial jets under the same live lease. */
+  /** Same action and finite/owner gates as mixed(), without copying the panels.
+   * The next prepare or mixed attempt expires this view. Consume it on the
+   * authenticated stream; do not retain it across a lease revocation. */
+  cudaError_t mixed_view(const double* left, const double* right, CudaGridGeometryMixedView& view,
+                         cudaStream_t stream) noexcept;
+  /** Admit all mixed actions of an endpoint before any partial work. */
+  cudaError_t admit_actions(std::size_t actions) noexcept;
+  /** Borrow [20,point,AO] spatial jets when resident; replay has no such view. */
   cudaError_t spatial_jets(const double*& jets) noexcept;
   /** Borrow [left/right,point,xyz] from the last successful mixed() action.
    * Point motion is the actual owner-atom direction gathered on CUDA. The
@@ -107,6 +125,8 @@ class CudaGridGeometryResponse {
  private:
   cudaError_t authenticate(cudaStream_t stream) noexcept;
   cudaError_t partition(const double* left, const double* right) noexcept;
+  cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream) noexcept;
+  void finish_mixed() noexcept;
   CudaGridGeometryShape shape_{};
   CudaGridGeometryOptions options_{};
   CudaGridGeometryReference reference_{};

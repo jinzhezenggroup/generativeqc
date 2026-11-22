@@ -83,9 +83,14 @@ def _write_fixture(
                 fixture["auxiliary_spherical"],
                 tile,
                 reject,
+                2
+                if "range_omega" in fixture
+                else int(fixture.get("long_range", False)),
             ],
             dtype=np.uint64,
         ).tofile(output)
+        if "range_omega" in fixture:
+            np.array([fixture["range_omega"]], dtype=np.float64).tofile(output)
         fixture["centers"].astype(np.float64).tofile(output)
         for role in ("orbital", "auxiliary"):
             for atom, angular, radial in fixture[role]:
@@ -150,6 +155,7 @@ class DfOracle:
 
         lib.num_threads(1)
         self.df = df
+        self.omega = fixture.get("range_omega", 0.3 if fixture.get("long_range") else 0)
         self.centers = fixture["centers"]
         labels = tuple(f"H{index}" for index in range(len(self.centers)))
         self.molecules, self.transforms, self.owners = [], [], []
@@ -187,6 +193,9 @@ class DfOracle:
             molecule.set_geom_(centers, unit="Bohr", inplace=False)
             for molecule in self.molecules
         ]
+        if self.omega:
+            orbital.set_range_coulomb(self.omega)
+            auxiliary.set_range_coulomb(self.omega)
         orbital_transform, auxiliary_transform = self.transforms
         raw = self.df.incore.aux_e2(
             orbital, auxiliary, intor="int3c2e_cart", aosym="s1"
@@ -272,15 +281,33 @@ def test_joint_f_orbital_g_auxiliary_two_pass_source(
     _qualify_raw_df_source("fg", orbital_spherical, auxiliary_spherical, 64, tmp_path)
 
 
+@pytest.mark.parametrize("domain,tile,omega", (("sp", 7, 0.3), ("fg", 64, 0.33)))
+def test_long_range_df_two_pass_source(
+    domain: str, tile: int, omega: float, tmp_path: Path
+) -> None:
+    """Both raw and weighted passes use the live erf operator, including f/g projection."""
+    if os.environ.get("GENERATIVEQC_HESSIAN_TEST_LONG_RANGE_DF") != "1":
+        pytest.skip("requires an inventory with long-range DF leaves")
+    _qualify_raw_df_source(domain, True, True, tile, tmp_path, omega=omega)
+
+
+def test_raw_df_range_identity_mismatch_fails_closed(tmp_path: Path) -> None:
+    _native(dict(_fixture(), range_omega=0.33), tmp_path, reject=5)
+
+
 def _qualify_raw_df_source(
     domain: str,
     orbital_spherical: bool,
     auxiliary_spherical: bool,
     tile: int,
     tmp_path: Path,
+    *,
+    omega: float = 0,
 ) -> None:
     """Share the independent source, fitted-response and exact semantic-work gates."""
     fixture = _fixture(domain, orbital_spherical, auxiliary_spherical)
+    if omega:
+        fixture["range_omega"] = omega
     actual, receipt = _native(fixture, tmp_path, tile=tile)
     oracle = DfOracle(fixture)
     reference = oracle.evaluate(fixture["centers"])

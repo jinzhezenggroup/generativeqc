@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <stdexcept>
@@ -7,6 +8,7 @@
 #include "dft/cuda_ks_wb97mv_ecp_nuclear.hpp"
 #include "dft/cuda_ks_wb97mv_model.hpp"
 #include "response/ecp_density.cuh"
+#include "runtime/resource_cuda.cuh"
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::dft {
@@ -32,6 +34,40 @@ struct Range {
   const double* pointer{};
   std::size_t bytes{};
 };
+struct Staging {
+  std::size_t bytes{}, terms{}, total{}, sum{}, status{}, sum_bytes{}, sum_terms{};
+};
+std::vector<unsigned> ecp_centers(const core::System& system) {
+  std::vector<unsigned> centers;
+  for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
+    if (system.atoms[atom].ecp_core) centers.push_back(static_cast<unsigned>(atom));
+  return centers;
+}
+Staging plan_staging(const integrals::CudaEcpNuclearShape& shape, unsigned spins,
+                     integrals::CudaEcpNuclearOptions& options) {
+  Staging staging;
+  const auto reserve = [&](std::size_t count, std::size_t size) {
+    const auto offset = staging.bytes, extra = product(count, size);
+    require(extra <= SIZE_MAX - 255 && staging.bytes <= SIZE_MAX - extra - 255,
+            "ECP staging alignment overflow");
+    staging.bytes = (staging.bytes + extra + 255) / 256 * 256;
+    return offset;
+  };
+  const maps::Extents extents{shape.nao, spins};
+  check(maps::workspace_total(extents, staging.sum_bytes));
+  require(
+      maps::work_total(extents, staging.sum_terms) && staging.sum_terms <= options.max_affine_terms,
+      "ECP physical spin sum exceeds affine work budget");
+  staging.terms = reserve(shape.terms, sizeof(core::EcpTerm));
+  staging.total = reserve(product(2, product(shape.nao, shape.nao)), sizeof(double));
+  staging.sum = reserve(staging.sum_bytes, 1);
+  staging.status = reserve(1, sizeof(int));
+  require(staging.bytes < options.max_workspace_bytes, "ECP staging exhausts device budget");
+  options.max_workspace_bytes -= staging.bytes;
+  options.max_contraction_affine_terms =
+      std::min(options.max_contraction_affine_terms, options.max_affine_terms - staging.sum_terms);
+  return staging;
+}
 __global__ void symmetric_spins(const double* density, std::size_t nao, unsigned spins,
                                 double absolute, double relative, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < spins * nao * nao;
@@ -66,7 +102,7 @@ struct CudaKsWb97mvEcpNuclear::Impl {
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
-    if (arena) (void)cudaFree(arena);
+    if (arena) (void)runtime::resource_cuda_free(arena);
   }
   template <class Value = double>
   Value* at(std::size_t offset) {
@@ -81,7 +117,7 @@ struct CudaKsWb97mvEcpNuclear::Impl {
       if (methods::detail::dft_cuda_resident_fock_sources(self.batch, self.item, self.expected,
                                                           current,
                                                           detail) != GENERATIVEQC_STATUS_SUCCESS ||
-          current != self.fock || !cuda_ks_wb97mv_model_matches(self.expected, current) ||
+          current != self.fock || !cuda_ks_hessian_model_matches(self.expected, current) ||
           methods::detail::dft_cuda_resident_orbital_frame(self.batch, self.item, self.expected,
                                                            current_frame,
                                                            detail) != GENERATIVEQC_STATUS_SUCCESS ||
@@ -153,6 +189,18 @@ struct CudaKsWb97mvEcpNuclear::Impl {
 CudaKsWb97mvEcpNuclear::CudaKsWb97mvEcpNuclear() = default;
 CudaKsWb97mvEcpNuclear::~CudaKsWb97mvEcpNuclear() = default;
 
+std::size_t CudaKsWb97mvEcpNuclear::mandatory_workspace(const core::System& system,
+                                                        const CudaWb97mvGridShape& shape,
+                                                        integrals::CudaEcpNuclearOptions options) {
+  const integrals::CudaEcpNuclearShape source{shape.atoms, shape.primitives, shape.nao,
+                                              system.ecp_terms.size()};
+  const auto staging = plan_staging(source, shape.spins, options);
+  options.allow_validation = false;
+  std::size_t workspace{};
+  check(integrals::cuda_ecp_nuclear_workspace(source, ecp_centers(system), options, workspace));
+  return workspace + staging.bytes;
+}
+
 generativeqc_status CudaKsWb97mvEcpNuclear::prepare(methods::PreparedBatch& batch, std::size_t item,
                                                     const CudaKsFinalStateToken& expected,
                                                     const integrals::CudaEcpNuclearOptions& options,
@@ -166,8 +214,8 @@ generativeqc_status CudaKsWb97mvEcpNuclear::prepare(methods::PreparedBatch& batc
     status =
         methods::detail::dft_cuda_resident_fock_sources(batch, item, expected, owner->fock, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    require(cuda_ks_wb97mv_model_matches(expected, owner->fock),
-            "ECP source requires the complete native WB97M-V model");
+    require(cuda_ks_hessian_model_matches(expected, owner->fock),
+            "ECP source requires a matched native stationary KS model");
     status = methods::detail::dft_cuda_resident_orbital_frame(batch, item, expected, owner->frame,
                                                               detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -183,9 +231,7 @@ generativeqc_status CudaKsWb97mvEcpNuclear::prepare(methods::PreparedBatch& batc
     cudaStreamCaptureStatus capture{};
     check(cudaStreamIsCapturing(owner->stream, &capture));
     require(capture == cudaStreamCaptureStatusNone, "ECP source preparation cannot capture");
-    std::vector<unsigned> centers;
-    for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
-      if (system.atoms[atom].ecp_core) centers.push_back(static_cast<unsigned>(atom));
+    const auto centers = ecp_centers(system);
     owner->shape = {shape.atoms, shape.primitives, shape.nao, system.ecp_terms.size()};
     owner->host_terms = system.ecp_terms.data();
     owner->spins = shape.spins;
@@ -196,40 +242,40 @@ generativeqc_status CudaKsWb97mvEcpNuclear::prepare(methods::PreparedBatch& batc
     owner->spin_bytes = product(product(owner->matrix, shape.spins), sizeof(double));
     owner->basis_bytes =
         product(3 * shape.atoms + 2 * shape.primitives + 16 * shape.nao, sizeof(double));
-    std::size_t bytes{};
-    check(integrals::cuda_ecp_nuclear_workspace(owner->shape, centers, options, bytes));
-    const auto reserve = [&](std::size_t count, std::size_t size) {
-      const auto offset = bytes, extra = product(count, size);
-      require(extra <= SIZE_MAX - 255 && bytes <= SIZE_MAX - extra - 255,
-              "ECP staging alignment overflow");
-      bytes = (bytes + extra + 255) / 256 * 256;
-      return offset;
+    auto source_options = options;
+    const auto staging = plan_staging(owner->shape, shape.spins, source_options);
+    std::size_t workspace_bytes{};
+    const auto allocate = [&] {
+      check(integrals::cuda_ecp_nuclear_workspace(owner->shape, centers, source_options,
+                                                  workspace_bytes));
+      owner->bytes = workspace_bytes + staging.bytes;
+      return runtime::resource_cuda_malloc(&owner->arena, owner->bytes);
     };
-    const auto workspace_bytes = bytes;
-    const auto terms_offset = reserve(system.ecp_terms.size(), sizeof(core::EcpTerm));
-    owner->total_offset = reserve(product(2, owner->matrix), sizeof(double));
-    const maps::Extents extents{shape.nao, shape.spins};
-    check(maps::workspace_total(extents, owner->sum_bytes));
-    require(
-        maps::work_total(extents, owner->sum_terms) && owner->sum_terms <= options.max_affine_terms,
-        "ECP physical spin sum exceeds affine work budget");
-    owner->sum_offset = reserve(owner->sum_bytes, 1);
-    owner->status_offset = reserve(1, sizeof(int));
-    require(bytes <= options.max_workspace_bytes, "ECP source plus staging exceeds device budget");
-    owner->bytes = bytes;
-    check(cudaMalloc(&owner->arena, bytes));
-    auto* terms = owner->at<core::EcpTerm>(terms_offset);
+    auto allocation = allocate();
+    if (allocation == cudaErrorMemoryAllocation && source_options.allow_validation) {
+      (void)cudaGetLastError();
+      source_options.allow_validation = false;
+      allocation = allocate();
+    }
+    if (allocation == cudaErrorMemoryAllocation) {
+      detail = "native ECP device workspace allocation failed";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+    check(allocation);
+    owner->sum_bytes = staging.sum_bytes;
+    owner->sum_terms = staging.sum_terms;
+    owner->total_offset = workspace_bytes + staging.total;
+    owner->sum_offset = workspace_bytes + staging.sum;
+    owner->status_offset = workspace_bytes + staging.status;
+    auto* terms = owner->at<core::EcpTerm>(workspace_bytes + staging.terms);
     check(cudaMemcpyAsync(terms, system.ecp_terms.data(),
                           system.ecp_terms.size() * sizeof(core::EcpTerm), cudaMemcpyHostToDevice,
                           owner->stream));
     check(cudaStreamSynchronize(owner->stream));
     const integrals::CudaEcpNuclearReference reference{
         lease.basis, terms, lease.device_id, owner->stream, Impl::authenticate, owner.get()};
-    check(owner->response.prepare(owner->shape, centers, options, reference, owner->arena,
+    check(owner->response.prepare(owner->shape, centers, source_options, reference, owner->arena,
                                   workspace_bytes));
-    require(owner->response.work().contraction_affine_terms <=
-                options.max_affine_terms - owner->sum_terms,
-            "ECP contraction plus spin sum exceeds affine work budget");
     impl_ = std::move(owner);
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {

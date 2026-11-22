@@ -90,7 +90,7 @@ struct GridSpec {};
 std::size_t grid_point_count(const core::System&, const GridSpec&) { return 4096; }
 std::size_t cuda_resident_grid_bytes(std::size_t, std::size_t) { return 1024; }
 std::size_t cuda_quadrature_bytes(std::size_t, std::size_t) { return 512; }
-template<class... Arguments> std::size_t cuda_ks_state_bytes(Arguments&&...) { return 512; }
+std::size_t cuda_ks_rebuild_state_bytes(std::size_t, unsigned, unsigned, bool) { return 512; }
 enum class CudaXcAoPrecision { Fp64 };
 struct Layout { std::size_t device_bytes{512}; };
 template<class... Arguments> Layout cuda_xc_layout_shape(Arguments&&...) { return {}; }

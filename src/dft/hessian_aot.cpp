@@ -1,6 +1,7 @@
 #include "dft/hessian_aot.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace generativeqc::dft::hessian_aot {
@@ -18,6 +19,14 @@ const Program* find(std::string_view name) noexcept {
       inventory.begin(), inventory.end(), name,
       [](const Program& program, std::string_view key) { return program.name < key; });
   return found != inventory.end() && found->name == name ? &*found : nullptr;
+}
+
+bool Program::accepts_omega(double omega) const noexcept {
+  return kind == Kind::integral && integral &&
+         (signature.omega == omega ||
+          (integral_at_omega &&
+           (signature.radial == "long_range" || signature.radial == "short_range") &&
+           std::isfinite(omega) && omega > 0));
 }
 
 cudaError_t launch_array(std::string_view name, const double* inputs, std::size_t lanes,
@@ -59,13 +68,24 @@ cudaError_t launch_integral(std::string_view name, const double* records, std::s
                             const long long* atoms, const double* direction, double* outputs,
                             int* status, cudaStream_t stream) noexcept {
   const auto* program = find(name);
-  if (!program || program->kind != Kind::integral || !program->integral)
-    return cudaErrorNotSupported;
-  if (!count || !panel_fits(program->record_stride, count) || !records || !atoms || !direction ||
+  if (!program) return cudaErrorNotSupported;
+  return launch_integral_at_omega(*program, program->signature.omega, records, count, atoms,
+                                  direction, outputs, status, stream);
+}
+
+cudaError_t launch_integral_at_omega(const Program& program, double omega, const double* records,
+                                     std::size_t count, const long long* atoms,
+                                     const double* direction, double* outputs, int* status,
+                                     cudaStream_t stream) noexcept {
+  if (!program.accepts_omega(omega)) return cudaErrorNotSupported;
+  if (!count || !panel_fits(program.record_stride, count) || !records || !atoms || !direction ||
       !outputs || !status)
     return cudaErrorInvalidValue;
+  if (omega != program.signature.omega)
+    return static_cast<cudaError_t>(program.integral_at_omega(omega, records, count, atoms,
+                                                              direction, outputs, status, stream));
   return static_cast<cudaError_t>(
-      program->integral(records, count, atoms, direction, outputs, status, stream));
+      program.integral(records, count, atoms, direction, outputs, status, stream));
 }
 
 }  // namespace generativeqc::dft::hessian_aot

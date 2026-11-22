@@ -4,12 +4,15 @@
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_wb97mv_model.hpp"
 #include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
+#include "dft/semilocal_family.hpp"
 #include "methods/dft_method.hpp"
+#include "runtime/resource_cuda.cuh"
 #include "scf/fock_prepared.hpp"
 
 namespace generativeqc::dft {
 namespace {
 void check(cudaError_t error) {
+  if (error == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
 }
 void require(bool valid, const char* message) {
@@ -29,7 +32,7 @@ struct CudaKsWb97mvNuclearJk::Impl {
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
-    if (arena) (void)cudaFree(arena);
+    if (arena) (void)runtime::resource_cuda_free(arena);
   }
   static cudaError_t authenticate(void* context) noexcept {
     auto& self = *static_cast<Impl*>(context);
@@ -62,8 +65,32 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     status = methods::detail::dft_cuda_resident_fock_sources(batch, item, expected, candidate->fock,
                                                              detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    require(cuda_ks_wb97mv_model_matches(expected, candidate->fock),
-            "J/K nuclear response requires the complete native WB97M-V model");
+    require(cuda_ks_hessian_model_matches(expected, candidate->fock),
+            "J/K nuclear response requires a matched native Hessian Fock model");
+    auto bound_options = options;
+    require(!options.range_exchange, "native nuclear J/K binds exchange from its live KS state");
+    if (!candidate->fock.correction) {
+      const auto& exchange = candidate->fock.primary->strategy().spec.exchange;
+      const auto fraction = -exchange.coefficient * (candidate->fock.spins == 1 ? 2 : 1);
+      require(exchange.present ? (options.part == CudaWb97mvJkPart::full_hybrid &&
+                                  options.full_exchange_fraction == fraction)
+                               : options.part == CudaWb97mvJkPart::coulomb,
+              "native nuclear source does not match the full-range Fock identity");
+    } else {
+      require(!candidate->fock.fitted_range && options.part != CudaWb97mvJkPart::full_hybrid,
+              "exact nuclear J/K cannot substitute for an accepted fitted LR correction");
+      if (expected.identity.model.functional == semilocal_family_code(SemilocalFamily::Pbe)) {
+        const auto& primary = candidate->fock.primary->strategy().spec;
+        const bool fitted = primary.coulomb.approximation == scf::FockApproximation::DensityFitted;
+        require(options.part == (fitted ? CudaWb97mvJkPart::correction : CudaWb97mvJkPart::exact),
+                "native range-PBE response requires the complete exact source for its primary");
+        const auto& correction = candidate->fock.correction->spec.exchange;
+        const double occupation = candidate->fock.spins == 1 ? 2.0 : 1.0;
+        bound_options.range_exchange = CudaWb97mvJkOptions::RangeExchange{
+            primary.exchange.present ? -occupation * primary.exchange.coefficient : 0.0,
+            -occupation * correction.coefficient, correction.omega};
+      }
+    }
     require(
         candidate->fock.primary->strategy().spec.coulomb.approximation !=
                 scf::FockApproximation::DensityFitted ||
@@ -100,13 +127,13 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     const CudaWb97mvJkShape integral_shape{shape.atoms, shape.primitives, shape.nao, shape.spins};
     std::size_t bytes{};
     const auto admission =
-        cuda_wb97mv_jk_workspace(integral_shape, shells, options, bytes, &detail);
+        cuda_wb97mv_jk_workspace(integral_shape, shells, bound_options, bytes, &detail);
     if (admission != cudaSuccess) throw std::runtime_error("J/K workspace admission: " + detail);
-    check(cudaMalloc(&candidate->arena, bytes));
+    check(runtime::resource_cuda_malloc(&candidate->arena, bytes));
     const CudaWb97mvJkReference reference{lease.basis, device, candidate->stream,
                                           Impl::authenticate, candidate.get()};
-    check(candidate->response.prepare(integral_shape, shells, options, reference, candidate->arena,
-                                      bytes));
+    check(candidate->response.prepare(integral_shape, shells, bound_options, reference,
+                                      candidate->arena, bytes));
     impl_ = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

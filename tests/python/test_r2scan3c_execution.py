@@ -278,6 +278,7 @@ def test_cuda_r2scan3c_spd_force_reports_bounded_resource_work(
     calculator = Calculator(
         method="r2scan-3c-rks",
         device="cuda",
+        precision="auto",  # Deliberately exercise the incumbent diagnostic owner.
         ks_options=KsOptions(grid=GRID),
         max_iterations=200,
         energy_tolerance=1e-12,
@@ -515,7 +516,7 @@ def test_cuda_r2scan3c_spd_total_matches_independent_analytic_oracle(
         ) as basis,
     ):
         item = batch.execute(strict=True, properties=("energy", "forces")).items[0]
-        state = StationaryKsState.from_native(batch, basis)
+        state = StationaryKsState.from_native(batch, basis, allow_reference_domain=True)
         try:
             electronic_energy, electronic_gradient = (
                 independent_semilocal_total_gradient(
@@ -733,7 +734,9 @@ def test_cuda_r2scan3c_df_spherical_total_force_matches_independent_reference() 
 
     def reference(batch: typing.Any, atoms: typing.Any) -> tuple[float, np.ndarray]:
         with NativeAO(atoms, basis=basis_spec, representation="spherical") as basis:
-            state = StationaryKsState.from_native(batch, basis)
+            state = StationaryKsState.from_native(
+                batch, basis, allow_reference_domain=True
+            )
             try:
                 coulomb, exchange, threshold = state._source.fock_provider_proof()
                 assert coulomb == "density-fitted" and exchange is None

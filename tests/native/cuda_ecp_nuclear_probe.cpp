@@ -71,11 +71,19 @@ void host_only() {
   const CudaEcpNuclearShape shape{2, 2, 2, 3};
   const std::array<unsigned, 1> centers{0};
   std::size_t bytes{};
+  CudaEcpNuclearOptions baseline;
+  baseline.allow_validation = false;
+  check(cuda_ecp_nuclear_workspace(shape, centers, baseline, bytes));
+  const auto mandatory = bytes;
   check(cuda_ecp_nuclear_workspace(shape, centers, {}, bytes));
-  const auto admitted = bytes;
+  require(bytes > mandatory, "optional confirmation did not reserve its larger grid");
+  CudaEcpNuclearOptions limited;
+  limited.max_workspace_bytes = mandatory;
+  check(cuda_ecp_nuclear_workspace(shape, centers, limited, bytes));
+  require(bytes == mandatory, "confirmation displaced the incumbent pair");
   for (unsigned gate = 0; gate < 5; ++gate) {
     CudaEcpNuclearOptions options;
-    if (gate == 0) options.max_workspace_bytes = admitted - 1;
+    if (gate == 0) options.max_workspace_bytes = mandatory - 1;
     if (gate == 1) options.max_terms = 1;
     if (gate == 2) options.max_ao_evaluations = 1;
     if (gate == 3) options.max_affine_terms = 1;
@@ -154,7 +162,10 @@ void run(const char* input_path, const char* output_path) {
                                     Owner::authenticate,
                                     &owner};
   std::size_t bytes{};
-  check(cuda_ecp_nuclear_workspace(shape, centers, {}, bytes));
+  // A passing request must work even when the caller reserves only the pair.
+  CudaEcpNuclearOptions sizing;
+  sizing.allow_validation = !header[6] && header[5] != 6;
+  check(cuda_ecp_nuclear_workspace(shape, centers, sizing, bytes));
   auto* arena = storage.allocate(bytes / sizeof(double));
   if (header[5] == 6) --bytes;
   if (header[5] == 7)
@@ -191,9 +202,13 @@ void run(const char* input_path, const char* output_path) {
                        matrix_sentinel.size() * sizeof(double), cudaMemcpyHostToDevice));
       require(response.values(direction, values, storage.stream) == cudaErrorInvalidValue &&
                   download(value_storage, matrix_sentinel.size()) == matrix_sentinel &&
-                  response.work().ao_evaluations == 2 * response.work().ao_evaluations_per_action &&
-                  !response.work().value_actions && !response.work().contraction_actions,
-              "unconverged ECP quadrature published values or skipped numerical work");
+                  response.work().validation.radial_layers &&
+                  !response.work().validation.passed_actions && !response.work().value_actions &&
+                  !response.work().contraction_actions,
+              "unconfirmed ECP quadrature published values or skipped validation");
+    } else {
+      require(!response.work().validation.radial_layers,
+              "invalid inputs triggered quadrature confirmation");
     }
     std::cout << "{\"action_rejected\":true}\n";
     return;

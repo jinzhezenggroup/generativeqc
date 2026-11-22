@@ -43,14 +43,37 @@ def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None
     return selected.value
 
 
+def cuda_r2scan3c_resource_graph(graph: Any, backend: str) -> bool:
+    """Match the native composite identity rather than a descriptive label."""
+    from generativeqc_compiler.method import resolve_method
+
+    return (
+        backend == "cuda"
+        and graph.identifier == "R2SCAN-3c"
+        and graph.identity == resolve_method("R2SCAN-3c", spin=graph.spin).identity
+    )
+
+
+def has_d4_correction(graph: Any) -> bool:
+    """Identify D4 on a resolved graph, independently of its carrier name."""
+    from generativeqc_compiler.method import D4Spec, DispersionCorrectionPrimitive
+
+    return graph is not None and any(
+        isinstance(node, DispersionCorrectionPrimitive)
+        and isinstance(node.specification, D4Spec)
+        for node in graph.primitives
+    )
+
+
 def select_resource_program(calculator: Any, electronic_request: Any) -> bytes | None:
     """Select a complete program only with matching correction capacity ownership.
 
     Missing additive resource support retains the standalone compatibility
     owner. After positive selection, query/preparation errors are authoritative.
     This does not extend the global planner's electronic or correction domains.
-    CUDA additionally needs the existing native stationary-capacity receipt:
-    compatibility forces would otherwise allocate a second correction owner.
+    CUDA force plans need the native stationary receipt; compatibility forces
+    would otherwise need a second correction owner. A CUDA named energy-only
+    plan cannot be promoted to forces on the prepared owner.
     """
     from generativeqc_compiler.method import (
         D3Spec,
@@ -59,9 +82,17 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
         GeometricCounterpoisePrimitive,
     )
 
-    graph = calculator._dispersion_method_ir
-    if graph is None or any(
+    graph = calculator._resource_dispersion_graph()
+    if graph is None:
+        return None
+    composite = any(
         isinstance(node, GeometricCounterpoisePrimitive) for node in graph.primitives
+    )
+    library = calculator._library
+    if composite and not (
+        cuda_r2scan3c_resource_graph(graph, calculator._device_name)
+        and getattr(calculator, "_cuda_r2scan_stationary", False)
+        and hasattr(library, "generativeqc_resource_ks_gcp_cuda_v1")
     ):
         return None
     corrections = [
@@ -72,10 +103,9 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
     if len(corrections) != 1 or not isinstance(corrections[0], (D3Spec, D4Spec)):
         return None
     family = "d4" if isinstance(corrections[0], D4Spec) else "d3"
-    library = calculator._library
+    energy_only = electronic_request.identity.observables == ("energy",)
     if (
-        calculator._dispersion_method_ir is None
-        or calculator._precision_mode != _native.PRECISION_FP64
+        calculator._precision_mode != _native.PRECISION_FP64
         or not hasattr(library, f"generativeqc_ks_{family}_resource_query_v1")
         or (
             calculator._device_name == "cuda"
@@ -85,9 +115,12 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
                     "generativeqc_batch_prepare_named_ks_with_device_resources_v1",
                 )
                 or not electronic_request.candidates
-                or any(
-                    "cuda_stationary_cache" not in dict(candidate.decisions)
-                    for candidate in electronic_request.candidates
+                or (
+                    not energy_only
+                    and any(
+                        "cuda_stationary_cache" not in dict(candidate.decisions)
+                        for candidate in electronic_request.candidates
+                    )
                 )
             )
         )
@@ -95,7 +128,7 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
         return None
     return select_named_program(
         library,
-        calculator._dispersion_method_ir,
+        graph,
         _native.BACKEND_CUDA
         if calculator._device_name == "cuda"
         else _native.BACKEND_CPU_REFERENCE,

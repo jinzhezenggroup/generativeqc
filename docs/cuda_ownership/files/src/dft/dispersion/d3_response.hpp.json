@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/dispersion/d3_response.hpp",
+  "role": "scientific",
+  "subsystem": "d3_dispersion",
+  "reason": "Bounded native D3 directional response reuses generated radial jets and reference arithmetic. The retained local contraction differentiates the same zero/BJ, ATM and switching branches without materializing a dense Hessian.",
+  "regions": []
+}

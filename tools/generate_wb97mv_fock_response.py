@@ -22,7 +22,8 @@ def generate() -> str:
     The affine schedule executes primal validation dependencies too. Count all
     nodes, including those dependencies, rather than advertising only the size
     of its output or the contraction one might implement in a future schedule.
-    These are scalar term visits, not measured FLOPs or an endpoint benchmark.
+    Count scalar visits and padded matrix product slots separately. Neither
+    count is a measured FLOP rate or an endpoint benchmark.
     """
     programs = fock_maps()
     text = [
@@ -30,6 +31,8 @@ def generate() -> str:
             programs,
             namespace="generativeqc_wb97mv_fock_maps",
             extents={"orbital": "nao", "auxiliary": "naux", "spin": "spins"},
+            tiled_matrix_products=True,
+            reuse_intermediate_storage=True,
         ),
         "namespace generativeqc_wb97mv_fock_maps {",
     ]
@@ -49,6 +52,7 @@ def generate() -> str:
             programs,
             namespace="generativeqc_wb97mv_fock_maps",
             extents={"orbital": "nao", "auxiliary": "naux", "spin": "spins"},
+            tiled_matrix_products=True,
         )
     )
     return "\n".join(text) + "\n"

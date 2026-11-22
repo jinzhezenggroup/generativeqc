@@ -124,6 +124,11 @@ std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_h
                                 bool exact_exchange = false, bool range_correction = false,
                                 bool incremental_direct_jk = false);
 
+/** State capacity for a prepared batch that can rebuild after a policy change.
+ * Exchange denotes a K matrix in the state, independent of the Fock provider. */
+std::size_t cuda_ks_rebuild_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
+                                        bool exchange, bool range_correction = false);
+
 /** Exact restricted D=2CC^T factor owned by the KS final-state arena. Unlike
  * fitted U, this lease survives another radial provider's scratch writes. It
  * expires with the method token and must be ordered on its producer stream. */
@@ -366,8 +371,8 @@ class CudaKsPlan {
    * the same canonical validation as resident_final_orbital_frame; host-unfused
    * owners without a resident XC plan fail closed, without staging a copy. */
   generativeqc_status resident_final_grid(const CudaKsFinalStateToken& expected,
-                                          CudaKsResidentGridBinding& binding,
-                                          std::string& detail) const;
+                                          CudaKsResidentGridBinding& binding, std::string& detail,
+                                          CudaKsGridRole role = CudaKsGridRole::primary) const;
   /** Reuse the shared physical/canonical resident proof and then borrow C/eps.
    * Stale/capturing/failed states never publish a partial frame binding. */
   generativeqc_status prepare_resident_final_orbital_frame(

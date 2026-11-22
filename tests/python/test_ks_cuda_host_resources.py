@@ -266,17 +266,21 @@ def test_native_refusal_or_coherently_corrupt_publication_never_falls_back(
         )
 
 
-def test_nonlocal_subbudget_and_missing_symbol_remain_explicit(
+def test_host_fleet_does_not_interpret_cuda_nonlocal_subbudget(
     library: typing.Any,
 ) -> None:
-    """A discovered inventory does not waive a caller's independent provider cap."""
+    """CPU owns its cap here; CUDA checks against its actual pair arena instead."""
     settings = options(nonlocal_correlation=True)
     settings["model"].nonlocal_memory_budget_bytes = 1
     items = [topology(2, 2, 0, 1, 64)]
     with pytest.raises(ValueError, match="nonlocal_memory_budget_bytes"):
         resources_ks._native_host_fleet_inventory(
-            library, items, backend="cuda", **settings
+            library, items, backend="cpu", **settings
         )
+    cuda_host = resources_ks._native_host_fleet_inventory(
+        library, items, backend="cuda", **settings
+    )
+    assert cuda_host is not None and cuda_host[0][0]["nonlocal_provider"] > 1
     assert (
         resources_ks._native_host_fleet_inventory(
             LibraryView(library, "generativeqc_resource_ks_cuda_host_fleet_v1"),

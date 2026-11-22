@@ -30,6 +30,9 @@
 #include "dft/ks_stopping_policy.hpp"
 #include "dft/ks_tile_policy.hpp"
 #include "dft/mixed_precision_warmup.hpp"
+#include "dft/r2scan_cuda_selection.hpp"
+#include "dft/r2scan_rvv10_model.hpp"
+#include "dft/split_hybrid_cuda_selection.hpp"
 #include "dft/xc.hpp"
 #include "generated_libxc_semilocal_cuda_registry.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -296,6 +299,13 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
                        incremental_direct_jk, cuda_ks_incremental_diis_gram_requested(n, history),
                        scf::diis_work_requested(), nullptr),
       n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+}
+
+std::size_t cuda_ks_rebuild_state_bytes(std::size_t nao, unsigned spins, unsigned history,
+                                        bool exchange, bool range_correction) {
+  const auto state = cuda_ks_state_bytes(nao, spins, history, exchange, range_correction);
+  // A later geometry rebuild may enable the history-square DIIS diagnostic.
+  return sum(state, product(sizeof(double), product(history, history)));
 }
 
 std::size_t cuda_ks_point_batch_budget(const CudaXcLayout& layout) {
@@ -1744,16 +1754,25 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
     if (nonlocal_correlation) {
       const auto* family = semilocal_family_metadata_from_code(functional);
-      if (!family || !family->native_nonlocal_correlation)
+      const auto& parameters = nonlocal_correlation->parameters();
+      const bool revised =
+          family && r2scan_rvv10_model_matches(
+                        family->family, parameters, options.semilocal_exchange_scale,
+                        options.semilocal_correlation_scale, has_exchange || has_range_correction);
+      if (!family || (!family->native_nonlocal_correlation && !revised))
         throw std::invalid_argument("CUDA KS nonlocal composition has no native family capability");
       device_nonlocal =
           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
-      const auto expected_domain = family->molecular_nonlocal_domain
+      const auto expected_domain = family->molecular_nonlocal_domain || revised
                                        ? nlc::Vv10DensityDomain::MolecularV1
                                        : nlc::Vv10DensityDomain::StrictPositive;
-      if (device_nonlocal &&
-          (!family->cuda_nonlocal_correlation || nonlocal_domain != expected_domain ||
-           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10))
+      if (revised && (!device_nonlocal || point_functional() != kCudaR2scanVariationalDomain ||
+                      nonlocal_grid.spec().partition_iterations != 3))
+        throw std::invalid_argument(
+            "r2SCAN+rVV10 requires the FP64 variational point domain and partition order 3");
+      if (device_nonlocal && (nonlocal_domain != expected_domain ||
+                              (!revised && (!family->cuda_nonlocal_correlation ||
+                                            parameters.variant != nlc::Vv10Variant::vv10))))
         throw std::invalid_argument(
             "device-resident CUDA nonlocal KS lacks a qualified family/domain capability");
       if (!device_nonlocal &&
@@ -1820,8 +1839,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (resident_grid && resident_grid.device != device)
       throw std::invalid_argument("CUDA KS resident grid belongs to a different device");
     const bool borrow_resident_grid = static_cast<bool>(resident_grid);
-    xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
-                               options.semilocal_exchange_scale,
+    xc_layout = cuda_xc_layout(basis, grid, point_functional(), spins == 2, tile,
+                               CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
     if (options.nonlocal_grid)
       nonlocal_xc_layout = cuda_xc_layout(
@@ -1829,7 +1848,37 @@ struct CudaKsPlan::Impl : KsStateStorage {
           CudaXcAoPrecision::Fp64, 0.0, 0.0, static_cast<bool>(nonlocal_grid.cuda_view()));
     const auto fock_precision = scf::cuda_fock_precision_capabilities(strategy);
     const bool application_precision = options.application_precision_budget[0] > 0.0;
-    bool fitted_xc_budget = false;
+    const bool fitted_local_rks =
+        options.precision_mode == GENERATIVEQC_PRECISION_AUTO && fitted_coulomb &&
+        !fitted_exchange && !has_exchange && !has_range_correction && !nonlocal_correlation &&
+        spins == 1 &&
+        options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
+        options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
+        provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    const bool fitted_pbe =
+        fitted_local_rks && functional == semilocal_family_code(SemilocalFamily::Pbe);
+    const bool ordinary_fitted_auto = fitted_pbe && !application_precision;
+    unsigned maximum_angular = 0;
+    if (application_precision || ordinary_fitted_auto)
+      for (const auto& shell : provider.system().shells)
+        maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+    const auto aos = (application_precision || ordinary_fitted_auto)
+                         ? molecule::ao_count(provider.system())
+                         : 0U;
+    const auto atoms = provider.system().atoms.size();
+    // Share the bounded XC-only proposal with the application-budget route.
+    // Ordinary AUTO can fall back to strict execution of the same fitted model;
+    // it never receives the application's relaxed stationarity allowance.
+    const bool fitted_xc_warmup =
+        fitted_local_rks && grid_spec == default_grid_spec() && aos >= 24 && aos <= 1200 &&
+        atoms >= 2 && atoms <= 96 && maximum_angular <= 2 &&
+        (ordinary_fitted_auto ||
+         admit_application_df_xc_budget(
+             options.application_precision_budget,
+             fitted_pbe || functional == semilocal_family_code(SemilocalFamily::R2scan)));
+    budget_fock = fitted_xc_warmup;
     if (application_precision) {
       for (const auto* control :
            {"GENERATIVEQC_EXPERIMENTAL_PBE_POINT_FP32",
@@ -1838,36 +1887,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (std::getenv(control))
           throw std::invalid_argument(
               "application precision cannot inherit experimental overrides");
-      unsigned maximum_angular = 0;
-      for (const auto& shell : provider.system().shells)
-        maximum_angular = std::max(maximum_angular, shell.angular_momentum);
-      // DF has no mixed J provider. A separate local pure-J qualification
-      // admits only XC matrix products, with the existing bounded proposal and
-      // strict physical closure. Never report a nonexistent FP32 DF recurrence.
-      fitted_xc_budget =
-          options.precision_mode == GENERATIVEQC_PRECISION_AUTO && fitted_coulomb &&
-          !fitted_exchange && !has_exchange && !has_range_correction && !nonlocal_correlation &&
-          grid_spec == default_grid_spec() &&
-          (functional == semilocal_family_code(SemilocalFamily::Pbe) ||
-           functional == semilocal_family_code(SemilocalFamily::R2scan)) &&
-          options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
-          molecule::ao_count(provider.system()) >= 24 &&
-          molecule::ao_count(provider.system()) <= 1200 && provider.system().atoms.size() >= 2 &&
-          provider.system().atoms.size() <= 96 && maximum_angular <= 2 &&
-          provider.system().ecp_terms.empty() &&
-          admit_application_df_xc_budget(
-              options.application_precision_budget,
-              spins == 1 && options.xc_execution_schedule ==
-                                scf::ScfOptions::XcExecutionSchedule::DeviceFused);
-      budget_fock =
-          options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-          (fitted_xc_budget ||
-           admit_application_fock(
-               options.application_precision_budget, molecule::ao_count(provider.system()),
-               provider.system().atoms.size(), maximum_angular,
-               spins == 1 && options.xc_execution_schedule ==
-                                 scf::ScfOptions::XcExecutionSchedule::DeviceFused,
-               provider.system().ecp_terms.empty(), fock_precision.coulomb));
+      budget_fock = options.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
+                    (fitted_xc_warmup ||
+                     admit_application_fock(
+                         options.application_precision_budget, aos, atoms, maximum_angular,
+                         spins == 1 && options.xc_execution_schedule ==
+                                           scf::ScfOptions::XcExecutionSchedule::DeviceFused,
+                         provider.system().ecp_terms.empty(), fock_precision.coulomb));
       budget_stationarity =
           budget_fock && (options.energy_tolerance > 1e-10 || options.density_tolerance > 1e-8 ||
                           options.screening_tolerance > 1e-12);
@@ -1905,14 +1931,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
       experimental_mixed_history = std::strcmp(selected, "1") == 0;
     }
     precision_schedule = resolve_cuda_ks_precision_schedule(
-        application_precision && !experimental_mixed_point && !budget_fock
+        ((application_precision && !experimental_mixed_point && !budget_fock) ||
+         (ordinary_fitted_auto && !fitted_xc_warmup && !experimental_mixed_point))
             ? std::optional<generativeqc_precision_mode>{GENERATIVEQC_PRECISION_FP64}
             : options.precision_mode,
         xc_layout.fast_paths, fitted_coulomb, nonlocal_correlation != nullptr,
         experimental_mixed_point, experimental_mixed_contractions,
         budget_fock ? fock_precision : scf::CudaFockPrecisionCapabilities{}, has_range_correction,
         range_correction && scf::cuda_range_exchange_precision_capability(*range_correction),
-        fitted_xc_budget);
+        fitted_xc_warmup);
     if (precision_schedule.any_lower_precision()) {
       mixed_warmup =
           resolve_mixed_precision_warmup(std::getenv("GENERATIVEQC_KS_MIXED_SWITCH_RESIDUAL"),
@@ -2330,8 +2357,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       if (!host_unfused) {
         // Device-fused XC setup drains this same stream.
         xc = std::make_unique<CudaXcPlan>(
-            basis, grid, functional, spins == 2, tile, xc_arena, resource.xc_device_bytes, stream,
-            CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
+            basis, grid, point_functional(), spins == 2, tile, xc_arena, resource.xc_device_bytes,
+            stream, CudaXcAoPrecision::Fp64, options.semilocal_exchange_scale,
             options.semilocal_correlation_scale, borrow_resident_grid);
         if (options.nonlocal_grid) {
           resource.xc_device_bytes = sum(resource.xc_device_bytes, nonlocal_xc_layout.device_bytes);
@@ -4561,10 +4588,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // publishing convergence or a warm seed. Rejection resumes the intact
     // DIIS proposal and invalidates only the borrowed orbital scratch.
     // Provisional occupied Focks cannot certify or cache a canonical frame.
-    // Direct UKS needs the same proof as RI-K: do not replace an already
-    // canonical physical density by a destabilizing unextrapolated update.
+    // RI-J without exchange needs the same proof as RI-K and Direct UKS:
+    // a small DIIS density change does not certify the physical eigenframe.
     const bool canonical_final_probe =
-        !occupied_stage && (fitted_exchange || spins == 2) && !budget_fock &&
+        !occupied_stage && (fitted_coulomb || fitted_exchange || spins == 2) && !budget_fock &&
         !has_range_correction && !nonlocal_correlation &&
         !precision_schedule.any_lower_precision() && configured_chunk_width() == 1 &&
         provider.system().ecp_terms.empty() &&
@@ -4893,9 +4920,51 @@ struct CudaKsPlan::Impl : KsStateStorage {
     diis_work_published = true;
   }
 
+  /** A private XC launcher key; public family and permanent method identity are unchanged. */
+  std::uint32_t point_functional() const noexcept {
+    const auto split_domain = cuda_split_hybrid_variational_domain(functional);
+    if (split_domain && !range_correction && !nonlocal_correlation) {
+      const auto& system = grid.system();
+      const bool all_electron = system.ecp_terms.empty() &&
+                                std::none_of(system.atoms.begin(), system.atoms.end(),
+                                             [](const auto& atom) { return atom.ecp_core != 0; });
+      std::size_t maximum_angular = 0;
+      for (const auto& shell : system.shells)
+        maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+      // The Direct AOT Hessian covers spherical f, independent of the
+      // smaller force inventory. Keep the existing Cartesian SCF policy.
+      const bool angular_domain =
+          all_electron
+              ? (maximum_angular <= 2 || system.basis_representation == core::kSphericalBasis ||
+                 provider.strategy().spec.coulomb.approximation ==
+                     scf::FockApproximation::DensityFitted)
+              : cuda_split_hybrid_ecp_angular_domain(system, 3);
+      if (angular_domain &&
+          use_cuda_split_hybrid_variational(functional, options, provider.strategy(), spins,
+                                            grid_spec, maximum_angular))
+        return split_domain;
+    }
+    if (!is_semilocal_family(functional, SemilocalFamily::R2scan) ||
+        provider.strategy().spec.exchange.present || range_correction ||
+        (nonlocal_correlation &&
+         !r2scan_rvv10_model_matches(SemilocalFamily::R2scan, nonlocal_correlation->parameters(),
+                                     options.semilocal_exchange_scale,
+                                     options.semilocal_correlation_scale, false)))
+      return functional;
+    std::size_t maximum_angular = 0;
+    for (const auto& shell : grid.system().shells)
+      maximum_angular = std::max(maximum_angular, std::size_t{shell.angular_momentum});
+    return use_cuda_r2scan_variational(options, grid_spec, maximum_angular)
+               ? kCudaR2scanVariationalDomain
+               : functional;
+  }
+
   /** Domain follows the bound scientific program, not its transport family. */
   std::uint32_t point_domain_version() const {
     if (automatic_program) return automatic_program->domain_version;
+    const auto point = point_functional();
+    if (point == kCudaR2scanVariationalDomain || is_linked_cuda_split_hybrid_point(point))
+      return point;
     return generated::split_hybrid_registered(functional)
                ? 4U
                : semilocal_family_domain_version(semilocal_family_from_code(functional));
@@ -4923,6 +4992,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return identity;
   }
 
+  /** An AUTO owner may have lower-precision schedules and retained proposal
+   * storage. Only a completed full-target FP64 phase can lend the Fock. */
+  bool strict_physical_fock() const noexcept {
+    return (!precision_schedule.any_lower_precision() || strict_refinement) &&
+           !pending_mixed_coulomb && !pending_mixed_exchange && !pending_mixed_resident &&
+           !pending_mixed_density && !pending_mixed_point && !pending_mixed_contractions &&
+           !pending_mixed_range_exchange && !pending_mixed_range_resident &&
+           !pending_mixed_nonlocal && !pending_nonlocal_seed && !pending_nonlocal_frozen;
+  }
+
   const CudaKsFinalStateToken& token_reference() const {
     if (!final_state_ready || !output.converged || is_active || is_pending || is_failed ||
         !solve_epoch || !final_generation)
@@ -4934,7 +5013,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!cached_final_token ||
         cached_final_token->identity.determinant.solve_epoch != solve_epoch ||
         cached_final_token->identity.determinant.factor.density_generation != final_generation)
-      cached_final_token = CudaKsFinalStateToken{1, final_identity()};
+      cached_final_token =
+          CudaKsFinalStateToken{1, final_identity(), strict_physical_fock(), budget_stationarity};
     return *cached_final_token;
   }
 
@@ -5192,10 +5272,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // AUTO can propose mixed iterates and then close with fresh FP64 F[D].
     // The final proof consumes that strict frame; the historical proposal
     // schedule does not change its algebra or relax any token/numerical gate.
-    const bool strict_final_arithmetic =
-        !precision_schedule.any_lower_precision() || strict_refinement;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, full_range_global_hybrid, strict_final_arithmetic, full_range_coulomb_only);
+        n, spins, full_range_global_hybrid, expected.strict_physical_fock, full_range_coulomb_only);
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
@@ -5693,17 +5771,22 @@ generativeqc_status CudaKsPlan::resident_final_fock_sources(const CudaKsFinalSta
   CudaKsResidentOrbitalFrameBinding frame;
   const auto status = resident_final_orbital_frame(expected, frame, detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-  CudaKsResidentFockBinding candidate{frame.device_id,
-                                      &impl_->provider,
-                                      impl_->range_correction ? &*impl_->range_correction : nullptr,
-                                      impl_->hcore,
-                                      impl_->fock,
-                                      frame.nao,
-                                      frame.spins,
-                                      frame.stream,
-                                      frame.owner,
-                                      frame.solve_epoch,
-                                      frame.generation};
+  CudaKsResidentFockBinding candidate{
+      frame.device_id,
+      &impl_->provider,
+      impl_->range_correction ? &*impl_->range_correction : nullptr,
+      impl_->hcore,
+      impl_->fock,
+      frame.nao,
+      frame.spins,
+      frame.stream,
+      frame.owner,
+      frame.solve_epoch,
+      frame.generation,
+      impl_->range_correction && impl_->range_correction->spec.exchange.approximation ==
+                                     scf::FockApproximation::DensityFitted
+          ? impl_->range_provider
+          : nullptr};
   if (!candidate) {
     detail = "CUDA KS resident Fock sources are unavailable";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -5714,36 +5797,37 @@ generativeqc_status CudaKsPlan::resident_final_fock_sources(const CudaKsFinalSta
 
 generativeqc_status CudaKsPlan::resident_final_grid(const CudaKsFinalStateToken& expected,
                                                     CudaKsResidentGridBinding& binding,
-                                                    std::string& detail) const {
+                                                    std::string& detail,
+                                                    CudaKsGridRole role) const {
   binding = {};
   CudaKsResidentOrbitalFrameBinding frame;
   const auto status = resident_final_orbital_frame(expected, frame, detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-  if (!impl_->xc) {
+  const bool separate = role == CudaKsGridRole::separate_nonlocal;
+  const auto& xc = separate ? impl_->nonlocal_xc : impl_->xc;
+  const auto& molecular_grid = separate ? impl_->nonlocal_grid : impl_->grid;
+  if (!xc || (separate && !expected.identity.model.nonlocal_grid)) {
     detail = "resident basis/grid requires a device-fused CUDA XC owner";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   try {
-    const auto& layout = impl_->xc->layout();
+    const auto& layout = xc->layout();
     // SCF may integrate a private exact permutation. Derivative ownership and
     // atomic measures use the retained canonical order, authenticated below.
-    const auto grid = impl_->xc->canonical_grid_view();
-    CudaKsResidentGridBinding candidate{frame.device_id,   impl_->xc->packed_basis(),
-                                        grid.points,       grid.weights,
-                                        frame.density,     layout.natom,
-                                        layout.nprimitive, layout.nao,
-                                        grid.point_count,  frame.spins,
-                                        frame.stream,      frame.owner,
-                                        frame.solve_epoch, frame.generation};
+    const auto grid = xc->canonical_grid_view();
+    CudaKsResidentGridBinding candidate{
+        frame.device_id, xc->packed_basis(), grid.points,       grid.weights,     frame.density,
+        layout.natom,    layout.nprimitive,  layout.nao,        grid.point_count, frame.spins,
+        frame.stream,    frame.owner,        frame.solve_epoch, frame.generation};
     if (!candidate || layout.response || layout.nao != frame.nao || layout.spins != frame.spins ||
         layout.npoint != grid.point_count || reinterpret_cast<void*>(grid.stream) != frame.stream)
       throw std::logic_error("CUDA KS resident basis/grid storage is inconsistent");
-    const auto quadrature = impl_->grid.cuda_view();
+    const auto quadrature = molecular_grid.cuda_view();
     if (quadrature) {
       if (quadrature.device != frame.device_id || quadrature.points != grid.points ||
           quadrature.weights != grid.weights || quadrature.point_count != grid.point_count)
         throw std::logic_error("CUDA KS moving-grid source is not its canonical XC quadrature");
-      const auto& spec = impl_->grid.spec();
+      const auto& spec = molecular_grid.spec();
       candidate.atomic_weights = quadrature.atomic_weights;
       candidate.points_per_atom = spec.version == 4 ? 0 : grid_points_per_atom(spec);
       candidate.partition_iterations = spec.partition_iterations;

@@ -1,8 +1,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <map>
+#include <new>
 #include <vector>
 
 #include "dft/cuda_wb97mv_nuclear_jk.hpp"
@@ -17,6 +19,10 @@ namespace aot = hessian_aot;
 namespace maps = generativeqc_wb97mv_nuclear_jk_ad;
 using Shell = integrals::CudaOneElectronShell;
 using Quartet = std::array<std::size_t, 4>;
+// A closure key encodes one generated selector followed by four shell momenta (s–f).
+constexpr unsigned angular_count = 4;
+constexpr std::size_t closure_count =
+    std::size(maps::radial) * angular_count * angular_count * angular_count * angular_count;
 constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
                                                                {{1, 0, 2, 3}},
                                                                {{0, 1, 3, 2}},
@@ -35,6 +41,7 @@ struct DeviceGroup {
   unsigned cache_slots[4]{0, 1, 2, 3};
   std::size_t resident_offset{}, records_offset{}, projected_offset{};
   bool source{};
+  double exchange_fraction{};
 };
 struct DeviceTile {
   unsigned components[16]{};
@@ -43,6 +50,7 @@ struct DeviceTile {
 struct Tile {
   const aot::Program* program{};
   DeviceTile device;
+  double omega{};
 };
 struct Group {
   DeviceGroup device;
@@ -83,7 +91,7 @@ struct Schedule {
   Layout plan;
   std::vector<Group> groups;
   std::vector<Tile> tiles;
-  std::array<std::vector<std::size_t>, 1280> closure;
+  std::array<std::vector<std::size_t>, closure_count> closure;
   std::vector<RawBatch> batches;
   std::vector<BatchReduction> batch_reductions;
   std::vector<BatchRun> batch_runs;
@@ -267,6 +275,17 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
                              const CudaWb97mvJkOptions& options, Schedule& result,
                              std::span<const Quartet> selection = {}) {
   auto& plan = result.plan;
+  if (options.part == CudaWb97mvJkPart::full_hybrid
+          ? !(options.full_exchange_fraction > 0 && options.full_exchange_fraction <= 1)
+          : options.full_exchange_fraction != 0)
+    return cudaErrorInvalidValue;
+  const auto range = options.range_exchange;
+  if (range &&
+      ((options.part != CudaWb97mvJkPart::exact && options.part != CudaWb97mvJkPart::correction) ||
+       !(range->short_fraction >= 0 && range->short_fraction <= 1) ||
+       !(range->long_minus_short >= -1 && range->long_minus_short <= 1) ||
+       !std::isfinite(range->omega) || range->omega <= 0))
+    return cudaErrorInvalidValue;
   if (!shape.atoms || !shape.primitives || !shape.nao || shells.empty() ||
       (shape.spins != 1 && shape.spins != 2) || !options.radial_tile || options.radial_tile > 64 ||
       shape.atoms > static_cast<std::size_t>(std::numeric_limits<long long>::max()) / 3 ||
@@ -284,7 +303,7 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
     return cudaErrorInvalidValue;
   std::size_t primitive_begin{}, ao_begin{};
   for (const auto& shell : shells) {
-    if (shell.atom >= shape.atoms || shell.angular > 3 || !shell.primitive_count ||
+    if (shell.atom >= shape.atoms || shell.angular >= angular_count || !shell.primitive_count ||
         shell.primitive_begin != primitive_begin || shell.ao_begin != ao_begin ||
         (shell.ao_count != cartesian_count(shell.angular) &&
          shell.ao_count != 2 * shell.angular + 1) ||
@@ -297,13 +316,16 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
   std::vector<maps::Kernel> kernels;
   switch (options.part) {
     case CudaWb97mvJkPart::exact:
-      kernels = {maps::Kernel::k_primary, maps::Kernel::k_correction};
+      kernels = range ? std::vector{range->short_fraction ? maps::Kernel::k_full_hybrid
+                                                          : maps::Kernel::k_coulomb,
+                                    maps::Kernel::k_range_hybrid}
+                      : std::vector{maps::Kernel::k_primary, maps::Kernel::k_correction};
       break;
     case CudaWb97mvJkPart::primary:
       kernels = {maps::Kernel::k_primary};
       break;
     case CudaWb97mvJkPart::correction:
-      kernels = {maps::Kernel::k_correction};
+      kernels = {range ? maps::Kernel::k_range_hybrid : maps::Kernel::k_correction};
       break;
     case CudaWb97mvJkPart::coulomb:
       kernels = {maps::Kernel::k_coulomb};
@@ -313,6 +335,9 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
       break;
     case CudaWb97mvJkPart::long_range:
       kernels = {maps::Kernel::k_long};
+      break;
+    case CudaWb97mvJkPart::full_hybrid:
+      kernels = {maps::Kernel::k_full_hybrid};
       break;
     default:
       return cudaErrorInvalidValue;
@@ -348,12 +373,19 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
                    kernel},
                   1,
                   0};
+      group.device.exchange_fraction = options.full_exchange_fraction;
+      if (range)
+        group.device.exchange_fraction = kernel == maps::Kernel::k_range_hybrid
+                                             ? range->long_minus_short
+                                             : range->short_fraction;
       const auto selected = static_cast<std::size_t>(kernel);
+      const double omega =
+          kernel == maps::Kernel::k_range_hybrid ? range->omega : maps::omega[selected];
       auto key = selected;
       for (unsigned slot = 0; slot < 4; ++slot) {
         const auto& shell = group.device.shells[slot];
         group.device.atoms[slot] = shell.atom;
-        key = key * 4 + shell.angular;
+        key = key * angular_count + shell.angular;
         if (!multiply(group.radials, shell.primitive_count, group.radials) ||
             !multiply(group.device.components, cartesian_count(shell.angular),
                       group.device.components) ||
@@ -373,11 +405,11 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
           for (unsigned slot = 0; slot < 4; ++slot)
             matches &= signature.angular[slot] == group.device.shells[slot].angular;
           if (!matches) continue;
-          if (signature.omega != maps::omega[selected] || !program.integral ||
-              program.centers != 4 || program.record_stride != 17 || program.outputs != 25 ||
-              program.components.empty() || program.components.size() > 16)
+          if (!program.accepts_omega(omega) || program.centers != 4 ||
+              program.record_stride != 17 || program.outputs != 25 || program.components.empty() ||
+              program.components.size() > 16)
             return cudaErrorNotSupported;
-          Tile tile{&program, {}};
+          Tile tile{&program, {}, omega};
           tile.device.count = program.components.size();
           for (unsigned index = 0; index < tile.device.count; ++index) {
             const auto component = program.components[index];
@@ -503,29 +535,26 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
   return cudaSuccess;
 }
 
-cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
-                     const CudaWb97mvJkOptions& options, Schedule& result) {
-  const auto original = ordered_schedule(shape, shells, options, result);
-  if (original != cudaErrorInvalidValue || !options.source_tile || !options.max_source_groups ||
-      !options.max_batch_workspace_bytes || !options.max_batch_projection_bytes)
-    return original;
+cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
+                               const CudaWb97mvJkOptions& options, std::size_t ordered_panels,
+                               Schedule& result) {
   Layout shared;
   shared.candidate_count = 1;
   std::size_t panels{}, vectors{};
-  if (!multiply(result.plan.panels, 2, panels) || !multiply(shape.atoms, 6, vectors) ||
+  if (!multiply(ordered_panels, 2, panels) || !multiply(shape.atoms, 6, vectors) ||
       !add(shared.candidate_count, panels) || !add(shared.candidate_count, vectors) ||
       !append(shared, shared.candidate_count, sizeof(double), shared.candidates) ||
       !append(shared, 2, sizeof(int), shared.status) || shared.bytes >= options.max_workspace_bytes)
-    return original;
-  result = {};
+    return cudaErrorInvalidValue;
   result.refusal = "canonical source group bound";
   std::size_t pairs{}, sources{};
-  if (!multiply(shells.size(), shells.size() + 1, pairs)) return original;
+  if (!multiply(shells.size(), shells.size() + 1, pairs)) return cudaErrorInvalidValue;
   pairs /= 2;
-  if (!multiply(pairs, pairs + 1, sources)) return original;
+  if (!multiply(pairs, pairs + 1, sources)) return cudaErrorInvalidValue;
   sources /= 2;
   const auto kernels = options.part == CudaWb97mvJkPart::exact ? 2 : 1;
-  if (!multiply(sources, kernels, sources) || sources > options.max_source_groups) return original;
+  if (!multiply(sources, kernels, sources) || sources > options.max_source_groups)
+    return cudaErrorInvalidValue;
   std::vector<Quartet> pending;
   auto tile_options = options;
   tile_options.max_workspace_bytes -= shared.bytes;
@@ -603,6 +632,37 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
     window.plan.status = plan.status;
   }
   result.source_groups = sources;
+  return cudaSuccess;
+}
+
+cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
+                     const CudaWb97mvJkOptions& options, Schedule& result) {
+  const auto ordered = ordered_schedule(shape, shells, options, result);
+  if (!options.source_tile || !options.max_source_groups || !options.max_batch_workspace_bytes ||
+      !options.max_batch_projection_bytes)
+    return ordered;
+  // Do not discard a resident direction: consecutive frozen/relaxed actions
+  // can reuse it. If requested residency did not fit, canonical windows keep
+  // eightfold source sharing without retaining the whole direction's jets.
+  if (ordered == cudaSuccess &&
+      (result.plan.resident_bytes || !options.max_resident_integral_bytes || shells.size() < 2))
+    return ordered;
+  if (ordered != cudaSuccess && ordered != cudaErrorInvalidValue) return ordered;
+  const auto ordered_panels = result.plan.panels;
+  if (ordered != cudaSuccess) {
+    const auto* ordered_refusal = result.refusal;
+    result = {};
+    result.refusal = ordered_refusal;
+    return canonical_schedule(shape, shells, options, ordered_panels, result);
+  }
+  try {
+    Schedule tiled;
+    if (canonical_schedule(shape, shells, options, ordered_panels, tiled) == cudaSuccess &&
+        tiled.plan.components < result.plan.components)
+      result = std::move(tiled);
+  } catch (const std::bad_alloc&) {
+    // Optional metadata must not invalidate the already admitted ordered plan.
+  }
   return cudaSuccess;
 }
 
@@ -819,7 +879,7 @@ __device__ void project_values(CudaWb97mvJkShape shape, const DeviceGroup* group
           integral[1 + coordinate] * direction[3 * group->atoms[coordinate / 3] + coordinate % 3];
     maps::Result result;
     if (!maps::evaluate(group->kernel, shape.spins, density, delta_density, shape.nao, ao,
-                        integral[0], motion, result))
+                        integral[0], motion, result, group->exchange_fraction))
       atomicExch(status, 1);
     auto* output = projected + 41 * quartet;
     output[0] = result.energy;
@@ -1280,7 +1340,7 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
         for (const auto& run : selected.batch_runs) {
           const auto& tile = selected.tiles[run.tile];
           error = static_cast<cudaError_t>(tile.program->integral_batch(
-              batches + run.first, run.count, direction, status, stream));
+              tile.omega, batches + run.first, run.count, direction, status, stream));
           if (error != cudaSuccess) break;
           ++state.work.integral_launches;
           for (std::size_t index = run.first; index < run.first + run.count; ++index)
@@ -1338,8 +1398,9 @@ cudaError_t CudaWb97mvNuclearJk::apply(const double* direction, const double* de
                                                records, status);
           error = cudaGetLastError();
           if (error == cudaSuccess)
-            error = static_cast<cudaError_t>(tile.program->integral(
-                records, count, groups[index].atoms, direction, raw, status, stream));
+            error =
+                aot::launch_integral_at_omega(*tile.program, tile.omega, records, count,
+                                              groups[index].atoms, direction, raw, status, stream);
           if (error == cudaSuccess) {
             state.work.component_evaluations += count * tile.device.count;
             ++state.work.integral_launches;

@@ -63,6 +63,18 @@ def test_piecewise_select_is_lazy_and_differentiates_selected_branch() -> None:
     assert "1.0 / x" in source
 
 
+def test_integer_power_lowering_prunes_singular_inactive_branch() -> None:
+    graph = Graph()
+    density = graph.variable("density")
+    active = graph.variable("active")
+    selected = graph.select_le(density, 0, active.pow(2), density.pow(-3))
+    specialized = graph.replace_subexpressions(
+        (selected,), {density: graph.constant(0)}
+    )
+    lowered, (root,) = graph.lower_small_integer_powers(specialized)
+    assert lowered.evaluate(root, {"active": 2.5}) == 6.25
+
+
 def _r2scan_unpolarized_feature(
     alpha: typing.Any, *, density: typing.Any = 0.7, sigma: typing.Any = 0.014
 ) -> typing.Any:

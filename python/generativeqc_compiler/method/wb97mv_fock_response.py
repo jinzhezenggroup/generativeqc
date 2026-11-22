@@ -2,16 +2,22 @@
 
 The fitted map is the density VJP of the existing stationary DF energy, not
 an occupied-factor approximation. Its argument may therefore be indefinite.
-The source owner supplies raw three-centers and its actual whitening operator;
-the inverse map respects that operator's out-auxiliary/source-auxiliary layout.
+With exchange the owner retains a whitened AO-pair panel. For Coulomb alone it
+retains raw values and applies the accepted whitening only to auxiliary charge
+vectors, including when the metric is truncated at fixed geometry.
 """
 
 from __future__ import annotations
 
+from fractions import Fraction
 from functools import cache
 
-from generativeqc_compiler.method.spec import resolve_method
-from generativeqc_compiler.method.stationary_df_second import df_second_programs
+from generativeqc_compiler.method.stationary_df_second import (
+    fitted_coulomb_energy,
+    fitted_exchange_energy,
+    solve_fitted_charge,
+    symmetric_fitted_fock,
+)
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -22,22 +28,24 @@ from generativeqc_compiler.tensor import (
     broadcast,
     einsum,
     input_tensor,
+    reduce_sum,
+    transpose,
 )
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 
 @cache
 def fock_maps() -> dict[str, Program]:
     """Return exact/fitted spin maps and the shared physical source transform."""
-    method = resolve_method("WB97M-V")
-    short, long = method.primitives[1:3]
     orbital = IndexSpace("orbital", "ao", 2)
     auxiliary = IndexSpace("auxiliary", "auxiliary", 3)
     row, column = Index("row", orbital), Index("column", orbital)
     first, second = Index("first", auxiliary), Index("second", auxiliary)
     whitening = input_tensor("whitening", TensorSpec((first, second), role="parameter"))
-    programs = {
-        "inverse": Program({"inverse": einsum("pa,pb->ab", whitening, whitening)})
-    }
+    raw = input_tensor(
+        "three_center", TensorSpec((row, column, second), role="parameter")
+    )
+    programs = {"whiten": Program({"whitened": einsum("ijq,pq->ijp", raw, whitening)})}
     for prefix, spins, occupation in (("rks", 1, 2), ("uks", 2, 1)):
         spin = Index("spin", IndexSpace("spin", "spin", spins))
         matrix = (spin, row, column)
@@ -47,32 +55,63 @@ def fock_maps() -> dict[str, Program]:
 
         coulomb = field("coulomb", (row, column))
         exchange = field("exchange")
+        exchange_coefficient = field("exchange_coefficient", ())
         programs[f"{prefix}_exact"] = Program(
             {
                 "primary": add(
                     broadcast(coulomb, matrix, (1, 2)),
-                    exchange,
-                    coefficients=(1, -short.coefficient / occupation),
+                    einsum(",sij->sij", exchange_coefficient, exchange),
                 )
             }
         )
-        programs[f"{prefix}_fitted"] = df_second_programs(
-            2, 3, spins, short.coefficient
-        )[-1]
+        density = input_tensor(
+            "density", TensorSpec(matrix, role="input", differentiable=True)
+        )
+        whitened = field("whitened", (row, column, first))
+        charge = einsum("ij,ijp->p", reduce_sum(density, (0,)), whitened)
+        j_energy = fitted_coulomb_energy(charge, charge)
+        k_energy = fitted_exchange_energy(
+            density,
+            whitened,
+            whitened,
+            -Fraction(1, 2 * occupation),
+            field("exchange_fraction", ()),
+        )
+        programs[f"{prefix}_fitted"] = symmetric_fitted_fock(add(j_energy, k_energy))
+        total = reduce_sum(density, (0,))
+        # Project both legs onto symmetric AO coordinates without creating a
+        # symmetrized copy of the three-center panel.
+        symmetric_total = einsum(
+            "ij->ij", add(total, transpose(total, (1, 0))), coefficient=Fraction(1, 2)
+        )
+        raw_charge = einsum("ij,ijq->q", symmetric_total, raw)
+        fitted_charge = solve_fitted_charge(whitening, raw_charge)
+        raw_fock = einsum("ijq,q->ij", raw, fitted_charge)
+        sym_fock = einsum(
+            "ij->ij",
+            add(raw_fock, transpose(raw_fock, (1, 0))),
+            coefficient=Fraction(1, 2),
+        )
+        programs[f"{prefix}_fitted_coulomb"] = Program(
+            {"primary": broadcast(sym_fock, matrix, (1, 2))}
+        )
+        # Match the unsigned K panel produced by Direct. Assembly applies
+        # the physical signed LR coefficient once for either provider.
+        programs[f"{prefix}_fitted_range"] = symmetric_fitted_fock(
+            fitted_exchange_energy(density, whitened, whitened, Fraction(1, 2), None)
+        )
         programs[f"{prefix}_assemble"] = Program(
             {
                 "fock": add(
                     field("primary"),
                     field("grid"),
-                    field("long_range"),
-                    broadcast(field("hcore", (row, column)), matrix, (1, 2)),
-                    coefficients=(
-                        1,
-                        1,
-                        -(long.coefficient - short.coefficient) / occupation,
-                        1,
+                    einsum(
+                        ",sij->sij", field("range_coefficient", ()), field("long_range")
                     ),
+                    broadcast(field("hcore", (row, column)), matrix, (1, 2)),
                 )
             }
         )
-    return programs
+    return {
+        name: prepare_for_backend(program, "cuda") for name, program in programs.items()
+    }

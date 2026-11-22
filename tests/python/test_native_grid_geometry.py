@@ -253,6 +253,7 @@ def _native(
     reject: bool = False,
     point_tile: int | None = None,
     topology: str | None = None,
+    replay: str | None = None,
 ) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_GRID_GEOMETRY_PROBE")
     if not executable:
@@ -296,6 +297,8 @@ def _native(
             *(
                 [topology]
                 if topology is not None
+                else [replay]
+                if replay is not None
                 else ["reject"]
                 if reject
                 else [str(point_tile)]
@@ -492,6 +495,16 @@ def test_native_point_parallel_tiles_preserve_geometry(tmp_path: Path) -> None:
     fixture = _fixture(points_per_atom=345)
     baseline, _ = _native(fixture, tmp_path, point_tile=64)
     parallel, _ = _native(fixture, tmp_path, point_tile=1024)
+    replay, receipt = _native(fixture, tmp_path, replay="replay")
+    assert receipt["ao_primitive_term_bound"] == 0
+    assert receipt["ao_replay_term_bound"] > 0
+    for actual, expected in zip(replay, baseline, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    partial, cached = _native(fixture, tmp_path, replay="partial")
+    assert cached["ao_primitive_term_bound"] > 0
+    assert 0 < cached["ao_replay_term_bound"] < receipt["ao_replay_term_bound"]
+    for actual, expected in zip(partial, baseline, strict=True):
+        np.testing.assert_array_equal(actual, expected)
     for actual, expected in zip(parallel, baseline, strict=True):
         np.testing.assert_array_equal(actual, expected)
     expected = _gaussians(fixture, _indices(3))
