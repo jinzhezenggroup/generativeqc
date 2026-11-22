@@ -54,6 +54,9 @@ inline cudaError_t gate(int*, cudaStream_t) { return cudaSuccess; }
 inline cudaError_t drain(cudaError_t error, cudaStream_t) { return error; }
 template <class... Args>
 void build_records(Args...) {}
+// The host scheduler is real; this probe does not execute either record kernel.
+inline void build_batch_records(CudaOneElectronShape, const DeviceJob*, const ParallelTask*,
+                                std::size_t, const double*, const double*, char*, int*) {}
 template <class... Args>
 void project(Args...) {}
 template <class... Args>

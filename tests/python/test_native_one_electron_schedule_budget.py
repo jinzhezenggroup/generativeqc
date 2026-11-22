@@ -32,6 +32,7 @@ def test_optional_host_metadata_oom_preserves_scalar_plan(
     fixture = tmp_path / "one_electron_schedule.cpp"
     fixture.write_text(
         "#include <cassert>\n#include <cstdlib>\n#include <iostream>\n"
+        "#define __host__\n#define __device__\n"
         + host
         + '} }\n#include "runtime.hpp"\nnamespace generativeqc::integrals {\n'
         + workspace
