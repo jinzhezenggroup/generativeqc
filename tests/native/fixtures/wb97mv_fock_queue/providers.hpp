@@ -26,7 +26,7 @@ constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1, cudaErrorNotSupported 
 constexpr int cudaMemoryTypeDevice = 2, cudaMemcpyDeviceToHost = 1, cudaMemcpyDeviceToDevice = 2,
               cudaMemcpyHostToDevice = 3;
 using cudaStreamCaptureStatus = int;
-constexpr int cudaStreamCaptureStatusNone = 0;
+constexpr int cudaStreamCaptureStatusNone = 0, cudaStreamCaptureStatusActive = 1;
 struct cudaPointerAttributes {
   int type, device;
 };
@@ -79,7 +79,7 @@ inline cudaError_t cudaPointerGetAttributes(cudaPointerAttributes* attributes, c
   return cudaSuccess;
 }
 inline cudaError_t cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* capture) {
-  *capture = queue_test::capturing ? 1 : cudaStreamCaptureStatusNone;
+  *capture = queue_test::capturing ? cudaStreamCaptureStatusActive : cudaStreamCaptureStatusNone;
   return cudaSuccess;
 }
 inline cudaError_t cudaMemsetAsync(void* destination, int value, std::size_t bytes, cudaStream_t) {
@@ -416,7 +416,7 @@ struct CudaWb97mvGridOptions {
 };
 struct CudaWb97mvGridWork {
   bool pair_budget_exceeded{};
-  std::size_t active_nonlocal_points{};
+  std::size_t active_nonlocal_points{}, response_actions{}, response_pairs{};
 };
 struct CudaWb97mvGridShape {
   std::size_t atoms{1}, primitives{1}, nao{2}, points{1};
@@ -448,8 +448,8 @@ struct CudaWb97mvGridResponse {
     pointer = queue_test::metadata.data() + 112;
     return cudaSuccess;
   }
-  cudaError_t apply(const double*, double* output, cudaStream_t) {
-    std::fill(output, output + 4 * queue_test::spins, 0);
+  cudaError_t enqueue_private_response(const double*, double* output, cudaStream_t) {
+    queue_test::pending.emplace_back([=] { std::fill(output, output + 4 * queue_test::spins, 0); });
     return cudaSuccess;
   }
   CudaWb97mvGridWork work() const { return {}; }

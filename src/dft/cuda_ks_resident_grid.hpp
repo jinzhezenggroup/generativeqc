@@ -3,6 +3,10 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace generativeqc_grid_pair_geometry {
+struct CenterPair;
+}
+
 namespace generativeqc::dft {
 
 /** Select the primary XC quadrature or the independently prepared VV10 one. */
@@ -33,6 +37,10 @@ struct CudaKsResidentGridBinding {
   std::uint64_t quadrature_owner{};
   const std::uint64_t* atom_offsets{};
   const double* atomic_radii{};
+  /** Optional stationary-force geometry borrowed under this same token.
+   * Immutable until the force owner is reset or destroyed. */
+  const generativeqc_grid_pair_geometry::CenterPair* center_pairs{};
+  std::uint64_t center_pair_epoch{};
 
   bool operator==(const CudaKsResidentGridBinding&) const = default;
 

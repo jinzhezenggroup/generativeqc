@@ -159,6 +159,14 @@ cudaError_t CudaKsOneElectronResponse::apply(const double* direction,
   return impl_ ? impl_->response.apply(direction, weights, output, stream)
                : cudaErrorInvalidResourceHandle;
 }
+cudaError_t CudaKsOneElectronResponse::enqueue_private(
+    const double* direction, const integrals::CudaOneElectronWeights& weights,
+    const integrals::CudaOneElectronOutput& output, int* transaction_status,
+    cudaStream_t stream) noexcept {
+  return impl_ ? impl_->response.enqueue_private(direction, weights, output, transaction_status,
+                                                 stream)
+               : cudaErrorInvalidResourceHandle;
+}
 CudaKsOneElectronWork CudaKsOneElectronResponse::work() const noexcept {
   return impl_ ? CudaKsOneElectronWork{impl_->device_bytes, impl_->response.work()}
                : CudaKsOneElectronWork{};

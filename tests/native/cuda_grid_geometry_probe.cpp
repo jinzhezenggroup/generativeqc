@@ -170,6 +170,28 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
     owner.immutable.push_back(device_prefix);
     owner.immutable.push_back(reference.atomic_radii);
   }
+  double* prepared_pairs{};
+  std::vector<double> center_table;
+  if (topology == "prepared-centers") {
+    // Independent scalar FP64 producer for the force table ABI. Ratio fields
+    // are intentionally poisoned: only distance and its Cartesian slope are
+    // reusable at mixed order.
+    for (std::size_t first = 0; first < shape.atoms; ++first) {
+      for (std::size_t second = 0; second < first; ++second) {
+        std::array<double, 3> delta{};
+        for (unsigned axis = 0; axis < 3; ++axis)
+          delta[axis] = basis[3 * first + axis] - basis[3 * second + axis];
+        const auto distance = std::hypot(delta[0], delta[1], delta[2]);
+        center_table.push_back(distance);
+        for (const auto component : delta) center_table.push_back(component / distance);
+        center_table.insert(center_table.end(), 2, std::numeric_limits<double>::quiet_NaN());
+      }
+    }
+    prepared_pairs = storage.upload(center_table);
+    reference.center_pairs =
+        reinterpret_cast<const generativeqc_grid_pair_geometry::CenterPair*>(prepared_pairs);
+    owner.immutable.push_back(prepared_pairs);
+  }
   auto* arena = storage.allocate(bytes / sizeof(double));
   auto* left_device = storage.upload(left);
   auto* right_device = storage.upload(right);
@@ -251,6 +273,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
     require(static_cast<bool>(capture.write(reinterpret_cast<const char*>(values.data()),
                                             values.size() * sizeof(double))),
             "probe output write failed");
+  const auto measured_work = response.work();
   const auto sentinel_ao = std::vector<double>(ao_count, 27);
   const auto sentinel_weights = std::vector<double>(weight_count, 27);
   const auto sentinel = [&] {
@@ -277,6 +300,12 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
               cudaErrorInvalidValue,
           "geometry accepted aliased outputs");
   unchanged();
+  if (prepared_pairs) {
+    require(response.mixed(left_device, right_device, ao_output, prepared_pairs, storage.stream) ==
+                cudaErrorInvalidValue,
+            "geometry accepted publication into borrowed center pairs");
+    unchanged();
+  }
   auto poisoned = left;
   poisoned[0] = std::numeric_limits<double>::quiet_NaN();
   check(cudaMemcpyAsync(left_device, poisoned.data(), poisoned.size() * sizeof(double),
@@ -285,8 +314,23 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
               cudaErrorInvalidValue,
           "geometry accepted a nonfinite direction");
   unchanged();
+  auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
+  const auto private_view_status = [&] {
+    check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
+    check(response.enqueue_private_mixed_view(left_device, right_device, view, transaction,
+                                              storage.stream));
+    check(cudaStreamSynchronize(storage.stream));
+    int status{};
+    check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+    unchanged();
+    return status;
+  };
+  require(private_view_status() != 0, "private geometry did not report nonfinite motion");
   check(cudaMemcpyAsync(left_device, left.data(), left.size() * sizeof(double),
                         cudaMemcpyHostToDevice, storage.stream));
+  require(private_view_status() == 0 &&
+              download(view.point_directions, 6 * shape.points) == expected_motion,
+          "private geometry did not recover after a failed action");
   check(cudaStreamSynchronize(storage.stream));
   check(cudaStreamBeginCapture(storage.stream, cudaStreamCaptureModeGlobal));
   const auto capture_status =
@@ -306,7 +350,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
               response.spatial_jets(jets) == cudaErrorInvalidResourceHandle && !jets,
           "geometry accepted revoked storage");
   unchanged();
-  const auto& work = response.work();
+  const auto& work = measured_work;
   std::cout << "{\"capacity_alias_finite_capture_revocation_gates\":true,\"workspace_bytes\":"
             << work.workspace_bytes << ",\"prepared_ao_values\":" << work.prepared_ao_jet_values
             << ",\"prepared_partition_pairs\":" << work.prepared_partition_pairs
@@ -330,7 +374,8 @@ int main(int argc, char** argv) {
     const auto partial = argc == 4 && std::string(argv[3]) == "partial";
     const auto replay = partial || (argc == 4 && std::string(argv[3]) == "replay");
     const std::string topology =
-        argc == 4 && (std::string(argv[3]) == "topology" || std::string(argv[3]) == "understated")
+        argc == 4 && (std::string(argv[3]) == "topology" || std::string(argv[3]) == "understated" ||
+                      std::string(argv[3]) == "prepared-centers")
             ? argv[3]
             : "";
     const auto reject =

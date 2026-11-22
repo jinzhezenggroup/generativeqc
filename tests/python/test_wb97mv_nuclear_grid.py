@@ -515,6 +515,8 @@ def _native_action(
     assert process.returncode == 0, process.stderr
     result = json.loads(process.stdout)
     assert result["nuclear_lifecycle"]
+    assert result["private_mixed_replay"]
+    assert result["private_direction_replay"]
     np.testing.assert_array_equal(result["retained_mixed"], result["mixed"])
     assert result["nuclear_contractions"] == 2
     return result

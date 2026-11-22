@@ -42,9 +42,19 @@ struct CudaGmresResult {
   bool converged() const noexcept { return status == CudaGmresStatus::converged; }
 };
 
+/** Private, stream-ordered result prefix of the linked GMRES arena. Read it
+ * on device after enqueue, before the next replay overwrites the arena. */
+struct CudaGmresDeviceReceipt {
+  int code;
+  std::size_t iterations, restarts;
+  double rhs_norm, residual_norm, tolerance;
+};
+
 /** Enqueue a native CUDA action on exactly the borrowed stream.
  * Inputs/outputs are distinct dimension-element device panels. The callback
- * must not retain them, change device/stream, or perform host numerical work.
+ * must not retain them, change device/stream, transfer host data, or perform
+ * host numerical work. The stream captures a reusable action topology, so a
+ * callback invocation is not a count of actions executed.
  * Its owner remains responsible for prepared-state authentication and any
  * additional workspace. A failed action never authorizes solution publication.
  */
@@ -58,13 +68,44 @@ using CudaGmresAction = cudaError_t (*)(void*, const double*, double*, std::size
 cudaError_t cuda_gmres_workspace(std::size_t dimension, const CudaGmresOptions& options,
                                  std::size_t& bytes) noexcept;
 
+/** One reusable graph for identical unseeded strict solves. Bound pointers
+ * and the provider's captured storage must outlive replay and cannot change
+ * identity. The caller owns any setup/terminal transfer and outer transaction.
+ * A nonzero upstream audit suppresses the iteration body, and only converged
+ * candidates reach the private solution. Noncopyable, single-stream owner. */
+class CudaGmresReplay {
+ public:
+  CudaGmresReplay() = default;
+  ~CudaGmresReplay();
+  CudaGmresReplay(const CudaGmresReplay&) = delete;
+  CudaGmresReplay& operator=(const CudaGmresReplay&) = delete;
+
+  cudaError_t prepare(std::size_t dimension, const CudaGmresOptions& options,
+                      CudaGmresAction action, void* context, const double* rhs,
+                      const double* diagonal, double* private_solution, void* workspace,
+                      std::size_t workspace_bytes, cudaStream_t stream) noexcept;
+  cudaError_t enqueue(const int* upstream_status = nullptr) const noexcept;
+  const CudaGmresDeviceReceipt* receipt() const noexcept { return receipt_; }
+
+ private:
+  cudaGraphExec_t execution_{};
+  cudaStream_t stream_{};
+  CudaGmresOptions options_{};
+  const double *rhs_{}, *diagonal_{};
+  double* solution_{};
+  void* workspace_{};
+  std::size_t dimension_{}, required_{};
+  const CudaGmresDeviceReceipt* receipt_{};
+};
+
 /** Restarted, right-preconditioned FP64 GMRES with device-only numerics.
  * The optional diagonal is the divisor, not its inverse; signed entries are
  * allowed, but every magnitude must exceed diagonal_floor. Modified Gram
  * Schmidt, stable norms, Givens rotations, triangular solves, candidates and
- * true UNPRECONDITIONED residuals all execute in linked CUDA code. The host
- * reads only discrete checkpoint status until the terminal scalar receipt.
- * No interpreter, compiler, BLAS handle, allocation or CPU fallback is used.
+ * true UNPRECONDITIONED residuals all execute in linked CUDA code. A bounded
+ * conditional graph controls the iterations; the host reads one setup status
+ * and the terminal receipt, never per-iteration status. No interpreter, runtime
+ * compiler, BLAS handle, extra scientific workspace or CPU fallback is used.
  *
  * The workspace must be double-aligned, resident on the current CUDA device,
  * and disjoint from rhs, diagonal and solution. The solution must be disjoint
@@ -73,7 +114,7 @@ cudaError_t cuda_gmres_workspace(std::size_t dimension, const CudaGmresOptions& 
  * it may exactly alias solution. Tolerance is still relative to the original
  * RHS and the initial residual uses the supplied operator, not the guess's
  * original proposal operator.
- * This call synchronizes the borrowed stream at checkpoints and before return;
+ * This call synchronizes the borrowed stream at setup and before return;
  * the enclosing owner must not use these panels concurrently on other streams.
  * Numerical failure is reported in result; CUDA/contract failure is the return
  * value. Empty systems need no action or input/output pointers, but still use

@@ -5,6 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace generativeqc_grid_pair_geometry {
+struct CenterPair;
+}
+
 namespace generativeqc::dft {
 
 struct CudaGridGeometryShape {
@@ -53,6 +57,8 @@ struct CudaGridGeometryReference {
    * Required together when points_per_atom is zero; share the owner lease. */
   const std::uint64_t* atom_offsets{};
   const double* atomic_radii{};
+  /** Optional FP64 center geometry installed by the authenticated force owner. */
+  const generativeqc_grid_pair_geometry::CenterPair* center_pairs{};
 };
 
 struct CudaGridGeometryWork {
@@ -112,6 +118,12 @@ class CudaGridGeometryResponse {
    * authenticated stream; do not retain it across a lease revocation. */
   cudaError_t mixed_view(const double* left, const double* right, CudaGridGeometryMixedView& view,
                          cudaStream_t stream) noexcept;
+  /** Borrow a provisional view on the same stream without a host audit. A
+   * separate initialized transaction status accumulates errors; the caller
+   * must drain and check it before publishing any result derived from view. */
+  cudaError_t enqueue_private_mixed_view(const double* left, const double* right,
+                                         CudaGridGeometryMixedView& view, int* transaction_status,
+                                         cudaStream_t stream) noexcept;
   /** Admit all mixed actions of an endpoint before any partial work. */
   cudaError_t admit_actions(std::size_t actions) noexcept;
   /** Borrow [20,point,AO] spatial jets when resident; replay has no such view. */
@@ -125,7 +137,11 @@ class CudaGridGeometryResponse {
  private:
   cudaError_t authenticate(cudaStream_t stream) noexcept;
   cudaError_t partition(const double* left, const double* right) noexcept;
-  cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream) noexcept;
+  cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream,
+                             int* transaction_status = nullptr) noexcept;
+  cudaError_t mixed_view_impl(const double* left, const double* right,
+                              CudaGridGeometryMixedView& view, int* transaction_status,
+                              cudaStream_t stream) noexcept;
   void finish_mixed() noexcept;
   CudaGridGeometryShape shape_{};
   CudaGridGeometryOptions options_{};

@@ -170,4 +170,9 @@ cudaError_t CudaOneElectronResponse::apply(const double*, const CudaOneElectronW
                                            const CudaOneElectronOutput&, cudaStream_t) noexcept {
   return cudaSuccess;
 }
+cudaError_t CudaOneElectronResponse::enqueue_private(const double*, const CudaOneElectronWeights&,
+                                                     const CudaOneElectronOutput&, int*,
+                                                     cudaStream_t) noexcept {
+  return cudaSuccess;
+}
 }  // namespace generativeqc::integrals

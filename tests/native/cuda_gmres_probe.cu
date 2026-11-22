@@ -142,6 +142,74 @@ std::vector<double> read(std::size_t count) {
   return result;
 }
 
+void replay() {
+  constexpr std::size_t dimension = 8, runs = 3;
+  std::vector<double> matrix(dimension * dimension);
+  for (std::size_t row = 0; row < dimension; ++row) matrix[row * dimension + row] = row + 1;
+  Stream stream;
+  Device<double> device_matrix(matrix.size()), rhs(dimension), solution(dimension),
+      history(runs * dimension);
+  Device<int> upstream(1);
+  Device<response::CudaGmresDeviceReceipt> receipts(runs);
+  const std::vector<double> ones(dimension, 1.0), sentinels(dimension, sentinel);
+  device_matrix.upload(matrix, stream.value);
+  rhs.upload(ones, stream.value);
+  solution.upload(sentinels, stream.value);
+  response::CudaGmresOptions options;
+  options.restart = 2;
+  options.relative_tolerance = 1e-12;
+  options.absolute_tolerance = 1e-13;
+  std::size_t bytes{};
+  check(response::cuda_gmres_workspace(dimension, options, bytes));
+  Device<unsigned char> workspace(bytes);
+  Operator owner{device_matrix.value};
+  response::CudaGmresReplay graph;
+  check(graph.prepare(dimension, options, action, &owner, rhs.value, nullptr, solution.value,
+                      workspace.value, bytes, stream.value));
+  // Snapshot each receipt and solution on device, with no wait between RHSs.
+  constexpr auto vector_bytes = dimension * sizeof(double);
+  for (std::size_t run = 0; run < runs; ++run) {
+    check(cudaMemsetAsync(upstream.value, run == 0 ? 1 : 0, sizeof(int), stream.value));
+    if (run == 2) check(cudaMemsetAsync(rhs.value, 0, vector_bytes, stream.value));
+    check(graph.enqueue(upstream.value));
+    check(cudaMemcpyAsync(history.value + run * dimension, solution.value, vector_bytes,
+                          cudaMemcpyDeviceToDevice, stream.value));
+    check(cudaMemcpyAsync(receipts.value + run, graph.receipt(), sizeof(*receipts.value),
+                          cudaMemcpyDeviceToDevice, stream.value));
+  }
+  std::vector<double> answers(runs * dimension);
+  response::CudaGmresDeviceReceipt observed[runs]{};
+  check(cudaMemcpyAsync(answers.data(), history.value, answers.size() * sizeof(double),
+                        cudaMemcpyDeviceToHost, stream.value));
+  check(cudaMemcpyAsync(observed, receipts.value, sizeof(observed), cudaMemcpyDeviceToHost,
+                        stream.value));
+  check(cudaStreamSynchronize(stream.value));
+  const auto audit = [&](std::size_t run, response::CudaGmresStatus status, bool iterations_ok) {
+    const auto& result = observed[run];
+    if (result.code != static_cast<int>(status) || !iterations_ok)
+      throw std::runtime_error("replay phase " + std::to_string(run) +
+                               ": status=" + std::to_string(result.code) +
+                               ", iterations=" + std::to_string(result.iterations) +
+                               ", restarts=" + std::to_string(result.restarts));
+  };
+  audit(0, response::CudaGmresStatus::nonfinite_input, !observed[0].iterations);
+  audit(1, response::CudaGmresStatus::converged,
+        observed[1].restarts && observed[1].residual_norm <= observed[1].tolerance);
+  audit(2, response::CudaGmresStatus::converged, !observed[2].iterations);
+  for (std::size_t row = 0; row < dimension; ++row) {
+    if (answers[row] != sentinel)
+      throw std::runtime_error("rejected replay overwrote its solution");
+    if (std::abs(answers[dimension + row] - 1.0 / (row + 1)) >= 2e-11) {
+      std::cerr << std::setprecision(17) << "row " << row << ": " << answers[dimension + row]
+                << " vs " << 1.0 / (row + 1) << '\n';
+      throw std::runtime_error("replayed solution diverges from diagonal oracle");
+    }
+    if (answers[2 * dimension + row] != 0)
+      throw std::runtime_error("zero RHS replay returned a stale solution");
+  }
+  std::cout << "{\"replay\":\"passed\"}\n";
+}
+
 void solve(int argc, char** argv) {
   if (argc != 13) throw std::runtime_error("solve needs eleven arguments");
   const auto count = std::stoull(argv[2]);
@@ -220,10 +288,12 @@ int main(int argc, char** argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "contract")
       contract();
+    else if (argc == 2 && std::string(argv[1]) == "replay")
+      replay();
     else if (argc > 1 && std::string(argv[1]) == "solve")
       solve(argc, argv);
     else
-      throw std::runtime_error("expected contract or solve");
+      throw std::runtime_error("expected contract, replay or solve");
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

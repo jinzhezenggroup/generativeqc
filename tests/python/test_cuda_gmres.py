@@ -74,6 +74,11 @@ def test_native_admission_without_device(probe: Path) -> None:
     assert _run(probe, "contract") == {"contract": "passed"}
 
 
+def test_device_graph_replays_rhs_without_intermediate_host_reads(probe: Path) -> None:
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    assert _run(probe, "replay") == {"replay": "passed"}
+
+
 def _solve(
     probe: Path,
     matrix: np.ndarray,
@@ -188,6 +193,17 @@ def test_iteration_exhaustion_preserves_solution(probe: Path) -> None:
     assert result["status"] == 2 and not result["converged"]
     assert result["residual_norm"] > result["tolerance"]
     assert result["solution"] is None and result["untouched"]
+
+
+def test_restarted_iterations_do_not_add_host_checkpoints(probe: Path) -> None:
+    matrix = np.diag(np.linspace(1, 8, 8))
+    rhs = np.ones(8)
+    short = _solve(probe, matrix, rhs, restart=1, max_iterations=1)
+    long = _solve(probe, matrix, rhs, restart=2, max_iterations=200)
+    assert short["cuda_error"] == 0 and short["untouched"]
+    _accept(long, matrix, rhs)
+    assert long["restarts"] > 0 and long["iterations"] > short["iterations"]
+    assert long["checkpoint_bytes"] == short["checkpoint_bytes"]
 
 
 def test_zero_projected_residual_never_bypasses_true_gate(probe: Path) -> None:

@@ -210,7 +210,7 @@ cudaError_t device_buffer(const void* pointer, int device) noexcept {
              : cudaErrorInvalidValue;
 }
 
-cudaError_t execution(cudaStream_t stream, int device) noexcept {
+cudaError_t execution(cudaStream_t stream, int device, bool composable = false) noexcept {
   if (!stream || device < 0) return cudaErrorInvalidValue;
   int current = -1;
   auto error = cudaGetDevice(&current);
@@ -219,7 +219,10 @@ cudaError_t execution(cudaStream_t stream, int device) noexcept {
   cudaStreamCaptureStatus capture{};
   error = cudaStreamIsCapturing(stream, &capture);
   if (error != cudaSuccess) return error;
-  return capture == cudaStreamCaptureStatusNone ? cudaSuccess : cudaErrorStreamCaptureUnsupported;
+  return capture == cudaStreamCaptureStatusNone ||
+                 (composable && capture == cudaStreamCaptureStatusActive)
+             ? cudaSuccess
+             : cudaErrorStreamCaptureUnsupported;
 }
 
 cudaError_t drain(cudaError_t error, cudaStream_t stream) noexcept {
@@ -246,6 +249,27 @@ __global__ void check_matrix(const double* density, std::size_t nao, unsigned sp
         fabs(value - transposed) > absolute + relative * fmax(fabs(value), fabs(transposed)))
       atomicExch(status, 1);
   }
+}
+
+__global__ void publish_private_response(const double* candidate, double* output, std::size_t count,
+                                         const int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
+    output[index] = *status ? nan("") : candidate[index];
+}
+
+__global__ void finish_private_mixed(const double* candidate, double* output, const int* status,
+                                     int* transaction_status) {
+  if (*status || !isfinite(*candidate)) {
+    atomicOr(transaction_status, 1);
+    *output = nan("");
+  } else {
+    *output = *transaction_status ? nan("") : *candidate;
+  }
+}
+
+__global__ void record_private_nuclear_status(const int* status, int* transaction_status) {
+  if (*status) atomicOr(transaction_status, 1);
 }
 
 __global__ void discover(const double* fields, const double* weights, const double* points,
@@ -675,9 +699,9 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape& shape,
   return cudaSuccess;
 }
 
-cudaError_t CudaWb97mvGridResponse::authenticate(cudaStream_t stream) noexcept {
+cudaError_t CudaWb97mvGridResponse::authenticate(cudaStream_t stream, bool composable) noexcept {
   if (!ready_ || stream != reference_.stream) return cudaErrorInvalidResourceHandle;
-  auto error = execution(stream, reference_.device_id);
+  auto error = execution(stream, reference_.device_id, composable);
   if (error != cudaSuccess) return error;
   error = reference_.authenticate(reference_.owner);
   if (error != cudaSuccess) {
@@ -762,18 +786,21 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   return error;
 }
 
-cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
+cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) noexcept {
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   auto* arena = static_cast<double*>(workspace_);
   auto* status = reinterpret_cast<int*>(arena + plan.status);
   auto* active = reinterpret_cast<std::size_t*>(arena + plan.active);
   const auto stream = reference_.stream;
+  const auto failure = [=](cudaError_t error) {
+    return defer_status ? error : drain(error, stream);
+  };
   if (options_.component == CudaWb97mvGridComponent::vv10_only) {
     // Pair and local-beta kernels accumulate into the point coefficients.
     const auto zero =
         cudaMemsetAsync(arena + plan.coefficients, 0, plan.fields * sizeof(double), stream);
-    if (zero != cudaSuccess) return drain(zero, stream);
+    if (zero != cudaSuccess) return failure(zero);
   } else if (uses_stationary_point(options_.functional_code))
     launch_stationary_points(arena + plan.base, arena + plan.direction, reference_.weights, nullptr,
                              shape_, options_.functional_code, response, arena + plan.coefficients,
@@ -792,11 +819,11 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
         arena + plan.base, arena + plan.direction, reference_.weights, shape_.points, response,
         arena + plan.coefficients, status);
   auto error = cudaGetLastError();
-  if (error != cudaSuccess) return drain(error, stream);
+  if (error != cudaSuccess) return failure(error);
   const auto count = work_.active_nonlocal_points;
   auto& pairs = response ? work_.response_pairs : work_.reference_pairs;
   const auto work = static_cast<std::uint64_t>(count) * count;
-  if (work > UINT64_MAX - pairs) return drain(cudaErrorInvalidValue, stream);
+  if (!defer_status && work > UINT64_MAX - pairs) return failure(cudaErrorInvalidValue);
   for (std::size_t row = 0; row < count; row += options_.pair_tile_points)
     for (std::size_t column = 0; column < count; column += options_.pair_tile_points) {
       const auto rows = std::min(count - row, options_.pair_tile_points);
@@ -812,12 +839,12 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
             shape_.points, shape_.spins, active, row, column, rows, columns, response,
             arena + plan.pairs, status);
       error = cudaGetLastError();
-      if (error != cudaSuccess) return drain(error, stream);
-      pairs += rows * columns;
+      if (error != cudaSuccess) return failure(error);
+      if (!defer_status) pairs += rows * columns;
       pair_reduce<<<maps::blocks(4 * rows), 128, 0, stream>>>(arena + plan.pairs, active, row, rows,
                                                               columns, shape_.points, shape_.spins,
                                                               arena + plan.coefficients, status);
-      if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+      if ((error = cudaGetLastError()) != cudaSuccess) return failure(error);
     }
   if (!response && count) {
     const auto beta =
@@ -825,7 +852,7 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
     local_beta<<<maps::blocks(count), 128, 0, stream>>>(reference_.weights, active, count,
                                                         shape_.points, shape_.spins, beta,
                                                         arena + plan.coefficients, status);
-    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+    if ((error = cudaGetLastError()) != cudaSuccess) return failure(error);
   }
   const auto panel = shape_.points * shape_.nao;
   for (unsigned spin = 0; spin < shape_.spins; ++spin) {
@@ -836,16 +863,16 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response) noexcept {
         coefficients + 3 * shape_.points, coefficients, coefficients + 4 * shape_.points,
         arena + (response ? plan.candidate : plan.reference) + spin * plan.matrix,
         arena + plan.tensor, plan.tensor_bytes, status, stream);
-    if (error != cudaSuccess) return drain(error, stream);
+    if (error != cudaSuccess) return failure(error);
   }
   check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
       arena + (response ? plan.candidate : plan.reference), shape_.nao, shape_.spins,
       options_.symmetry_absolute_tolerance, options_.symmetry_relative_tolerance, status);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  return numerical_status(status, stream);
+  if ((error = cudaGetLastError()) != cudaSuccess) return failure(error);
+  return defer_status ? cudaSuccess : numerical_status(status, stream);
 }
 
-cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
+cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_status) noexcept {
   Layout plan;
   if (!options_.nuclear_response || !layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   const auto stream = reference_.stream;
@@ -955,13 +982,31 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response) noexcept {
       arena + (response ? plan.candidate : plan.reference), shape_.nao, shape_.spins,
       options_.symmetry_absolute_tolerance, options_.symmetry_relative_tolerance, status);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  return numerical_status(status, stream);
+  return defer_status ? cudaSuccess : numerical_status(status, stream);
 }
 
 cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction(
     const double* ao, const double* weights, const double* points, const double* density,
     double* potential, cudaStream_t stream) noexcept {
+  return prepare_nuclear_direction_impl(ao, weights, points, density, potential, nullptr, stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_direction(
+    const double* ao, const double* weights, const double* points, const double* density,
+    double* potential, int* transaction_status, cudaStream_t stream) noexcept {
+  if (!transaction_status) {
+    nuclear_ready_ = false;
+    return cudaErrorInvalidValue;
+  }
+  return prepare_nuclear_direction_impl(ao, weights, points, density, potential, transaction_status,
+                                        stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
+    const double* ao, const double* weights, const double* points, const double* density,
+    double* potential, int* transaction_status, cudaStream_t stream) noexcept {
   nuclear_ready_ = false;
+  private_nuclear_status_ = nullptr;
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
   Layout plan;
@@ -998,19 +1043,30 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction(
       arena + plan.right_density, shape_.nao, shape_.spins, options_.symmetry_absolute_tolerance,
       options_.symmetry_relative_tolerance, status);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
+    return error;
   work_.nuclear_affine_terms += plan.direction_work;
   error = moving_features(shape_, plan, arena, arena + plan.right_ao, reference_.density,
                           arena + plan.right_density, arena + plan.direction, stream);
   if (error != cudaSuccess) return drain(error, stream);
-  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
-  if ((error = evaluate_nuclear(true)) != cudaSuccess) return error;
+  if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
+    return error;
+  if ((error = evaluate_nuclear(true, transaction_status != nullptr)) != cudaSuccess) return error;
   if ((error = authenticate(stream)) != cudaSuccess) return error;
-  error = cudaMemcpyAsync(potential, arena + plan.candidate, plan.matrices * sizeof(double),
-                          cudaMemcpyDeviceToDevice, stream);
-  error = drain(error, stream);
+  if (transaction_status) {
+    record_private_nuclear_status<<<1, 1, 0, stream>>>(status, transaction_status);
+    if ((error = cudaGetLastError()) != cudaSuccess) return error;
+    publish_private_response<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
+        arena + plan.candidate, potential, plan.matrices, transaction_status);
+    error = cudaGetLastError();
+  } else {
+    error = cudaMemcpyAsync(potential, arena + plan.candidate, plan.matrices * sizeof(double),
+                            cudaMemcpyDeviceToDevice, stream);
+    error = drain(error, stream);
+  }
   if (error == cudaSuccess) {
     nuclear_ready_ = true;
+    private_nuclear_status_ = transaction_status;
     ++work_.nuclear_directions;
   }
   return error;
@@ -1084,9 +1140,27 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const d
                                                   const double* mixed_weights,
                                                   const double* left_points, double* output,
                                                   cudaStream_t stream) noexcept {
+  return nuclear_mixed_impl(left_ao, mixed_ao, left_weights, mixed_weights, left_points, output,
+                            nullptr, stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_mixed(
+    const double* left_ao, const double* mixed_ao, const double* left_weights,
+    const double* mixed_weights, const double* left_points, double* output, int* transaction_status,
+    cudaStream_t stream) noexcept {
+  if (!transaction_status) return cudaErrorInvalidValue;
+  return nuclear_mixed_impl(left_ao, mixed_ao, left_weights, mixed_weights, left_points, output,
+                            transaction_status, stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
+    const double* left_ao, const double* mixed_ao, const double* left_weights,
+    const double* mixed_weights, const double* left_points, double* output, int* transaction_status,
+    cudaStream_t stream) noexcept {
   auto error = authenticate(stream);
   if (error != cudaSuccess) return error;
-  if (!nuclear_ready_) return cudaErrorInvalidResourceHandle;
+  if (!nuclear_ready_ || (private_nuclear_status_ && private_nuclear_status_ != transaction_status))
+    return cudaErrorInvalidResourceHandle;
   Layout plan;
   if (!layout(shape_, options_, plan) || work_.nuclear_contractions == UINT64_MAX ||
       work_.nuclear_graph_replays == UINT64_MAX ||
@@ -1112,7 +1186,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const d
     maps::finite_input<<<maps::blocks(count), 128, 0, stream>>>(input, count, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   }
-  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
+    return error;
   work_.nuclear_affine_terms += plan.mixed_work;
   if (plan.replay) {
     for (const auto& [input, offset, count] :
@@ -1137,11 +1212,18 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed(const double* left_ao, const d
                          : enqueue_nuclear_mixed(left_ao, mixed_ao, left_weights, mixed_weights,
                                                  left_points, stream);
   if (error != cudaSuccess) return drain(error, stream);
-  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
+    return error;
   if ((error = authenticate(stream)) != cudaSuccess) return error;
-  error = cudaMemcpyAsync(output, arena + plan.scalar, sizeof(double), cudaMemcpyDeviceToDevice,
-                          stream);
-  error = drain(error, stream);
+  if (transaction_status) {
+    finish_private_mixed<<<1, 1, 0, stream>>>(arena + plan.scalar, output, status,
+                                              transaction_status);
+    error = cudaGetLastError();
+  } else {
+    error = cudaMemcpyAsync(output, arena + plan.scalar, sizeof(double), cudaMemcpyDeviceToDevice,
+                            stream);
+    error = drain(error, stream);
+  }
   if (error == cudaSuccess) {
     ++work_.nuclear_contractions;
     if (nuclear_graph_) ++work_.nuclear_graph_replays;
@@ -1161,11 +1243,22 @@ cudaError_t CudaWb97mvGridResponse::reference_energy(const double*& energy) noex
 
 cudaError_t CudaWb97mvGridResponse::apply(const double* direction, double* output,
                                           cudaStream_t stream) noexcept {
+  return apply_impl(direction, output, stream, false);
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_private_response(const double* direction,
+                                                             double* output,
+                                                             cudaStream_t stream) noexcept {
+  return apply_impl(direction, output, stream, true);
+}
+
+cudaError_t CudaWb97mvGridResponse::apply_impl(const double* direction, double* output,
+                                               cudaStream_t stream, bool private_panel) noexcept {
   nuclear_ready_ = false;
-  auto error = authenticate(stream);
+  auto error = authenticate(stream, private_panel);
   if (error != cudaSuccess) return error;
   Layout plan;
-  if (!layout(shape_, options_, plan) || work_.response_actions == UINT64_MAX)
+  if (!layout(shape_, options_, plan) || (!private_panel && work_.response_actions == UINT64_MAX))
     return cudaErrorInvalidValue;
   const void* inputs[] = {reference_.basis,   reference_.points, reference_.weights,
                           reference_.density, workspace_,        direction};
@@ -1180,19 +1273,27 @@ cudaError_t CudaWb97mvGridResponse::apply(const double* direction, double* outpu
     if ((error = device_buffer(pointer, reference_.device_id)) != cudaSuccess) return error;
   auto* arena = static_cast<double*>(workspace_);
   auto* status = reinterpret_cast<int*>(arena + plan.status);
+  const auto failure = [=](cudaError_t code) { return private_panel ? code : drain(code, stream); };
   if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess)
-    return drain(error, stream);
-  ++work_.response_actions;
+    return failure(error);
+  if (!private_panel) ++work_.response_actions;
   check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
       direction, shape_.nao, shape_.spins, options_.symmetry_absolute_tolerance,
       options_.symmetry_relative_tolerance, status);
   error = cudaGetLastError();
   if (error == cudaSuccess)
     error = features(shape_, plan, arena, direction, arena + plan.direction, stream);
-  if (error != cudaSuccess) return drain(error, stream);
-  if ((error = numerical_status(status, stream)) != cudaSuccess) return error;
-  if ((error = evaluate(true)) != cudaSuccess) return error;
-  if ((error = authenticate(stream)) != cudaSuccess) return error;
+  if (error != cudaSuccess) return failure(error);
+  if (!private_panel && (error = numerical_status(status, stream)) != cudaSuccess) return error;
+  if ((error = evaluate(true, private_panel)) != cudaSuccess) return error;
+  if ((error = authenticate(stream, private_panel)) != cudaSuccess) return failure(error);
+  if (private_panel) {
+    // Keep the status on device. The enclosing Fock transaction audits the
+    // assembled result, so stale or partially computed grid data cannot pass.
+    publish_private_response<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
+        arena + plan.candidate, output, plan.matrices, status);
+    return cudaGetLastError();
+  }
   error = cudaMemcpyAsync(output, arena + plan.candidate, plan.matrices * sizeof(double),
                           cudaMemcpyDeviceToDevice, stream);
   return drain(error, stream);

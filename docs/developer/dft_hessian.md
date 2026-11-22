@@ -1740,15 +1740,18 @@ authenticate logical programs, not executable bytes or a converged SCF state.
 The same opt-in library includes the generic native solver in
 `src/response/cuda_gmres.hpp`. Its linked CUDA kernels keep Arnoldi vectors,
 scaled norms, modified Gram-Schmidt projections, Hessenberg/Givens coefficients,
-triangular solves and candidate/true-residual arithmetic on the device. The
-host receives only discrete checkpoint status until the terminal scalar
-receipt. Optional signed right preconditioning divides by the supplied diagonal;
+triangular solves and candidate/true-residual arithmetic on the device. A
+bounded CUDA conditional graph evaluates termination on the device. A checked
+scalar solve reads a setup status and a terminal receipt, not a checkpoint per
+iteration. The operator callback enqueues capturable work on the borrowed
+stream; the number of capture callbacks is not the executed action count.
+Optional signed right preconditioning divides by the supplied diagonal;
 entries at or below the requested gap floor fail. Projected convergence and
 happy breakdown never bypass the true unpreconditioned residual gate.
 
 The caller supplies the native CUDA operator, a borrowed stream and the exact
-admitted workspace. The initial iterate is zero; the public solution is an
-output-only panel, not an initial guess. Admission checks options, arithmetic overflow, byte budget,
+admitted workspace. Unless an explicit seed is passed, the initial iterate is
+zero. Admission checks options, arithmetic overflow, byte budget,
 alignment and nonaliasing before GPU work. There are no solver allocations or
 runtime compiler/interpreter dependencies. On numerical failure, exhausted
 iterations or a failed operator, the public solution remains unchanged. This
@@ -1782,7 +1785,11 @@ matvec residual alone cannot qualify a solution. The cache borrows the exact
 live frame/provider/device/stream and must be reset before replacing them.
 `max_resident_cpks_bytes` defaults to 128 KiB and remains subordinate to the
 existing response and aggregate budgets. Zero, insufficient capacity or an
-optional allocation failure retains ordinary physical GMRES. Standalone native
+optional allocation failure retains ordinary physical GMRES. For the strict
+FP64 Direct Cartesian LDA/PBE RKS domain, the default dense solve reuses one
+stream-bound graph with or without the cached operator. The per-column true
+residual and physical CPKS audits feed an aggregate device receipt; the host
+does not download per-column response panels. Standalone native
 HVP frontends prepare an action-only owner: it reserves neither a dense private
 candidate nor repeated-RHS storage. It still stages and validates each vector
 before publication. A dense call on that owner is rejected without starting
@@ -1943,7 +1950,11 @@ ratio, smooth switching and mixed product derivatives are compiler-generated;
 native traversal retains common binary scaling for the entire four-component
 product jet. Exact-zero factors need no division by a factor. Pair-center jets
 are prepared once per action and reused across bounded point tiles, without
-atom-count-specific compilation. Point-pair visits and cached/output AO values
+atom-count-specific compilation. A matching completed stationary-force owner
+can lend its FP64 center distances and unit separations. The moving-grid owner
+still generates the directional and mixed tangents, and a force reset revokes
+the lease. The force tiles and lower-order active-AO masks do not qualify as
+order-three collocation caches. Point-pair visits and cached/output AO values
 have checked semantic-work bounds independent of the workspace bound. A separate
 conservative Gaussian primitive/polynomial-term bound admits preparation work;
 small AO outputs alone do not bound contraction cost. Packed basis indices,

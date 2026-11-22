@@ -253,6 +253,16 @@ cudaError_t gate(int* status, cudaStream_t stream) {
   error = drain(error, stream);
   return error == cudaSuccess && failed ? cudaErrorInvalidValue : error;
 }
+__global__ void accumulate_failure(const int* status, int* transaction_status) {
+  if (*status) atomicOr(transaction_status, 1);
+}
+__global__ void copy_private_panel(const double* candidate, double* output, std::size_t count,
+                                   const int* status) {
+  if (*status) return;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
+    output[index] = candidate[index];
+}
 __global__ void finite_values(const double* values, std::size_t count, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
@@ -598,6 +608,16 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
       state.ready = false;
       return error;
     }
+    constexpr std::size_t max_upload_staging_bytes = 1U << 20;
+    std::vector<DeviceJob> packed_jobs;
+    if (state.jobs.size() <= max_upload_staging_bytes / sizeof(DeviceJob)) {
+      try {
+        packed_jobs.reserve(state.jobs.size());
+        for (const auto& job : state.jobs) packed_jobs.push_back(job.device);
+      } catch (const std::bad_alloc&) {
+        packed_jobs.clear();
+      }
+    }
     const auto stream = reference.stream;
     auto* base = static_cast<char*>(workspace);
     auto* status = reinterpret_cast<int*>(base + plan.status);
@@ -607,9 +627,15 @@ cudaError_t CudaOneElectronResponse::prepare(const CudaOneElectronShape& shape,
     if (error == cudaSuccess)
       error = cudaMemcpyAsync(device_shells, shells.data(), shells.size_bytes(),
                               cudaMemcpyHostToDevice, stream);
-    for (std::size_t index = 0; index < state.jobs.size() && error == cudaSuccess; ++index)
-      error = cudaMemcpyAsync(device_jobs + index, &state.jobs[index].device, sizeof(DeviceJob),
-                              cudaMemcpyHostToDevice, stream);
+    if (error == cudaSuccess && !packed_jobs.empty()) {
+      error =
+          cudaMemcpyAsync(device_jobs, packed_jobs.data(), packed_jobs.size() * sizeof(DeviceJob),
+                          cudaMemcpyHostToDevice, stream);
+    } else {
+      for (std::size_t index = 0; index < state.jobs.size() && error == cudaSuccess; ++index)
+        error = cudaMemcpyAsync(device_jobs + index, &state.jobs[index].device, sizeof(DeviceJob),
+                                cudaMemcpyHostToDevice, stream);
+    }
     if (error == cudaSuccess && !plan.tasks.empty())
       error =
           cudaMemcpyAsync(base + plan.parallel_descriptors, plan.tasks.data(),
@@ -666,6 +692,23 @@ cudaError_t CudaOneElectronResponse::apply(const double* direction,
                                            const CudaOneElectronWeights& weights,
                                            const CudaOneElectronOutput& output,
                                            cudaStream_t stream) noexcept {
+  return apply_impl(direction, weights, output, nullptr, stream);
+}
+
+cudaError_t CudaOneElectronResponse::enqueue_private(const double* direction,
+                                                     const CudaOneElectronWeights& weights,
+                                                     const CudaOneElectronOutput& output,
+                                                     int* transaction_status,
+                                                     cudaStream_t stream) noexcept {
+  if (!transaction_status) return cudaErrorInvalidValue;
+  return apply_impl(direction, weights, output, transaction_status, stream);
+}
+
+cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
+                                                const CudaOneElectronWeights& weights,
+                                                const CudaOneElectronOutput& output,
+                                                int* transaction_status,
+                                                cudaStream_t stream) noexcept {
   auto& state = *impl_;
   if (state.work.attempted_actions == UINT64_MAX) return cudaErrorInvalidValue;
   ++state.work.attempted_actions;
@@ -685,14 +728,26 @@ cudaError_t CudaOneElectronResponse::apply(const double* direction,
                        output.gradient,       output.hvp};
   const std::size_t output_counts[] = {plan.matrix, plan.matrix,     plan.matrix,
                                        plan.matrix, 3 * shape.atoms, 3 * shape.atoms};
+  if (transaction_status) {
+    if ((error = device_buffer(transaction_status, reference.device_id)) != cudaSuccess)
+      return error;
+    if (!disjoint(state.workspace, plan.bytes, transaction_status, sizeof(int)))
+      return cudaErrorInvalidValue;
+  }
   for (unsigned index = 0; index < 7; ++index) {
     if (!disjoint(state.workspace, plan.bytes, inputs[index], input_counts[index] * sizeof(double)))
+      return cudaErrorInvalidValue;
+    if (transaction_status && !disjoint(transaction_status, sizeof(int), inputs[index],
+                                        input_counts[index] * sizeof(double)))
       return cudaErrorInvalidValue;
     if ((error = device_buffer(inputs[index], reference.device_id)) != cudaSuccess) return error;
   }
   for (unsigned index = 0; index < 6; ++index) {
     if (!disjoint(state.workspace, plan.bytes, outputs[index],
                   output_counts[index] * sizeof(double)))
+      return cudaErrorInvalidValue;
+    if (transaction_status && !disjoint(transaction_status, sizeof(int), outputs[index],
+                                        output_counts[index] * sizeof(double)))
       return cudaErrorInvalidValue;
     for (unsigned other = 0; other < 7; ++other)
       if (!disjoint(outputs[index], output_counts[index] * sizeof(double), inputs[other],
@@ -725,8 +780,8 @@ cudaError_t CudaOneElectronResponse::apply(const double* direction,
         state.options.symmetry_relative_tolerance, status);
     error = cudaGetLastError();
   }
-  error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
-  if (error != cudaSuccess) return error;
+  if (error == cudaSuccess && !transaction_status) error = gate(status, stream);
+  if (error != cudaSuccess) return transaction_status ? error : drain(error, stream);
   error =
       cudaMemsetAsync(candidate, 0, (4 * plan.matrix + 6 * shape.atoms) * sizeof(double), stream);
   if (state.replay && error == cudaSuccess) {
@@ -790,17 +845,27 @@ cudaError_t CudaOneElectronResponse::apply(const double* direction,
                                                                6 * shape.atoms, status);
     error = cudaGetLastError();
   }
-  error = error == cudaSuccess ? gate(status, stream) : drain(error, stream);
+  if (error == cudaSuccess && !transaction_status) error = gate(status, stream);
   if (error == cudaSuccess) error = state.authenticate(stream);
-  if (error != cudaSuccess) return error;
+  if (error != cudaSuccess) return transaction_status ? error : drain(error, stream);
+  if (transaction_status) {
+    accumulate_failure<<<1, 1, 0, stream>>>(status, transaction_status);
+    error = cudaGetLastError();
+  }
   std::size_t offset{};
   for (unsigned index = 0; index < 6 && error == cudaSuccess; ++index) {
-    error =
-        cudaMemcpyAsync(outputs[index], candidate + offset, output_counts[index] * sizeof(double),
-                        cudaMemcpyDeviceToDevice, stream);
+    if (transaction_status) {
+      copy_private_panel<<<blocks(output_counts[index]), 128, 0, stream>>>(
+          candidate + offset, outputs[index], output_counts[index], status);
+      error = cudaGetLastError();
+    } else {
+      error =
+          cudaMemcpyAsync(outputs[index], candidate + offset, output_counts[index] * sizeof(double),
+                          cudaMemcpyDeviceToDevice, stream);
+    }
     offset += output_counts[index];
   }
-  error = drain(error, stream);
+  if (!transaction_status) error = drain(error, stream);
   if (error == cudaSuccess) ++state.work.completed_actions;
   return error;
 }

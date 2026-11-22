@@ -138,9 +138,18 @@ class CudaWb97mvNuclearJk {
                       void* workspace, std::size_t workspace_bytes) noexcept;
   cudaError_t apply(const double* direction, const double* density, const double* delta_density,
                     const CudaWb97mvJkOutput& output, cudaStream_t stream) noexcept;
+  /** Enqueue a fresh action into private buffers. The caller owns the sticky
+   * transaction audit and must drain and accept it before using the outputs.
+   * This path neither consumes nor authorizes the optional direction cache. */
+  cudaError_t enqueue_private_fresh(const double* direction, const double* density,
+                                    const double* delta_density, const CudaWb97mvJkOutput& output,
+                                    int* transaction_status, cudaStream_t stream) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:
+  cudaError_t apply_impl(const double* direction, const double* density,
+                         const double* delta_density, const CudaWb97mvJkOutput& output,
+                         int* transaction_status, cudaStream_t stream) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

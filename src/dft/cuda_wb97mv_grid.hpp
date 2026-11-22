@@ -121,6 +121,13 @@ class CudaWb97mvGridResponse {
    * blocks together. Output is [spin,AO,AO], disjoint from all retained inputs.
    */
   cudaError_t apply(const double* direction, double* output, cudaStream_t stream) noexcept;
+  /** Enqueue the same response into a private downstream Fock panel. A
+   * numerical failure writes NaNs instead of publishing unchecked data; the
+   * consumer must audit its candidate before exposing a result. The consumer
+   * owns stream completion, including errors after partial enqueue, and
+   * accounts actual replay rather than host record-time calls. */
+  cudaError_t enqueue_private_response(const double* direction, double* output,
+                                       cudaStream_t stream) noexcept;
   /** Borrow the prepared native value-side potential under the same live lease.
    * It remains internal, and must not be written or retained after revocation.
    */
@@ -134,6 +141,12 @@ class CudaWb97mvGridResponse {
   cudaError_t prepare_nuclear_direction(const double* ao, const double* weights,
                                         const double* points, const double* density,
                                         double* potential, cudaStream_t stream) noexcept;
+  /** Enqueue the right direction against a private device transaction. Only
+   * mixed contractions using that same status may consume the right cache. */
+  cudaError_t enqueue_private_nuclear_direction(const double* ao, const double* weights,
+                                                const double* points, const double* density,
+                                                double* potential, int* transaction_status,
+                                                cudaStream_t stream) noexcept;
   /** Stationary left nuclear partial with zero left/mixed density motion.
    * The retained right density response participates in the mixed AO features.
    * Mixed point motion is zero for affine owner-atom coordinates. The scalar
@@ -142,18 +155,36 @@ class CudaWb97mvGridResponse {
                             const double* left_weights, const double* mixed_weights,
                             const double* left_points, double* output,
                             cudaStream_t stream) noexcept;
+  /** Enqueue a contraction into a private scalar, deferring its numerical
+   * audit into the enclosing device transaction. The transaction owns a
+   * separate, initialized status flag and must drain and check it before
+   * any external publication. Neither argument may alias grid storage. */
+  cudaError_t enqueue_private_nuclear_mixed(const double* left_ao, const double* mixed_ao,
+                                            const double* left_weights, const double* mixed_weights,
+                                            const double* left_points, double* output,
+                                            int* transaction_status, cudaStream_t stream) noexcept;
   /** Borrow the opt-in prepared grid energy scalar under the live lease. */
   cudaError_t reference_energy(const double*& energy) noexcept;
   const CudaWb97mvGridWork& work() const noexcept { return work_; }
 
  private:
-  cudaError_t authenticate(cudaStream_t stream) noexcept;
-  cudaError_t evaluate(bool response) noexcept;
-  cudaError_t evaluate_nuclear(bool response) noexcept;
+  cudaError_t authenticate(cudaStream_t stream, bool composable = false) noexcept;
+  cudaError_t apply_impl(const double* direction, double* output, cudaStream_t stream,
+                         bool private_panel) noexcept;
+  cudaError_t evaluate(bool response, bool defer_status = false) noexcept;
+  cudaError_t evaluate_nuclear(bool response, bool defer_status = false) noexcept;
+  cudaError_t prepare_nuclear_direction_impl(const double* ao, const double* weights,
+                                             const double* points, const double* density,
+                                             double* potential, int* transaction_status,
+                                             cudaStream_t stream) noexcept;
   cudaError_t build_nuclear_graph() noexcept;
   cudaError_t enqueue_nuclear_mixed(const double* left_ao, const double* mixed_ao,
                                     const double* left_weights, const double* mixed_weights,
                                     const double* left_points, cudaStream_t stream) noexcept;
+  cudaError_t nuclear_mixed_impl(const double* left_ao, const double* mixed_ao,
+                                 const double* left_weights, const double* mixed_weights,
+                                 const double* left_points, double* output, int* transaction_status,
+                                 cudaStream_t stream) noexcept;
   CudaWb97mvGridShape shape_{};
   CudaWb97mvGridOptions options_{};
   CudaWb97mvGridReference reference_{};
@@ -162,6 +193,7 @@ class CudaWb97mvGridResponse {
   double beta_{};
   bool ready_{};
   bool nuclear_ready_{};
+  int* private_nuclear_status_{};
   cudaGraphExec_t nuclear_graph_{};
 };
 

@@ -234,6 +234,48 @@ __global__ void audit(const double* value, const double* reference, std::size_t 
       atomicOr(status, 4);
   }
 }
+
+struct ActionCounts {
+  std::uint64_t quartets, eris, actions, grid_actions;
+};
+
+// These slots have independent owners: each Direct enqueue resets its own
+// flag. The generated maps must never clear a previous Direct failure.
+constexpr unsigned status_count = 3;
+
+__device__ bool failed_action(const int* status) { return status[0] || status[1] || status[2]; }
+
+__global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
+                             std::uint64_t grid_bound, ActionCounts* total, int* status) {
+  if (total->grid_actions == grid_bound) {
+    status[0] |= 8;
+    return;
+  }
+  // Grid quadrature was submitted even if the Fock candidate fails its audit.
+  ++total->grid_actions;
+  if (failed_action(status)) return;
+  if (counts[0] > bound || counts[2] > bound - counts[0] || counts[1] > bound ||
+      counts[3] > bound - counts[1]) {
+    status[0] |= 8;
+    return;
+  }
+  const auto quartets = counts[0] + counts[2], eris = counts[1] + counts[3];
+  if (quartets > UINT64_MAX - total->quartets || eris > UINT64_MAX - total->eris ||
+      total->actions == UINT64_MAX) {
+    status[0] |= 8;
+    return;
+  }
+  total->quartets += quartets;
+  total->eris += eris;
+  ++total->actions;
+}
+
+__global__ void publish_private_fock(const double* candidate, double* output, std::size_t count,
+                                     const int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
+    output[index] = failed_action(status) ? nan("") : candidate[index];
+}
 }  // namespace
 
 struct CudaKsWb97mvResponse::Impl {
@@ -262,9 +304,10 @@ struct CudaKsWb97mvResponse::Impl {
       *fitted_panel{}, *range_whitened{}, *seed{}, *exchange_coefficient{}, *range_coefficient{},
       *compensation{};
   int* status{};
-  int* direct_status{};
   std::uint64_t *census{}, *range_census{};
-  bool ready{};
+  ActionCounts* action_counts{};
+  std::uint64_t grid_actions{};
+  bool ready{}, used{};
   const char* failure_check{};
 
   Impl(methods::PreparedBatch& owner, std::size_t index, CudaKsFinalStateToken token,
@@ -282,14 +325,16 @@ struct CudaKsWb97mvResponse::Impl {
     if (arena) (void)runtime::resource_cuda_free(arena);
   }
 
-  cudaError_t authenticate(cudaStream_t requested) {
+  cudaError_t authenticate(cudaStream_t requested, bool composable = false) {
     int device = -1;
     cudaStreamCaptureStatus capture{};
     if (requested != stream || cudaGetDevice(&device) != cudaSuccess || device != source.device_id)
       return cudaErrorInvalidResourceHandle;
     auto error = cudaStreamIsCapturing(stream, &capture);
     if (error != cudaSuccess) return error;
-    if (capture != cudaStreamCaptureStatusNone) return cudaErrorStreamCaptureUnsupported;
+    if (capture != cudaStreamCaptureStatusNone &&
+        !(composable && capture == cudaStreamCaptureStatusActive))
+      return cudaErrorStreamCaptureUnsupported;
     CudaKsResidentFockBinding current;
     std::string detail;
     if (methods::detail::dft_cuda_resident_fock_sources(batch, item, expected, current, detail) !=
@@ -321,12 +366,12 @@ struct CudaKsWb97mvResponse::Impl {
   }
 
   cudaError_t gate(int* failure_flags = nullptr) {
-    int failed[2]{};
+    int failed[status_count]{};
     auto error = cudaMemcpyAsync(failed, status, sizeof(failed), cudaMemcpyDeviceToHost, stream);
     if (error != cudaSuccess) return error;
     if ((error = cudaStreamSynchronize(stream)) != cudaSuccess) return error;
     if (failure_flags) *failure_flags = failed[0];
-    return failed[0] || failed[1] ? cudaErrorInvalidValue : cudaSuccess;
+    return failed[0] || failed[1] || failed[2] ? cudaErrorInvalidValue : cudaSuccess;
   }
 
   generativeqc_status prepare_resident(std::string& detail) {
@@ -394,7 +439,7 @@ struct CudaKsWb97mvResponse::Impl {
 
   cudaError_t evaluate(const double* density, const double* grid_potential, const double* hcore,
                        bool response) {
-    check(cudaMemsetAsync(status, 0, 2 * sizeof(int), stream));
+    check(cudaMemsetAsync(status, 0, status_count * sizeof(int), stream));
     const auto* beta = source.spins == 2 ? density + matrix : nullptr;
     const auto& spec = source.primary->strategy().spec;
     auto* beta_exchange = source.spins == 2 && spec.exchange.present ? exchange + matrix : nullptr;
@@ -410,11 +455,10 @@ struct CudaKsWb97mvResponse::Impl {
         check(launch(shape, density, fitted_panel, fitted.whitening, primary, map_workspace,
                      map_bytes, status, stream));
       }
-      check(gate());
     } else {
       const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
           direct, spec, density, matrix, coulomb, spec.exchange.present ? exchange : nullptr,
-          compensation, compensation_elements, direct_status, 0, census, detail, true, beta,
+          compensation, compensation_elements, status + 1, 0, census, detail, true, beta,
           beta_exchange, false);
       if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
       check(source.spins == 1
@@ -422,7 +466,6 @@ struct CudaKsWb97mvResponse::Impl {
                                          map_workspace, map_bytes, status, stream)
                 : maps::launch_uks_exact(shape, coulomb, exchange, exchange_coefficient, primary,
                                          map_workspace, map_bytes, status, stream));
-      check(gate());
     }
     // Absent exchange panels stay zero for the linear assembly maps. In a
     // pure model no exchange or LR integral action is enqueued.
@@ -431,11 +474,10 @@ struct CudaKsWb97mvResponse::Impl {
           source.spins == 1 ? maps::launch_rks_fitted_range : maps::launch_uks_fitted_range;
       check(launch(range_shape, seed, density, range_whitened, long_range, map_workspace, map_bytes,
                    status, stream));
-      check(gate());
     } else if (source.correction) {
       const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
           range_direct ? range_direct : direct, source.correction->spec, density, matrix, nullptr,
-          long_range, compensation, compensation_elements, direct_status, 0, range_census, detail,
+          long_range, compensation, compensation_elements, status + 2, 0, range_census, detail,
           true, beta, source.spins == 2 ? long_range + matrix : nullptr, false);
       if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
     }
@@ -451,30 +493,34 @@ struct CudaKsWb97mvResponse::Impl {
         response ? options.grid.symmetry_relative_tolerance : options.reference_relative_tolerance,
         status);
     check(cudaGetLastError());
+    if (response) {
+      // Preparation bounded squared active-point counts per action. Bound the
+      // aggregate for either grid before incrementing a real replay count.
+      const auto max_points =
+          std::max(grid.work().active_nonlocal_points, vv10_grid.work().active_nonlocal_points);
+      const auto pairs = static_cast<std::uint64_t>(max_points) * max_points;
+      const auto grid_bound = pairs ? UINT64_MAX / pairs : UINT64_MAX;
+      count_action<<<1, 1, 0, stream>>>(census, options.max_direct_eri_evaluations, grid_bound,
+                                        action_counts, status);
+      return cudaGetLastError();
+    }
     int failure_flags{};
     const auto audited = gate(&failure_flags);
     if (audited == cudaErrorInvalidValue && (failure_flags & 2))
       throw std::runtime_error("physical response Fock audit encountered a nonfinite value");
     if (audited == cudaErrorInvalidValue && (failure_flags & 4))
-      throw std::runtime_error(response
-                                   ? "induced Fock is not symmetric"
-                                   : "reconstructed Fock disagrees with the accepted SCF Fock");
+      throw std::runtime_error("reconstructed Fock disagrees with the accepted SCF Fock");
     check(audited);
     std::uint64_t counts[4]{};
     check(cudaMemcpyAsync(counts, census, sizeof(counts), cudaMemcpyDeviceToHost, stream));
     check(cudaStreamSynchronize(stream));
-    auto& quartets = response ? receipt.response_quartets : receipt.reference_quartets;
-    auto& eris = response ? receipt.response_eris : receipt.reference_eris;
     require(counts[0] <= options.max_direct_eri_evaluations &&
                 counts[2] <= options.max_direct_eri_evaluations - counts[0] &&
                 counts[1] <= options.max_direct_eri_evaluations &&
                 counts[3] <= options.max_direct_eri_evaluations - counts[1],
             "physical response Direct census exceeded its admitted work bound");
-    require(quartets <= std::numeric_limits<std::uint64_t>::max() - (counts[0] + counts[2]) &&
-                eris <= std::numeric_limits<std::uint64_t>::max() - (counts[1] + counts[3]),
-            "physical response work receipt overflow");
-    quartets += counts[0] + counts[2];
-    eris += counts[1] + counts[3];
+    receipt.reference_quartets = counts[0] + counts[2];
+    receipt.reference_eris = counts[1] + counts[3];
     return cudaSuccess;
   }
 };
@@ -644,8 +690,8 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     owner->compensation_elements =
         direct_actions ? product(product(2, grid_shape.spins), product(cartesian, cartesian)) : 0;
     const auto compensation_offset = layout.add(owner->compensation_elements);
-    const auto status_offset = layout.add(1);
-    const auto census_offset = layout.add(4);
+    const auto status_offset = layout.add(2);
+    const auto census_offset = layout.add(4 + sizeof(ActionCounts) / sizeof(double));
     owner->arena_bytes = layout.bytes;
     require(owner->arena_bytes < options.max_device_bytes,
             "physical response workspace exceeds its explicit device bound");
@@ -682,9 +728,9 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     owner->range_coefficient = panel(range_coefficient_offset);
     owner->compensation = panel(compensation_offset);
     owner->status = reinterpret_cast<int*>(panel(status_offset));
-    owner->direct_status = owner->status + 1;
     owner->census = reinterpret_cast<std::uint64_t*>(panel(census_offset));
     owner->range_census = owner->census + 2;
+    owner->action_counts = reinterpret_cast<ActionCounts*>(owner->census + 4);
     check(cudaMemsetAsync(owner->arena, 0, owner->arena_bytes, lease.stream));
     const double seed = 1;
     check(cudaMemcpyAsync(owner->seed, &seed, sizeof(seed), cudaMemcpyHostToDevice, lease.stream));
@@ -770,11 +816,16 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
 
 cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
                                         cudaStream_t stream) noexcept {
+  return apply_impl(direction, output, stream, false);
+}
+
+cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* output,
+                                             cudaStream_t stream, bool private_panel) noexcept {
   if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
   try {
     auto& owner = *impl_;
     owner.failure_check = "induced Fock action buffer admission";
-    auto error = owner.authenticate(stream);
+    auto error = owner.authenticate(stream, private_panel);
     if (error != cudaSuccess) {
       owner.ready = false;
       return error;
@@ -819,8 +870,6 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
           overlap(output, bytes, vv10_lease.weights, vv10_shape.points * sizeof(double)))
         return cudaErrorInvalidValue;
     }
-    if (owner.receipt.actions == std::numeric_limits<std::uint64_t>::max())
-      return cudaErrorInvalidValue;
     struct DrainOnFailure {
       cudaStream_t stream;
       bool active{true};
@@ -829,26 +878,33 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
         // borrows the caller's direction or output storage.
         if (active) (void)cudaStreamSynchronize(stream);
       }
-    } drain{stream};
+    } drain{stream, !private_panel};
+    owner.used = true;
     owner.failure_check = "induced Fock XC response";
-    check(owner.grid.apply(direction, owner.potential, stream));
+    check(owner.grid.enqueue_private_response(direction, owner.potential, stream));
     if (owner.expected.identity.model.nonlocal_grid) {
-      check(owner.vv10_grid.apply(direction, owner.candidate, stream));
+      check(owner.vv10_grid.enqueue_private_response(direction, owner.candidate, stream));
       sum_grid_potentials<<<maps::blocks(owner.elements), 128, 0, stream>>>(
           owner.potential, owner.candidate, owner.potential, owner.elements);
       check(cudaGetLastError());
     }
     owner.failure_check = "induced Fock assembly and finite symmetric audit";
     check(owner.evaluate(direction, owner.potential, owner.zero, true));
-    error = owner.authenticate(stream);
+    if (!private_panel) check(owner.gate());
+    error = owner.authenticate(stream, private_panel);
     if (error != cudaSuccess) {
       owner.ready = false;
       return error;
     }
+    if (private_panel) {
+      publish_private_fock<<<maps::blocks(owner.elements), 128, 0, stream>>>(
+          owner.candidate, output, owner.elements, owner.status);
+      return cudaGetLastError();
+    }
+    check(collect_work());
     check(cudaMemcpyAsync(output, owner.candidate, bytes, cudaMemcpyDeviceToDevice, stream));
     check(cudaStreamSynchronize(stream));
     drain.active = false;
-    ++owner.receipt.actions;
     owner.failure_check = nullptr;
     return cudaSuccess;
   } catch (...) {
@@ -862,7 +918,7 @@ const char* CudaKsWb97mvResponse::failure_check() const noexcept {
 
 generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_additional_bytes,
                                                            std::string& detail) {
-  if (!impl_ || !impl_->ready || impl_->receipt.actions || impl_->receipt.resident_integral_bytes) {
+  if (!impl_ || !impl_->ready || impl_->used || impl_->receipt.resident_integral_bytes) {
     detail = "optional integral admission requires an unused prepared response owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -887,11 +943,35 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_a
   }
 }
 
+cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
+  if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  ActionCounts counts{};
+  const auto copied = cudaMemcpyAsync(&counts, owner.action_counts, sizeof(counts),
+                                      cudaMemcpyDeviceToHost, owner.stream);
+  const auto completed = cudaStreamSynchronize(owner.stream);
+  if (copied != cudaSuccess) return copied;
+  if (completed != cudaSuccess) return completed;
+  owner.receipt.response_quartets = counts.quartets;
+  owner.receipt.response_eris = counts.eris;
+  owner.receipt.actions = counts.actions;
+  owner.grid_actions = counts.grid_actions;
+  owner.failure_check = nullptr;
+  return cudaSuccess;
+}
+
 CudaKsWb97mvResponseWork CudaKsWb97mvResponse::work() const noexcept {
   if (!impl_) return {};
   auto receipt = impl_->receipt;
   receipt.grid = impl_->grid.work();
   receipt.separate_vv10 = impl_->vv10_grid.work();
+  auto grid_receipt = [&](CudaWb97mvGridWork& grid) {
+    grid.response_actions = impl_->grid_actions;
+    const auto points = static_cast<std::uint64_t>(grid.active_nonlocal_points);
+    grid.response_pairs = (points * points) * grid.response_actions;
+  };
+  grid_receipt(receipt.grid);
+  if (impl_->expected.identity.model.nonlocal_grid) grid_receipt(receipt.separate_vv10);
   return receipt;
 }
 
@@ -902,7 +982,7 @@ cudaError_t CudaKsWb97mvResponse::induced_fock(void* context, const double* dire
   auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
   if (!self.impl_ || shape.nao != self.impl_->source.nao || shape.spins != self.impl_->source.spins)
     return cudaErrorInvalidValue;
-  return self.apply(direction, output, stream);
+  return self.apply_impl(direction, output, stream, true);
 }
 
 }  // namespace generativeqc::dft

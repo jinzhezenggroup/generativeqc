@@ -62,7 +62,7 @@ void array(const char* name, const std::vector<double>& values) {
  * they are not part of native preparation or response execution. */
 void run(bool unrestricted, const std::string& mode) {
   const bool physical = mode == "physical";
-  const bool fock = mode == "fock" || mode == "df-fock";
+  const bool fock = mode == "fock" || mode == "df-fock" || mode == "fock-no-resident";
   const bool nuclear = mode == "nuclear" || mode == "df-nuclear";
   const bool one_electron = mode == "one-electron" || mode == "df-one-electron";
   const bool nuclear_jk = mode == "nuclear-jk" || mode == "df-nuclear-jk";
@@ -671,6 +671,7 @@ void run(bool unrestricted, const std::string& mode) {
   if (fock) {
     dft::CudaKsWb97mvResponseOptions full_controls;
     full_controls.grid = controls;
+    if (mode == "fock-no-resident") full_controls.max_resident_integral_bytes = 0;
     for (unsigned bound = 0; bound < 3; ++bound) {
       auto insufficient = full_controls;
       if (bound == 0) insufficient.max_device_bytes = 1;
@@ -710,16 +711,29 @@ void run(bool unrestricted, const std::string& mode) {
     require(full_response.apply(input, output, lease.stream) == cudaErrorInvalidValue &&
                 download(output, elements) == unchanged,
             "nonfinite physical response published an output");
-    check(cudaMemcpyAsync(input, direction.data(), elements * sizeof(double),
-                          cudaMemcpyHostToDevice, lease.stream));
+    const auto before_refusal = full_response.work();
     response::CudaKsCpksReference cpks_reference(*batch, 0, token);
     require(cpks_reference.prepare(detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    const auto cpks_shape = cpks_reference.shape();
+    auto* private_output = storage.allocate(elements);
+    check(dft::CudaKsWb97mvResponse::induced_fock(&full_response, input, private_output, cpks_shape,
+                                                  lease.stream));
+    check(full_response.collect_work());
+    const auto refused = download(private_output, elements);
+    const auto after_refusal = full_response.work();
+    require(std::all_of(refused.begin(), refused.end(),
+                        [](double value) { return std::isnan(value); }) &&
+                after_refusal.actions == before_refusal.actions &&
+                after_refusal.response_eris == before_refusal.response_eris &&
+                after_refusal.response_quartets == before_refusal.response_quartets,
+            "unaudited Fock panel contributed to the accepted action census");
+    check(cudaMemcpyAsync(input, direction.data(), elements * sizeof(double),
+                          cudaMemcpyHostToDevice, lease.stream));
     response::CudaCpksOptions cpks_controls;
     cpks_controls.gmres.restart = 12;
     cpks_controls.gmres.max_iterations = 120;
     cpks_controls.gmres.absolute_tolerance = 1e-12;
     cpks_controls.gmres.relative_tolerance = 1e-10;
-    const auto cpks_shape = cpks_reference.shape();
     std::size_t cpks_bytes{};
     check(response::cuda_cpks_workspace(cpks_shape, cpks_controls, cpks_bytes));
     auto* cpks_arena = storage.allocate((cpks_bytes + sizeof(double) - 1) / sizeof(double));
@@ -735,6 +749,7 @@ void run(bool unrestricted, const std::string& mode) {
     require(cpks_result.converged(), "physical molecular CPKS did not converge");
     array("cpks_density", download(output, elements));
     array("cpks_weighted", download(weighted_direction, elements));
+    check(full_response.collect_work());
     const auto work = full_response.work();
     std::cout << ",\"capacity_alias_finite_gates\":true,\"cpks_actions\":"
               << cpks_result.induced_fock_actions << ",\"fock_actions\":" << work.actions
@@ -850,15 +865,17 @@ int main(int argc, char** argv) {
     const std::string mode = argc == 3 ? argv[2] : "grid";
     require((argc == 2 ||
              (argc == 3 &&
-              (mode == "physical" || mode == "fock" || mode == "df-fock" || mode == "geometry" ||
-               mode == "df-geometry" || mode == "nuclear" || mode == "df-nuclear" ||
-               mode == "one-electron" || mode == "df-one-electron" || mode == "nuclear-jk" ||
-               mode == "df-nuclear-jk" || mode == "df-response" || mode == "direct-df-response" ||
+              (mode == "physical" || mode == "fock" || mode == "df-fock" ||
+               mode == "fock-no-resident" || mode == "geometry" || mode == "df-geometry" ||
+               mode == "nuclear" || mode == "df-nuclear" || mode == "one-electron" ||
+               mode == "df-one-electron" || mode == "nuclear-jk" || mode == "df-nuclear-jk" ||
+               mode == "df-response" || mode == "direct-df-response" ||
                mode == "df-nuclear-source" || mode == "ecp-source" || mode == "df-ecp-source" ||
                mode == "spherical-ecp-source" || mode == "df-spherical-ecp-source"))) &&
                 (std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks"),
             "usage: ks_wb97mv_grid_probe rks|uks "
-            "[physical|fock|df-fock|geometry|df-geometry|nuclear|df-nuclear|one-electron|df-one-"
+            "[physical|fock|fock-no-resident|df-fock|geometry|df-geometry|nuclear|df-nuclear|"
+            "one-electron|df-one-"
             "electron|nuclear-jk|df-nuclear-jk|df-response|direct-df-response|df-nuclear-source|"
             "ecp-source|df-ecp-source|spherical-ecp-source|df-spherical-ecp-source]");
     run(std::string(argv[1]) == "uks", mode);

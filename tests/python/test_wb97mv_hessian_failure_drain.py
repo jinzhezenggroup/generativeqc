@@ -30,8 +30,8 @@ _RUNTIME = r"""
 #include <vector>
 using cudaStream_t = void*;
 using cudaError_t = int;
-constexpr int cudaSuccess=0, cudaErrorInvalidResourceHandle=1, cudaErrorUnknown=2;
-constexpr int cudaMemcpyDeviceToDevice=0, cudaMemcpyHostToDevice=1;
+constexpr int cudaSuccess=0, cudaErrorInvalidResourceHandle=1, cudaErrorUnknown=2, cudaErrorInvalidValue=3;
+constexpr int cudaMemcpyDeviceToDevice=0, cudaMemcpyHostToDevice=1, cudaMemcpyDeviceToHost=2;
 namespace q {
 struct Task {const void* source; std::function<void()> run;};
 std::vector<Task> pending;
@@ -62,8 +62,26 @@ using std::vector<T>::vector;
 namespace maps {unsigned blocks(std::size_t n){return unsigned(n);}}
 void unit(double* p,std::size_t n,std::size_t i){
 q::pending.push_back({nullptr,[=]{std::fill(p,p+n,0);p[i]=1;}});}
-void store_column(const double* p,std::size_t n,std::size_t i,double* out){
-q::pending.push_back({p,[=]{for(std::size_t j=0;j<n;++j)out[j*n+i]=p[j];}});}
+namespace response {
+enum class CudaGmresStatus {running, converged};
+enum class CudaCpksStatus {running, converged, linear_solve_failed};
+enum class CudaCpksResidentPrecision {fp64};
+struct CudaGmresReceipt{
+int code{};std::size_t iterations{},restarts{};
+double rhs_norm{},residual_norm{},tolerance{};
+std::size_t operator_actions{},preconditioner_actions{};CudaGmresStatus status{};};
+struct CudaCpksDenseReceipt{
+std::size_t iterations{};CudaGmresReceipt last;
+CudaCpksStatus failure{};};
+struct CudaCpksDenseReplay{CudaCpksDenseReceipt* receipt;int* column_status;struct{} solver;};
+}
+struct DenseAssemblyAudit{
+std::size_t completed;int failed;response::CudaCpksDenseReceipt cpks;};
+void store_column(const double* p,std::size_t n,std::size_t i,const int* status,
+double* out,DenseAssemblyAudit* audit){
+q::pending.push_back({p,[=]{if(*status){audit->failed=1;return;}
+++audit->completed;for(std::size_t j=0;j<n;++j)out[j*n+i]=p[j];}});}
+namespace core {constexpr int kCartesianBasis=1;}
 void symmetric(const double*,std::size_t,double,double,int*){
 q::pending.push_back({nullptr,[]{}});}
 enum class CudaKsWb97mvHessianStatus{failed,response_not_converged,converged};
@@ -71,10 +89,15 @@ enum class CudaKsWb97mvHessianMode{dense_and_action};
 struct CudaKsWb97mvHessianResult{
 CudaKsWb97mvHessianStatus status=CudaKsWb97mvHessianStatus::failed;
 const char* failure_check{};
+std::size_t completed_directions{};
+struct{response::CudaGmresReceipt gmres;response::CudaCpksStatus status{};}response;
 bool converged()const{return status==CudaKsWb97mvHessianStatus::converged;}};
 struct Atom{int atomic_number{1};std::array<double,3> position{};double ionic_charge()const{return 1;}};
-struct Primary{struct System{std::vector<Atom> atoms{Atom{},Atom{}};} value;
-const System& system(){return value;}};
+struct Primary{struct System{std::vector<Atom> atoms{Atom{},Atom{}};
+int basis_representation=core::kCartesianBasis;} value;
+const System& system(){return value;}
+struct Strategy{struct{struct{bool present{};}exchange;}spec;};
+Strategy strategy(){return {};}};
 enum class Correction {none, d3, d4};
 struct D4Correction {int profile()const{return 0;}};
 namespace dispersion {
@@ -87,26 +110,47 @@ D4Tables eeq_d4_host_tables(int){return {};}
 ChargeTables eeq2019_host_tables(){return {};}
 }
 struct Owner{
-cudaStream_t stream=nullptr;double storage[32]{};void* arena=storage;
+cudaStream_t stream=nullptr;double storage[48]{};void* arena=storage;
 std::size_t bytes=sizeof(storage),direction=0,candidate=2,complete=4,status_offset=10,
 coordinates=2,charges=12,pair_atoms=14,pairs=1,correction_geometry=16,
-d4_numbers=22,d4_elements=24,d4_references=25,d4_c6=26,eeq_parameters=27;
+d4_numbers=22,d4_elements=24,d4_references=25,d4_c6=26,eeq_parameters=27,dense_audit_offset=32;
 CudaKsWb97mvHessianMode mode{CudaKsWb97mvHessianMode::dense_and_action};
 struct{struct{struct{bool nonlocal_grid{};}model;}identity;}expected;
 struct Geometry{int admit_actions(std::size_t){return 0;}}geometry,vv10_geometry;
 struct{bool d3{};std::optional<D4Correction> d4;}corrections;
 dispersion::D4Tables d4_tables;
 dispersion::ChargeTables eeq_tables;
-struct{Primary* primary;}fock;Primary primary;
-struct{double symmetry_absolute_tolerance=1e-7,symmetry_relative_tolerance=1e-7;}options;
-struct{unsigned published_hvps=0,published_hessians=0;}receipt;
+bool has_df{},has_ecp{},operator_matrix{};
+struct{unsigned spins{1};}frame;
+struct{Primary* primary;void* correction{};}fock;Primary primary;
+struct{void collect_dense(const response::CudaCpksDenseReceipt&) {}}cpks_operator;
+struct Induced{
+Owner* owner;
+int collect_work(){
+double receipt{};
+const auto e=cudaMemcpyAsync(&receipt,owner->at(owner->candidate),sizeof(receipt),
+cudaMemcpyDeviceToHost,owner->stream);
+const auto completed=cudaStreamSynchronize(owner->stream);
+return e?e:completed;}}
+induced{this};
+struct{double symmetry_absolute_tolerance=1e-7,symmetry_relative_tolerance=1e-7;
+struct{response::CudaCpksResidentPrecision resident_precision{};
+struct{std::size_t max_iterations{20};}gmres;}cpks;}options;
+struct{unsigned published_hvps=0,published_hessians=0,completed_directions=0,cpks_strict_iterations=0;}receipt;
 Owner(){fock.primary=&primary;}
 template<class T=double>T* at(std::size_t p){return reinterpret_cast<T*>(storage+p);}
 int admit(const double*,double*,bool,cudaStream_t){return q::reject?23:0;}
 int prepare_frozen_exact(){return 0;}
-int compute(CudaKsWb97mvHessianResult& r,bool=false,std::size_t=0){
+int compute(CudaKsWb97mvHessianResult& r,bool=false,std::size_t=0,
+response::CudaCpksDenseReplay* replay=nullptr){
 if(q::throw_compute)throw std::runtime_error("child exception");
 auto e=cudaMemsetAsync(at(candidate),0,2*sizeof(double),stream);if(e)return e;
+if(replay){
+q::pending.push_back({nullptr,[=]{
+*replay->column_status=q::converge?0:1;
+replay->receipt->last.code=int(response::CudaGmresStatus::converged);
+if(!q::converge)replay->receipt->failure=response::CudaCpksStatus::linear_solve_failed;
+}});r.status=CudaKsWb97mvHessianStatus::converged;return 0;}
 if(!q::converge){r.status=CudaKsWb97mvHessianStatus::response_not_converged;return 0;}
 e=cudaStreamSynchronize(stream);if(!e)r.status=CudaKsWb97mvHessianStatus::converged;
 return e;}
@@ -123,12 +167,13 @@ _MAIN = r"""
 int main(){try{
 int controls=0;
 for(auto stream:{static_cast<void*>(nullptr),reinterpret_cast<void*>(8)}){
-for(bool full:{false,true}){
-q::reset();CudaKsWb97mvHessian owner;owner.impl_->stream=stream;
+for(int mode:{0,1,2}){
+const bool full=mode!=0,deferred=mode==2;
+q::reset();CudaKsWb97mvHessian owner;owner.impl_->stream=stream;owner.impl_->has_df=!deferred;
 double input[2]{1,2},output[4]{27,27,27,27};CudaKsWb97mvHessianResult result;
 auto run=[&]{return full?owner.hessian(output,stream,result):owner.apply(input,output,stream,result);};
 q::require(run()==0&&result.converged()&&q::pending.empty(),"valid action");
-q::require(q::fences==(full?4:2),"extra successful-path fence");
+q::require(q::fences==(full?(deferred?3:5):3),"extra successful-path fence");
 const int calls=q::calls,launches=q::launches;
 const auto prior_hvps=owner.impl_->receipt.published_hvps,
 prior_hessians=owner.impl_->receipt.published_hessians;

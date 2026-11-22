@@ -126,7 +126,7 @@ runpy.run_path('tools/generate_wb97mv_fock_response.py', run_name='__main__')
     assert outputs[0].read_bytes() == outputs[1].read_bytes()
 
 
-def _native(spins: int, fitted: bool) -> dict:
+def _native(spins: int, fitted: bool, resident: bool) -> dict:
     executable = os.environ.get("GENERATIVEQC_KS_WB97MV_GRID_PROBE")
     if not executable:
         pytest.skip(
@@ -134,8 +134,10 @@ def _native(spins: int, fitted: bool) -> dict:
         )
     path = Path(executable).resolve()
     assert path.is_file()
+    assert os.environ.get("SLURM_JOB_ID"), "real-GPU tests require Slurm"
+    mode = "df-fock" if fitted else "fock" if resident else "fock-no-resident"
     process = subprocess.run(
-        [str(path), "rks" if spins == 1 else "uks", "df-fock" if fitted else "fock"],
+        [str(path), "rks" if spins == 1 else "uks", mode],
         check=True,
         capture_output=True,
         text=True,
@@ -228,12 +230,21 @@ def _jk(density: np.ndarray, eri: np.ndarray, long_range: np.ndarray) -> np.ndar
     )
 
 
-@pytest.mark.parametrize("spins", (1, 2))
-@pytest.mark.parametrize("fitted", (False, True))
+@pytest.mark.parametrize(
+    ("spins", "fitted", "resident"),
+    (
+        (1, False, True),
+        (2, False, True),
+        (1, True, True),
+        (2, True, True),
+        (1, False, False),
+    ),
+    ids=("direct-rks", "direct-uks", "fitted-rks", "fitted-uks", "direct-no-resident"),
+)
 def test_live_physical_fock_and_cpks_against_independent_oracles(
-    spins: int, fitted: bool
+    spins: int, fitted: bool, resident: bool
 ) -> None:
-    result = _native(spins, fitted)
+    result = _native(spins, fitted, resident)
     assert result["revoked_without_publication"]
     nao = result["nao"]
     shape = (spins, nao, nao)
@@ -348,6 +359,8 @@ def test_live_physical_fock_and_cpks_against_independent_oracles(
         assert errors[1] <= max(2e-10, errors[0] * 0.4)
     assert result["capacity_alias_finite_gates"]
     assert result["fock_actions"] > 0 and result["cpks_actions"] > 0
+    if not resident:
+        assert result["resident_integral_bytes"] == 0
     # Cached Direct values count when prepared, not on each Fock traversal.
     if result["resident_integral_bytes"]:
         assert result["resident_source_evaluations"] > 0

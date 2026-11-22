@@ -2,7 +2,8 @@
 
 This is generic FP64 linear algebra, not a second scientific derivative algebra.
 The native response owner supplies the operator, storage, stream, finite limits
-and checkpoint controller. Every iterative numerical scalar stays on the device.
+and graph ownership. The generated iteration controller keeps the stop decision
+and numerical scalars on the device.
 No method, occupation, density, XC or integral policy belongs in this schedule.
 """
 
@@ -23,16 +24,11 @@ def emit_cuda_gmres() -> str:
 namespace generativeqc::response::cuda_gmres_detail {
 using Status = CudaGmresStatus;
 constexpr unsigned threads = 256;
-struct State {
-  int code;
+struct State : CudaGmresDeviceReceipt {
   int breakdown;
-  double rhs_norm;
-  double residual_norm;
-  double tolerance;
-  double beta;
+  std::size_t column;
   double norm_before;
   double norm_after;
-  double projection;
 };
 
 __device__ void fail(State* state, Status status) {
@@ -46,7 +42,11 @@ __device__ int status_code(State* state) {
 }
 
 __global__ void validate(const double* rhs, const double* diagonal, std::size_t count,
-                         double floor, State* state) {
+                         double floor, const int* upstream, State* state) {
+  if (upstream && *upstream) {
+    if (!blockIdx.x && !threadIdx.x) fail(state, Status::nonfinite_input);
+    return;
+  }
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     if (!isfinite(rhs[index])) fail(state, Status::nonfinite_input);
@@ -110,94 +110,104 @@ __global__ void norm(const double* values, std::size_t count, double* output,
 __global__ void initial(State* state, double relative, double absolute, bool seeded) {
   if (state->code) return;
   if (!seeded) state->residual_norm = state->rhs_norm;
-  state->beta = state->residual_norm;
   state->tolerance = fmax(absolute, relative * state->rhs_norm);
   if (state->residual_norm <= state->tolerance)
     state->code = static_cast<int>(Status::converged);
 }
 
 __global__ void cycle(State* state, double* target) {
-  if (state->code) return;
-  state->beta = state->residual_norm;
-  target[0] = state->beta;
+  if (!state->column) target[0] = state->residual_norm;
 }
 
-__global__ void normalize(const double* input, double* output, std::size_t count,
-                          const double* divisor, State* state, bool arnoldi) {
-  if (status_code(state) || (arnoldi && state->breakdown)) return;
+__global__ void prepare_direction(const double* residual, double* basis, double* base,
+                                  const double* candidate, const double* diagonal,
+                                  double* directions, double* action_input,
+                                  std::size_t count, State* state) {
+  const auto column = state->column;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
-    const double value = input[index] / *divisor;
-    if (!isfinite(value)) fail(state, Status::numerical_failure);
-    else output[index] = value;
-  }
-}
-
-__global__ void precondition(const double* input, const double* diagonal, double* output,
-                             std::size_t count, State* state) {
-  if (status_code(state)) return;
-  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-       index < count; index += std::size_t(blockDim.x) * gridDim.x) {
-    const double value = diagonal ? input[index] / diagonal[index] : input[index];
+    if (!column) {
+      if (state->iterations) base[index] = candidate[index];
+      const double normalized = residual[index] / state->residual_norm;
+      if (!isfinite(normalized)) fail(state, Status::numerical_failure);
+      basis[index] = normalized;
+    }
+    const auto entry = column * count + index;
+    const double value = diagonal ? basis[entry] / diagonal[index] : basis[entry];
     if (!isfinite(value)) fail(state, Status::invalid_preconditioner);
+    directions[entry] = action_input[index] = value;
+  }
+}
+
+// One block owns each MGS projection as before. Keeping the row loop in this
+// same block avoids O(restart**2) graph nodes and retains the reduction order.
+__global__ void orthogonalize(const double* basis, double* work, double* hessenberg,
+                              std::size_t count, std::size_t leading, unsigned passes,
+                              State* state) {
+  __shared__ double partial[threads];
+  __shared__ int failed;
+  const auto column = state->column;
+  auto* entries = hessenberg + column * leading;
+  for (unsigned pass = 0; pass < passes; ++pass) {
+    for (std::size_t row = 0; row <= column; ++row) {
+      if (!threadIdx.x) failed = state->code;
+      __syncthreads();
+      if (failed) return;
+      const auto* left = basis + row * count;
+      double sum = 0.0, correction = 0.0;
+      for (std::size_t index = threadIdx.x; index < count; index += blockDim.x) {
+        const double adjusted = left[index] * work[index] - correction;
+        const double next = sum + adjusted;
+        correction = (next - sum) - adjusted;
+        sum = next;
+      }
+      partial[threadIdx.x] = sum;
+      __syncthreads();
+      for (unsigned stride = threads / 2; stride; stride /= 2) {
+        if (threadIdx.x < stride) partial[threadIdx.x] += partial[threadIdx.x + stride];
+        __syncthreads();
+      }
+      const double projection = partial[0];
+      if (!isfinite(projection)) {
+        if (!threadIdx.x) fail(state, Status::numerical_failure);
+        return;
+      }
+      for (std::size_t index = threadIdx.x; index < count; index += blockDim.x) {
+        const double value = work[index] - projection * left[index];
+        if (!isfinite(value)) fail(state, Status::numerical_failure);
+        else work[index] = value;
+      }
+      if (!threadIdx.x) {
+        const double entry = pass ? entries[row] + projection : projection;
+        if (!isfinite(entry)) fail(state, Status::numerical_failure);
+        else entries[row] = entry;
+      }
+      __syncthreads();
+    }
+  }
+}
+
+__global__ void normalize(const double* work, double* basis, std::size_t count, State* state) {
+  if (status_code(state) || state->breakdown) return;
+  auto* output = basis + (state->column + 1) * count;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+       index < count; index += std::size_t(blockDim.x) * gridDim.x) {
+    const double value = work[index] / state->norm_after;
+    if (!isfinite(value)) fail(state, Status::numerical_failure);
     else output[index] = value;
   }
 }
 
-__global__ void dot(const double* left, const double* right, std::size_t count, State* state) {
-  __shared__ double partial[threads];
-  __shared__ int active;
-  if (!threadIdx.x) active = state->code == 0;
-  __syncthreads();
-  if (!active) return;
-  double sum = 0.0, correction = 0.0;
-  for (std::size_t index = threadIdx.x; index < count; index += blockDim.x) {
-    const double product = left[index] * right[index];
-    const double adjusted = product - correction;
-    const double next = sum + adjusted;
-    correction = (next - sum) - adjusted;
-    sum = next;
-  }
-  partial[threadIdx.x] = sum;
-  __syncthreads();
-  for (unsigned stride = threads / 2; stride; stride /= 2) {
-    if (threadIdx.x < stride) partial[threadIdx.x] += partial[threadIdx.x + stride];
-    __syncthreads();
-  }
-  if (!threadIdx.x) {
-    if (!isfinite(partial[0])) fail(state, Status::numerical_failure);
-    else state->projection = partial[0];
-  }
-}
-
-__global__ void orthogonalize(const double* basis, double* work, std::size_t count,
-                              State* state) {
-  if (status_code(state)) return;
-  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-       index < count; index += std::size_t(blockDim.x) * gridDim.x) {
-    const double value = work[index] - state->projection * basis[index];
-    if (!isfinite(value)) fail(state, Status::numerical_failure);
-    else work[index] = value;
-  }
-}
-
-__global__ void accumulate(double* entry, State* state) {
+__global__ void arnoldi(double* hessenberg, std::size_t leading, State* state, double relative) {
   if (state->code) return;
-  const double value = *entry + state->projection;
-  if (!isfinite(value)) fail(state, Status::numerical_failure);
-  else *entry = value;
-}
-
-__global__ void arnoldi(double* entry, State* state, double relative) {
-  if (state->code) return;
-  *entry = state->norm_after;
+  hessenberg[state->column * leading + state->column + 1] = state->norm_after;
   state->breakdown = state->norm_after <= relative * state->norm_before;
 }
 
 __global__ void rotate(double* hessenberg, double* cosine, double* sine, double* target,
-                       double* coefficients, std::size_t leading, std::size_t column,
-                       State* state) {
+                       double* coefficients, std::size_t leading, State* state) {
   if (state->code) return;
+  const auto column = state->column;
   double* current = hessenberg + column * leading;
   for (std::size_t row = 0; row < column; ++row) {
     const double upper = cosine[row] * current[row] + sine[row] * current[row + 1];
@@ -228,8 +238,9 @@ __global__ void rotate(double* hessenberg, double* cosine, double* sine, double*
 
 __global__ void candidate(const double* base, const double* directions,
                           const double* coefficients, double* output, std::size_t count,
-                          std::size_t columns, State* state) {
+                          State* state) {
   if (status_code(state)) return;
+  const auto columns = state->column + 1;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
        index < count; index += std::size_t(blockDim.x) * gridDim.x) {
     double value = base[index];
@@ -251,11 +262,33 @@ __global__ void residual(const double* rhs, const double* image, double* output,
   }
 }
 
-__global__ void accept(State* state) {
-  if (state->code) return;
-  if (state->residual_norm <= state->tolerance)
-    state->code = static_cast<int>(Status::converged);
-  else if (state->breakdown) state->code = static_cast<int>(Status::breakdown);
+__global__ void complete_iteration(State* state, std::size_t restart, std::size_t limit,
+                                    cudaGraphConditionalHandle condition) {
+  ++state->iterations;
+  if (!state->code) {
+    if (state->residual_norm <= state->tolerance)
+      state->code = static_cast<int>(Status::converged);
+    else if (state->breakdown) state->code = static_cast<int>(Status::breakdown);
+    else if (state->iterations == limit) state->code = static_cast<int>(Status::iteration_limit);
+    else if (++state->column == restart) {
+      state->column = 0;
+      ++state->restarts;
+    }
+  }
+  cudaGraphSetConditional(condition, state->code == 0);
+}
+
+__global__ void start_iteration(State* state, cudaGraphConditionalHandle condition) {
+  cudaGraphSetConditional(condition, state->code == 0);
+}
+
+__global__ void copy_converged(const double* base, const double* candidate, double* solution,
+                               std::size_t count, const State* state) {
+  if (state->code != static_cast<int>(Status::converged)) return;
+  const auto* accepted = state->iterations ? candidate : base;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+       index < count; index += std::size_t(blockDim.x) * gridDim.x)
+    solution[index] = accepted[index];
 }
 }  // namespace generativeqc::response::cuda_gmres_detail
 """

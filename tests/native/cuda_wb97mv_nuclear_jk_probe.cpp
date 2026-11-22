@@ -300,8 +300,30 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   require(response.apply(motion, density, delta, output, storage.stream) == cudaErrorInvalidValue,
           "nonfinite direction admitted");
   unchanged();
+  auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
+  const auto private_action = [&] {
+    check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
+    check(response.enqueue_private_fresh(motion, density, delta, output, transaction,
+                                         storage.stream));
+    int status{};
+    check(cudaMemcpyAsync(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost,
+                          storage.stream));
+    check(cudaStreamSynchronize(storage.stream));
+    return status;
+  };
+  require(private_action() != 0, "private exact action lost a rejected direction audit");
+  unchanged();
   check(cudaMemcpy(motion, direction.data(), direction.size() * sizeof(double),
                    cudaMemcpyHostToDevice));
+  require(private_action() == 0, "private exact failure contaminated a valid replay");
+  std::array<std::vector<double>, 5> private_output;
+  for (unsigned index = 0; index < 5; ++index)
+    private_output[index] = download(pointers[index], counts[index]);
+  check(response.apply(motion, density, delta, output, storage.stream));
+  for (unsigned index = 0; index < 5; ++index)
+    require(private_output[index] == download(pointers[index], counts[index]),
+            "private exact action changed the checked output");
+  sentinel();
   for (unsigned index = 0; index < 2 * shape.spins; ++index) {
     const auto offset = index * shape.nao * shape.nao;
     check(cudaMemcpy(density + offset, &nan, sizeof(double), cudaMemcpyHostToDevice));

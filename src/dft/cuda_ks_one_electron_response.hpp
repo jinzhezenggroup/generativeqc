@@ -59,6 +59,10 @@ class CudaKsOneElectronResponse {
                               std::string& detail);
   cudaError_t apply(const double* direction, const integrals::CudaOneElectronWeights& weights,
                     const integrals::CudaOneElectronOutput& output, cudaStream_t stream) noexcept;
+  cudaError_t enqueue_private(const double* direction,
+                              const integrals::CudaOneElectronWeights& weights,
+                              const integrals::CudaOneElectronOutput& output,
+                              int* transaction_status, cudaStream_t stream) noexcept;
   CudaKsOneElectronWork work() const noexcept;
 
  private:

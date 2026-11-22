@@ -518,6 +518,20 @@ def test_native_point_parallel_tiles_preserve_geometry(tmp_path: Path) -> None:
     )
 
 
+def test_native_borrowed_center_pairs_preserve_mixed_geometry(tmp_path: Path) -> None:
+    """Force-style distance/slope storage gives the same independently checked jets."""
+    fixture = _fixture(points_per_atom=9)
+    baseline, _ = _native(fixture, tmp_path)
+    prepared, receipt = _native(fixture, tmp_path, topology="prepared-centers")
+    for actual, expected in zip(prepared, baseline, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=2e-14, rtol=2e-13)
+    coarse, fine = (_weight_differences(fixture, step) for step in (0.004, 0.002))
+    np.testing.assert_allclose(
+        prepared[2], (4 * fine - coarse) / 3, atol=2e-8, rtol=2e-6
+    )
+    assert receipt["capacity_alias_finite_capture_revocation_gates"]
+
+
 @pytest.mark.parametrize("iterations", [1, 2, 3, 4, 5])
 def test_native_mixed_geometry_and_source_lifetime(
     tmp_path: Path, iterations: int

@@ -416,6 +416,11 @@ int native_metrics(void* pointer, uint64_t* output, size_t count) {
   return owner ? stationary_metrics(owner->scientific, output, count) : 1;
 }
 
+const generativeqc_grid_pair_geometry::CenterPair* native_center_pairs(const void* pointer) {
+  const auto* owner = static_cast<const NativeOwner*>(pointer);
+  return owner ? owner->scientific->center_pairs : nullptr;
+}
+
 void native_destroy(void* pointer) {
   auto* owner = static_cast<NativeOwner*>(pointer);
   if (!owner) return;

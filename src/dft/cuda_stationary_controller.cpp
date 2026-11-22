@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdlib>
 #include <stdexcept>
 #include <string_view>
@@ -19,6 +20,8 @@
 
 namespace generativeqc::dft {
 namespace {
+std::atomic<std::uint64_t> next_center_pair_epoch{1};
+
 void require_stationary_call(int status, const std::array<char, 512>& error) {
   // Private executor codes are device/host OOM (2/3) and driver failure (4),
   // not the public enum. Driver failure must not trigger a numerical seed
@@ -261,6 +264,27 @@ CudaStationaryController::CudaStationaryController(const core::System& system, c
 
 CudaStationaryController::~CudaStationaryController() { close(); }
 
+void CudaStationaryController::attach_center_pairs(CudaKsResidentGridBinding& grid) const noexcept {
+  const auto& token = center_pair_token_;
+  if (!binding_->center_pairs || !token || grid.atoms < 2 || grid.device_id != device_ ||
+      grid.quadrature_owner != quadrature_.owner || grid.points != quadrature_.points ||
+      grid.weights != quadrature_.weights || grid.atomic_weights != quadrature_.atomic_weights ||
+      grid.atom_offsets != quadrature_.atom_offsets ||
+      grid.atomic_radii != quadrature_.atomic_radii ||
+      grid.point_count != quadrature_.point_count || grid.atoms != centers_.size() / 3 ||
+      grid.points_per_atom != points_per_atom_ ||
+      grid.coincident_tolerance != coincident_tolerance_ ||
+      grid.partition_iterations != binding_->model.partition_iterations ||
+      grid.density != token.alpha || grid.nao != aos_ || grid.spins != token.spins ||
+      grid.stream != token.stream || grid.owner != token.owner ||
+      grid.solve_epoch != token.solve_epoch || grid.generation != token.generation)
+    return;
+  if (const auto* pairs = binding_->center_pairs(stationary_)) {
+    grid.center_pairs = pairs;
+    grid.center_pair_epoch = center_pair_epoch_;
+  }
+}
+
 void CudaStationaryController::close() noexcept {
   // The stationary consumer borrows the grid stream and tile storage. It must
   // drain/die first on every ordinary and exceptional lifecycle path.
@@ -283,6 +307,7 @@ generativeqc_status CudaStationaryController::gradient(
     const CudaKsResidentFittedProjectionBinding* fitted_projection,
     const CudaKsResidentOccupiedFactorBinding* occupied_factor) {
   detail.clear();
+  center_pair_token_ = {};
   struct ReuseAttempt {
     NonlocalOwner* owner;
     bool complete{};
@@ -692,6 +717,12 @@ generativeqc_status CudaStationaryController::gradient(
     runtime::cuda_trace::trace_counter("grid_tile_points", tile_points_);
     runtime::cuda_trace::trace_counter("shared_nonlocal_grid", shared_nonlocal_grid ? 1 : 0);
     output.swap(candidate);
+    // The force owner and its grid use private streams. Successful terminal
+    // completion fences their writes before publication on the KS lease.
+    if (!mixed_grid && resources_.cached_geometry) {
+      center_pair_token_ = density;
+      center_pair_epoch_ = next_center_pair_epoch.fetch_add(1, std::memory_order_relaxed);
+    }
     reuse_attempt.complete = true;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {

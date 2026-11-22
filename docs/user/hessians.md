@@ -82,6 +82,14 @@ With `ResourceBudget`, canonical Direct PBE0 and B3LYP require only the
 energy SCF inventory, including when the basis has f shells and the standalone
 force owner is not available.
 
+For all-electron Cartesian LDA/PBE RKS with Direct integrals, the native
+FP64 response keeps the CPKS iterations and molecular accumulation on the
+device. The default dense solve reuses one response context for the raw
+columns; it does not average the matrix with its transpose. Both endpoints
+can start from an energy-only SCF plan and do not run a standalone force
+calculation. An unavailable linked device provider rejects the request rather
+than switching to CPU.
+
 The CUDA scalar-ECP source first compares the fixed 160-radial/32-polar
 and 224-radial/44-polar quadratures. If a local or nonlocal channel misses
 the tolerance with finite results, the source can check that channel once

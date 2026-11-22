@@ -78,6 +78,7 @@ def _native(
     displaced_gradients: bool = False,
     auto_precision: bool = False,
     fitted_xc_warmup: bool = False,
+    borrow_force_centers: bool = False,
     metric_branch: str | None = None,
     method_case: str | None = None,
 ) -> dict:
@@ -94,6 +95,7 @@ def _native(
     mode += "-gradient-check" if displaced_gradients else ""
     mode += "-auto-precision" if auto_precision else ""
     mode += "-fitted-xc-warmup" if fitted_xc_warmup else ""
+    mode += "-borrow-force-centers" if borrow_force_centers else ""
     mode += "-spherical" if spherical else ""
     mode += "-ecp" if ecp else ""
     mode += "-auxd" if auxiliary_d else ""
@@ -136,6 +138,18 @@ def _native(
     return json.loads(result.stdout)
 
 
+@pytest.mark.parametrize("method_case", ("lda", "pbe"))
+def test_direct_semilocal_hessian_borrows_live_force_centers(method_case: str) -> None:
+    """A force replay revokes the first lease without changing the HVP."""
+    options = {"benchmark_water": True, "method_case": method_case}
+    direct = _native(1, False, False, False, False, **options)
+    borrowed = _native(
+        1, False, False, False, False, borrow_force_centers=True, **options
+    )
+    np.testing.assert_allclose(borrowed["hvp"], direct["hvp"], atol=2e-12, rtol=2e-11)
+    assert borrowed["lifecycle"]
+
+
 @pytest.mark.parametrize("fitted", [False, True], ids=["direct", "fitted"])
 @pytest.mark.parametrize("full", [False, True], ids=["hvp", "matrix"])
 def test_hessian_shares_prepared_device_ledger(fitted: bool, full: bool) -> None:
@@ -148,10 +162,75 @@ def test_hessian_shares_prepared_device_ledger(fitted: bool, full: bool) -> None
     )
 
 
+@pytest.mark.parametrize("method_case", ("lda", "pbe"))
+@pytest.mark.parametrize("full", (False, True), ids=("hvp", "matrix"))
+def test_cartesian_semilocal_hessian_ledger_replay(
+    method_case: str, full: bool
+) -> None:
+    """Measure live bytes across same-state budget/nonconvergence rejection and replay."""
+    result = _native(
+        1,
+        False,
+        False,
+        False,
+        full,
+        benchmark_water=True,
+        resource_ledger=True,
+        method_case=method_case,
+    )
+    assert 0 < result["response_bytes"]
+    assert (
+        result["response_bytes"] + result["scf_retained_bytes"]
+        <= result["aggregate_peak_bytes"]
+    )
+
+
 def test_d3_hard_cutoff_preserves_device_output() -> None:
     """Reject undefined curvature without publishing any part of the result."""
     result = _native(1, False, True, False, False, method_case="pbe-d3-hard-cutoff")
     assert result["hard_cutoff_preserves_output"]
+
+
+@pytest.mark.parametrize("method_case", ("lda", "pbe"))
+def test_cartesian_dense_replays_without_resident_cpks_operator(
+    method_case: str,
+) -> None:
+    """The bounded matrix-free route preserves the complete dense result."""
+    common = {"benchmark_water": True, "method_case": method_case}
+    cached = _native(1, False, False, False, True, **common)
+    physical = _native(1, False, False, False, True, physical_cpks=True, **common)
+    assert cached["cpks_operator_columns"] > 0
+    assert physical["cpks_operator_columns"] == 0
+    assert physical["cpks_strict_iterations"] > 0
+    np.testing.assert_allclose(
+        physical["hessian"], cached["hessian"], atol=2e-10, rtol=0
+    )
+
+
+@pytest.mark.parametrize("method_case", ("lda", "pbe"))
+def test_cartesian_direct_hessian_streams_without_resident_integrals(
+    method_case: str,
+) -> None:
+    """Stream both nuclear derivatives and induced Direct J in the same endpoint."""
+    common = {"benchmark_water": True, "method_case": method_case}
+    cached = _native(1, False, False, False, True, **common)
+    streamed = _native(
+        1,
+        False,
+        False,
+        False,
+        True,
+        streamed=True,
+        unbatched=True,
+        physical_cpks=True,
+        **common,
+    )
+    assert cached["resident_integral_bytes"] > 0
+    assert streamed["resident_integral_bytes"] == 0
+    assert streamed["cpks_operator_columns"] == 0
+    assert streamed["induced_direct_quartets"] > 0
+    for field in ("hvp", "hessian"):
+        np.testing.assert_allclose(streamed[field], cached[field], atol=2e-10, rtol=0)
 
 
 @pytest.mark.parametrize("spins", (1, 2))

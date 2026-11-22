@@ -506,6 +506,10 @@ def test_native_failure_does_not_publish(probe: Path, mode: str) -> None:
     assert np.all(np.array(result["response"]) == 91.25)
 
 
+def test_private_response_propagates_failure_then_replays(probe: Path) -> None:
+    assert _native(probe, _fixture(), mode="private-replay") == {"private_replay": True}
+
+
 def test_native_work_budget_not_just_storage_budget(probe: Path) -> None:
     result = _native(probe, _fixture(), pairs=63)
     assert result["prepared"] != 0
