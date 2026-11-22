@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,6 +17,8 @@ def _translation_unit(source: str) -> str:
     host = source[: source.index("unsigned blocks(")]
     host = host.replace('#include "response/grid_geometry_response.cuh"', "")
     host = host.replace("namespace ad = generativeqc_grid_geometry_ad;", "")
+    # The device-only pair record depends on the response AD header omitted above.
+    host = re.sub(r"(?ms)^struct PartitionPair \{.*?^\};\n", "", host)
     start = source.index("cudaError_t cuda_grid_geometry_workspace(")
     workspace = source[
         start : source.index(
