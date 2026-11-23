@@ -88,7 +88,7 @@ option(GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES
 option(GENERATIVEQC_ENABLE_HOST_KS_RESPONSE
        "Build native CPU fixed-geometry KS response, not a complete Hessian endpoint" OFF)
 set(GENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY
-    "${CMAKE_CURRENT_SOURCE_DIR}/manifests/host_hessian_aot_b3lyp.json" CACHE FILEPATH
+    "${CMAKE_CURRENT_SOURCE_DIR}/manifests/host_hessian_aot_catalog.json" CACHE FILEPATH
     "Explicit build-time physical-method inventory for CPU Hessian scalar leaves")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
@@ -615,7 +615,7 @@ if(GENERATIVEQC_BUILD_TESTS)
                      $<TARGET_FILE:generativeqc_cli> $<TARGET_FILE:generativeqc_cli_json_probe>
                      $<TARGET_FILE:generativeqc_cli_profile_probe>)
     set_tests_properties(generativeqc_cli_runtime_contract PROPERTIES
-                         ENVIRONMENT "GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>")
+                         ENVIRONMENT "GENERATIVEQC_TEST_MONOLITHIC=$<BOOL:${GENERATIVEQC_MONOLITHIC_CLI}>;GENERATIVEQC_TEST_CPU_FORCE_AOT=$<BOOL:${GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT}>")
     add_test(NAME generativeqc_cli_methodir_codegen
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_cli_method_catalog_codegen.py")

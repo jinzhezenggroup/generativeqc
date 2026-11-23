@@ -7,6 +7,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include "dft/host_force_resources.hpp"
+#include "integrals/packed_spherical_eri.hpp"
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "tensor/cuda_binding_resources.hpp"
@@ -29,7 +31,25 @@ struct KsHostResourceShape {
 using CpuKsHostResourceShape = KsHostResourceShape;
 
 /** Execution-storage distinctions, not capability or scientific admission. */
-enum class KsHostExecution { cpu, cuda_fused, cuda_host_unfused };
+enum class KsHostExecution {
+  cpu,
+  cuda_fused,
+  cuda_host_unfused,
+  cpu_packed,
+  cpu_forces,
+  cpu_packed_forces
+};
+
+constexpr bool ks_host_packed(KsHostExecution execution) noexcept {
+  return execution == KsHostExecution::cpu_packed ||
+         execution == KsHostExecution::cpu_packed_forces;
+}
+
+/** Select only the numeric layout; force capability remains a prepared property. */
+constexpr KsHostExecution cpu_ks_host_execution(bool packed, bool forces) noexcept {
+  if (packed) return forces ? KsHostExecution::cpu_packed_forces : KsHostExecution::cpu_packed;
+  return forces ? KsHostExecution::cpu_forces : KsHostExecution::cpu;
+}
 
 /** Stable private bridge ordering; zero CUDA-only slots preserve the common
  * host inventory vocabulary without implying CPU ownership of those bindings.
@@ -52,6 +72,13 @@ inline constexpr std::array<const char*, 16> ks_host_resource_keys{"metadata",
                                                                    "scf_workspace"};
 
 inline constexpr auto& cpu_ks_host_resource_keys = ks_host_resource_keys;
+
+/** Numeric extent of the value array for an already validated spherical basis. */
+inline std::uint64_t cpu_ks_packed_value_bytes(std::uint64_t orbital_aos) {
+  if (orbital_aos > std::numeric_limits<std::size_t>::max())
+    throw std::overflow_error("packed KS orbital count exceeds size_t");
+  return integrals::PackedSphericalEri::required_bytes(static_cast<std::size_t>(orbital_aos));
+}
 
 /** Conservative simultaneous capacities for serialized preparation/host work.
  * Retained grid/provider/state survives every item; setup and SCF workspaces
@@ -80,10 +107,13 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     }
     return result;
   };
-  if (execution != KsHostExecution::cpu && execution != KsHostExecution::cuda_fused &&
+  const bool packed_eri = ks_host_packed(execution);
+  const bool forces =
+      execution == KsHostExecution::cpu_forces || execution == KsHostExecution::cpu_packed_forces;
+  const bool cpu = execution == KsHostExecution::cpu || packed_eri || forces;
+  if (!cpu && execution != KsHostExecution::cuda_fused &&
       execution != KsHostExecution::cuda_host_unfused)
     throw std::invalid_argument("unknown KS host execution storage");
-  const bool cpu = execution == KsHostExecution::cpu;
   const bool host_xc = cpu || execution == KsHostExecution::cuda_host_unfused;
   // The resolved v4 wire shape uses polar=0 and radial=level (including 0).
   // This query only admits capacity; the scientific descriptor validates v4.
@@ -96,6 +126,10 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
       !shape.max_iterations)
     throw std::invalid_argument(
         "KS inventory requires valid topology; CPU is limited to through-g");
+  if (packed_eri && shape.maximum_angular > 3)
+    throw std::invalid_argument("packed KS inventory requires a real spherical s/p/d/f topology");
+  if (forces && (shape.nonlocal_correlation || shape.maximum_angular > 3))
+    throw std::invalid_argument("CPU KS force inventory requires local XC and s/p/d/f topology");
   const auto orbital_square = product({shape.orbital_aos, shape.orbital_aos});
   const auto cartesian_square = product({shape.cartesian_aos, shape.cartesian_aos});
   const auto orbital_fourth = cpu ? product({orbital_square, orbital_square}) : 0;
@@ -109,9 +143,13 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
   const auto grid = product({36, shape.grid_points});
   const auto basis = product({8, packed});
   const auto warm = sum({product({8, orbital_square, sum({4, product({4, shape.spins})})}),
-                         product({96, shape.atoms})});
+                         product({96, shape.atoms}), forces ? product({24, shape.atoms}) : 0});
   const auto history = product({256, shape.max_iterations});
-  const auto provider = product({8, sum({product({2, orbital_square}), orbital_fourth})});
+  // PreparedFockPlan retains the one-electron matrices plus exactly one value
+  // array. The packed and dense arrays never coexist for a packed request.
+  const auto eri_values =
+      packed_eri ? cpu_ks_packed_value_bytes(shape.orbital_aos) : product({8, orbital_fourth});
+  const auto provider = sum({product({16, orbital_square}), eri_values});
   const auto nonlocal_provider = shape.nonlocal_correlation ? product({48, shape.grid_points}) : 0;
   Bytes solver = 0;
   if (!cpu && shape.orbital_aos > cuda_execution::kSmallEigensolverLimit) {
@@ -146,6 +184,21 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
                                  ? sum({nonlocal_provider, product({32, tile, shape.orbital_aos}),
                                         product({8, orbital_square, shape.spins == 2 ? 3u : 1u})})
                                  : 0;
+  Bytes force_workspace = 0;
+  if (forces) {
+    // Forces re-diagonalize and authenticate the retained final F[D]. The
+    // eigensolve/matrix workspace is covered by the ordinary solver envelope;
+    // the verified D/F/W/C/eigenvalues then remain live across both sources.
+    const auto frame =
+        product({8, shape.spins, sum({product({4, orbital_square}), shape.orbital_aos})});
+    // Integral source scratch retires before XC. Its four coordinate buffers
+    // survive the XC pullback and then overlap force assembly/publication.
+    const auto xc = dft::cpu_stationary_xc_workspace_bytes(shape.atoms, shape.orbital_aos,
+                                                           shape.grid_points, tile);
+    const auto sources = product({96, shape.atoms});
+    force_workspace = sum({frame, std::max({Bytes{dft::cpu_stationary_force_source_bytes},
+                                            sum({xc, sources}), product({7 * 24, shape.atoms})})});
+  }
   // Bound the radial shell descriptors and up to three cached angular rules,
   // including the original and temporary polar vectors during CUDA setup.
   // This shape-only ABI deliberately admits both unpruned and pruned grids.
@@ -157,6 +210,8 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
                       product({8, shape.atoms, shape.atoms}), product({64, shape.atoms}), 8});
   Bytes setup = 0;
   if (cpu) {
+    // Both spherical value sources use the same shell-quartet visitor. Keep
+    // the ordinary setup allowance; only the retained value extent changes.
     const auto cartesian_fourth = product({cartesian_square, cartesian_square});
     const auto angular_extent = sum({shape.maximum_angular, 3});
     const auto hermite =
@@ -188,7 +243,7 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
           matrix_binding, structured_binding,
           xc_staging,     nonlocal_provider,
           cache,          retained,
-          setup,          sum({matrix, xc_tile, nonlocal_work, cache})};
+          setup,          std::max(force_workspace, sum({matrix, xc_tile, nonlocal_work, cache}))};
 }
 
 /** Compatibility entry point for the existing private CPU item ABI. */

@@ -18,6 +18,7 @@ from generativeqc_compiler.dft.native_semilocal import native_semilocal_record
 from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.method.host_hessian_aot import (
     HostArrayProgram,
+    HostInventory,
     emit_registry,
     parse_inventory,
     programs,
@@ -159,6 +160,34 @@ def _evaluate(linked: tuple, name: str, values: dict) -> np.ndarray:
 def test_inventory_refuses_ignored_or_unsupported_controls(change: dict) -> None:
     with pytest.raises(ValueError):
         parse_inventory({**json.loads(INVENTORY.read_text()), **change})
+
+
+def test_catalog_binds_scaled_pbe0_and_preserves_b3lyp_leaf_contracts() -> None:
+    legacy = parse_inventory(json.loads(INVENTORY.read_text()))
+    payload = json.loads(
+        (INVENTORY.parent / "host_hessian_aot_catalog.json").read_text()
+    )
+    catalog = parse_inventory(payload)
+
+    def contracts(inventory: HostInventory) -> list[tuple[str, str, tuple[str, ...]]]:
+        # Graph/Expr handles are local to a lowering, not artifact identities.
+        return [(leaf.name, leaf.identity, leaf.inputs) for leaf in programs(inventory)]
+
+    assert contracts(catalog) == contracts(legacy)
+    registry = emit_registry(catalog)
+    assert resolve_method("PBE0").identity in registry
+    assert resolve_method("PBE0", spin="polarized").identity in registry
+    assert registry.count("PointDomain::scaled_pbe0_rks") == 1
+    assert registry.count("PointDomain::scaled_pbe0_uks") == 1
+    restricted = emit_registry(parse_inventory({**payload, "spins": ["unpolarized"]}))
+    assert "PointDomain::scaled_pbe0_uks" not in restricted
+    for method in ("LDA_XC_PW", "PBE"):
+        assert resolve_method(method).identity in registry
+        assert resolve_method(method, spin="polarized").identity not in registry
+    with pytest.raises(
+        ValueError, match="unsupported host Hessian AOT catalog methods"
+    ):
+        parse_inventory({**payload, "additional_methods": ["WB97M-V"]})
 
 
 def test_exact_identity_and_reachable_input_metadata(linked: tuple) -> None:

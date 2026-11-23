@@ -1402,11 +1402,11 @@ static PbeStationaryXcDerivative stationary_gga_xc_derivative(
       }
     }
   }
-  const auto partition = grid.contract_weight_derivative(weight_sensitivity);
-  runtime::sample_cpu_capacity(
-      runtime::add_capacity(runtime::vector_bytes(partition),
-                            runtime::vector_capacities(result.gradient, weight_sensitivity, ao,
-                                                       density_phi, density_jet)));
+  const auto partition = [&] {
+    runtime::CpuRetainedCapacity retained(runtime::vector_capacities(
+        result.gradient, weight_sensitivity, ao, density_phi, density_jet));
+    return grid.contract_weight_derivative(weight_sensitivity);
+  }();
   if (partition.size() != ncoord)
     throw std::runtime_error("stationary PBE Becke derivative shape mismatch");
   for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)

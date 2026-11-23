@@ -788,14 +788,7 @@ class Batch {
         generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
         const generativeqc_device_resources* resources = nullptr)
       : atom_counts_(systems.size()) {
-    std::vector<const generativeqc_system*> handles(systems.size());
-    for (std::size_t i = 0; i < systems.size(); ++i) {
-      if (systems[i] == nullptr) {
-        throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "null system in batch");
-      }
-      handles[i] = systems[i]->get();
-      atom_counts_[i] = systems[i]->atom_count();
-    }
+    const auto handles = batch_system_handles(systems);
     if (resources)
       check(generativeqc_batch_prepare_with_device_resources(
           context.get(), handles.data(), static_cast<std::uint32_t>(handles.size()), &method, flags,
@@ -804,6 +797,35 @@ class Batch {
       check(generativeqc_batch_prepare(context.get(), handles.data(),
                                        static_cast<std::uint32_t>(handles.size()), &method, flags,
                                        &handle_));
+  }
+
+  /** @native-contract generativeqc::Batch::prepare_named_ks
+   * @behavior Prepare a batch using the native named KS graph and correction catalog.
+   * @inputs Live context, nonempty systems, solver controls, named selector and optional
+   * exact MethodIR identity; optional resources select retained CUDA admission.
+   * @outputs Returns the owning native Batch.
+   * @lifetime Native preparation copies inputs and shares supplied resources; the context
+   * must outlive the batch. Descriptors and their pointer fields are borrowed only here.
+   * @errors Invalid inputs or native refusal throw Error; no unbudgeted or alternate retry.
+   * @execution Synchronous preparation and ordinary native batch replay.
+   * @units Geometry in Bohr, energies in Hartree and capacities in bytes.
+   */
+  static Batch prepare_named_ks(
+      Context& context, std::span<const System* const> systems,
+      const generativeqc_method_descriptor& method, const generativeqc_named_ks_descriptor& name,
+      generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+      const generativeqc_device_resources* resources = nullptr) {
+    Batch batch;
+    batch.atom_counts_.resize(systems.size());
+    const auto handles = batch.batch_system_handles(systems);
+    const auto count = static_cast<std::uint32_t>(handles.size());
+    if (resources)
+      check(generativeqc_batch_prepare_named_ks_with_device_resources_v1(
+          context.get(), handles.data(), count, &method, &name, flags, resources, &batch.handle_));
+    else
+      check(generativeqc_batch_prepare_named_ks_v1(context.get(), handles.data(), count, &method,
+                                                   &name, flags, &batch.handle_));
+    return batch;
   }
   /** @native-contract generativeqc::Batch::~Batch
    * @behavior Destroy the owned native batch and release resources.
@@ -893,6 +915,68 @@ class Batch {
     check(generativeqc_ks_hessian_cuda_v2(handle_, index, options ? options : &defaults,
                                           direction.data(), direction.size(), output.data(),
                                           output.size(), &receipt));
+    return receipt;
+  }
+
+  /** @native-contract generativeqc::Batch::ks_cpu_hessian
+   * @behavior Compute the raw CPU KS Hessian from the item's current accepted SCF state.
+   * @inputs Original input index, disjoint output span of exactly (3*N)^2 doubles, and
+   * initialized CPU options identifying the accepted system. Execute the batch first.
+   * @outputs Row-major matrix and a detached work receipt as the return value.
+   * @errors Throws Error on native failure; output remains unchanged, with no fallback.
+   * @lifetime Borrows only for the synchronous call; serialize batch and context operations.
+   * @units Matrix in Hartree/Bohr^2; capacities in bytes.
+   */
+  generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian(
+      std::size_t index, std::span<double> output,
+      const generativeqc_ks_host_hessian_options_v1& options) {
+    generativeqc_ks_host_hessian_receipt_v1 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cpu_v1(handle_, index, &options, nullptr, 0, output.data(),
+                                         output.size(), &receipt));
+    return receipt;
+  }
+
+  /** @native-contract generativeqc::Batch::ks_cpu_hessian_recycled
+   * @behavior Compute a raw LDA/PBE CPU RKS Hessian with recycled RHS groups and Cartesian or
+   * real-spherical AOs; PBE may include linked D3(BJ).
+   * @inputs Same options and output as ks_cpu_hessian, plus a group size between two and four.
+   * @outputs Row-major matrix and a detached work receipt.
+   * @errors Throws Error on refusal without changing output; never substitutes another schedule.
+   * @lifetime Vectors are local to one group on one accepted state.
+   * @units Matrix in Hartree/Bohr^2; capacities in bytes.
+   */
+  generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian_recycled(
+      std::size_t index, std::span<double> output,
+      const generativeqc_ks_host_hessian_options_v1& options, std::size_t block_size) {
+    generativeqc_ks_host_hessian_receipt_v1 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cpu_recycled_v1(handle_, index, &options, block_size,
+                                                  output.data(), output.size(), &receipt));
+    return receipt;
+  }
+
+  /** @native-contract generativeqc::Batch::ks_cpu_hvp
+   * @behavior Apply the CPU KS Hessian without constructing a dense matrix.
+   * @inputs Original input index, finite direction and disjoint output spans of exactly 3*N
+   * doubles each, and initialized CPU options identifying the accepted system.
+   * @outputs Atom-major Cartesian action and a detached work receipt as the return value.
+   * @errors Throws Error on native failure or empty direction; output remains unchanged.
+   * @lifetime Borrows only for the synchronous call; serialize batch and context operations.
+   * @units Hartree/Bohr^2 action on the supplied direction; capacities in bytes.
+   */
+  generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hvp(
+      std::size_t index, std::span<const double> direction, std::span<double> output,
+      const generativeqc_ks_host_hessian_options_v1& options) {
+    if (direction.empty())
+      throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "CPU KS HVP requires a direction");
+    generativeqc_ks_host_hessian_receipt_v1 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cpu_v1(handle_, index, &options, direction.data(),
+                                         direction.size(), output.data(), output.size(), &receipt));
     return receipt;
   }
 
@@ -1050,6 +1134,20 @@ class Batch {
   }
 
  private:
+  Batch() = default;
+
+  std::vector<const generativeqc_system*> batch_system_handles(
+      std::span<const System* const> systems) {
+    std::vector<const generativeqc_system*> handles(systems.size());
+    for (std::size_t index = 0; index < systems.size(); ++index) {
+      if (!systems[index])
+        throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "null system in batch");
+      handles[index] = systems[index]->get();
+      atom_counts_[index] = systems[index]->atom_count();
+    }
+    return handles;
+  }
+
   generativeqc_batch* handle_ = nullptr;
   std::vector<std::uint32_t> atom_counts_;
 };

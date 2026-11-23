@@ -11,6 +11,14 @@ extern "C" int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t*, std::s
                                                     std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t*, std::size_t,
                                                      std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_packed_fleet_v1(const std::uint64_t*, std::size_t,
+                                                            std::uint64_t, std::uint64_t*,
+                                                            std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_packed_force_fleet_v1(const std::uint64_t*, std::size_t,
+                                                                  std::uint64_t, std::uint64_t*,
+                                                                  std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_force_fleet_v1(const std::uint64_t*, std::size_t,
+                                                           std::uint64_t*, std::size_t);
 
 namespace {
 void require(bool condition, const char* message) {
@@ -32,6 +40,28 @@ void test_fleet_owner() {
   CpuKsHostFleetResources repeated;
   for (std::size_t index = 0; index < 3; ++index) repeated.append(shape);
   require(repeated.inventory() == aggregate, "KS repetition differs from descriptor fleet");
+  CpuKsHostFleetResources packed;
+  constexpr auto packed_execution = generativeqc::scf::KsHostExecution::cpu_packed;
+  const auto packed_item = packed.append(shape, 3, packed_execution);
+  constexpr std::uint64_t dense_values = 16 * sizeof(double);
+  constexpr std::uint64_t packed_values = 6 * sizeof(double);
+  const auto savings = dense_values - packed_values;
+  require(item[5] - packed_item[5] == savings && item[13] - packed_item[13] == savings &&
+              item[14] == packed_item[14] && item[15] == packed_item[15],
+          "packed KS changes only the retained ERI values, not transient workspace");
+  const auto packed_aggregate = packed.inventory();
+  require(packed_aggregate[12] == aggregate[12] - 3 * savings &&
+              packed_aggregate[13] == aggregate[13] &&
+              packed_aggregate[14] == aggregate[14] - 3 * savings,
+          "packed KS values must remain resident for each item");
+  auto through_g = shape;
+  through_g.maximum_angular = 4;
+  try {
+    packed.append(through_g, 1, packed_execution);
+    require(false, "packed KS accepted a g shell");
+  } catch (const std::invalid_argument&) {
+  }
+  require(packed.inventory() == packed_aggregate, "failed packed request mutated fleet");
   auto invalid = shape;
   invalid.primitives = 0;
   for (const auto copies : {std::uint64_t{0}, std::numeric_limits<std::uint64_t>::max()}) {
@@ -144,11 +174,93 @@ void test_fleet_bridge() {
               std::all_of(single.begin(), single.end(), [](auto value) { return value == 314159; }),
           "overflowing KS bridge peak published output");
 }
+
+void test_packed_fleet_bridge() {
+  const std::array<std::uint64_t, 17> first{2,  2, 2,   2, 6,   1, 0, 0, 6144,
+                                            24, 8, 256, 8, 100, 1, 0, 0};
+  std::array<std::uint64_t, 34> shapes{};
+  std::copy(first.begin(), first.end(), shapes.begin());
+  std::copy(first.begin(), first.end(), shapes.begin() + first.size());
+  shapes[18] = shapes[19] = 3;
+  auto query = [&](std::uint64_t cap, auto& output) {
+    return generativeqc_resource_ks_cpu_packed_fleet_v1(shapes.data(), shapes.size(), cap,
+                                                        output.data(), output.size());
+  };
+  constexpr auto cap = 8 * (6 + 21);
+  std::array<std::uint64_t, 47> values{};
+  require(query(cap, values) == 0, "exact-fit packed KS fleet denied");
+  require(values[5] == 16 * (4 + 9) + cap && values[14] == values[12] + values[13],
+          "packed KS fleet returned the wrong provider/peak");
+  const auto committed = values;
+  require(query(cap + 1, values) == 0 && values == committed,
+          "packed KS fleet charged the caller ceiling");
+  require(query(cap - 1, values) == 1 && values == committed,
+          "short packed KS capacity mutated output or returned the wrong status");
+  shapes[23] = 4;
+  require(query(cap, values) == -1 && values == committed,
+          "invalid packed KS item mutated output or returned the wrong status");
+}
+
+void test_packed_force_fleet_bridge() {
+  const std::array<std::uint64_t, 34> shapes{2, 2,    2,  2, 6,   1, 0,   0, 6144, 24, 8, 256,
+                                             8, 100,  1,  0, 0,   3, 3,   3, 3,    9,  2, 0,
+                                             0, 9216, 24, 8, 256, 8, 100, 1, 0,    0};
+  constexpr std::uint64_t cap = 8 * (6 + 21);
+  std::array<std::uint64_t, 47> energy{}, force{};
+  require(generativeqc_resource_ks_cpu_packed_fleet_v1(shapes.data(), shapes.size(), cap,
+                                                       energy.data(), energy.size()) == 0,
+          "exact packed energy fleet was rejected");
+  const auto query = [&](const auto& input, std::uint64_t bytes) {
+    return generativeqc_resource_ks_cpu_packed_force_fleet_v1(input.data(), input.size(), bytes,
+                                                              force.data(), force.size());
+  };
+  const auto status = query(shapes, cap);
+  std::array<std::uint64_t, 47> dense_force{};
+  const auto dense_query = [&](const auto& input) {
+    return generativeqc_resource_ks_cpu_force_fleet_v1(input.data(), input.size(),
+                                                       dense_force.data(), dense_force.size());
+  };
+  if (status == 2) {
+    require(force == decltype(force){}, "unlinked force inventory published output");
+    require(dense_query(shapes) == 2 && dense_force == decltype(dense_force){},
+            "unlinked dense force inventory published output");
+    return;
+  }
+  require(status == 0, "exact packed force fleet was rejected");
+  const auto cap_and_frame = (64u << 20) + 8 * 2 * (4 * 9 + 3);
+  require(force[5] == energy[5] && force[12] == energy[12] + 24 * (2 + 3) &&
+              force[13] == cap_and_frame && force[14] == force[12] + force[13],
+          "force fleet changed the provider or summed serialized force scratch");
+  const auto admitted = force;
+  require(query(shapes, cap - 1) == 1 && force == admitted,
+          "short packed force cap published output");
+  auto invalid = shapes;
+  invalid[17 + 15] = 1;
+  require(query(invalid, cap) == -1 && force == admitted,
+          "nonlocal packed force query published partial output");
+  require(dense_query(shapes) == 0 && dense_force[5] == force[5] + 8 * (16 + 81) - cap &&
+              dense_force[12] == force[12] + 8 * (16 + 81) - cap && dense_force[13] == force[13] &&
+              dense_force[14] == dense_force[12] + dense_force[13],
+          "dense force bridge did not replace the packed provider with dense values");
+  const auto dense_admitted = dense_force;
+  require(dense_query(invalid) == -1 && dense_force == dense_admitted,
+          "invalid later dense force item modified committed output");
+
+  // A large explicit AO tile can dominate the integral publication cap.
+  auto large_tile = shapes;
+  large_tile[17 + 8] = large_tile[17 + 11] = 300'000;
+  require(query(large_tile, cap) == 0, "large valid force tile was rejected");
+  const auto expected_xc = 8 * (10 * 3 * 300'000 + 6 * 3 + 4 * 3 + 300'000 + 3 * 9 + 5 * 3);
+  require(force[13] == expected_xc + 96 * 3 + 8 * 2 * (4 * 9 + 3),
+          "force fleet did not price the overlapping AO and Becke buffers");
+}
 }  // namespace
 
 int main() {
   test_fleet_owner();
   test_fleet_bridge();
+  test_packed_fleet_bridge();
+  test_packed_force_fleet_bridge();
   const std::array<std::uint64_t, 17> shape{2,  2, 2,   2, 6,   1, 0, 0, 6144,
                                             24, 8, 256, 8, 100, 1, 0, 0};
   std::array<std::uint64_t, 16> inventory{};

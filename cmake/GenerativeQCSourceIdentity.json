@@ -127,6 +127,7 @@
     "tools/hessian_aot_inventory.py",
     "tools/generate_hessian_aot.py",
     "manifests/host_hessian_aot_b3lyp.json",
+    "manifests/host_hessian_aot_catalog.json",
     "tools/generate_host_hessian_aot.py",
     "tools/generate_cuda_gmres.py",
     "tools/generate_ks_cpks.py",

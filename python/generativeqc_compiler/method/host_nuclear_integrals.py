@@ -56,27 +56,26 @@ def integral_direction_program() -> tuple[Graph, tuple[Expr, ...]]:
 @cache
 def quartet_energy_program(method: MethodIR) -> Program:
     """Share the canonical ordered J/K energy between first and second sources."""
-    if {primitive.kind for primitive in method.primitives} != {
-        "semilocal_xc",
-        "exact_exchange",
-    }:
-        raise ValueError("native quartet direction requires a full-range global hybrid")
+    kinds = {primitive.kind for primitive in method.primitives}
+    if kinds not in ({"semilocal_xc"}, {"semilocal_xc", "exact_exchange"}):
+        raise ValueError("native quartet direction requires a full-range KS model")
     plan = StationaryGradientPlan(method, StationaryMeanField(SCF_POINT_MODEL))
+    coulomb = density_incidence(
+        plan.integral_block("coulomb", terms=1, differentiate_densities=True).objective,
+        exchange=False,
+    )
+    if "exact_exchange" not in kinds:
+        return Program({"energy": coulomb})
     return Program(
         {
             "energy": add(
-                *(
-                    density_incidence(
-                        plan.integral_block(
-                            source, terms=1, differentiate_densities=True
-                        ).objective,
-                        exchange=exchange,
-                    )
-                    for source, exchange in (
-                        ("coulomb", False),
-                        ("exact_exchange", True),
-                    )
-                )
+                coulomb,
+                density_incidence(
+                    plan.integral_block(
+                        "exact_exchange", terms=1, differentiate_densities=True
+                    ).objective,
+                    exchange=True,
+                ),
             )
         }
     )
@@ -141,13 +140,17 @@ def quartet_direction_program(method: MethodIR) -> Program:
     """
     plan = StationaryGradientPlan(method, StationaryMeanField(SCF_POINT_MODEL))
     objective = quartet_energy_program(method)
-    reverse = transpose_program(objective, ("energy",), inputs=INCIDENCES).program
-    fock = Program({name: reverse.outputs[f"bar_{name}"] for name in INCIDENCES})
+    present = {
+        node.attrs["name"] for node in objective.live_nodes if node.op == "input"
+    }
+    incidences = tuple(name for name in INCIDENCES if name in present)
+    reverse = transpose_program(objective, ("energy",), inputs=incidences).program
+    fock = Program({name: reverse.outputs[f"bar_{name}"] for name in incidences})
     moving = linearize(fock, ("integrals",)).program
     return Program(
         {
             f"motion_{slot}": moving.outputs[f"d_{name}"]
-            for slot, name in enumerate(INCIDENCES)
+            for slot, name in enumerate(incidences)
         },
         provenance={
             "stationary_plan": plan.identity,

@@ -40,10 +40,8 @@ struct HostGgaResponseWork {
  * Density/direction/output are spin/row/column-major in the same real AO basis.
  * The immutable reference density is borrowed. validate_current must reject a
  * dead or changed stationary owner, including geometry/grid/method/spin changes.
- * Exact linked XC and coefficient-response identities are mandatory; no JIT or
- * reference fallback exists. Nonnegative spin densities and compatible zero
- * gradients use the linked graph's exact production vacuum branch. Nonfinite
- * derivatives outside that branch fail, never acquire a density/tangent floor.
+ * The exact method chooses linked scalar identities or a native physical-point
+ * domain. No JIT, reference fallback, density floor or tangent floor exists.
  *
  * workspace_bytes bounds owned heap numeric panels, including transactional
  * output staging, not borrowed state, callback/provider storage, compiled scalar
@@ -70,10 +68,11 @@ class HostGgaXcResponse {
    */
   static std::size_t primal_cache_bytes(HostGgaResponseShape shape, std::size_t maximum_bytes);
 
-  HostGgaXcResponse(HostGgaResponseShape shape, std::size_t budget_bytes,
-                    std::span<const double> density, std::string_view xc_identity,
-                    std::string_view coefficient_response_identity, HostGgaTileReader reader,
-                    std::function<void()> validate_current);
+  HostGgaXcResponse(
+      HostGgaResponseShape shape, std::size_t budget_bytes, std::span<const double> density,
+      std::string_view xc_identity, std::string_view coefficient_response_identity,
+      HostGgaTileReader reader, std::function<void()> validate_current,
+      host_hessian_aot::PointDomain domain = host_hessian_aot::PointDomain::linked_ad);
 
   void apply(std::span<const double> direction, std::span<double> output);
   /** Synchronous same-frame independent directions, not a coupled/block solve.
@@ -102,6 +101,7 @@ class HostGgaXcResponse {
   std::span<const double> density_;
   const host_hessian_aot::Program* xc_{};
   const host_hessian_aot::Program* coefficients_{};
+  host_hessian_aot::PointDomain domain_;
   HostGgaTileReader reader_;
   std::function<void()> validate_current_;
   std::array<std::size_t, 5> feature_inputs_{}, values_{}, tangents_{};

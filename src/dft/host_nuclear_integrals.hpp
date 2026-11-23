@@ -106,11 +106,17 @@ class HostKsNuclearIntegrals {
    * the unscaled compiler map when a physical integral tangent is tiny.
    */
   static bool coordinate_density_supported(std::span<const double> density) noexcept;
-  static std::size_t density_response_terms(const AoBasis& basis, std::size_t spins);
+  static std::size_t density_response_terms(const AoBasis& basis, std::size_t spins,
+                                            std::string_view method_identity = {});
   static HostNuclearIntegralPlan plan(
       const AoBasis& basis, std::size_t spins,
       HostNuclearEriSchedule schedule = HostNuclearEriSchedule::SymmetryUnique,
-      HostNuclearFirstSchedule first_schedule = HostNuclearFirstSchedule::Direction);
+      HostNuclearFirstSchedule first_schedule = HostNuclearFirstSchedule::Direction,
+      std::string_view method_identity = {});
+
+  /** Mandatory first-source storage, without enumerating primitive work. */
+  static std::size_t direction_bytes(std::size_t atoms, std::size_t aos, std::size_t spins,
+                                     std::string_view method_identity);
 
   HostKsNuclearIntegrals(
       const core::System& system, const AoBasis& basis, const scf::ResolvedFockBuild& strategy,
@@ -180,7 +186,11 @@ class HostKsNuclearIntegralCurvature {
   static HostNuclearIntegralPlan plan(
       const AoBasis& basis, std::size_t spins,
       HostNuclearIntegralCurvatureSchedule schedule = HostNuclearIntegralCurvatureSchedule::Mixed,
-      HostNuclearEriSchedule eri_schedule = HostNuclearEriSchedule::SymmetryUnique);
+      HostNuclearEriSchedule eri_schedule = HostNuclearEriSchedule::SymmetryUnique,
+      std::string_view method_identity = {});
+  /** Mandatory scalar curvature storage, without enumerating primitive work. */
+  static std::size_t column_bytes(std::size_t atoms, std::size_t aos, std::size_t spins,
+                                  std::string_view method_identity);
   HostKsNuclearIntegralCurvature(
       const core::System& system, const AoBasis& basis, const scf::ResolvedFockBuild& strategy,
       std::span<const double> density, std::span<const double> weighted_density,

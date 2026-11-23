@@ -13,11 +13,13 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/hf_host_resources.hpp"
 #include "scf/initial_guess/automatic_policy.hpp"
 #include "scf/initial_guess/huckel.hpp"
 #include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/initial_guess/minao.hpp"
 #include "scf/initial_guess/overlap.hpp"
+#include "scf/ks_host_resources.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/reference/linalg.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -27,6 +29,13 @@ namespace {
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
+}
+
+/** Shared compact and prepared target gate. The population cannot stand in for
+ * the target spin: an unrestricted singlet still needs a different seed. */
+bool preliminary_target_topology_eligible(bool restricted, bool has_ecp, std::int64_t electrons,
+                                          unsigned multiplicity) {
+  return restricted && !has_ecp && automatic_minao_population_eligible(electrons, multiplicity);
 }
 
 bool preliminary_target_common_eligible(const core::System& system,
@@ -44,19 +53,30 @@ bool preliminary_target_common_eligible(const core::System& system,
       options.application_precision_budget[0] > 0.0 && options.preliminary_guess &&
       (options.preliminary_guess->kind == PreliminaryKind::Minao ||
        options.preliminary_guess->kind == PreliminaryKind::Huckel);
-  return strategy.spec.spin == FockSpin::Restricted &&
-         (precision == GENERATIVEQC_PRECISION_FP64 || application_seed) &&
+  return (precision == GENERATIVEQC_PRECISION_FP64 || application_seed) &&
          (options.preliminary_guess->kind == PreliminaryKind::Huckel ||
           (exact(strategy.spec.coulomb) && exact(strategy.spec.exchange))) &&
-         system.ecp_terms.empty() &&
-         std::none_of(system.atoms.begin(), system.atoms.end(),
-                      [](const auto& atom) { return atom.ecp_core != 0; }) &&
-         automatic_minao_population_eligible(system.electron_count, system.multiplicity);
+         preliminary_target_topology_eligible(
+             strategy.spec.spin == FockSpin::Restricted,
+             !system.ecp_terms.empty() ||
+                 std::any_of(system.atoms.begin(), system.atoms.end(),
+                             [](const auto& atom) { return atom.ecp_core != 0; }),
+             system.electron_count, system.multiplicity);
 }
 
 bool minao_elements_eligible(const core::System& system) {
   return std::all_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
     return automatic_minao_element_eligible(atom.atomic_number);
+  });
+}
+
+/** The CPU integral provider admits g, but the coarse LDA source uses AO grid
+ * primitives through f. Decline before constructing a separate source owner. */
+constexpr bool lda_source_supports_angular(unsigned angular) { return angular <= 3; }
+
+bool lda_source_supported(const core::System& system) {
+  return std::none_of(system.shells.begin(), system.shells.end(), [](const auto& shell) {
+    return !lda_source_supports_angular(shell.angular_momentum);
   });
 }
 
@@ -95,11 +115,7 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
   if (policy.kind == PreliminaryKind::Huckel)
     return prepare_huckel_initial_density(system, target.one_electron(), policy, diagnostic, eigen,
                                           products);
-  // The CPU integral provider admits g, but the LDA AO-grid primitive only
-  // admits through f. Decline before building an unusable extra integral owner.
-  if (policy.kind == PreliminaryKind::Lda &&
-      std::any_of(system.shells.begin(), system.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum > 3; })) {
+  if (policy.kind == PreliminaryKind::Lda && !lda_source_supported(system)) {
     diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
     return std::nullopt;
   }
@@ -246,26 +262,31 @@ std::optional<PreliminaryOptions> preliminary_options(
   return options;
 }
 
-std::size_t preliminary_numeric_capacity(const core::System& system,
-                                         const PreliminaryOptions& options) {
-  validate_preliminary_options(options);
+namespace {
+CpuPreliminaryBasisShape cpu_preliminary_basis_shape(const core::System& system) {
+  CpuPreliminaryBasisShape shape{system.atoms.size(),
+                                 molecule::ao_count(system),
+                                 molecule::cartesian_ao_count(system),
+                                 system.shells.size(),
+                                 0,
+                                 0};
+  for (const auto& shell : system.shells) {
+    shape.primitives = runtime::size_add(shape.primitives, shell.primitives.size());
+    shape.angular = std::max(shape.angular, shell.angular_momentum);
+  }
+  return shape;
+}
+
+std::size_t preliminary_scf_numeric_capacity(const CpuPreliminaryBasisShape& shape,
+                                             const PreliminaryOptions& options) {
   const auto checked_add = [](std::size_t a, std::size_t b) { return runtime::size_add(a, b); };
   const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
-  const auto n = molecule::ao_count(system);
+  const auto n = shape.orbitals;
   const auto n2 = checked_mul(n, n);
-  if (options.kind == PreliminaryKind::Huckel)
-    return huckel_numeric_capacity(huckel_capacity_shape(system), options.diis_history);
-  if (options.kind == PreliminaryKind::Minao)
-    return minao_numeric_capacity_shape(n, system.atoms.size(), minao_source_ao_count(system),
-                                        minao_source_primitive_count(system));
-  const auto cartesian = molecule::cartesian_ao_count(system);
+  const auto cartesian = shape.cartesian;
   const auto c2 = checked_mul(cartesian, cartesian);
-  std::size_t primitives = 0;
-  for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 4)
-      throw std::invalid_argument("preliminary SCF capacity is qualified through g shells");
-    primitives = checked_add(primitives, shell.primitives.size());
-  }
+  if (shape.angular > 4)
+    throw std::invalid_argument("preliminary SCF capacity is qualified through g shells");
   // Three numeric ERI copies cover Cartesian generation/unpacking and a
   // public spherical tensor. The independent byte cap excludes Jet object
   // headers, just like its documented numeric-payload scope. ResourceBudget
@@ -276,14 +297,13 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   // Primitive arrays are shared by Cartesian AoViews. The LDA peak has at
   // most four 16*P numeric copies (source/grid Systems, packed AO primitives,
   // and temporary basis validation), covered by 128*P independently of P.
-  auto source = checked_add(system.atoms.size(), system.shells.size());
-  source = checked_add(source, checked_add(primitives, checked_add(cartesian, n)));
+  auto source = checked_add(shape.atoms, shape.shells);
+  source = checked_add(source, checked_add(shape.primitives, checked_add(cartesian, n)));
   bytes = checked_add(bytes, checked_mul(128, source));
   if (options.kind == PreliminaryKind::Lda) {
-    const auto points =
-        checked_mul(system.atoms.size(),
-                    checked_mul(options.radial_points,
-                                checked_mul(options.angular_polar, options.angular_azimuth)));
+    const auto points = checked_mul(
+        shape.atoms, checked_mul(options.radial_points,
+                                 checked_mul(options.angular_polar, options.angular_azimuth)));
     bytes = checked_add(bytes, checked_mul(64, points));
     bytes = checked_add(bytes, checked_mul(8, checked_mul(n, std::min<std::size_t>(points, 256))));
     bytes = checked_add(bytes, checked_mul(256, options.max_iterations));
@@ -292,6 +312,19 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   if (bytes > static_cast<std::uint64_t>(INT64_MAX))
     throw std::overflow_error("preliminary SCF capacity exceeds portable int64 scope");
   return bytes;
+}
+}  // namespace
+
+std::size_t preliminary_numeric_capacity(const core::System& system,
+                                         const PreliminaryOptions& options) {
+  validate_preliminary_options(options);
+  if (options.kind == PreliminaryKind::Huckel)
+    return huckel_numeric_capacity(huckel_capacity_shape(system), options.diis_history);
+  if (options.kind == PreliminaryKind::Minao)
+    return minao_numeric_capacity_shape(molecule::ao_count(system), system.atoms.size(),
+                                        minao_source_ao_count(system),
+                                        minao_source_primitive_count(system));
+  return preliminary_scf_numeric_capacity(cpu_preliminary_basis_shape(system), options);
 }
 
 std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
@@ -330,6 +363,124 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
   if (!common || strategy.backend != FockBackend::Cpu || options.compute_forces)
     throw std::invalid_argument(
         "preliminary SCF requires a CPU FP64 all-electron restricted exact energy endpoint");
+}
+
+namespace {
+template <class NumericCapacity>
+CpuPreliminaryInventory cpu_preliminary_inventory(const CpuPreliminaryBasisShape& shape,
+                                                  const PreliminaryOptions& policy,
+                                                  NumericCapacity numeric_capacity) {
+  CpuPreliminaryInventory result;
+  result.maximum_numeric_bytes = policy.maximum_numeric_bytes;
+  if (policy.kind == PreliminaryKind::Lda && !lda_source_supports_angular(shape.angular)) {
+    result.disposition = CpuPreliminaryInventory::Disposition::SourceDeclined;
+    return result;
+  }
+  result.required_numeric_bytes = numeric_capacity();
+  if (result.required_numeric_bytes > result.maximum_numeric_bytes) {
+    result.disposition = CpuPreliminaryInventory::Disposition::BudgetSkipped;
+    return result;
+  }
+  const auto orbitals = shape.orbitals;
+  result.seed_bytes = runtime::size_mul(sizeof(double), runtime::size_mul(orbitals, orbitals));
+  if (result.required_numeric_bytes < result.seed_bytes)
+    throw std::logic_error("preliminary capacity does not cover its seed");
+  result.workspace_bytes = result.required_numeric_bytes - result.seed_bytes;
+  if (policy.kind == PreliminaryKind::Minao || policy.kind == PreliminaryKind::Huckel)
+    return result;
+
+  std::uint64_t source_peak = 0;
+  if (policy.kind == PreliminaryKind::HartreeFock) {
+    CpuHfHostFleetResources fleet;
+    fleet.append({{shape.atoms, orbitals, shape.cartesian, 1, shape.angular, policy.diis_history, 0,
+                   0, 0, 0},
+                  shape.shells,
+                  shape.primitives,
+                  0,
+                  0});
+    source_peak = fleet.inventory()[2];
+  } else {
+    const auto grid_points =
+        runtime::size_mul(runtime::size_mul(shape.atoms, policy.radial_points),
+                          runtime::size_mul(policy.angular_polar, policy.angular_azimuth));
+    CpuKsHostFleetResources fleet;
+    fleet.append({shape.atoms, orbitals, shape.cartesian, shape.shells, shape.primitives, 1,
+                  shape.angular, 0, grid_points, policy.radial_points, policy.angular_polar, 256,
+                  policy.diis_history, policy.max_iterations, false, false, 0});
+    source_peak = fleet.inventory()[14];
+  }
+  result.workspace_bytes = std::max(result.workspace_bytes, source_peak);
+  return result;
+}
+}  // namespace
+
+CpuPreliminaryInventory cpu_direct_preliminary_inventory(const core::System& system,
+                                                         const PreliminaryOptions& policy,
+                                                         bool rhf_forces) {
+  if (policy.automatic_cpu)
+    throw std::invalid_argument("CPU preliminary inventory requires an explicit guess policy");
+  ScfOptions controls;
+  controls.compute_forces = rhf_forces;
+  controls.preliminary_guess = policy;
+  const auto strategy =
+      resolve_fock_build(make_hf_fock_spec(FockSpin::Restricted), FockBackend::Cpu);
+  validate_preliminary_target(system, strategy, controls);
+  const auto shape = cpu_preliminary_basis_shape(system);
+  return cpu_preliminary_inventory(shape, policy, [&] {
+    if (policy.kind == PreliminaryKind::Minao || policy.kind == PreliminaryKind::Huckel)
+      return preliminary_numeric_capacity(system, policy);
+    return preliminary_scf_numeric_capacity(shape, policy);
+  });
+}
+
+CpuPreliminaryInventory cpu_direct_preliminary_inventory(
+    const CpuPreliminaryBasisShape& shape, const PreliminaryOptions& policy,
+    std::span<const std::int32_t> atomic_numbers, std::span<const HuckelShellShape> shell_shapes,
+    int representation, std::int64_t electrons, unsigned multiplicity, bool has_ecp,
+    unsigned spin_channels) {
+  validate_preliminary_options(policy);
+  if (!shape.atoms || shape.atoms != atomic_numbers.size() || !shape.orbitals ||
+      shape.cartesian < shape.orbitals || !shape.shells || shape.shells > shape.orbitals ||
+      shape.primitives < shape.shells || electrons < 0 || !multiplicity ||
+      static_cast<std::uint64_t>(electrons) / 2 > shape.orbitals ||
+      (spin_channels != 1 && spin_channels != 2) ||
+      (representation != core::kCartesianBasis && representation != core::kSphericalBasis) ||
+      (policy.kind == PreliminaryKind::Huckel ? shell_shapes.size() != shape.shells
+                                              : !shell_shapes.empty()))
+    throw std::invalid_argument("invalid compact CPU preliminary topology");
+  const bool common =
+      preliminary_target_topology_eligible(spin_channels == 1, has_ecp, electrons, multiplicity);
+  if (policy.automatic_cpu) {
+    if (!common || !std::ranges::all_of(atomic_numbers, automatic_minao_element_eligible))
+      return {0, policy.maximum_numeric_bytes, 0, 0,
+              CpuPreliminaryInventory::Disposition::TargetDeclined};
+  } else if (!common) {
+    throw std::invalid_argument(
+        "CPU preliminary inventory requires an all-electron restricted target");
+  }
+  return cpu_preliminary_inventory(shape, policy, [&] {
+    if (policy.kind == PreliminaryKind::Minao)
+      return preliminary_minao_numeric_capacity(shape.orbitals, atomic_numbers.data(), shape.atoms);
+    if (policy.kind == PreliminaryKind::Huckel) {
+      unsigned angular = 0;
+      std::size_t cartesian = 0;
+      const auto huckel = huckel_capacity_shape(
+          shape.atoms, shape.shells, representation,
+          [&](std::size_t index) { return atomic_numbers[index]; },
+          [&](std::size_t index) {
+            const auto shell = shell_shapes[index];
+            angular = std::max(angular, shell.angular_momentum);
+            cartesian = runtime::size_add(
+                cartesian, molecule::shell_ao_count(shell.angular_momentum, core::kCartesianBasis));
+            return shell;
+          });
+      if (huckel.target_aos != shape.orbitals || huckel.primitives != shape.primitives ||
+          cartesian != shape.cartesian || angular != shape.angular)
+        throw std::invalid_argument("Huckel shell rows disagree with preliminary topology");
+      return huckel_numeric_capacity(huckel, policy.diis_history);
+    }
+    return preliminary_scf_numeric_capacity(shape, policy);
+  });
 }
 
 void resolve_automatic_preliminary_guess(const core::System& system,

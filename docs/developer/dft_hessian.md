@@ -88,9 +88,10 @@ with the same physical spin rather than a user-controlled identifier. An uncut
 two-body D3(BJ), ATM-off correction is an independently qualified additive
 source; it does not repeat electronic response. Only the exact canonical B3LYP
 RKS/UKS graph additionally admits scalar ECPs through the linked native CPU
-owner, with the same direct FP64, AO and resource bounds. PBE0 UKS, ECPs on
-PBE0 or coefficient-variable graphs, DF and CUDA full-range variants remain
-excluded. A spherical Ni/def2-SVP fixture does not
+owner, with the same direct FP64, AO and resource bounds. Canonical PBE0 UKS
+requires the linked owner described below rather than this compatibility
+implementation. ECPs on PBE0 or coefficient-variable graphs, DF and CUDA
+full-range variants remain excluded here. A spherical Ni/def2-SVP fixture does not
 establish production-scale support for 25–40-atom Ni systems.
 The low-level receipt always reports `public_calculator_endpoint=False`;
 only the actual Calculator wrapper marks the endpoint public and adds native
@@ -267,29 +268,50 @@ tools import these production owners directly. The tools perturbation adapter
 binds `solve_stationary_nuclear_perturbation[s]` to that shared GMRES solver for
 both RHF and RKS operators.
 
-The CPU direct all-electron Cartesian LDA/PBE RKS path has installed
-production owners for the live CPKS state/J/XC binding, nuclear-direction
-response, NativeAO-owned generated first/second integral response, complete
-seven-source molecular HVP, shared multi-RHS CPKS and raw bounded full-Hessian
-assembly. The existing finite-difference, raw-symmetry and resource-admission
-tests continue to qualify the same scientific contract. Repository consumers
-import `generativeqc.rks_hessian_directional` and `generativeqc.rks_hessian`
-directly. The same owner is exposed through
-`Calculator.hessian_vector_product()` and `Calculator.hessian()` for CPU direct
-all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
-explicit integral/output budgets and report the executed public endpoint in
-result diagnostics. WB97M-V uses the separate compiler-AD owner described below.
+For canonical CPU Direct FP64 all-electron LDA/PBE RKS with Cartesian or
+real-spherical AOs,
+`Calculator.hessian_vector_product()` and the default scalar
+`Calculator.hessian()` dispatch to the linked native owner below. The linked
+recycled variant processes groups of two to four RHS using the same stationary
+assembly, the native recycle vector owner and scalar GMRES. A fresh recycle
+space starts every group. Without the binding, or for true block GMRES or
+other group widths, Python retains the Cartesian-only compatibility domain and
+uses
+the bounded `generativeqc.rks_hessian_directional` and
+`generativeqc.rks_hessian` path. Both paths publish the raw result and report
+the executed owner in diagnostics. WB97M-V uses the separate compiler-AD
+owner described below.
 
-## Linked native CPU B3LYP endpoint
+(linked-native-cpu-b3lyp-endpoint)=
+## Linked native CPU Hessian endpoint
 
 `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` (the default when stationary CPU
 first-derivative primitives are enabled) links the host scalar and
-response prerequisites into the native core. It enables the private synchronous
-`api/ks_host_hessian.hpp` bridge, the canonical B3LYP RKS/UKS Python Hessian/HVP
-route, and the CPU CLI. This is independent of CUDA Hessian-AOT selection.
+response prerequisites into the native core. The canonical B3LYP RKS/UKS
+Python Hessian/HVP route, CPU CLI, and installed SDK all consume the same
+synchronous `generativeqc_ks_hessian_cpu_v1` bridge on the accepted batch. This
+is independent of CUDA Hessian-AOT selection.
 The initial linked electronic inventory is exact Gaussian/VWN-RPA B3LYP;
 the native catalog also supplies its canonical two-body, ATM-off D3(BJ) total
 program without duplicating electronic coefficients or dispersion fit data.
+
+The default `manifests/host_hessian_aot_catalog.json` additionally binds
+canonical all-electron Direct FP64 PBE0 RKS/UKS, bare or named two-body D3(BJ).
+Its moving-grid, mixed-curvature and fixed-grid induced XC coefficients use
+the scaled PBE point evaluator and directional response already used by the
+native SCF domain. UKS uses separate physical alpha and beta fields and does
+not admit a nonzero tangent in an exactly empty spin block. The integral maps
+use the exact electronic binding in both planning and execution. The PBE0
+binding does not admit scalar ECP, fitted integrals or arbitrary PBE-based
+compositions. B3LYP leaves are unchanged.
+The default inventory also binds canonical LDA/PBE RKS for all-electron
+Direct FP64 with Cartesian or real-spherical AOs. These bindings reuse the
+physical SCF point response and generate Coulomb-only nuclear integral
+contractions. Canonical PBE with uncut two-body D3(BJ), ATM off, uses the
+same PBE response and adds the existing native D3 curvature once. UKS, ECP,
+other corrections and custom semilocal scales are not admitted here.
+An existing CMake build retains its cached inventory selection. Explicitly
+select `manifests/host_hessian_aot_b3lyp.json` for a B3LYP-only package.
 
 The Hessian default follows `GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` so
 intentional primitive-free builds remain valid without enabling dependent
@@ -331,7 +353,14 @@ default response gate has
 options retain their original gates, including a requested relative-only solve.
 
 Separate native numerical/integral/grid/response/ECP/D3/output reservations are
-enforced. The default aggregate native numerical cap is 512 MiB and nuclear
+enforced. The SDK's `generativeqc_ks_hessian_cpu_minimum_bytes_v1` queries the
+same base reservation used by execution, using a normalized orbital system and
+the exact linked total program. It includes the stationary frame, output and
+assembly storage, configured grid/response capacities, scalar integral
+curvature, and any ECP/D3 curvature. First-order integral/ECP storage belongs
+to the response reservation. The query does not build the grid, enumerate
+quartets, or reserve optional post-SCF workspace. The default aggregate native
+numerical cap is 512 MiB and nuclear
 primitive-visit cap is 100,000,000 over the whole requested matrix or HVP.
 `Calculator.hessian`, `Calculator.hessian_vector_product` and
 `optimize_saddle` accept an explicit positive-int64 `max_eri_primitives` override
@@ -374,6 +403,13 @@ owner as the retained-batch qualification; complete public and installed
 qualification must still execute their actual entry points. DF is excluded.
 The saddle adapter remains a separate all-electron consumer: Hessian admission
 does not promote an ECP transition-state endpoint.
+
+For a budgeted Python request, the native resource composer overlaps the
+declared primal peaks (including a named correction) and frontend wire staging
+with the derivative cap before preparation. The CPU bridge sizes its mandatory
+reservations against that cap and spends only the residual allowance on optional
+matrix and response-batch panels, cumulatively. The numerical reservation receipt
+may be smaller than the composed cap; it is not a process memory measurement.
 
 ### Molecular corrector frame ownership
 
@@ -438,18 +474,22 @@ not establish that cold-compile path.
 `GENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES=ON` builds the separate static
 target `generativeqc_host_hessian_aot`, including in a CPU-only configuration.
 `GENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY` selects an explicit inventory; its
-default is `manifests/host_hessian_aot_b3lyp.json`. This inventory packages
+default is `manifests/host_hessian_aot_catalog.json`. It packages
 physical B3LYP semilocal energy/feature derivatives for both spin layouts,
 compact XC coefficients and their response, mixed grid primitives, and nuclear
 pair HVP leaves, first AO motion, weighted GGA field response, and frozen GGA
-energy mixed geometry, plus uncut two-body D3(BJ) column leaves. Build-time
+energy mixed geometry, plus uncut two-body D3(BJ) column leaves. The default
+also binds PBE0 RKS/UKS to the scaled native PBE point response, not generated PBE0
+scalar XC leaves. Build-time
 Python uses the existing compiler Graph roots;
 the linked leaves invoke no Python, runtime compiler, device, or reference engine.
 
 Enabling scalar leaves alone supplies prerequisites, **not a complete native CPU
 Hessian or transition-state endpoint**. Complete B3LYP execution requires
 `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN`, which links the composed native owner
-into the core and CLI. The leaf target itself supplies neither integral
+into the core and CLI. Linking the complete owner refuses inventories missing
+any required electronic or D3 column leaf at configure time; partial inventories
+are still available for leaf-only builds. The leaf target itself supplies neither integral
 assembly, occupied/virtual response, SCF state ownership nor molecular TS steps.
 The CUDA `GENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES` option remains separate.
 
@@ -2652,7 +2692,8 @@ CUDA execution. Finite differences and reference evaluators are test oracles onl
 
 ## Qualified execution boundary
 
-LDA/PBE retain their CPU direct all-electron Cartesian closed-shell domain.
+The linked LDA/PBE CPU domain is Direct all-electron closed-shell FP64 with
+Cartesian or real-spherical AOs. The Python compatibility path remains Cartesian.
 Canonical CUDA LDA/PBE/PBE0/B3LYP use the native RKS/UKS domain above.
 Canonical WB97M-V additionally admits the spin, representation, backend,
 fitting and ECP domains described here, subject to their resource, quadrature

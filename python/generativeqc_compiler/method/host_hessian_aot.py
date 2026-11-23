@@ -7,7 +7,7 @@ orbital response nor molecular assembly and must not enable endpoint admission.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import cache
 from typing import Any
@@ -34,6 +34,7 @@ from .nuclear_repulsion import nuclear_pair_program
 from .spec import resolve_method
 
 SCHEMA = "generativeqc.host-hessian-aot-inventory/v1"
+CATALOG_SCHEMA = "generativeqc.host-hessian-aot-inventory/v2"
 ARRAYS = (
     "xc",
     "coefficients",
@@ -51,6 +52,21 @@ ARRAYS = (
     *D3_COLUMN_ARRAYS,
 )
 SPINS = ("unpolarized", "polarized")
+METHOD_LEAVES = frozenset(("xc", "gga_field_response", "gga_energy_mixed"))
+NATIVE_POINTS = {
+    "PBE0": {"unpolarized": "scaled_pbe0_rks", "polarized": "scaled_pbe0_uks"},
+    "PBE": {"unpolarized": "pbe_rks"},
+    "LDA_XC_PW": {"unpolarized": "lda_rks"},
+}
+ENDPOINT_LEAVES = METHOD_LEAVES | frozenset(
+    (
+        "coefficient_response",
+        "ao_first_motion",
+        "integral_direction",
+        "nuclear_pair_column",
+        *D3_COLUMN_ARRAYS,
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -60,10 +76,61 @@ class HostInventory:
     method: str
     spins: tuple[str, ...]
     arrays: tuple[str, ...]
+    # The primary inventory owns common AO, coefficient, integral and grid leaves.
+    # Additional models bind a native physical-point provider, not Maple leaves.
+    additional_methods: tuple[str, ...] = ()
+
+    def spins_for(self, method: str) -> tuple[str, ...]:
+        """Keep physical-point registrations and integral map domains identical."""
+        domains = NATIVE_POINTS.get(method)
+        return (
+            self.spins
+            if domains is None
+            else tuple(spin for spin in self.spins if spin in domains)
+        )
+
+
+def require_endpoint_leaves(inventory: HostInventory) -> None:
+    """Require every shared leaf used by the linked electronic and D3 columns."""
+    missing = sorted(ENDPOINT_LEAVES.difference(inventory.arrays))
+    if missing:
+        raise ValueError(
+            "complete CPU Hessian endpoint lacks leaves: " + ", ".join(missing)
+        )
 
 
 def parse_inventory(payload: Any) -> HostInventory:
     """Reject ignored metadata and unsupported physical-method domains."""
+    if isinstance(payload, dict) and payload.get("schema") == CATALOG_SCHEMA:
+        if set(payload) != {
+            "schema",
+            "method",
+            "spins",
+            "arrays",
+            "additional_methods",
+        }:
+            raise ValueError("invalid host Hessian AOT catalog")
+        additional = payload["additional_methods"]
+        if (
+            not isinstance(additional, list)
+            or not additional
+            or any(
+                not isinstance(name, str) or name not in NATIVE_POINTS
+                for name in additional
+            )
+            or len(set(additional)) != len(additional)
+            or payload["method"] != "B3LYP"
+        ):
+            raise ValueError("unsupported host Hessian AOT catalog methods")
+        primary = parse_inventory(
+            {key: payload[key] for key in ("method", "spins", "arrays")}
+            | {"schema": SCHEMA}
+        )
+        if not (METHOD_LEAVES | {"coefficient_response"}) <= set(primary.arrays):
+            raise ValueError("host Hessian AOT catalog requires complete XC leaves")
+        if "unpolarized" not in primary.spins:
+            raise ValueError("additional host Hessian methods require RKS leaves")
+        return replace(primary, additional_methods=tuple(additional))
     if (
         not isinstance(payload, dict)
         or set(payload) != {"schema", "method", "spins", "arrays"}
@@ -265,46 +332,8 @@ def emit_registry(inventory: HostInventory) -> str:
     bindings = []
     if {"xc", "coefficient_response"} <= set(inventory.arrays):
         entries = {program.name: program for program in selected}
-        for spin in inventory.spins:
-            method = resolve_method(inventory.method, spin=spin)
-            functional = next(
-                primitive.functional
-                for primitive in method.primitives
-                if primitive.kind == "semilocal_xc"
-            )
-            exchange = next(
-                primitive.coefficient
-                for primitive in method.primitives
-                if primitive.kind == "exact_exchange"
-            )
-            try:
-                record = native_semilocal_record(functional, spin=spin)
-            except ValueError:
-                continue
-            if exchange != Fraction(record["cuda_global_hybrid_exact_exchange"]):
-                continue
-            bindings.append(
-                "    {"
-                + json.dumps(method.identity)
-                + f", {record['code']}U, {record['domain_version']}U, "
-                + f"{2 if spin == 'polarized' else 1}, {float(exchange)!r}, "
-                + json.dumps(entries["xc_" + spin].identity)
-                + ", "
-                + json.dumps(entries["coefficient_response_" + spin].identity)
-                + ", "
-                + json.dumps(
-                    entries["gga_field_response_" + spin].identity
-                    if "gga_field_response" in inventory.arrays
-                    else ""
-                )
-                + ", "
-                + json.dumps(
-                    entries["gga_energy_mixed_" + spin].identity
-                    if "gga_energy_mixed" in inventory.arrays
-                    else ""
-                )
-                + "},"
-            )
+        for method_name in (inventory.method, *inventory.additional_methods):
+            bindings.extend(_method_bindings(method_name, inventory, entries))
     return "\n".join(
         [
             '#include "dft/host_hessian_aot.hpp"',
@@ -343,3 +372,72 @@ def emit_registry(inventory: HostInventory) -> str:
             "",
         ]
     )
+
+
+def _method_bindings(
+    method_name: str,
+    inventory: HostInventory,
+    entries: dict[str, HostArrayProgram],
+) -> list[str]:
+    bindings = []
+    for spin in inventory.spins_for(method_name):
+        physical_point = NATIVE_POINTS.get(method_name, {}).get(spin)
+        method = resolve_method(method_name, spin=spin)
+        functional = next(
+            primitive.functional
+            for primitive in method.primitives
+            if primitive.kind == "semilocal_xc"
+        )
+        exchange = next(
+            (
+                primitive.coefficient
+                for primitive in method.primitives
+                if primitive.kind == "exact_exchange"
+            ),
+            Fraction(0),
+        )
+        try:
+            record = native_semilocal_record(
+                "PBE" if method_name == "PBE0" else functional, spin=spin
+            )
+        except ValueError:
+            continue
+        expected_exchange = Fraction(record["cuda_global_hybrid_exact_exchange"] or 0)
+        if method_name == "PBE0":
+            expected = {
+                name: Fraction(value)
+                * (1 - expected_exchange if name == "GGA_X_PBE" else 1)
+                for name, value in record["components"]
+            }
+            if dict(functional.components) != expected or functional.range_omega:
+                raise ValueError("PBE0 MethodIR differs from native PBE scaling")
+        if exchange != (
+            0 if physical_point and method_name != "PBE0" else expected_exchange
+        ):
+            continue
+        leaves = (
+            (f'"", "", "", "", PointDomain::{physical_point}')
+            if physical_point
+            else ", ".join(
+                json.dumps(
+                    entries[role + "_" + spin].identity
+                    if role in inventory.arrays
+                    else ""
+                )
+                for role in (
+                    "xc",
+                    "coefficient_response",
+                    "gga_field_response",
+                    "gga_energy_mixed",
+                )
+            )
+        )
+        bindings.append(
+            "    {"
+            + json.dumps(method.identity)
+            + f", {record['code']}U, {record['domain_version']}U, "
+            + f"{2 if spin == 'polarized' else 1}, {float(exchange)!r}, "
+            + leaves
+            + "},"
+        )
+    return bindings

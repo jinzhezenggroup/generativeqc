@@ -84,6 +84,14 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
 
     graph = calculator._resource_dispersion_graph()
     if graph is None:
+        from .resources_ks import native_dense_force_request
+
+        if calculator._cpu_packed_eri_maximum_bytes or native_dense_force_request(
+            electronic_request
+        ):
+            return select_named_program(
+                calculator._library, calculator.method_ir, _native.BACKEND_CPU_REFERENCE
+            )
         return None
     composite = any(
         isinstance(node, GeometricCounterpoisePrimitive) for node in graph.primitives

@@ -28,6 +28,20 @@ std::span<const Program> programs() noexcept;
 /** Missing name/identity pairs never request runtime compilation or fallback. */
 const Program* find(std::string_view name, std::string_view identity) noexcept;
 
+/** The physical point provider is part of an exact method binding, not a fallback
+ * when a linked scalar leaf happens to report a numerical error. */
+enum class PointDomain { linked_ad, scaled_pbe0_rks, lda_rks, pbe_rks, scaled_pbe0_uks };
+
+/** Physical fields have four Cartesian components per density block. */
+constexpr std::size_t physical_spins(PointDomain domain) noexcept {
+  return domain == PointDomain::linked_ad ? 0 : domain == PointDomain::scaled_pbe0_uks ? 2 : 1;
+}
+
+/** These bindings have no Fock exchange or admitted post-SCF correction. */
+constexpr bool semilocal_only(PointDomain domain) noexcept {
+  return domain == PointDomain::lda_rks || domain == PointDomain::pbe_rks;
+}
+
 /** One complete fixed-grid scalar closure bound to native KS model metadata.
  * This authenticates composition/spin and linked programs, not a stationary
  * state, integral provider or complete derivative endpoint. The optional
@@ -43,6 +57,7 @@ struct MethodBinding {
   std::string_view field_response_identity;
   /** Optional independent frozen-energy mixed closure; not response or assembly. */
   std::string_view energy_mixed_identity;
+  PointDomain point_domain{PointDomain::linked_ad};
 };
 
 std::span<const MethodBinding> method_bindings() noexcept;

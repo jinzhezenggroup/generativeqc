@@ -17,6 +17,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_initial_guess_auto_kind_v1](#native-c-generativeqc-initial-guess-auto-kind-v1)
 - [generativeqc_initial_guess_auto_system_kind_v1](#native-c-generativeqc-initial-guess-auto-system-kind-v1)
 - [generativeqc_initial_guess_auto_kind_v2](#native-c-generativeqc-initial-guess-auto-kind-v2)
+- [generativeqc_initial_guess_default_kind_v1](#native-c-generativeqc-initial-guess-default-kind-v1)
 - [generativeqc_initial_guess_auto_system_kind_v2](#native-c-generativeqc-initial-guess-auto-system-kind-v2)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
@@ -208,6 +209,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::DensityFittingMetricDiagnostic](#native-cpp-generativeqc-densityfittingmetricdiagnostic)
 - [generativeqc::Batch](#native-cpp-generativeqc-batch)
 - [generativeqc::Batch::Batch](#native-cpp-generativeqc-batch-batch)
+- [generativeqc::Batch::prepare_named_ks](#native-cpp-generativeqc-batch-prepare-named-ks)
 - [generativeqc::Batch::~Batch](#native-cpp-generativeqc-batch-destructor-batch)
 - [generativeqc::Batch::Batch-copy](#native-cpp-generativeqc-batch-batch-copy)
 - [generativeqc::Batch::operator=-copy](#native-cpp-generativeqc-batch-copy-assignment-copy)
@@ -215,6 +217,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::size](#native-cpp-generativeqc-batch-size)
 - [generativeqc::Batch::ks_hessian](#native-cpp-generativeqc-batch-ks-hessian)
 - [generativeqc::Batch::ks_hvp](#native-cpp-generativeqc-batch-ks-hvp)
+- [generativeqc::Batch::ks_cpu_hessian](#native-cpp-generativeqc-batch-ks-cpu-hessian)
+- [generativeqc::Batch::ks_cpu_hessian_recycled](#native-cpp-generativeqc-batch-ks-cpu-hessian-recycled)
+- [generativeqc::Batch::ks_cpu_hvp](#native-cpp-generativeqc-batch-ks-cpu-hvp)
 - [generativeqc::Batch::execute](#native-cpp-generativeqc-batch-execute)
 - [generativeqc::Batch::clear_warm_starts](#native-cpp-generativeqc-batch-clear-warm-starts)
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
@@ -232,6 +237,12 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_hessian_cuda_version_v2](#native-c-generativeqc-ks-hessian-cuda-version-v2)
 - [generativeqc_ks_hessian_default_options_v2](#native-c-generativeqc-ks-hessian-default-options-v2)
 - [generativeqc_ks_hessian_cuda_v2](#native-c-generativeqc-ks-hessian-cuda-v2)
+- [generativeqc_ks_hessian_cpu_version_v1](#native-c-generativeqc-ks-hessian-cpu-version-v1)
+- [generativeqc_ks_hessian_cpu_method_v1](#native-c-generativeqc-ks-hessian-cpu-method-v1)
+- [generativeqc_ks_hessian_cpu_default_options_v1](#native-c-generativeqc-ks-hessian-cpu-default-options-v1)
+- [generativeqc_ks_hessian_cpu_minimum_bytes_v1](#native-c-generativeqc-ks-hessian-cpu-minimum-bytes-v1)
+- [generativeqc_ks_hessian_cpu_v1](#native-c-generativeqc-ks-hessian-cpu-v1)
+- [generativeqc_ks_hessian_cpu_recycled_v1](#native-c-generativeqc-ks-hessian-cpu-recycled-v1)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
@@ -396,6 +407,33 @@ population, preparation-budget, or density gates. HF requires the RHF method.
 **Errors.** Uses the v1 model query status codes and preserves output on failure.
 
 **Execution.** Synchronous, allocation-free discovery; no context, device, or scientific work.
+
+(native-c-generativeqc-initial-guess-default-kind-v1)=
+## generativeqc_initial_guess_default_kind_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_default_kind_v1 ( const generativeqc_initial_guess_auto_policy * request , uint32_t * descriptor_kind ) ;
+```
+
+**Behavior.** Select the native automatic cold-start descriptor for a model, preferring
+HUCKEL over MINAO when supported. Does not alter explicitly supplied descriptors.
+
+**Inputs.** Same model facts as generativeqc_initial_guess_auto_kind_v1, but atomic_numbers
+must be NULL and atom_count zero. Precision describes the seed, not target arithmetic.
+
+**Outputs.** On SUCCESS, writes a kind suitable for initial_guess_options.kind: AUTO_HUCKEL_CPU
+or AUTO_CPU on CPU, HUCKEL or MINAO on CUDA, or zero for a core-density start. CPU automatic
+kinds still require native per-system admission. CUDA callers must use the corresponding
+system policy query before installing a nonzero kind to retain automatic fallback.
+
+**Lifetime.** Borrows the request for the call; retains no storage.
+
+**Errors.** Uses the v1 model query status codes, rejects atom lists, and preserves output on
+failure.
+
+**Execution.** Synchronous, allocation-free and context-free; performs no scientific or device work.
 
 (native-c-generativeqc-initial-guess-auto-system-kind-v2)=
 ## generativeqc_initial_guess_auto_system_kind_v2
@@ -5604,6 +5642,31 @@ null System element before preparation; allocation failures may throw standard e
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
 
+(native-cpp-generativeqc-batch-prepare-named-ks)=
+## generativeqc::Batch::prepare_named_ks
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+static Batch prepare_named_ks ( Context & context , std :: span < const System * const > systems , const generativeqc_method_descriptor & method , const generativeqc_named_ks_descriptor & name , generativeqc_batch_flags flags = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS , const generativeqc_device_resources * resources = nullptr )
+```
+
+**Behavior.** Prepare a batch using the native named KS graph and correction catalog.
+
+**Inputs.** Live context, nonempty systems, solver controls, named selector and optional
+exact MethodIR identity; optional resources select retained CUDA admission.
+
+**Outputs.** Returns the owning native Batch.
+
+**Lifetime.** Native preparation copies inputs and shares supplied resources; the context
+must outlive the batch. Descriptors and their pointer fields are borrowed only here.
+
+**Errors.** Invalid inputs or native refusal throw Error; no unbudgeted or alternate retry.
+
+**Execution.** Synchronous preparation and ordinary native batch replay.
+
+**Units.** Geometry in Bohr, energies in Hartree and capacities in bytes.
+
 (native-cpp-generativeqc-batch-destructor-batch)=
 ## generativeqc::Batch::~Batch
 
@@ -5728,6 +5791,72 @@ generativeqc_ks_hessian_receipt_v2 ks_hvp ( std :: size_t index , std :: span < 
 
 **Inputs.** Original input index, finite direction and disjoint output spans of exactly 3*N
 doubles each, and optional bounded response controls. Execute the batch first.
+
+**Outputs.** Atom-major Cartesian action and a detached work receipt as the return value.
+
+**Errors.** Throws Error on native failure or empty direction; output remains unchanged.
+
+**Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
+
+**Units.** Hartree/Bohr^2 action on the supplied direction; capacities in bytes.
+
+(native-cpp-generativeqc-batch-ks-cpu-hessian)=
+## generativeqc::Batch::ks_cpu_hessian
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian ( std :: size_t index , std :: span < double > output , const generativeqc_ks_host_hessian_options_v1 & options )
+```
+
+**Behavior.** Compute the raw CPU KS Hessian from the item's current accepted SCF state.
+
+**Inputs.** Original input index, disjoint output span of exactly (3*N)^2 doubles, and
+initialized CPU options identifying the accepted system. Execute the batch first.
+
+**Outputs.** Row-major matrix and a detached work receipt as the return value.
+
+**Errors.** Throws Error on native failure; output remains unchanged, with no fallback.
+
+**Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
+
+**Units.** Matrix in Hartree/Bohr^2; capacities in bytes.
+
+(native-cpp-generativeqc-batch-ks-cpu-hessian-recycled)=
+## generativeqc::Batch::ks_cpu_hessian_recycled
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian_recycled ( std :: size_t index , std :: span < double > output , const generativeqc_ks_host_hessian_options_v1 & options , std :: size_t block_size )
+```
+
+**Behavior.** Compute a raw LDA/PBE CPU RKS Hessian with recycled RHS groups and Cartesian or
+real-spherical AOs; PBE may include linked D3(BJ).
+
+**Inputs.** Same options and output as ks_cpu_hessian, plus a group size between two and four.
+
+**Outputs.** Row-major matrix and a detached work receipt.
+
+**Errors.** Throws Error on refusal without changing output; never substitutes another schedule.
+
+**Lifetime.** Vectors are local to one group on one accepted state.
+
+**Units.** Matrix in Hartree/Bohr^2; capacities in bytes.
+
+(native-cpp-generativeqc-batch-ks-cpu-hvp)=
+## generativeqc::Batch::ks_cpu_hvp
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hvp ( std :: size_t index , std :: span < const double > direction , std :: span < double > output , const generativeqc_ks_host_hessian_options_v1 & options )
+```
+
+**Behavior.** Apply the CPU KS Hessian without constructing a dense matrix.
+
+**Inputs.** Original input index, finite direction and disjoint output spans of exactly 3*N
+doubles each, and initialized CPU options identifying the accepted system.
 
 **Outputs.** Atom-major Cartesian action and a detached work receipt as the return value.
 
@@ -5877,7 +6006,7 @@ selects the force schedule independently with automatic SCF tiling.
 Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 
 ```cpp
-inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt )
+inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt , std :: uint64_t packed_eri_bytes = 0 )
 ```
 
 **Behavior.** Prepare a catalog KS graph, including range exchange, nonlocal correlation and
@@ -5887,6 +6016,8 @@ dispersion when present. The native library owns scientific assembly and admissi
 supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
 execution policy; this helper replaces method.ks_options with those controls.
 nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
+packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
+zero keeps the ordinary provider. Forces still use the prepared derivative owner.
 
 **Outputs.** Returns one owned Calculation.
 
@@ -6151,6 +6282,142 @@ shared device ledger if present; downloads only the terminal derivative, not SCF
 
 **Units.** Coordinates/direction in Bohr coordinate conventions; Hessian in Hartree/Bohr^2;
 HVP is the linear action in the supplied direction. Capacities in bytes.
+
+(native-c-generativeqc-ks-hessian-cpu-version-v1)=
+## generativeqc_ks_hessian_cpu_version_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_version_v1 ( void ) ;
+```
+
+**Behavior.** Discover the linked CPU Hessian ABI without initializing a context.
+
+**Outputs.** Returns 1 if linked, 0 otherwise; not a per-system capability.
+
+**Execution.** Allocation-free host metadata query.
+
+(native-c-generativeqc-ks-hessian-cpu-method-v1)=
+## generativeqc_ks_hessian_cpu_method_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_method_v1 ( const char * identity ) ;
+```
+
+**Behavior.** Query the linked CPU derivative catalog by exact MethodIR identity.
+
+**Inputs.** NUL-terminated native electronic or total MethodIR identity.
+
+**Outputs.** Returns 1 if linked for the identity, 0 for null, missing or unknown identity.
+
+**Execution.** Host metadata query; prepared state and capacity admission are separate.
+
+(native-c-generativeqc-ks-hessian-cpu-default-options-v1)=
+## generativeqc_ks_hessian_cpu_default_options_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_default_options_v1 ( generativeqc_ks_host_hessian_options_v1 * options ) ;
+```
+
+**Behavior.** Initialize bounded CPU derivative defaults, size and ABI version.
+
+**Inputs.** Pointer to writable options storage.
+
+**Outputs.** Overwrites the descriptor; the caller must set expected system fields.
+
+**Errors.** A null pointer returns INVALID_ARGUMENT.
+
+**Execution.** Does not require a context or linked CPU Hessian provider.
+
+**Units.** Capacities in bytes; tolerances apply to the physical response residual.
+
+(native-c-generativeqc-ks-hessian-cpu-minimum-bytes-v1)=
+## generativeqc_ks_hessian_cpu_minimum_bytes_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_minimum_bytes_v1 ( generativeqc_context * context , const generativeqc_system * system , const char * method , uint32_t dense , const generativeqc_ks_host_hessian_options_v1 * options , size_t * minimum_bytes ) ;
+```
+
+**Behavior.** Return the mandatory numerical reservation used by CPU Hessian execution.
+
+**Inputs.** Live context and normalized orbital system, exact total MethodIR identity or
+a native named KS selector (including any correction), dense=1 for a matrix or 0
+for HVP, and initialized CPU v1 options. The query ignores numeric_bytes, expected
+geometry and solver settings.
+
+**Outputs.** Numerical byte floor, including the configured grid and response capacities.
+
+**Lifetime.** Borrows inputs synchronously; serialize with context operations. Inputs and
+output must not overlap, and no pointers are retained.
+
+**Errors.** Unsupported program/system, invalid inputs or modeled sub-cap violations
+leave the result unchanged. Meeting the floor does not guarantee later grid, solver,
+work-cap, optional-schedule or final-state admission.
+
+**Execution.** Shape and correction sizing only; no SCF, grid construction or ERI work census.
+
+**Units.** Bytes; this is a modeled derivative reservation, not a measure of process RSS.
+
+(native-c-generativeqc-ks-hessian-cpu-v1)=
+## generativeqc_ks_hessian_cpu_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_v1 ( generativeqc_batch * batch , size_t index , const generativeqc_ks_host_hessian_options_v1 * options , const double * direction , size_t direction_count , double * output , size_t output_count , generativeqc_ks_host_hessian_receipt_v1 * receipt ) ;
+```
+
+**Behavior.** Differentiate one accepted CPU KS batch item, including any prepared native D3.
+
+**Inputs.** Live batch, original input index, initialized options and receipt (set struct_size
+and abi_version). Expected elements/coordinates/charge/spin must match the live state.
+For N atoms, supply NULL/0 direction and exactly (3N)^2 outputs, or a finite 3N-entry
+direction and exactly 3N outputs. All caller and borrowed source buffers must be disjoint.
+
+**Outputs.** Raw row-major matrix or atom-major Cartesian HVP and a detached work receipt.
+
+**Lifetime.** No pointers retained; serialize against other batch/context operations.
+
+**Errors.** Malformed, stale, unsupported, nonconverged, or over-budget requests fail
+without changing either output. No provider, Python, or compiler fallback.
+
+**Execution.** Synchronous FP64 CPU derivative of the current verified physical SCF state.
+
+**Units.** Geometry in Bohr; Hessian in Hartree/Bohr^2; HVP acts on the supplied direction.
+
+(native-c-generativeqc-ks-hessian-cpu-recycled-v1)=
+## generativeqc_ks_hessian_cpu_recycled_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_recycled_v1 ( generativeqc_batch * batch , size_t index , const generativeqc_ks_host_hessian_options_v1 * options , size_t block_size , double * output , size_t output_count , generativeqc_ks_host_hessian_receipt_v1 * receipt ) ;
+```
+
+**Behavior.** Differentiate a verified Direct FP64 LDA/PBE RKS batch item with Cartesian or
+real-spherical AOs; PBE may include linked D3(BJ).
+
+**Inputs.** Same batch, expected system options and detached publication as CPU v1 dense;
+block_size is two through four, not exceeding the number of Cartesian coordinates.
+
+**Outputs.** Raw row-major matrix and complete derivative work receipt.
+
+**Lifetime.** Synchronous; the recycle space resets at every group and borrows no caller storage.
+
+**Errors.** Invalid, unsupported, stale, nonconverged and over-budget requests publish nothing.
+A requested group that does not fit is not replaced by an independent schedule.
+
+**Execution.** The same native stationary owner with sequential, recycled GMRES initial guesses.
+Every response still passes the physical residual test.
+
+**Units.** Block size in RHS directions; geometry in Bohr; Hessian in Hartree/Bohr^2.
 
 (native-c-generativeqc-precision-admission-query-v1)=
 ## generativeqc_precision_admission_query_v1

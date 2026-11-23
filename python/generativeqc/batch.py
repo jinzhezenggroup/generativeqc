@@ -260,6 +260,7 @@ class PreparedBatch:
             raise ValueError(
                 "native Hessian capacity requires its composed resource plan"
             )
+        self._hessian_request = _hessian_request
         self._last_statuses = None
         self._dispersion_batch: typing.Any = None
         self._native_dispersion: typing.Any = None
@@ -298,6 +299,8 @@ class PreparedBatch:
         self._effective_ks_options = self._ks_profile_selection.options
         self.resource_plan = resource_plan
         self._planned_properties = None
+        self._packed_force_plan = False
+        self._dense_force_plan = False
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         self._output_aware_cpu_forces = qualified_direct_semilocal_context(calculator)
@@ -305,14 +308,19 @@ class PreparedBatch:
             calculator._capabilities.family == "density_functional"
             and resource_plan is not None
         ):
-            self._planned_properties = next(
-                (
-                    request.identity.observables
-                    for request in resource_plan.requests
-                    if request.name == "ks"
-                ),
+            ks_request = next(
+                (request for request in resource_plan.requests if request.name == "ks"),
                 None,
             )
+            if ks_request is not None:
+                self._planned_properties = ks_request.identity.observables
+            self._packed_force_plan = bool(
+                calculator._cpu_packed_eri_maximum_bytes
+                and self._planned_properties
+                and "forces" in self._planned_properties
+            )
+            if self._packed_force_plan and not ks_export:
+                raise ValueError("packed force plans require ks_export=True")
         prepared_properties = (
             calculator._resource_properties(self._planned_properties)
             if self._output_aware_cpu_forces
@@ -325,12 +333,13 @@ class PreparedBatch:
         self.resource_diagnostics = None
         self._resource_ledger = None
         self._resource_prepare = None
-        self._cuda_d4_resource_replay = None
+        self._fixed_ks_resource_replay = None
         dispersion_request = None
         resource_native_name = None
         native_graph = calculator._dispersion_method_ir
         if resource_plan is not None or calculator._resource_budget is not None:
             from ._named_ks import select_resource_program
+            from .resources_ks import native_dense_force_request
 
             native_graph = calculator._resource_dispersion_graph()
             share_native_program = (
@@ -348,6 +357,9 @@ class PreparedBatch:
                 request, resource_native_name = request
             else:
                 resource_native_name = select_resource_program(calculator, request)
+            # Implicit calculator budgets also create a plan here; its force
+            # authority has the same preparation and replay requirements.
+            self._dense_force_plan = native_dense_force_request(request)
             dispersion_request = calculator._dispersion_resource_request(
                 self._systems,
                 request,
@@ -387,6 +399,16 @@ class PreparedBatch:
                 from .resources_planning import validate_resource_plan
 
                 validate_resource_plan(self.resource_plan, library=self._library)
+            if _hessian_request is not None:
+                from ._hessian_resources import HESSIAN_RESOURCE_OWNER
+
+                if not any(
+                    component.name == HESSIAN_RESOURCE_OWNER
+                    and component == _hessian_request
+                    and component.identity.backend == request.identity.backend
+                    for component in self.resource_plan.requests
+                ):
+                    raise ValueError("Hessian request does not match its resource plan")
             if request.identity.backend == "cuda":
                 from .resources_native import NativeDeviceLedger
 
@@ -397,16 +419,6 @@ class PreparedBatch:
                     else ()
                 )
                 if _hessian_request is not None:
-                    from ._hessian_resources import HESSIAN_RESOURCE_OWNER
-
-                    if not any(
-                        component.name == HESSIAN_RESOURCE_OWNER
-                        and component == _hessian_request
-                        for component in self.resource_plan.requests
-                    ):
-                        raise ValueError(
-                            "Hessian request does not match its resource plan"
-                        )
                     components = (*components, HESSIAN_RESOURCE_OWNER)
                 self._resource_ledger = NativeDeviceLedger(
                     self._library,
@@ -423,23 +435,23 @@ class PreparedBatch:
                     "CUDA resource plans exclude optional profiling allocations"
                 )
         self._model_signature = calculator._model_signature()
-        if (
+        fixed_cuda_d4 = (
             resource_native_name is not None
             and request.identity.backend == "cuda"
             and dispersion_request is not None
             and dispersion_request.name == "d4"
             and calculator._initial_guess is None
-        ):
-            # Native D4 retains its complete conservative force capacity across
-            # replays. The validated request can outlive planning as long as
-            # both the scientific snapshot and planning inputs remain intact.
-            self._cuda_d4_resource_replay = (
+        )
+        if fixed_cuda_d4 or self._packed_force_plan or self._dense_force_plan:
+            # These plans cover the full output set across replay. No shape
+            # query is needed until the planning or scientific inputs change.
+            self._fixed_ks_resource_replay = (
                 self._resource_replay_inputs(),
                 request,
             )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
-            if self._cuda_d4_resource_replay is None
+            if not fixed_cuda_d4
             else calculator._basis_metadata_from_snapshot(
                 atoms,
                 charge=charge,
@@ -503,7 +515,7 @@ class PreparedBatch:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
             native_name = resource_native_name
-            if calculator._cpu_packed_eri_maximum_bytes:
+            if calculator._cpu_packed_eri_maximum_bytes or self._dense_force_plan:
                 native_graph = calculator.method_ir
             if native_name is not None and calculator._cuda_intrinsic_pbe_d4:
                 # Native catalog admission checks the electronic carrier and
@@ -527,6 +539,10 @@ class PreparedBatch:
             if calculator._cpu_packed_eri_maximum_bytes and native_name is None:
                 raise NotImplementedError(
                     "packed ERI storage requires linked named KS preparation"
+                )
+            if self._dense_force_plan and native_name is None:
+                raise NotImplementedError(
+                    "native dense force plans require linked named KS"
                 )
 
             def prepare() -> typing.Any:
@@ -614,6 +630,18 @@ class PreparedBatch:
                 configure_native_cuda_stationary_batch(
                     self._library, self._batch, self.resource_plan
                 )
+                if self._packed_force_plan and not self._native_dft_force_eligible():
+                    raise NotImplementedError(
+                        "packed force plans require native derivatives for every prepared item"
+                    )
+                if (
+                    self._dense_force_plan
+                    and ks_export
+                    and not self._native_dft_force_eligible()
+                ):
+                    raise NotImplementedError(
+                        "native dense force plans require native derivatives for every prepared item"
+                    )
             if native_name is not None and calculator._dispersion_method_ir is not None:
                 from ._named_ks import NativeKsDispersion
 
@@ -1272,6 +1300,7 @@ class PreparedBatch:
             calculator._device_id,
             calculator._method_name,
             calculator._representation_name,
+            calculator._cpu_packed_eri_maximum_bytes,
             calculator._capabilities.supported_properties,
             self._systems,
             self._charges,
@@ -1281,7 +1310,7 @@ class PreparedBatch:
             None
             if self._effective_ks_options is calculator._ks_options
             else self._effective_ks_options.to_payload(),
-            self._planned_properties,
+            frozenset(self._planned_properties or ()),
             dict(os.environ),
         )
 
@@ -1289,8 +1318,8 @@ class PreparedBatch:
         """Validate replay capacity; rebudget optional CPU force scratch.
 
         ``execute`` has already checked the scientific model and initial-guess
-        identity. Only a complete native CUDA D4 owner may reuse its immutable
-        prepared request; all other paths retain full request reconstruction.
+        identity. Native CUDA D4 and native CPU force plans may reuse their
+        immutable prepared request; other paths keep full reconstruction.
         External plans still undergo full validation before native preparation.
         """
         calculator = self._calculator
@@ -1299,7 +1328,7 @@ class PreparedBatch:
             "multiplicities": self._multiplicities,
             "ks_options": self._effective_ks_options,
         }
-        replay = self._cuda_d4_resource_replay
+        replay = self._fixed_ks_resource_replay
         inputs = self._resource_replay_inputs() if replay is not None else None
         expected = (
             replay[1]
@@ -1317,10 +1346,12 @@ class PreparedBatch:
                 f"{expected.name.upper()} resource inputs or execution schedule changed after preparation"
             )
         if replay is not None:
-            self._cuda_d4_resource_replay = (inputs, expected)
-        if not self._output_aware_cpu_forces and properties <= frozenset(
-            expected.identity.observables
-        ):
+            self._fixed_ks_resource_replay = (inputs, expected)
+        if (
+            self._packed_force_plan
+            or self._dense_force_plan
+            or not self._output_aware_cpu_forces
+        ) and properties <= frozenset(expected.identity.observables):
             return expected, self.resource_plan
         if expected.identity.backend == "cuda" and (
             self._native_dispersion is not None
@@ -1333,8 +1364,14 @@ class PreparedBatch:
                 "prepare a new batch with qualified force capacity"
             )
         candidate = self.resource_plan
+        # A fleet prepared against an energy-only envelope did not have to
+        # pass the native force admission check. Keep its existing upgrade
+        # policy and require the conservative derivative reservation.
         current = calculator._resource_request(
-            self._systems, **options, properties=properties
+            self._systems,
+            **options,
+            properties=properties,
+            _allow_native_dense_forces=False,
         )
         if current != expected:
             # Preserve provider selections, phases, other owners and the budget.
@@ -1395,6 +1432,14 @@ class PreparedBatch:
         self._ensure_open()
         from .initial_guess import read_initial_guess_diagnostic
 
+        if (
+            properties is None
+            and self.resource_plan is not None
+            and self._calculator._cpu_packed_eri_maximum_bytes
+        ):
+            properties = (
+                ("energy", "forces") if self._packed_force_plan else ("energy",)
+            )
         if properties is None:
             properties = self._calculator._default_properties(
                 batch=True,
@@ -1419,6 +1464,15 @@ class PreparedBatch:
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
         compute_forces = "forces" in requested
+        if (
+            compute_forces
+            and self.resource_plan is not None
+            and self._calculator._cpu_packed_eri_maximum_bytes
+            and not self._packed_force_plan
+        ):
+            raise NotImplementedError(
+                "packed ERI energy-only plans cannot replay forces; prepare with an explicit force plan"
+            )
         if compute_forces and not self._ks_export:
             raise ValueError("forces require ks_export=True")
         public_dft_forces = (
@@ -1436,6 +1490,14 @@ class PreparedBatch:
             public_dft_forces and self._native_dft_force_eligible(index)
             for index in range(count)
         )
+        if compute_forces and self._packed_force_plan and not all(native_dft_forces):
+            raise NotImplementedError(
+                "packed force plans cannot replay with compatibility derivatives"
+            )
+        if compute_forces and self._dense_force_plan and not all(native_dft_forces):
+            raise NotImplementedError(
+                "native dense force budgets cannot fund compatibility derivatives"
+            )
         if (
             public_dft_forces
             and self._calculator._automatic_libxc_name is not None

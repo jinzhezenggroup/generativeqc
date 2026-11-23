@@ -30,7 +30,7 @@ for uncut, two-body BJ with ATM off. D4, zero damping, ATM and finite cutoffs do
 not inherit this declaration. This changes the full corrected MethodIR identity,
 not its electronic projection or pinned parameter/data identities. Native
 second-order electronic admission remains separate; see the
-[linked CPU composition contract](dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+[linked CPU composition contract](dft_hessian.md#linked-native-cpu-hessian-endpoint).
 
 Energy is in Hartree; coordinates are in bohr. The correction returns
 **gradient = dE/dR**, including explicit pair-distance and coordination-number
@@ -335,7 +335,7 @@ The `Calculator` admits this correction only with an already-qualified
 electronic curvature domain. Exact canonical B3LYP RKS/UKS, including the
 qualified scalar-ECP exception, uses the linked native CPU aggregate owner and
 native D3 source rather than frontend composition or runtime compilation; see
-[the native Hessian contract](dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+[the native Hessian contract](dft_hessian.md#linked-native-cpu-hessian-endpoint).
 Other admitted CPU full-range compositions retain the detached-source path.
 There, electronic response owners are closed before correction execution; detached electronic outputs,
 private totals and immutable publication still count against simultaneous

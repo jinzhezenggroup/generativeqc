@@ -3,10 +3,13 @@
 
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cli/json.hpp"
+#include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 
 namespace generativeqc::cli {
@@ -40,10 +43,23 @@ struct HessianInvocation {
   double response_atol{1e-12};
   std::uint32_t response_restart{30};
   std::uint32_t response_iterations{200};
+  std::uint32_t response_recycle_block_size{};
   bool response_fp32_proposal{};
   std::uint32_t nonlocal_radial{}, nonlocal_polar{}, nonlocal_azimuth{};
   std::optional<std::uint32_t> nonlocal_level;
 };
+
+/** Share derivative byte controls, total-program selection and normalized system creation
+ * between the native inventory and execution; neither needs a Python runtime. */
+bool parse_cpu_hessian_byte_limit(HessianInvocation& invocation, std::string_view option,
+                                  std::string_view value);
+const method_generated::Method* linked_cpu_hessian_program(const RunOptions& options);
+System make_cpu_hessian_system(Context& context, const RunOptions& options,
+                               std::span<const generativeqc_atom> atoms,
+                               const NativeBasisData& basis);
+generativeqc_ks_host_hessian_options_v1 cpu_hessian_controls(
+    const RunOptions& options, std::span<const generativeqc_atom> atoms,
+    const HessianInvocation& invocation);
 
 // Split endpoint-only controls from the ordinary, centrally validated run flags.
 HessianInvocation parse_hessian_invocation(int argc, char** argv);

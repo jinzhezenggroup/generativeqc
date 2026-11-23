@@ -72,6 +72,32 @@ not a measurement of provider allocations or whole-process memory. A missing
 symbol keeps old-library portable sizing; a discovered query's rejection is an
 error and never triggers a portable retry.
 
+Explicit Direct FP64 CPU RHF/RKS plans in the CLI and Python share the native
+cold-start layout. The CLI queries the normalized system; Python passes the
+already planned AO topology through `generativeqc_resource_preliminary_cpu_shape_v1`
+without allocating a context, basis values or scientific state. Both charge
+one seed per eligible item and the largest serialized source workspace, on
+top of the conservative target envelope. HF and coarse LDA include the full
+source inventory. The CLI reports the native requirement and cap; Python
+records the inventory owner and per-item decision in the schedule identity.
+Only a known local-cap skip or native source-domain decline removes that
+item's reservation. The aggregate host budget never changes the explicit
+policy. Older libraries without the compact query and other execution domains
+retain their existing planning contracts; a detected query that rejects or
+publishes malformed data is an error.
+
+For automatic MINAO and Hückel on Direct FP64 CPU HF/KS, Python and the CLI's
+opt-in `--initial-guess auto` use the version-2 compact query to obtain the
+resolved provider and capacity together.
+The query takes the target's spin channels separately from its multiplicity.
+The schedule records each resolved kind and disposition: out-of-domain items
+use the core density, while a local-cap skip retains the provider ID and
+reports `budget_skipped` at cold execution. Neither reserves source storage;
+an aggregate host shortage still rejects the plan. Older libraries missing
+`generativeqc_resource_preliminary_cpu_shape_v2` retain the split policy and
+capacity queries. This does not change the CLI's default core start or
+fitted/CUDA planning.
+
 With an already-loaded library exposing `generativeqc_resource_compose_v1`,
 runtime `plan_resources(..., library=library)`, calculator estimation and
 budgeted preparation use the shared C++ resource composition engine. The native
@@ -377,10 +403,26 @@ CPU KS calculator plans with a discovered
 owners as the installed CLI for per-item diagnostics, twelve retained-owner
 totals and serialized preparation/SCF workspace. The query validates the entire
 fleet and the complete signed-int64 retained-plus-workspace peak before
-publication. A caller-supplied workspace floor preserves the existing CPU force
-consumer allowance without implying native admission of that consumer; its
-eligibility and allowance policy remain frontend-owned. Restricted AO caches
-remain transient, and nonlocal provider sub-budgets remain explicit.
+publication. For qualified dense Direct CPU named KS force plans,
+`generativeqc_resource_ks_cpu_force_fleet_v1` instead includes native force
+outputs and serialized derivative workspace, using the same inventory as the
+CLI. Plans use the smaller bound only for the selected named program and
+check native force capability on every prepared item before replay. Corrected
+programs also need their separate native correction reservation. When the
+force inventory or named derivative package is absent, the ordinary CPU
+fleet query retains the conservative compatibility workspace floor; a
+malformed or rejected native inventory is an error. Nonlocal provider
+sub-budgets remain explicit.
+
+For budgeted direct CPU energy with `cpu_packed_eri_maximum_bytes`, the
+packed fleet query uses the same native inventory as the CLI. It charges the
+exact retained value array for every item and keeps the existing serialized
+setup allowance. The packed cap separately gates the sum of those arrays;
+the global host cap still covers the complete modeled peak. Plan identity
+binds the provider and packed cap. The route requires a linked named local
+LDA/GGA program with full-range J/K and a real-spherical s/p/d/f basis;
+force replay, missing native inventory, and undersized packed caps do not
+fall back to dense storage.
 
 Native rejection never retries Python sizing. Schedule identity records item
 and fleet authority separately. Libraries exposing only
@@ -535,13 +577,23 @@ Property coverage differs by entry point, and the difference is deliberate:
 - `Calculator.estimate_resources(..., properties=(...))` plans the properties
   that calculator context actually advertises. A
   [direct all-electron CPU semilocal force](../user/dft_density_fitting.md)
-  context that requests `"forces"` reserves the transient CPU force workspace
-  floor. The retained CUDA force owner is a separate CUDA-backend reservation;
-  it is not part of the CPU plan.
-- The Python-free `generativeqc resources` dry run still reports unsupported for
-  `--forces` and for density-fitted KS, because its scalar v1 layout does not
-  enumerate the prepared force or fitted-provider storage. It fails closed
-  rather than presenting an energy envelope as a force plan.
+  context can reserve force capacity up front with `properties=("energy", "forces")`.
+  A later force request on an energy-only dense batch still requires admitting
+  the conservative compatibility floor. The retained CUDA force owner is a
+  separate CUDA-backend reservation; it is not part of the CPU plan.
+- Native dense and explicit packed CPU KS force plans reserve the selected ERI
+  values and force output vectors for every item, and the maximum serialized
+  phase workspace.
+  The force phase includes the verified spin frame and the greater of the
+  native integral source capacity and the overlapping semilocal AO/Becke
+  buffers. This is a declared numeric inventory, excluding integral recurrence
+  temporaries, allocator overhead and BLAS/runtime internals. No compatibility
+  force consumer or late upgrade from a packed energy-only batch is covered.
+- The Python-free `generativeqc resources --forces` dry run uses the same
+  native force inventory for its qualified Direct CPU KS programs, with either
+  dense or explicitly packed values. `run --host-bytes` uses that same layout
+  before preparation. The CLI still refuses unqualified force and fitted KS
+  inventory rather than presenting an energy envelope as a complete plan.
 - Automatic (Libxc-inventoried) CUDA KS is energy-only in both entry points;
   `include_forces` is rejected before planning.
 

@@ -431,6 +431,10 @@ class HostKsNuclearHessian::Impl {
     return {assembly, reserved, fixed, child.gmres_workspace_bytes, child.admitted};
   }
 
+  [[nodiscard]] std::size_t optional_remaining() const noexcept {
+    return limits.max_optional_numeric_bytes - integral_matrix_bytes - batch_bytes;
+  }
+
   std::size_t admit_batch(const response::GmresOptions& options, std::size_t maximum) {
     SourceInvocation guard(busy);
     validate();
@@ -444,7 +448,7 @@ class HostKsNuclearHessian::Impl {
       const auto elements = size_mul(width, per_direction);
       const auto bytes = size_mul(elements, sizeof(double));
       if (bytes > limits.max_assembly_numeric_bytes - owned_bytes ||
-          bytes > limits.max_numeric_bytes - reserved ||
+          bytes > limits.max_numeric_bytes - reserved || bytes > optional_remaining() ||
           !response->resources(options, width).admitted)
         continue;
       std::unique_ptr<double[]> candidate;
@@ -563,7 +567,8 @@ HostKsNuclearHessian::~HostKsNuclearHessian() = default;
 bool HostKsNuclearHessian::admit_coordinate_sources(const response::GmresOptions& options) {
   SourceInvocation guard(impl_->busy);
   impl_->validate();
-  impl_->coordinate_first_admitted = impl_->response->admit_coordinate_sources(options);
+  impl_->coordinate_first_admitted =
+      impl_->response->admit_coordinate_sources(options, impl_->batch_width);
   return impl_->coordinate_first_admitted;
 }
 void HostKsNuclearHessian::prepare_coordinate_sources() {
@@ -586,15 +591,16 @@ bool HostKsNuclearHessian::admit_integral_matrix(HostNuclearIntegralPlan allowan
       !HostKsNuclearIntegralCurvature::projected_matrix_supported(
           impl_->geometry.geometry().basis(), impl_->density))
     return false;
-  const auto plan =
-      HostKsNuclearIntegralCurvature::plan(impl_->geometry.geometry().basis(), impl_->spins,
-                                           schedule, impl_->limits.integrals.eri_schedule);
+  const auto plan = HostKsNuclearIntegralCurvature::plan(
+      impl_->geometry.geometry().basis(), impl_->spins, schedule,
+      impl_->limits.integrals.eri_schedule, impl_->method_identity);
   const auto matrix_fields =
       size_add(size_add(1, impl_->dimension), size_mul(impl_->dimension, impl_->dimension));
   const auto storage_count = size_add(matrix_fields, impl_->dimension);
   const auto bytes = size_add(plan.numeric_bytes, size_mul(storage_count, sizeof(double)));
   if (bytes > allowance.numeric_bytes ||
       bytes > impl_->limits.max_numeric_bytes - impl_->reserved ||
+      bytes > impl_->optional_remaining() ||
       plan.one_electron_primitives > allowance.one_electron_primitives ||
       plan.eri_primitives > allowance.eri_primitives || plan.map_terms > allowance.map_terms)
     return false;

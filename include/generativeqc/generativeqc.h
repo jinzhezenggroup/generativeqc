@@ -943,6 +943,23 @@ GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind
 GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v2(
     const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind);
 
+/** @native-contract generativeqc_initial_guess_default_kind_v1
+ * @behavior Select the native automatic cold-start descriptor for a model, preferring
+ * HUCKEL over MINAO when supported. Does not alter explicitly supplied descriptors.
+ * @inputs Same model facts as generativeqc_initial_guess_auto_kind_v1, but atomic_numbers
+ * must be NULL and atom_count zero. Precision describes the seed, not target arithmetic.
+ * @outputs On SUCCESS, writes a kind suitable for initial_guess_options.kind: AUTO_HUCKEL_CPU
+ * or AUTO_CPU on CPU, HUCKEL or MINAO on CUDA, or zero for a core-density start. CPU automatic
+ * kinds still require native per-system admission. CUDA callers must use the corresponding
+ * system policy query before installing a nonzero kind to retain automatic fallback.
+ * @lifetime Borrows the request for the call; retains no storage.
+ * @errors Uses the v1 model query status codes, rejects atom lists, and preserves output on
+ * failure.
+ * @execution Synchronous, allocation-free and context-free; performs no scientific or device work.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_default_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* descriptor_kind);
+
 /** @native-contract generativeqc_initial_guess_auto_system_kind_v2
  * @behavior Resolve automatic Huckel or Hcore for one system, including its population.
  * @inputs Uses the v1 system query request and population validation contract.

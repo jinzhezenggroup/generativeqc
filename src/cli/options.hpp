@@ -59,10 +59,12 @@ struct RunOptions {
     return value;
   }();
   std::string initial_guess_name{"none"};
+  bool automatic_initial_guess() const noexcept { return initial_guess_name == "auto"; }
   bool initial_guess_explicit{false}, initial_guess_controls_explicit{false};
   std::uint32_t batch{1};
   std::optional<std::uint64_t> host_bytes, device_bytes, pinned_host_bytes;
   std::optional<std::uint64_t> owned_device_bytes;
+  std::uint64_t cpu_packed_eri_bytes{0};
   std::uint64_t host_reserve_bytes{0}, device_reserve_bytes{0};
   double headroom_fraction{0};
   generativeqc_precision_mode precision{GENERATIVEQC_PRECISION_FP64};

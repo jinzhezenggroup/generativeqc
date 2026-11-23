@@ -200,10 +200,10 @@ work. Trust-radius controls are
 records these controls; explicit values do not relax native accepted-state
 verification.
 Derivative work/response controls are the same as
-[the native CPU Hessian command](native_cli.md#native-cpu-b3lyp-hessian-and-hvp).
+[the native CPU Hessian command](native_cli.md#native-cpu-hessian-and-hvp).
 
 The saddle task accepts the same optional packed ERI value cap described in
-[the native CPU Hessian command](native_cli.md#native-cpu-b3lyp-hessian-and-hvp).
+[the native CPU Hessian command](native_cli.md#native-cpu-hessian-and-hvp).
 It applies throughout the solve, independently of cold Fock damping and
 accepted-frame warm starts. Neither proposal mixing nor a warm seed can make
 an over-budget packed request fall back to ordinary values.
@@ -366,7 +366,7 @@ optimizer or preliminary lower-level calculation runs in production.
 
 `max_eri_primitives` and `max_map_terms` optionally override the native primitive
 and contraction/assembly work caps for each complete Hessian request, as defined in the
-[native CPU derivative contract](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+[native CPU derivative contract](../developer/dft_hessian.md#linked-native-cpu-hessian-endpoint).
 It is not a bound on time, induced-Fock work or the complete optimization, and
 does not promote an unqualified molecular domain.
 

@@ -196,6 +196,43 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v2(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+generativeqc_status generativeqc_initial_guess_default_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* descriptor_kind) {
+  if (!request || !descriptor_kind) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (request->atomic_numbers || request->atom_count) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+  uint32_t provider = 0;
+  auto status = generativeqc_initial_guess_auto_kind_v2(request, &provider);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto capabilities = generativeqc_initial_guess_capabilities_v1();
+  const bool cpu = request->backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  const bool fitted = request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+  // Discovery returns the execution descriptor, not just an eligible provider:
+  // only the CPU automatic kinds can be shared across heterogeneous systems.
+  uint32_t huckel = GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL;
+  if (cpu)
+    huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU;
+  else if (request->method == GENERATIVEQC_METHOD_RHF)
+    huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF;
+  if (fitted) huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF;
+  if (provider == GENERATIVEQC_INITIAL_GUESS_HUCKEL && (capabilities & huckel) == huckel) {
+    *descriptor_kind =
+        cpu ? GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU : GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  status = generativeqc_initial_guess_auto_kind_v1(request, &provider);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  uint32_t minao = GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO;
+  if (cpu) minao |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU;
+  *descriptor_kind =
+      provider == GENERATIVEQC_INITIAL_GUESS_MINAO && (capabilities & minao) == minao
+          ? (cpu ? GENERATIVEQC_INITIAL_GUESS_AUTO_CPU : GENERATIVEQC_INITIAL_GUESS_MINAO)
+          : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_initial_guess_auto_system_kind_v2(
     const generativeqc_initial_guess_auto_policy* request, int64_t electron_count,
     uint32_t multiplicity, uint32_t* resolved_kind) {

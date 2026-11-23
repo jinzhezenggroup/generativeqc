@@ -272,7 +272,7 @@ class NativeMolecularEvaluator {
 
   generativeqc_ks_host_hessian_options_v1 derivative_controls(const Frame& frame) const {
     const auto& input = invocation_.derivatives;
-    generativeqc_ks_host_hessian_options_v1 controls;
+    auto controls = api::default_host_hessian_options();
     controls.expected_atoms = frame.atoms.data();
     controls.expected_atom_count = frame.atoms.size();
     controls.expected_charge = options_.charge;
@@ -536,7 +536,7 @@ class NativeMolecularEvaluator {
                     current_->positions.end()))
       throw std::runtime_error("Hessian geometry lacks its prepared energy/gradient batch");
     const auto controls = derivative_controls(*current_);
-    generativeqc_ks_host_hessian_receipt_v1 receipt;
+    auto receipt = api::empty_host_hessian_receipt();
     check(generativeqc_ks_hessian_cpu_v1(current_->batch.get(), 0, &controls, nullptr, 0,
                                          output.data(), output.size(), &receipt));
     add_work("nuclear_response_solves", receipt.completed_directions);

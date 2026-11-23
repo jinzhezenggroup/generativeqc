@@ -12,6 +12,7 @@ from generativeqc_compiler.method.host_hessian_aot import (
     emit_registry,
     parse_inventory,
     programs,
+    require_endpoint_leaves,
 )
 
 from tools.generate_df_kernels import write_if_changed
@@ -25,10 +26,19 @@ def main() -> None:
     selection.add_argument("--list", action="store_true")
     selection.add_argument("--unit")
     selection.add_argument("--all", action="store_true")
+    selection.add_argument("--check-endpoint", action="store_true")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
     inventory = parse_inventory(json.loads(args.inventory.read_text()))
+    if args.check_endpoint:
+        if args.output is not None or args.output_dir is not None:
+            parser.error("--check-endpoint does not accept output paths")
+        try:
+            require_endpoint_leaves(inventory)
+        except ValueError as error:
+            parser.error(str(error))
+        return
     selected = programs(inventory)
     names = tuple(program.name + ".cpp" for program in selected) + ("registry.cpp",)
     if args.list:

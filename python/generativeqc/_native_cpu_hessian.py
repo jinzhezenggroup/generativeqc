@@ -15,7 +15,7 @@ import math
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -236,14 +236,25 @@ def _options(
     )
 
 
+def linked_method(library: Any, method_identity: str) -> bool:
+    """Query the installed CPU derivative package without preparing SCF."""
+    version = getattr(library, "generativeqc_ks_hessian_cpu_version_v1", None)
+    query = getattr(library, "generativeqc_ks_hessian_cpu_method_v1", None)
+    if (
+        version is None
+        or query is None
+        or not hasattr(library, "generativeqc_ks_hessian_cpu_v1")
+    ):
+        return False
+    version.argtypes, version.restype = [], ct.c_uint32
+    query.argtypes, query.restype = [ct.c_char_p], ct.c_uint32
+    return version() == 1 and query(method_identity.encode("ascii")) == 1
+
+
 def preflight(calculator: Calculator) -> None:
     """Authenticate linked electronic and complete correction selectors before SCF."""
     if calculator._device_name != "cpu":
         raise NotImplementedError("native CPU Hessian requires a CPU prepared owner")
-    if calculator._resource_budget is not None:
-        raise NotImplementedError(
-            "native CPU Hessian uses separate derivative reservations, not ResourceBudget"
-        )
     library = calculator._library
     version = getattr(library, "generativeqc_ks_hessian_cpu_version_v1", None)
     query = getattr(library, "generativeqc_ks_hessian_cpu_method_v1", None)
@@ -255,12 +266,7 @@ def preflight(calculator: Calculator) -> None:
         raise NotImplementedError(
             "native CPU Hessian bridge is unavailable; no Python/JIT fallback"
         )
-    version.argtypes, version.restype = [], ct.c_uint32
-    query.argtypes, query.restype = [ct.c_char_p], ct.c_uint32
-    if (
-        version() != 1
-        or query(calculator.ks_options.method_ir.identity.encode("ascii")) != 1
-    ):
+    if not linked_method(library, calculator.ks_options.method_ir.identity):
         raise NotImplementedError(
             "native CPU Hessian has no exact linked electronic MethodIR; no Python/JIT fallback"
         )
@@ -268,7 +274,8 @@ def preflight(calculator: Calculator) -> None:
         from ._named_ks import select_named_program
 
         if (
-            select_named_program(
+            not linked_method(library, calculator.method_ir.identity)
+            or select_named_program(
                 library, calculator.method_ir, _native.BACKEND_CPU_REFERENCE
             )
             is None
@@ -403,6 +410,64 @@ def orbital_frame(
     )
 
 
+def _output_panel_bytes(coordinates: int, dense: bool) -> int:
+    """Account for the native candidate, caller result and scalar column staging."""
+    elements = coordinates * coordinates if dense else coordinates
+    return 8 * (2 * elements + 3 * coordinates + 2)
+
+
+def _minimum_bytes(
+    calculator: Calculator,
+    atoms: tuple[Atom, ...],
+    charge: int,
+    multiplicity: int,
+    dense: bool,
+    options: _Options,
+) -> int:
+    """Ask the derivative owner to size the normalized system without SCF."""
+    library = calculator._library
+    query = getattr(library, "generativeqc_ks_hessian_cpu_minimum_bytes_v1", None)
+    if query is None:
+        raise NotImplementedError("native CPU Hessian lacks pre-SCF byte sizing")
+    query.argtypes = [
+        ct.c_void_p,
+        ct.c_void_p,
+        ct.c_char_p,
+        ct.c_uint32,
+        ct.POINTER(_Options),
+        ct.POINTER(ct.c_size_t),
+    ]
+    query.restype = ct.c_int
+    context = ct.c_void_p()
+    _native.check(
+        library,
+        library.generativeqc_context_create(
+            ct.byref(calculator._context_descriptor()), ct.byref(context)
+        ),
+    )
+    system = None
+    try:
+        system = calculator._create_native_system(context, atoms, charge, multiplicity)
+        minimum = ct.c_size_t()
+        _native.check(
+            library,
+            query(
+                context,
+                system,
+                calculator.method_ir.identity.encode("ascii"),
+                dense,
+                ct.byref(options),
+                ct.byref(minimum),
+            ),
+            context=context,
+        )
+        return minimum.value
+    finally:
+        if system is not None:
+            library.generativeqc_system_destroy(system)
+        library.generativeqc_context_destroy(context)
+
+
 def execute_batch(
     calculator: Calculator,
     batch: PreparedBatch,
@@ -420,6 +485,7 @@ def execute_batch(
     numeric_budget_bytes: int | None = None,
     response_budget_bytes: int | None = None,
     index: int = 0,
+    recycle_block_size: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Consume the current accepted native state without starting another SCF.
 
@@ -445,18 +511,67 @@ def execute_batch(
         from ._native_hessian import checked_direction
 
         direction = checked_direction(direction, len(atoms))
-    panel_bytes = 8 * (2 * int(np.prod(shape)) + 3 * coordinates + 2)
+    panel_bytes = _output_panel_bytes(coordinates, direction is None)
     if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
+    resource_admission = None
+    if batch.resource_plan is not None:
+        from ._hessian_resources import CPU_HESSIAN_CAPACITY, CPU_HESSIAN_PROVIDER
+
+        request = batch._hessian_request
+        product = "hessian" if direction is None else "hvp"
+        if (
+            len(batch._atom_counts) != 1
+            or request is None
+            or request.identity.provider != CPU_HESSIAN_PROVIDER
+            or request.identity.observables != (product,)
+            or request not in batch.resource_plan.requests
+        ):
+            raise NotImplementedError(
+                "budgeted CPU Hessian execution requires its composed derivative reservation"
+            )
+        selected = dict(batch.resource_plan.selections)[request.name]
+        candidate = next(item for item in request.candidates if item.name == selected)
+        (capacity,) = (
+            row.bytes for row in candidate.estimates if row.name == CPU_HESSIAN_CAPACITY
+        )
+        options.numeric_bytes = min(options.numeric_bytes, capacity)
+        resource_admission = {
+            "plan_host_peak_bytes": batch.resource_plan.peak_bytes["host"],
+            "effective_host_limit_bytes": batch.resource_plan.budget.limits().get(
+                "host"
+            ),
+            "derivative_host_cap_bytes": capacity,
+            "scope_exclusions": tuple(
+                dict.fromkeys(
+                    exclusion
+                    for owner in batch.resource_plan.requests
+                    for exclusion in owner.scope_exclusions
+                )
+            ),
+        }
     pointer = ct.POINTER(ct.c_double)
     library = calculator._library
-    execute = library.generativeqc_ks_hessian_cpu_v1
+    if recycle_block_size is None:
+        execute = library.generativeqc_ks_hessian_cpu_v1
+        source_types = [pointer, ct.c_size_t]
+        source = (
+            None if direction is None else direction.ctypes.data_as(pointer),
+            0 if direction is None else direction.size,
+        )
+    else:
+        if direction is not None or not 2 <= recycle_block_size <= min(4, coordinates):
+            raise ValueError(
+                "native recycled Hessian requires two to four dense RHS per group"
+            )
+        execute = library.generativeqc_ks_hessian_cpu_recycled_v1
+        source_types = [ct.c_size_t]
+        source = (recycle_block_size,)
     execute.argtypes = [
         ct.c_void_p,
         ct.c_size_t,
         ct.POINTER(_Options),
-        pointer,
-        ct.c_size_t,
+        *source_types,
         pointer,
         ct.c_size_t,
         ct.POINTER(_Receipt),
@@ -470,16 +585,24 @@ def execute_batch(
             batch._batch,
             index,
             ct.byref(options),
-            None if direction is None else direction.ctypes.data_as(pointer),
-            0 if direction is None else direction.size,
+            *source,
             output.ctypes.data_as(pointer),
             output.size,
             ct.byref(receipt),
         ),
         context=batch._context,
     )
+    if (
+        resource_admission is not None
+        and receipt.numeric_reservation_bytes > options.numeric_bytes
+    ):
+        raise RuntimeError(
+            "native CPU Hessian exceeded its admitted numerical capacity"
+        )
     value = np.frombuffer(output.tobytes(), dtype=np.float64).reshape(shape)
     diagnostics = {name: getattr(receipt, name) for name, _ in _Receipt._fields_[2:]}
+    if resource_admission is not None:
+        diagnostics["resource_admission"] = resource_admission
     from .profiles import canonical_hash
 
     sources = ("nuclear_integrals", "moving_grid_xc", "scalar_ecp", "nuclear_repulsion")
@@ -493,7 +616,7 @@ def execute_batch(
         reference_engine_fallbacks=0,
         posthoc_symmetrization=False,
         response_algorithm="native-restarted-gmres",
-        response_strategy="scalar",
+        response_strategy="scalar" if recycle_block_size is None else "recycled",
         numerical_reservation_scope="derivative-owned; excludes primal/export-scratch/BLAS/RSS",
         component_publication="aggregate-with-scalar-energy-receipt",
         nuclear_response_solves=receipt.completed_directions,
@@ -526,6 +649,11 @@ def execute_batch(
             else calculator._d3_second_order_spec.identity
         ),
     )
+    if recycle_block_size is not None:
+        diagnostics["block_size"] = recycle_block_size
+        diagnostics["block_count"] = (
+            coordinates + recycle_block_size - 1
+        ) // recycle_block_size
     if calculator._d3_second_order_spec is not None:
         diagnostics["dispersion"] = {
             "electronic_response_solves": 0,
@@ -574,6 +702,7 @@ def run_native_cpu(
     max_map_terms: int | None = None,
     numeric_budget_bytes: int | None = None,
     response_budget_bytes: int | None = None,
+    recycle_block_size: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Detach one native response, retaining electronic and total primal energies.
 
@@ -598,11 +727,45 @@ def run_native_cpu(
         response_budget_bytes=response_budget_bytes,
     )
     coordinates = 3 * len(atoms)
-    elements = coordinates * coordinates if direction is None else coordinates
-    if 8 * (2 * elements + 3 * coordinates + 2) > options.output_bytes:
+    panel_bytes = _output_panel_bytes(coordinates, direction is None)
+    if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
+    batch_controls = {}
+    if (
+        calculator._resource_budget is not None
+        or numeric_budget_bytes is not None
+        or response_budget_bytes is not None
+    ):
+        minimum = _minimum_bytes(
+            calculator, atoms, charge, multiplicity, direction is None, options
+        )
+        if minimum > options.numeric_bytes:
+            raise MemoryError(
+                "CPU Hessian aggregate numerical reservation exceeded "
+                f"(required={minimum}, cap={options.numeric_bytes})"
+            )
+        if calculator._resource_budget is not None:
+            from ._hessian_resources import plan_cpu_hessian
+
+            plan, request = plan_cpu_hessian(
+                calculator,
+                atoms,
+                charge=charge,
+                multiplicity=multiplicity,
+                dense=direction is None,
+                budget=calculator._resource_budget,
+                options=options,
+                minimum=minimum,
+                staging_bytes=len(atoms) * ct.sizeof(_native.AtomDescriptor)
+                + (0 if direction is None else 2 * coordinates * 8),
+            )
+            batch_controls.update(resource_plan=plan, _hessian_request=request)
     with calculator.prepare_batch(
-        [atoms], charges=[charge], multiplicities=[multiplicity], warm_start=False
+        [atoms],
+        charges=[charge],
+        multiplicities=[multiplicity],
+        warm_start=False,
+        **batch_controls,
     ) as batch:
         primal = batch.execute(strict=True, properties=("energy",)).items[0]
         result = execute_batch(
@@ -620,6 +783,7 @@ def run_native_cpu(
             max_map_terms=max_map_terms,
             numeric_budget_bytes=numeric_budget_bytes,
             response_budget_bytes=response_budget_bytes,
+            recycle_block_size=recycle_block_size,
         )
     return replace(
         result,

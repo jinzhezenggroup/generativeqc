@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "dft/host_gga_fields.hpp"
+#include "dft/host_hessian_point.hpp"
 #include "host_xc_curvature_maps.hpp"
 #include "runtime/bounded_workspace.hpp"
 
@@ -107,10 +108,7 @@ class HostGgaNuclearCurvature::Impl {
         resources.grid_pair_visits > limits.grid_pair_visits)
       throw std::length_error("frozen GGA curvature numeric or complete-source cap exceeded");
     const auto* binding = host_hessian_aot::find_method(method);
-    if (binding && binding->spins == spins)
-      field = host_hessian_aot::find(
-          spins == 1 ? "gga_energy_mixed_unpolarized" : "gga_energy_mixed_polarized",
-          binding->energy_mixed_identity);
+    if (binding && binding->spins == spins) field = host_hessian_point::mixed_program(*binding);
     if (!field || !field->evaluate || field->outputs != 4 || field->inputs.size() != 16 * spins + 4)
       throw std::invalid_argument("missing exact method/spin frozen GGA mixed closure");
     for (std::size_t moving = 0; moving < 4; ++moving) {

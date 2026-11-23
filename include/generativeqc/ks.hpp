@@ -48,6 +48,8 @@ struct KsGrid {
  * supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
  * execution policy; this helper replaces method.ks_options with those controls.
  * nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
+ * packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
+ * zero keeps the ordinary provider. Forces still use the prepared derivative owner.
  * @outputs Returns one owned Calculation.
  * @lifetime All inputs are copied at preparation; context must outlive the calculation.
  * @errors Throws Error on unsupported methods, identity mismatch or native admission failure.
@@ -59,7 +61,8 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
                                     KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
                                     std::uint64_t dispersion_bytes = 256ull << 20,
                                     const char* identity = nullptr,
-                                    std::optional<KsGrid> nonlocal_grid = std::nullopt) {
+                                    std::optional<KsGrid> nonlocal_grid = std::nullopt,
+                                    std::uint64_t packed_eri_bytes = 0) {
   generativeqc_ks_nonlocal_grid_options extended{};
   auto& options = extended.base.base;
   options.struct_size = nonlocal_grid ? sizeof(extended) : sizeof(options);
@@ -86,8 +89,9 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
     extended.grid = &nonlocal_options;
   }
   method.ks_options = &options;
-  const generativeqc_named_ks_descriptor named{
-      sizeof(named), GENERATIVEQC_ABI_VERSION, name.c_str(), identity, dispersion_bytes, 0};
+  const generativeqc_named_ks_descriptor named{sizeof(named),    GENERATIVEQC_ABI_VERSION,
+                                               name.c_str(),     identity,
+                                               dispersion_bytes, packed_eri_bytes};
   return Calculation(context, system, method, named);
 }
 

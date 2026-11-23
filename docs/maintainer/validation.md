@@ -267,7 +267,7 @@ second independent matrix that needs manual maintenance.
 ### Native CPU canonical-hybrid curvature controls
 
 The linked CPU execution contract and resource semantics are owned by
-[DFT Hessian architecture](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+[DFT Hessian architecture](../developer/dft_hessian.md#linked-native-cpu-hessian-endpoint).
 The opt-in `tests/python/test_native_canonical_heavy_hessian.py` checks actual
 native RKS/UKS electronic curvature on the canonical external Ni/I/Cs/H records.
 Set `GENERATIVEQC_RUN_NATIVE_CANONICAL_HEAVY=1` and select an explicit case:

@@ -248,27 +248,31 @@ std::size_t eri_matrix_primitive_work(const AoBasis& basis, std::size_t base,
   return add(multiply(3, incidences - all.triangular), single_center);
 }
 
-const maps::Program& map(std::size_t spins) {
+std::string_view map_key(std::size_t spins, std::string_view method_identity) {
   if (spins != 1 && spins != 2) throw std::invalid_argument("invalid host nuclear integral spin");
-  const auto name = spins == 1 ? "quartet_unpolarized" : "quartet_polarized";
+  if (method_identity.empty()) return spins == 1 ? "unpolarized" : "polarized";
+  const auto key = maps::method_map_key(method_identity, spins);
+  if (key.empty()) throw std::invalid_argument("missing linked host nuclear method maps");
+  return key;
+}
+
+const maps::Program& map(std::string_view key) {
+  const auto name = std::string("quartet_") + std::string(key);
   for (const auto& entry : maps::programs())
     if (entry.name == name) return entry;
   throw std::invalid_argument("missing linked host nuclear quartet map");
 }
 
-const maps::Program& weight_map(std::string_view source, std::size_t spins, bool response = false) {
-  if (spins != 1 && spins != 2) throw std::invalid_argument("invalid host integral curvature spin");
-  const auto name = std::string(source) + (response ? "_response_weight_" : "_weight_") +
-                    (spins == 1 ? "unpolarized" : "polarized");
+const maps::Program& weight_map(std::string_view source, std::string_view key, bool response) {
+  const auto name =
+      std::string(source) + (response ? "_response_weight_" : "_weight_") + std::string(key);
   for (const auto& entry : maps::programs())
     if (entry.name == name && entry.outputs.size() == (response ? 2u : 1u)) return entry;
   throw std::invalid_argument("missing linked host integral curvature weight map");
 }
 
-const maps::Program& density_response_map(std::size_t spins) {
-  if (spins != 1 && spins != 2)
-    throw std::invalid_argument("invalid host integral moving-density spin");
-  const auto name = spins == 1 ? "density_response_unpolarized" : "density_response_polarized";
+const maps::Program& density_response_map(std::string_view key) {
+  const auto name = std::string("density_response_") + std::string(key);
   for (const auto& entry : maps::programs())
     if (entry.name == name && entry.outputs.size() == 1) return entry;
   throw std::invalid_argument("missing linked integral moving-density contraction");
@@ -322,11 +326,41 @@ struct EriProgress {
   }
 };
 
+std::size_t first_source_bytes(std::size_t atoms, std::size_t matrix, std::size_t spins,
+                               std::size_t packed, bool panel, std::string_view method_identity) {
+  const auto key = map_key(spins, method_identity);
+  std::size_t bytes{};
+  if (!map(key).workspace({spins, 1}, bytes))
+    throw std::overflow_error("host nuclear integral map workspace overflow");
+  const auto coordinates = multiply(3, atoms);
+  const auto columns = panel ? add(coordinates, 1) : 1;
+  auto elements = add(multiply(multiply(spins + 1, matrix), columns), 28 + 8 * spins);
+  if (panel)
+    elements =
+        add(elements, add(coordinates, add(multiply(3 * spins, matrix), add(packed, atoms))));
+  if (panel) {
+    std::size_t response_bytes{};
+    if (!density_response_map(key).workspace({spins, matrix}, response_bytes))
+      throw std::overflow_error("host integral moving-density workspace overflow");
+    bytes = std::max(bytes, response_bytes);
+  }
+  bytes = add(bytes, multiply(elements, sizeof(double)));
+  if (bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+    throw std::overflow_error("host nuclear integral exceeds signed resource domain");
+  return bytes;
+}
 }  // namespace
+
+std::size_t HostKsNuclearIntegrals::direction_bytes(std::size_t atoms, std::size_t aos,
+                                                    std::size_t spins,
+                                                    std::string_view method_identity) {
+  return first_source_bytes(atoms, multiply(aos, aos), spins, 0, false, method_identity);
+}
 
 HostNuclearIntegralPlan HostKsNuclearIntegrals::plan(const AoBasis& basis, std::size_t spins,
                                                      HostNuclearEriSchedule schedule,
-                                                     HostNuclearFirstSchedule first_schedule) {
+                                                     HostNuclearFirstSchedule first_schedule,
+                                                     std::string_view method_identity) {
   if (first_schedule != HostNuclearFirstSchedule::Direction &&
       first_schedule != HostNuclearFirstSchedule::CoordinatePanel)
     throw std::invalid_argument("invalid host nuclear first-source schedule");
@@ -338,27 +372,12 @@ HostNuclearIntegralPlan HostKsNuclearIntegrals::plan(const AoBasis& basis, std::
   }
   const auto pairs = multiply(primitive_terms, primitive_terms);
   const auto matrix = multiply(basis.nao, basis.nao);
-  const auto& entry = map(spins);
-  std::size_t bytes{}, terms{};
-  const maps::Extents shape{spins, 1};
-  if (!entry.workspace(shape, bytes) || !entry.work(shape, terms))
-    throw std::overflow_error("host nuclear integral map envelope overflow");
-  const auto coordinates = multiply(3, basis.natom);
-  const bool panel = first_schedule == HostNuclearFirstSchedule::CoordinatePanel;
-  const auto columns = panel ? add(coordinates, 1) : 1;
-  auto elements = add(multiply(multiply(spins + 1, matrix), columns), 28 + 8 * spins);
-  if (panel)
-    elements = add(elements, add(coordinates, add(multiply(3 * spins, matrix),
-                                                  add(basis.packed.size(), basis.natom))));
-  if (panel) {
-    std::size_t response_bytes{};
-    if (!density_response_map(spins).workspace({spins, matrix}, response_bytes))
-      throw std::overflow_error("host integral moving-density workspace overflow");
-    bytes = std::max(bytes, response_bytes);
-  }
-  bytes = add(bytes, multiply(elements, sizeof(double)));
-  if (bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-    throw std::overflow_error("host nuclear integral exceeds signed resource domain");
+  std::size_t terms{};
+  if (!map(map_key(spins, method_identity)).work({spins, 1}, terms))
+    throw std::overflow_error("host nuclear integral map work overflow");
+  const auto bytes = first_source_bytes(basis.natom, matrix, spins, basis.packed.size(),
+                                        first_schedule == HostNuclearFirstSchedule::CoordinatePanel,
+                                        method_identity);
   return {bytes, multiply(pairs, add(basis.natom, 1)), eri_primitive_work(basis, base, schedule),
           multiply(multiply(matrix, matrix), terms)};
 }
@@ -369,10 +388,11 @@ bool HostKsNuclearIntegrals::coordinate_density_supported(
                      [](double value) { return std::isfinite(value) && std::abs(value) <= 1e50; });
 }
 
-std::size_t HostKsNuclearIntegrals::density_response_terms(const AoBasis& basis,
-                                                           std::size_t spins) {
+std::size_t HostKsNuclearIntegrals::density_response_terms(const AoBasis& basis, std::size_t spins,
+                                                           std::string_view method_identity) {
   std::size_t terms{};
-  if (!density_response_map(spins).work({spins, multiply(basis.nao, basis.nao)}, terms))
+  const auto& response = density_response_map(map_key(spins, method_identity));
+  if (!response.work({spins, multiply(basis.nao, basis.nao)}, terms))
     throw std::overflow_error("host integral moving-density work overflow");
   return multiply(multiply(3, basis.natom), terms);
 }
@@ -395,12 +415,13 @@ class IntegralFrame {
         spins(strategy.spec.spin == scf::FockSpin::Restricted ? 1 : 2) {
     if (!validator) throw std::invalid_argument("host nuclear integrals require a live owner");
     const auto* method = host_hessian_aot::find_method(method_identity);
-    if (!method || method->spins != spins || method_identity != maps::method_identity(spins) ||
+    if (!method || method->spins != spins || maps::method_map_key(method_identity, spins).empty() ||
         (strategy.spec.spin != scf::FockSpin::Restricted &&
          strategy.spec.spin != scf::FockSpin::Unrestricted) ||
         strategy.backend != scf::FockBackend::Cpu ||
         strategy.precision != scf::FockPrecision::Float64 || strategy.spec.version != 1 ||
-        !strategy.spec.coulomb.present || !strategy.spec.exchange.present ||
+        !strategy.spec.coulomb.present ||
+        strategy.spec.exchange.present != (method->exact_exchange != 0.0) ||
         strategy.spec.coulomb.coefficient != 1 ||
         strategy.spec.exchange.coefficient != -method->exact_exchange / (spins == 1 ? 2 : 1) ||
         strategy.spec.coulomb.op != scf::FockOperator::FullRange ||
@@ -498,8 +519,10 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
       : IntegralFrame(system, basis, strategy, density, method_identity,
                       std::move(validate_current)),
         options(options),
-        resources(HostKsNuclearIntegrals::plan(basis, spins, options.eri_schedule, first_schedule)),
-        quartet(map(spins)),
+        resources(HostKsNuclearIntegrals::plan(basis, spins, options.eri_schedule, first_schedule,
+                                               method_identity)),
+        quartet(map(map_key(spins, method_identity))),
+        moving_density(density_response_map(map_key(spins, method_identity))),
         coordinate_panel(first_schedule == HostNuclearFirstSchedule::CoordinatePanel) {
     if (coordinate_panel && !HostKsNuclearIntegrals::coordinate_density_supported(density))
       throw std::invalid_argument("resident nuclear first-source density range exceeded");
@@ -512,8 +535,10 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
         resources.map_terms > options.limits.map_terms)
       throw std::length_error("host nuclear integral numeric or complete-source work cap exceeded");
     projection = host_hessian_aot::find("integral_direction", maps::projection_identity);
+    const std::size_t incidences = strategy.spec.exchange.present ? 4 : 2;
     if (!projection || projection->inputs.size() != 25 || projection->outputs != 1 ||
-        !projection->evaluate || quartet.inputs.size() != 6 || quartet.outputs.size() != 4)
+        !projection->evaluate || quartet.inputs.size() != incidences + 2 ||
+        quartet.outputs.size() != incidences)
       throw std::invalid_argument("missing host nuclear integral projection/quartet closure");
     for (std::size_t index = 0; index < 12; ++index) {
       gradient_inputs[index] = projection_input("g" + std::to_string(index));
@@ -782,14 +807,15 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
     std::array<maps::Output, 4> output_bindings{};
     std::array<std::span<double>, 6> panels{};
     auto remaining = inputs;
-    for (std::size_t index = 0; index < panels.size(); ++index) {
+    const auto input_count = quartet.inputs.size(), incidence_count = quartet.outputs.size();
+    for (std::size_t index = 0; index < input_count; ++index) {
       const auto scalar =
           quartet.inputs[index] == "bar_energy" || quartet.inputs[index] == "d_integrals";
       panels[index] = remaining.first(scalar ? 1 : spins);
       remaining = remaining.subspan(panels[index].size());
       input_bindings[index] = {panels[index].data(), panels[index].size()};
     }
-    for (std::size_t slot = 0; slot < 4; ++slot)
+    for (std::size_t slot = 0; slot < incidence_count; ++slot)
       output_bindings[slot] = {outputs.data() + slot * spins, spins};
     std::size_t map_terms{};
     const maps::Extents shape{spins, 1};
@@ -884,7 +910,7 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
                               partials[partial_count++] = partial;
                             });
       quartet_incidences(indices, options.eri_schedule, [&](const auto& incidence) {
-        for (std::size_t index = 0; index < panels.size(); ++index) {
+        for (std::size_t index = 0; index < input_count; ++index) {
           const auto name = quartet.inputs[index];
           if (name == "bar_energy")
             panels[index][0] = 1;
@@ -901,10 +927,11 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
           }
         }
         census.map_terms = add(census.map_terms, map_terms);
-        if (quartet.evaluate(shape, input_bindings, output_bindings, arena) !=
-            maps::Status::success)
+        if (quartet.evaluate(shape, std::span(input_bindings).first(input_count),
+                             std::span(output_bindings).first(incidence_count),
+                             arena) != maps::Status::success)
           throw std::domain_error("linked nuclear quartet Fock map failed");
-        for (std::size_t slot = 0; slot < 4; ++slot)
+        for (std::size_t slot = 0; slot < incidence_count; ++slot)
           for (std::size_t spin = 0; spin < spins; ++spin) {
             const auto element =
                 spin * matrix + incidence[positions[slot][0]] * aos + incidence[positions[slot][1]];
@@ -956,7 +983,7 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
       symmetric(density_right.subspan(spin * matrix, matrix), aos);
       symmetric(weighted_density_right.subspan(spin * matrix, matrix), aos);
     }
-    const auto& entry = density_response_map(spins);
+    const auto& entry = moving_density;
     const maps::Extents shape{spins, matrix};
     std::size_t terms{};
     if (!entry.work(shape, terms))
@@ -1002,6 +1029,7 @@ class HostKsNuclearIntegrals::Impl : public IntegralFrame {
   std::size_t storage_count{}, projection_input_index{};
   HostNuclearIntegralPlan resources;
   const maps::Program& quartet;
+  const maps::Program& moving_density;
   bool coordinate_panel{}, panel_ready{}, snapshots_bound{};
   std::span<double> density_snapshot, basis_snapshot, ionic_snapshot;
   std::span<double> density_motion, weighted_motion, response_arena;
@@ -1060,9 +1088,48 @@ bool HostKsNuclearIntegralCurvature::projected_matrix_supported(
   }
 }
 
+namespace {
+std::size_t curvature_bytes(std::size_t atoms, std::size_t matrix, std::size_t spins,
+                            std::size_t packed, std::size_t eri_matrix,
+                            HostNuclearIntegralCurvatureSchedule schedule,
+                            std::string_view method_identity) {
+  const bool column = schedule == HostNuclearIntegralCurvatureSchedule::Column;
+  const bool projected = schedule == HostNuclearIntegralCurvatureSchedule::ProjectedMatrix;
+  const bool full_matrix = schedule == HostNuclearIntegralCurvatureSchedule::Matrix || projected;
+  const auto key = map_key(spins, method_identity);
+  std::size_t arena_bytes{};
+  for (const auto source : {"one_electron", "overlap_pulay", "quartet"}) {
+    std::size_t bytes{};
+    if (!weight_map(source, key, column).workspace({spins, 1}, bytes))
+      throw std::overflow_error("host integral curvature weight workspace overflow");
+    arena_bytes = std::max(arena_bytes, bytes);
+  }
+  const auto dimension = multiply(3, atoms);
+  const auto fields = full_matrix ? add(add(1, dimension), multiply(dimension, dimension))
+                      : column    ? add(2, multiply(6, atoms))
+                                  : 4;
+  auto elements =
+      add(multiply(2, fields), column ? add(3, multiply(8, spins)) : add(2, multiply(4, spins)));
+  if (column) elements = add(elements, add(dimension, multiply(2, multiply(spins, matrix))));
+  if (projected)
+    elements = add(elements, add(packed, multiply(spins, add(matrix, multiply(2, eri_matrix)))));
+  const auto bytes = add(arena_bytes, multiply(elements, sizeof(double)));
+  if (bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+    throw std::overflow_error("host integral curvature exceeds signed resource domain");
+  return bytes;
+}
+}  // namespace
+
+std::size_t HostKsNuclearIntegralCurvature::column_bytes(std::size_t atoms, std::size_t aos,
+                                                         std::size_t spins,
+                                                         std::string_view method_identity) {
+  return curvature_bytes(atoms, multiply(aos, aos), spins, 0, 0,
+                         HostNuclearIntegralCurvatureSchedule::Column, method_identity);
+}
+
 HostNuclearIntegralPlan HostKsNuclearIntegralCurvature::plan(
     const AoBasis& basis, std::size_t spins, HostNuclearIntegralCurvatureSchedule schedule,
-    HostNuclearEriSchedule eri_schedule) {
+    HostNuclearEriSchedule eri_schedule, std::string_view method_identity) {
   if (schedule != HostNuclearIntegralCurvatureSchedule::Mixed &&
       schedule != HostNuclearIntegralCurvatureSchedule::Column &&
       schedule != HostNuclearIntegralCurvatureSchedule::Matrix &&
@@ -1081,13 +1148,13 @@ HostNuclearIntegralPlan HostKsNuclearIntegralCurvature::plan(
     primitive_terms = add(primitive_terms, multiply(ao.count, ao.terms));
   }
   const maps::Extents shape{spins, 1};
-  std::size_t arena_bytes{}, pair_terms{}, quartet_terms{};
+  const auto key = map_key(spins, method_identity);
+  std::size_t pair_terms{}, quartet_terms{};
   for (const auto source : {"one_electron", "overlap_pulay", "quartet"}) {
-    const auto& entry = weight_map(source, spins, column);
-    std::size_t bytes{}, terms{};
-    if (!entry.workspace(shape, bytes) || !entry.work(shape, terms))
-      throw std::overflow_error("host integral curvature weight envelope overflow");
-    arena_bytes = std::max(arena_bytes, bytes);
+    const auto& entry = weight_map(source, key, column);
+    std::size_t terms{};
+    if (!entry.work(shape, terms))
+      throw std::overflow_error("host integral curvature weight work overflow");
     if (std::string_view(source) == "quartet")
       quartet_terms = terms;
     else
@@ -1095,22 +1162,10 @@ HostNuclearIntegralPlan HostKsNuclearIntegralCurvature::plan(
   }
   const auto pairs = multiply(primitive_terms, primitive_terms);
   const auto matrix = multiply(basis.nao, basis.nao);
-  const auto dimension = multiply(3, basis.natom);
-  const auto fields = full_matrix ? add(add(1, dimension), multiply(dimension, dimension))
-                      : column    ? add(2, multiply(6, basis.natom))
-                                  : 4;
-  auto elements =
-      add(multiply(2, fields), column ? add(3, multiply(8, spins)) : add(2, multiply(4, spins)));
-  if (column)
-    elements = add(elements, add(multiply(3, basis.natom), multiply(2, multiply(spins, matrix))));
   const auto eri_matrix =
       projected ? multiply(polynomial.orbitals.size(), polynomial.orbitals.size()) : matrix;
-  if (projected)
-    elements = add(elements,
-                   add(basis.packed.size(), multiply(spins, add(matrix, multiply(2, eri_matrix)))));
-  const auto bytes = add(arena_bytes, multiply(elements, sizeof(double)));
-  if (bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-    throw std::overflow_error("host integral curvature exceeds signed resource domain");
+  const auto bytes = curvature_bytes(basis.natom, matrix, spins, basis.packed.size(), eri_matrix,
+                                     schedule, method_identity);
   const auto pair_visits = full_matrix ? add(9, multiply(36, basis.natom))
                            : column    ? add(3, multiply(6, basis.natom))
                                        : add(basis.natom, 1);
@@ -1140,11 +1195,11 @@ class HostKsNuclearIntegralCurvature::Impl : public IntegralFrame {
         fields(matrix_schedule   ? add(add(1, multiply(3, atoms)), multiply(3 * atoms, 3 * atoms))
                : column_schedule ? add(2, multiply(6, atoms))
                                  : 4),
-        resources(
-            HostKsNuclearIntegralCurvature::plan(basis, spins, schedule, options.eri_schedule)),
-        hcore(weight_map("one_electron", spins, column_schedule)),
-        metric(weight_map("overlap_pulay", spins, column_schedule)),
-        quartet(weight_map("quartet", spins, column_schedule)) {
+        resources(HostKsNuclearIntegralCurvature::plan(basis, spins, schedule, options.eri_schedule,
+                                                       method_identity)),
+        hcore(weight_map("one_electron", map_key(spins, method_identity), column_schedule)),
+        metric(weight_map("overlap_pulay", map_key(spins, method_identity), column_schedule)),
+        quartet(weight_map("quartet", map_key(spins, method_identity), column_schedule)) {
     if (!options.validation_quartets || options.validation_quartets > 4096)
       throw std::invalid_argument("host integral curvature requires bounded validation cadence");
     if (resources.numeric_bytes > options.limits.numeric_bytes ||

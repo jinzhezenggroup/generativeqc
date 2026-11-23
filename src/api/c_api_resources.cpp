@@ -7,12 +7,14 @@
 #include <stdexcept>
 
 #include "api/error.hpp"
+#include "api/handles.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
 #include "generated_ecp_ao.cuh"
+#include "integrals/s_integrals.hpp"
 #include "methods/dft_method.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "methods/method.hpp"
@@ -1230,6 +1232,105 @@ int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
   }
 }
 
+/** Shape-only private query for a normalized CPU Direct RHF/RKS system. The
+ * RHF-force bit describes the HF solve's own derivative mode, not the separate
+ * stationary RKS force consumer. Output is unchanged on any refusal.
+ */
+generativeqc_status generativeqc_resource_preliminary_cpu_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_initial_guess_options* request, std::uint32_t rhf_forces,
+    std::uint64_t* values, std::size_t value_count) {
+  if (!context || !system || !request || !values || value_count != 5 || rhf_forces > 1)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard lock(context->mutex);
+  try {
+    if (context->state.executed_backend != generativeqc::core::kCpuReferenceBackend)
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const auto policy = generativeqc::scf::initial_guess::preliminary_options(request);
+    const auto result = generativeqc::scf::initial_guess::cpu_direct_preliminary_inventory(
+        system->data, *policy, rhf_forces != 0);
+    const std::array output{result.required_numeric_bytes, result.maximum_numeric_bytes,
+                            result.seed_bytes, result.workspace_bytes,
+                            static_cast<std::uint64_t>(result.disposition)};
+    std::ranges::copy(output, values);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+static int resource_preliminary_cpu_shape(
+    const generativeqc_initial_guess_options* request, const std::uint64_t* shape,
+    std::size_t shape_count, const std::int32_t* numbers, std::size_t atom_count,
+    const generativeqc::scf::initial_guess::HuckelShellShape* shells, std::size_t shell_count,
+    int representation, std::int64_t electrons, std::uint32_t multiplicity, std::uint32_t has_ecp,
+    std::uint32_t spin_channels, std::uint64_t* values, std::size_t value_count,
+    bool with_automatic) {
+  if (!generativeqc::api::valid_descriptor(request) || !shape || shape_count != 5 || !numbers ||
+      !atom_count || atom_count > UINT32_MAX || (shell_count && !shells) || !values ||
+      value_count != (with_automatic ? 6u : 5u) || has_ecp > 1 || shape[4] > UINT32_MAX ||
+      std::any_of(shape, shape + 4, [](std::uint64_t value) {
+        return value > std::numeric_limits<std::size_t>::max();
+      }))
+    return -1;
+  try {
+    using namespace generativeqc::scf::initial_guess;
+    const CpuPreliminaryBasisShape basis{atom_count,
+                                         static_cast<std::size_t>(shape[0]),
+                                         static_cast<std::size_t>(shape[1]),
+                                         static_cast<std::size_t>(shape[2]),
+                                         static_cast<std::size_t>(shape[3]),
+                                         static_cast<unsigned>(shape[4])};
+    const auto policy = *preliminary_options(request);
+    if (policy.automatic_cpu != with_automatic) return -1;
+    const auto result = cpu_direct_preliminary_inventory(
+        basis, policy, std::span(numbers, atom_count), std::span(shells, shell_count),
+        representation, electrons, multiplicity, has_ecp != 0, spin_channels);
+    const auto kind = result.disposition == CpuPreliminaryInventory::Disposition::TargetDeclined
+                          ? 0u
+                          : static_cast<std::uint32_t>(policy.kind);
+    const std::array output{result.required_numeric_bytes,
+                            result.maximum_numeric_bytes,
+                            result.seed_bytes,
+                            result.workspace_bytes,
+                            static_cast<std::uint64_t>(result.disposition),
+                            static_cast<std::uint64_t>(kind)};
+    std::copy_n(output.begin(), value_count, values);
+    return 0;
+  } catch (...) {
+    return -1;
+  }
+}
+
+/** Explicit-policy inventory. The shape slots are public/Cartesian AOs,
+ * shells, primitives and maximum angular momentum. Only Huckel needs rows. */
+int generativeqc_resource_preliminary_cpu_shape_v1(
+    const generativeqc_initial_guess_options* request, const std::uint64_t* shape,
+    std::size_t shape_count, const std::int32_t* numbers, std::size_t atom_count,
+    const generativeqc::scf::initial_guess::HuckelShellShape* shells, std::size_t shell_count,
+    int representation, std::int64_t electrons, std::uint32_t multiplicity, std::uint32_t has_ecp,
+    std::uint64_t* values, std::size_t value_count) {
+  return resource_preliminary_cpu_shape(request, shape, shape_count, numbers, atom_count, shells,
+                                        shell_count, representation, electrons, multiplicity,
+                                        has_ecp, 1, values, value_count, false);
+}
+
+/** Automatic Direct FP64 CPU inventory. The caller supplies the immutable
+ * model's spin channel count. A sixth slot publishes the resolved provider
+ * or zero for a topology decline; local budget skips keep the provider ID.
+ * Both query versions leave the entire output unchanged on error. */
+int generativeqc_resource_preliminary_cpu_shape_v2(
+    const generativeqc_initial_guess_options* request, const std::uint64_t* shape,
+    std::size_t shape_count, const std::int32_t* numbers, std::size_t atom_count,
+    const generativeqc::scf::initial_guess::HuckelShellShape* shells, std::size_t shell_count,
+    int representation, std::int64_t electrons, std::uint32_t multiplicity, std::uint32_t has_ecp,
+    std::uint32_t spin_channels, std::uint64_t* values, std::size_t value_count) {
+  return resource_preliminary_cpu_shape(request, shape, shape_count, numbers, atom_count, shells,
+                                        shell_count, representation, electrons, multiplicity,
+                                        has_ecp, spin_channels, values, value_count, true);
+}
+
 /** Private compact-topology query for the native Huckel preparation allowance.
  * Atomic occupied-channel selection and the numeric polynomial are shared with
  * actual admission. Borrows immutable arrays, uses O(atoms) metadata scratch,
@@ -1392,9 +1493,9 @@ int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t
  * Two scalar passes validate the full request before publishing with O(1)
  * native scratch; malformed later items or aggregate overflow preserve output.
  */
-int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
-                                          std::uint64_t workspace_floor, std::uint64_t* values,
-                                          std::size_t value_count) {
+static int ks_cpu_fleet(const std::uint64_t* shapes, std::size_t shape_count,
+                        std::uint64_t workspace_floor, std::uint64_t packed_cap,
+                        std::uint64_t* values, std::size_t value_count, bool forces = false) {
   if (!shapes || !shape_count || shape_count % 17 || !values) return -1;
   const auto item_count = shape_count / 17;
   if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
@@ -1414,11 +1515,25 @@ int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size
           shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
           shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
     };
+    const auto execution = scf::cpu_ks_host_execution(packed_cap != 0, forces);
     scf::CpuKsHostFleetResources fleet(workspace_floor);
-    for (std::size_t index = 0; index < item_count; ++index) fleet.append(item_at(index));
+    auto remaining = packed_cap;
+    bool insufficient = false;
+    for (std::size_t index = 0; index < item_count; ++index) {
+      const auto item = item_at(index);
+      fleet.append(item, 1, execution);
+      if (packed_cap) {
+        const auto value_bytes = scf::cpu_ks_packed_value_bytes(item.orbital_aos);
+        if (value_bytes > remaining)
+          insufficient = true;
+        else
+          remaining -= value_bytes;
+      }
+    }
+    if (insufficient) return 1;
     const auto aggregate = fleet.inventory();
     for (std::size_t index = 0; index < item_count; ++index) {
-      const auto item = scf::cpu_ks_host_resources(item_at(index));
+      const auto item = scf::ks_host_resources(item_at(index), execution);
       std::copy(item.begin(), item.end(), values + 15 + 16 * index);
     }
     std::copy(aggregate.begin(), aggregate.end(), values);
@@ -1426,6 +1541,46 @@ int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size
   } catch (...) {
     return -1;
   }
+}
+
+int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                          std::uint64_t workspace_floor, std::uint64_t* values,
+                                          std::size_t value_count) {
+  return ks_cpu_fleet(shapes, shape_count, workspace_floor, 0, values, value_count);
+}
+
+/** Same host shape and transactional output layout, for caller-validated
+ * spherical s/p/d/f bases. A short whole-fleet packed cap returns 1 without
+ * publication; invalid shape/capacity returns -1. No dense retry or sizing. */
+int generativeqc_resource_ks_cpu_packed_fleet_v1(const std::uint64_t* shapes,
+                                                 std::size_t shape_count, std::uint64_t packed_cap,
+                                                 std::uint64_t* values, std::size_t value_count) {
+  if (!packed_cap || packed_cap > std::numeric_limits<std::size_t>::max()) return -1;
+  return ks_cpu_fleet(shapes, shape_count, 0, packed_cap, values, value_count);
+}
+
+/** Capacity only: the prepared calculation separately authenticates all force
+ * providers. Only the native non-fitted, local, full-range lane consumes it.
+ * Return 2 without publication when this build lacks the derivative package.
+ */
+int generativeqc_resource_ks_cpu_packed_force_fleet_v1(const std::uint64_t* shapes,
+                                                       std::size_t shape_count,
+                                                       std::uint64_t packed_cap,
+                                                       std::uint64_t* values,
+                                                       std::size_t value_count) {
+  if (!packed_cap || packed_cap > std::numeric_limits<std::size_t>::max()) return -1;
+  if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return 2;
+  return ks_cpu_fleet(shapes, shape_count, 0, packed_cap, values, value_count, true);
+}
+
+/** The dense variant of the local full-range CPU force fleet inventory.
+ * A missing derivative package returns 2 without writing caller storage.
+ */
+int generativeqc_resource_ks_cpu_force_fleet_v1(const std::uint64_t* shapes,
+                                                std::size_t shape_count, std::uint64_t* values,
+                                                std::size_t value_count) {
+  if (!generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives()) return 2;
+  return ks_cpu_fleet(shapes, shape_count, 0, 0, values, value_count, true);
 }
 
 /** Shape-only CUDA host lifetimes, including explicitly retained consumers.

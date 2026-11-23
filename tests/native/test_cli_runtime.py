@@ -26,6 +26,7 @@ INCREMENTAL_SELECTORS = (
     "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
 )
 KS_INVENTORY_METHODS = ("lda-rks", "lda-uks", "pbe-rks", "pbe-uks")
+CPU_KS_INVENTORY_METHODS = (*KS_INVENTORY_METHODS, "pbe0-rks", "pbe0-uks")
 # Independent PySCF 2.14 level-3 Treutler-Ahlrichs/NWChem grid, no density
 # pruning: 9808 points per H. v4 stores a level and zero angular placeholders,
 # so multiplying the descriptor fields does not count its pruned grid points.
@@ -75,6 +76,339 @@ class RuntimeTests(unittest.TestCase):
             "bohr",
             *arguments,
         )
+
+    def test_packed_cpu_ks_force_and_preparation_refusals(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_CPU_FORCE_AOT") == "0":
+            self.skipTest("this build explicitly omits linked CPU analytic forces")
+        molecule = self.root / "heh.xyz"
+        molecule.write_text(
+            "2\nAsymmetric geometry in Bohr\nHe .03 -.02 .01\nH .15 .13 1.5\n"
+        )
+        base = (
+            "run",
+            str(molecule),
+            "--units",
+            "bohr",
+            "--method",
+            "b3lyp-d3(bj)-uks",
+            "--multiplicity",
+            "2",
+            "--representation",
+            "spherical",
+            "--grid-level",
+            "0",
+            "--energy-tolerance",
+            "1e-12",
+            "--density-tolerance",
+            "1e-10",
+            "--json",
+        )
+        flags = ("--cpu-packed-eri-budget-bytes", "48")
+        trace = self.root / "packed-force.jsonl"
+        self.env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(trace)
+        force = self.cli(*base, *flags, "--forces")
+        self.env.pop("GENERATIVEQC_DF_PROGRESS_TRACE")
+        ordinary = self.cli(*base, "--forces")
+        self.assertEqual(force.returncode, 0, force.stderr)
+        self.assertEqual(ordinary.returncode, 0, ordinary.stderr)
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+        self.assertEqual(
+            [
+                event["value"]
+                for event in events
+                if event.get("key") == "packed_eri_retained_bytes"
+            ],
+            [48],
+        )
+        packed, dense = json.loads(force.stdout), json.loads(ordinary.stdout)
+        self.assertAlmostEqual(
+            packed["energy_hartree"], dense["energy_hartree"], delta=2e-10
+        )
+        actual = packed["forces_hartree_per_bohr"]
+        for actual_row, dense_row in zip(
+            actual, dense["forces_hartree_per_bohr"], strict=True
+        ):
+            for value, expected in zip(actual_row, dense_row, strict=True):
+                self.assertAlmostEqual(value, expected, delta=2e-8)
+        for changed, message in (
+            (
+                ("--cpu-packed-eri-budget-bytes", "47"),
+                "packed spherical ERI capacity exceeded",
+            ),
+            ((*flags, "--representation", "cartesian"), "real spherical s/p/d/f basis"),
+            ((*flags, "--density-fitting", "cpu"), "linked direct FP64 CPU KS"),
+            ((*flags, "--backend", "cuda"), "linked direct FP64 CPU KS"),
+            ((*flags, "--max-iterations", "1"), "converge"),
+        ):
+            refused = self.cli(*base, *changed, "--forces")
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertEqual(refused.stdout, "")
+            self.assertIn(message, refused.stderr)
+        refused = self.cli(*base, *flags, "--method", "wb97m-v-uks", "--forces")
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(refused.stdout, "")
+        self.assertIn("linked direct FP64 CPU KS", refused.stderr)
+
+    def test_cpu_ks_force_resource_plan_matches_run(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_CPU_FORCE_AOT") == "0":
+            self.skipTest("this build explicitly omits linked CPU analytic forces")
+        molecule = self.root / "heh.xyz"
+        molecule.write_text("2\nBohr\nHe .03 -.02 .01\nH .15 .13 1.5\n")
+        trace = self.root / "admission.jsonl"
+        self.env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(trace)
+        for method, spin, provider in (
+            ("pbe0-rks", ("--charge", "1"), ()),
+            ("pbe-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
+            ("pbe-d3(bj)-rks", ("--charge", "1"), ()),
+            ("pbe0-d3(bj)-rks", ("--charge", "1"), ()),
+            (
+                "b3lyp-d3(bj)-uks",
+                ("--multiplicity", "2"),
+                (
+                    "--representation",
+                    "spherical",
+                    "--cpu-packed-eri-budget-bytes",
+                    "48",
+                ),
+            ),
+        ):
+            with self.subTest(method=method):
+                common = (
+                    str(molecule),
+                    "--units",
+                    "bohr",
+                    "--method",
+                    method,
+                    "--grid-level",
+                    "0",
+                    *spin,
+                    *provider,
+                )
+                force_plan = self.cli("resources", *common, "--forces")
+                energy_plan = self.cli("resources", *common)
+                self.assertEqual(force_plan.returncode, 0, force_plan.stderr)
+                self.assertEqual(energy_plan.returncode, 0, energy_plan.stderr)
+                self.assertFalse(trace.exists())
+                plan, energy = (
+                    json.loads(force_plan.stdout),
+                    json.loads(energy_plan.stdout),
+                )
+                self.assertEqual(plan["property"], "forces")
+                peak = plan["peak_bytes"]["host"]
+                self.assertGreater(peak, energy["peak_bytes"]["host"])
+                self.assertEqual(
+                    plan["item_inventory"]["provider"],
+                    energy["item_inventory"]["provider"],
+                )
+                if "-d3(" in method or "-d4(" in method:
+                    self.assertEqual(
+                        plan["correction_inventory"], energy["correction_inventory"]
+                    )
+                if provider:
+                    self.assertEqual(plan["packed_eri_inventory"]["retained_bytes"], 48)
+                    fleet = self.cli(
+                        "resources",
+                        *common,
+                        "--forces",
+                        "--batch",
+                        "3",
+                        "--cpu-packed-eri-budget-bytes",
+                        "144",
+                    )
+                    self.assertEqual(fleet.returncode, 0, fleet.stderr)
+                    inventory = json.loads(fleet.stdout)
+                    self.assertEqual(
+                        inventory["packed_eri_inventory"]["retained_bytes"], 144
+                    )
+                    self.assertEqual(
+                        inventory["item_inventory"], plan["item_inventory"]
+                    )
+                    short_fleet = self.cli(
+                        "resources",
+                        *common,
+                        "--forces",
+                        "--batch",
+                        "3",
+                        "--cpu-packed-eri-budget-bytes",
+                        "143",
+                    )
+                    self.assertEqual(short_fleet.returncode, 2, short_fleet.stderr)
+                    self.assertEqual(
+                        json.loads(short_fleet.stdout)["status"], "infeasible"
+                    )
+                for host, reserve, feasible in (
+                    (peak - 1, 0, False),
+                    (peak, 1, False),
+                    (peak + 1, 1, True),
+                ):
+                    limits = (
+                        "--host-bytes",
+                        str(host),
+                        "--host-reserve-bytes",
+                        str(reserve),
+                    )
+                    planned = self.cli("resources", *common, "--forces", *limits)
+                    self.assertEqual(planned.returncode, 0 if feasible else 2)
+                    inventory = json.loads(planned.stdout)
+                    self.assertEqual(
+                        inventory["status"], "feasible" if feasible else "infeasible"
+                    )
+                    self.assertEqual(inventory["peak_bytes"]["host"], peak)
+                    self.assertEqual(inventory["limits"]["host"], host - reserve)
+                    self.assertFalse(trace.exists())
+                    if feasible:
+                        continue
+                    refused = self.cli("run", *common, "--forces", *limits, "--json")
+                    self.assertNotEqual(refused.returncode, 0)
+                    self.assertEqual(refused.stdout, "")
+                    self.assertIn(
+                        "allocation inventory exceeds host budget", refused.stderr
+                    )
+                    self.assertFalse(trace.exists())
+                limits = ("--host-bytes", str(peak + 1), "--host-reserve-bytes", "1")
+                bounded = self.cli("run", *common, "--forces", *limits, "--json")
+                ordinary = self.cli("run", *common, "--forces", "--json")
+                self.assertEqual(bounded.returncode, 0, bounded.stderr)
+                self.assertEqual(ordinary.returncode, 0, ordinary.stderr)
+                result = json.loads(bounded.stdout)
+                self.assertEqual(
+                    result.pop("resource_admission"),
+                    {
+                        "modeled_host_peak_bytes": peak,
+                        "effective_host_limit_bytes": peak,
+                    },
+                )
+                self.assertEqual(result, json.loads(ordinary.stdout))
+                self.assertTrue(trace.exists())
+                trace.unlink()
+                unrelated_guess = self.cli(
+                    "run",
+                    *common,
+                    "--forces",
+                    *limits,
+                    "--initial-guess",
+                    "huckel",
+                    "--json",
+                )
+                self.assertNotEqual(unrelated_guess.returncode, 0)
+                self.assertEqual(unrelated_guess.stdout, "")
+                self.assertIn(
+                    "initial-guess inventory requires"
+                    if method.endswith("-uks")
+                    else "allocation inventory exceeds host budget",
+                    unrelated_guess.stderr,
+                )
+                self.assertFalse(trace.exists())
+
+    def test_preliminary_resource_and_run_share_exact_host_admission(self) -> None:
+        """Retain all seeds, serialize source scratch, and honor the explicit cap."""
+        molecule = str(SOURCE / "tests/data/h2_bohr.xyz")
+        trace = self.root / "guess-admission.jsonl"
+        self.env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(trace)
+        cases = [
+            ("rhf", "hf", ()),
+            ("rhf", "lda", ()),
+            ("rhf", "minao", ("--forces",)),
+            ("rhf", "huckel", ("--forces",)),
+            ("rhf", "auto", ("--forces",)),
+        ]
+        if os.environ.get("GENERATIVEQC_TEST_CPU_FORCE_AOT") != "0":
+            cases += [
+                ("pbe-rks", kind, ("--forces", "--grid-level", "0"))
+                for kind in ("hf", "lda", "minao", "huckel", "auto")
+            ]
+        for method, kind, properties in cases:
+            with self.subTest(method=method, kind=kind):
+                args = (
+                    molecule,
+                    "--units",
+                    "bohr",
+                    "--method",
+                    method,
+                    *properties,
+                    "--json",
+                    "--energy-tolerance",
+                    "1e-12",
+                    "--density-tolerance",
+                    "1e-10",
+                )
+                guess = ("--initial-guess", kind)
+
+                def inventory(
+                    *flags: str, code: int = 0, common: tuple[str, ...] = args
+                ) -> dict:
+                    """Dry runs must never enter the native SCF progress trace."""
+                    command = self.cli("resources", *common, *flags)
+                    self.assertEqual(command.returncode, code, command.stderr)
+                    self.assertFalse(trace.exists())
+                    return json.loads(command.stdout)
+
+                core = inventory()["peak_bytes"]["host"]
+                plan = inventory(*guess)
+                guess_layout = plan["initial_guess_inventory"]
+                self.assertEqual(guess_layout["kind"], kind)
+                if kind == "auto":
+                    self.assertEqual(guess_layout["resolved_kind"], "huckel")
+                    explicit = inventory("--initial-guess", "huckel")
+                    self.assertEqual(plan["peak_bytes"], explicit["peak_bytes"])
+                    self.assertEqual(
+                        guess_layout["required_numeric_bytes"],
+                        explicit["initial_guess_inventory"]["required_numeric_bytes"],
+                    )
+                self.assertEqual(guess_layout["disposition"], "attempt")
+                self.assertEqual(guess_layout["fleet_seed_bytes"], 32)
+                required = guess_layout["required_numeric_bytes"]
+                exact_guess = (*guess, "--initial-guess-bytes", str(required))
+                peak = plan["peak_bytes"]["host"]
+                self.assertEqual(
+                    peak, core + 32 + guess_layout["serialized_workspace_bytes"]
+                )
+                self.assertNotEqual(
+                    plan["identity"], inventory(*exact_guess)["identity"]
+                )
+                fleet_flags = ("--batch", "3")
+                fleet = inventory(*exact_guess, *fleet_flags)
+                self.assertEqual(
+                    fleet["peak_bytes"]["host"]
+                    - inventory(*fleet_flags)["peak_bytes"]["host"],
+                    96 + guess_layout["serialized_workspace_bytes"],
+                )
+                short = ("--host-bytes", str(peak - 1))
+                refused = inventory(*exact_guess, *short, code=2)
+                self.assertEqual(refused["status"], "infeasible")
+                run_refused = self.cli("run", *args, *exact_guess, *short)
+                self.assertNotEqual(run_refused.returncode, 0, run_refused.stderr)
+                self.assertFalse(run_refused.stdout or trace.exists())
+                self.assertIn("exceeds host budget", run_refused.stderr)
+                low_guess = (*guess, "--initial-guess-bytes", str(required - 1))
+                skipped_plan = inventory(*low_guess, "--host-bytes", str(core))
+                self.assertEqual(skipped_plan["peak_bytes"]["host"], core)
+                self.assertEqual(
+                    skipped_plan["initial_guess_inventory"]["disposition"],
+                    "budget_skipped",
+                )
+                for flags, cap, outcome in (
+                    (exact_guess, peak, "used"),
+                    (low_guess, core, "budget_skipped"),
+                ):
+                    run = self.cli("run", *args, *flags, "--host-bytes", str(cap))
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    result = json.loads(run.stdout)
+                    actual = result["initial_guess"]
+                    if kind == "auto":
+                        self.assertEqual(actual["resolved_kind"], "huckel")
+                    self.assertEqual(actual["preparation_numeric_capacity"], required)
+                    self.assertEqual(actual["outcome"], outcome)
+                    self.assertEqual(
+                        result["resource_admission"]["modeled_host_peak_bytes"], cap
+                    )
+                    if outcome == "budget_skipped":
+                        self.assertEqual(actual["preliminary_fock_builds"], 0)
+                    if method == "rhf":
+                        self.assertAlmostEqual(
+                            result["energy_hartree"], -1.1167143251757508, delta=1e-8
+                        )
+                    trace.unlink(missing_ok=True)
 
     def test_explicit_native_initial_guesses_and_budget_boundary(self) -> None:
         """Exercise installed-style execution, native fallback, and oracle E/F."""
@@ -180,7 +514,17 @@ class RuntimeTests(unittest.TestCase):
                 "run",
                 ("--initial-guess", "huckel", "--initial-guess-max-iterations", "0"),
             ),
-            ("resources", ("--initial-guess", "huckel")),
+            ("resources", ("--initial-guess", "huckel", "--backend", "cuda")),
+            ("run", ("--initial-guess", "auto", "--backend", "cuda")),
+            ("run", ("--initial-guess", "auto", "--precision", "auto")),
+            ("run", ("--initial-guess", "auto", "--density-fitting", "cpu")),
+            ("resources", ("--initial-guess", "auto", "--method", "uhf")),
+            ("optimize", ("--initial-guess", "auto")),
+            (
+                "resources",
+                ("--initial-guess", "huckel", "--initial-guess-max-iterations", "65"),
+            ),
+            ("resources", ("--initial-guess", "lda", "--forces")),
             ("optimize", ("--initial-guess", "huckel")),
             ("hessian", ("--initial-guess", "huckel")),
             ("run", ("--method", "gfn2-xtb", "--initial-guess", "huckel")),
@@ -1019,7 +1363,9 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
             plan = json.loads(run.stdout)
             self.assertGreater(plan["item_inventory"]["retained"], 1000)
-        unsupported = self.resources("--method", "pbe-rks", "--forces")
+        unsupported = self.resources(
+            "--method", "pbe-rks", "--forces", "--backend", "cuda"
+        )
         self.assertEqual(unsupported.returncode, 2)
         self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
 
@@ -1035,7 +1381,7 @@ class RuntimeTests(unittest.TestCase):
             ctypes.c_size_t,
         ]
         query.restype = ctypes.c_int
-        for method in KS_INVENTORY_METHODS:
+        for method in CPU_KS_INVENTORY_METHODS:
             with self.subTest(method=method):
                 run = self.resources(
                     "--method", method, "--batch", "3", "--max-iterations", "250"
@@ -1159,9 +1505,24 @@ class RuntimeTests(unittest.TestCase):
             self._check_named_correction_inventory(
                 "generativeqc_ks_d3_resource_query_v1", Diagnostic, prefix
             )
+        self._check_named_correction_inventory(
+            "generativeqc_ks_d3_resource_query_v1",
+            Diagnostic,
+            "pbe0-d3(bj)",
+            electronic_method="pbe0",
+            backends=("cpu",),
+            spins=("rks",),
+        )
 
     def _check_named_correction_inventory(
-        self, query_name: str, Diagnostic: type[ctypes.Structure], prefix: str
+        self,
+        query_name: str,
+        Diagnostic: type[ctypes.Structure],
+        prefix: str,
+        *,
+        electronic_method: str = "pbe",
+        backends: tuple[str, ...] = ("cpu", "cuda"),
+        spins: tuple[str, ...] = ("rks", "uks"),
     ) -> None:
         """Compare whole CLI capacities and exact/below gates to the public owner."""
         self.env.pop("LD_PRELOAD", None)
@@ -1175,16 +1536,18 @@ class RuntimeTests(unittest.TestCase):
         ]
         query.restype = ctypes.c_int
         abi_version = library.generativeqc_get_abi_version()
-        for backend in ("cpu", "cuda"):
+        for backend in backends:
             if backend == "cuda":
                 if sys.platform != "linux":
                     continue
                 self.env["LD_PRELOAD"] = str(PROFILE_PROBE)
-            for spin in ("rks", "uks"):
+            for spin in spins:
                 for batch in (1, 3):
                     with self.subTest(backend=backend, spin=spin, batch=batch):
                         common = ("--backend", backend, "--batch", str(batch))
-                        electronic = self.resources("--method", f"pbe-{spin}", *common)
+                        electronic = self.resources(
+                            "--method", f"{electronic_method}-{spin}", *common
+                        )
                         self.assertEqual(electronic.returncode, 0, electronic.stderr)
                         base = json.loads(electronic.stdout)
                         method = f"{prefix}-{spin}"
@@ -1253,9 +1616,10 @@ class RuntimeTests(unittest.TestCase):
     def test_named_d4_inventory_keeps_electronic_and_composite_boundaries(self) -> None:
         for method, extra in (
             ("pbe0-d4(bj-eeq-atm)-rks", ()),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--forces",)),
             ("r2scan-3c-rks", ()),
             ("pbe-d4-rks", ()),
-            ("pbe-d4(bj-eeq-atm)-rks", ("--forces",)),
+            ("pbe-d4(bj-eeq-atm)-rks", ("--backend", "cuda", "--forces")),
             ("pbe-d4(bj-eeq-atm)-rks", ("--density-fitting", "cpu")),
         ):
             with self.subTest(method=method, extra=extra):
@@ -1265,8 +1629,13 @@ class RuntimeTests(unittest.TestCase):
 
     def test_named_d3_inventory_keeps_electronic_and_force_boundaries(self) -> None:
         for method, extra in (
-            ("pbe0-d3(bj)-rks", ()),
-            ("pbe-d3(bj)-rks", ("--forces",)),
+            ("pbe0-rks", ("--backend", "cuda")),
+            ("pbe0-d3(bj)-rks", ("--backend", "cuda")),
+            ("pbe0-d3(bj)-rks", ("--backend", "cuda", "--forces")),
+            ("pbe0-d3(bj)-rks", ("--density-fitting", "cpu")),
+            ("pbe0-d3(bj)-rks", ("--density-fitting", "cpu", "--forces")),
+            ("pbe0-d3(0)-rks", ()),
+            ("pbe0-d3(0)-rks", ("--forces",)),
             ("pbe-d3(0)-uks", ("--density-fitting", "cpu")),
         ):
             with self.subTest(method=method, extra=extra):
@@ -2018,10 +2387,17 @@ class RuntimeTests(unittest.TestCase):
     def test_native_resources_reject_unqualified_hybrid_and_correlated_domains(
         self,
     ) -> None:
-        for method in ("pbe0-rks", "pbe0-uks", "rccsd"):
-            result = self.resources("--method", method)
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+        for method, extra in (
+            ("b3lyp-rks", ("--backend", "cuda")),
+            ("b3lyp-d3(bj)-uks", ("--density-fitting", "cpu")),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ()),
+            ("pbe0-uks", ("--density-fitting", "cpu")),
+            ("rccsd", ()),
+        ):
+            with self.subTest(method=method, extra=extra):
+                result = self.resources("--method", method, *extra)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
 
     def test_scalar_ecp_analytic_energy_forces_and_metadata_validation(self) -> None:
         # Keep this native-only contract runnable without Python packages.
@@ -2090,6 +2466,47 @@ class RuntimeTests(unittest.TestCase):
         planned = self.cli("resources", *flags)
         self.assertEqual(planned.returncode, 0, planned.stderr)
         self.assertGreater(json.loads(planned.stdout)["ecp_workspace"], 0)
+
+        # The same basis has an analytically solvable two-electron singlet at
+        # charge -1. Its ECP disables the automatic seed, not the target RHF.
+        singlet = (
+            str(molecule),
+            "--method",
+            "rhf",
+            "--charge",
+            "-1",
+            "--basis",
+            str(path),
+        )
+        core_plan = self.cli("resources", *singlet)
+        self.assertEqual(core_plan.returncode, 0, core_plan.stderr)
+        peak = json.loads(core_plan.stdout)["peak_bytes"]["host"]
+        auto = (*singlet, "--initial-guess", "auto", "--host-bytes", str(peak))
+        plan = self.cli("resources", *auto)
+        self.assertEqual(plan.returncode, 0, plan.stderr)
+        planned = json.loads(plan.stdout)
+        self.assertEqual(planned["peak_bytes"]["host"], peak)
+        inventory = planned["initial_guess_inventory"]
+        self.assertEqual(inventory["resolved_kind"], "none")
+        self.assertEqual(inventory["disposition"], "target_declined")
+        for key in (
+            "required_numeric_bytes",
+            "fleet_seed_bytes",
+            "serialized_workspace_bytes",
+        ):
+            self.assertEqual(inventory[key], 0)
+        auto_run = self.cli("run", *auto, "--json")
+        self.assertEqual(auto_run.returncode, 0, auto_run.stderr)
+        result = json.loads(auto_run.stdout)
+        self.assertEqual(
+            result["initial_guess"],
+            {"kind": "auto", "resolved_kind": "none", "outcome": "target_declined"},
+        )
+        self.assertAlmostEqual(
+            result["energy_hartree"],
+            2 * (1.5 - math.sqrt(8 / math.pi)) + 2 / math.sqrt(math.pi),
+            places=10,
+        )
         corrupted = copy.deepcopy(record)
         corrupted["elements"][0]["ecp_data"] = (
             '[{"ecp_type":"scalar_ecp","ecp_type":"scalar_ecp"}]'

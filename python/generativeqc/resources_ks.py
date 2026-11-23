@@ -92,6 +92,24 @@ _CPU_HOST_INVENTORY_KEYS = (
 
 
 _CPU_HOST_PERSISTENT_KEYS = _CPU_HOST_INVENTORY_KEYS[:12]
+_CPU_PACKED_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_fleet_v1"
+_CPU_PACKED_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_force_fleet_v1"
+_CPU_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_force_fleet_v1"
+
+
+def native_dense_force_request(request: ResourceRequest) -> bool:
+    """The smaller native bound cannot fund the Python compatibility consumer."""
+    return (
+        request.name == "ks"
+        and request.identity.backend == "cpu"
+        and "forces" in request.identity.observables
+        and json.loads(request.identity.schedule).get("fleet_inventory")
+        == "native-cpu-force-v1"
+    )
+
+
+class _PackedEriCapacityExceeded(ValueError):
+    """The exact retained fleet does not fit its separate provider cap."""
 
 
 def _cpu_host_shape(
@@ -201,6 +219,9 @@ def _native_host_fleet_inventory(
     backend: str,
     workspace_floor: int = 0,
     retained_allowance: int = 0,
+    packed_cap: int = 0,
+    packed_forces: bool = False,
+    dense_forces: bool = False,
     **options: typing.Any,
 ) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
     """Query all retained owners and serialized workspace before publication.
@@ -213,13 +234,22 @@ def _native_host_fleet_inventory(
     if backend not in ("cpu", "cuda"):
         raise ValueError("KS host inventory requires cpu or cuda backend")
     cuda = backend == "cuda"
-    symbol = (
-        "generativeqc_resource_ks_cuda_host_fleet_v1"
-        if cuda
-        else "generativeqc_resource_ks_cpu_fleet_v1"
-    )
+    if dense_forces:
+        symbol = _CPU_FORCE_FLEET_SYMBOL
+    elif packed_forces:
+        symbol = _CPU_PACKED_FORCE_FLEET_SYMBOL
+    elif packed_cap:
+        symbol = _CPU_PACKED_FLEET_SYMBOL
+    elif cuda:
+        symbol = "generativeqc_resource_ks_cuda_host_fleet_v1"
+    else:
+        symbol = "generativeqc_resource_ks_cpu_fleet_v1"
     query = getattr(library, symbol, None)
     if query is None:
+        if packed_cap:
+            raise NotImplementedError(
+                "packed ERI plans require a native host inventory"
+            )
         return None
     if not cuda and retained_allowance:
         raise ValueError("the CPU fleet ABI has no retained consumer allowance")
@@ -233,23 +263,35 @@ def _native_host_fleet_inventory(
     )
     shapes = (ctypes.c_uint64 * len(dimensions))(*dimensions)
     values = (ctypes.c_uint64 * (15 + 16 * len(items)))()
+    floor = checked_bytes(workspace_floor, "KS workspace allowance")
+    allowance = checked_bytes(retained_allowance, "KS retained consumer allowance")
+    controls = (
+        () if dense_forces else (allowance, floor) if cuda else (packed_cap or floor,)
+    )
     query.argtypes = [
         ctypes.POINTER(ctypes.c_uint64),
         ctypes.c_size_t,
-        *([ctypes.c_uint64] * (2 if cuda else 1)),
+        *([ctypes.c_uint64] * len(controls)),
         ctypes.POINTER(ctypes.c_uint64),
         ctypes.c_size_t,
     ]
     query.restype = ctypes.c_int
-    floor = checked_bytes(workspace_floor, "KS workspace allowance")
-    allowance = checked_bytes(retained_allowance, "KS retained consumer allowance")
-    if query(
+    status = query(
         shapes,
         len(shapes),
-        *((allowance, floor) if cuda else (floor,)),
+        *controls,
         values,
         len(values),
-    ):
+    )
+    if packed_cap and status == 1:
+        raise _PackedEriCapacityExceeded(
+            "packed spherical ERI capacity exceeded for retained KS batch"
+        )
+    if packed_forces and status == 2:
+        raise NotImplementedError("this build omits native CPU stationary forces")
+    if dense_forces and status == 2:
+        return None
+    if status:
         raise ValueError(
             f"native {backend.upper()} KS fleet inventory rejected shape or capacity"
         )
@@ -271,6 +313,10 @@ def _native_host_fleet_inventory(
         )
         for index in range(len(items))
     ]
+    if dense_forces and any(
+        not row["retained"] or not row["scf_workspace"] for row in host
+    ):
+        raise ValueError("native CPU KS fleet inventory omitted a required force item")
     totals = dict(zip(_CPU_HOST_PERSISTENT_KEYS, aggregate[:12], strict=True))
     if any(
         row["retained"] != sum(row[key] for key in _CPU_HOST_PERSISTENT_KEYS)
@@ -1145,18 +1191,34 @@ def ks_resource_request(
     device_id: typing.Any = 0,
     library: typing.Any = None,
     include_forces: typing.Any = False,
+    cpu_packed_eri_maximum_bytes: int = 0,
     name: typing.Any = "ks",
     first_phase: typing.Any = 0,
     last_phase: typing.Any = 0,
     _fitted: tuple[typing.Any, int, float] | None = None,
     _application_precision_budget: typing.Any = None,
     _cuda_energy_only: bool = False,
+    _allow_native_dense_forces: bool = True,
 ) -> typing.Any:
-    """Resolve one complete KS request for the shared global planner."""
+    """Resolve one complete KS request for the shared global planner.
+
+    A positive ``cpu_packed_eri_maximum_bytes`` gates the exact retained value
+    arrays for the whole fleet, independently of the composed host budget.
+    This opt-in requires native named full-range CPU execution. Forces need
+    the separate native force inventory and prepared derivative capability.
+    """
     if type(include_forces) is not bool:
         raise TypeError("include_forces must be boolean")
     if backend not in ("cpu", "cuda"):
         raise NotImplementedError("KS planning requires a native CPU or CUDA backend")
+    packed_cap = cpu_packed_eri_maximum_bytes
+    if type(packed_cap) is not int or not 0 <= packed_cap < 2**64:
+        raise ValueError("CPU packed ERI capacity must be a nonnegative uint64 integer")
+    if packed_cap and (
+        backend != "cpu" or str(precision).lower() != "fp64" or _fitted is not None
+    ):
+        raise NotImplementedError("packed ERI plans require direct FP64 CPU KS")
+    packed_forces = bool(packed_cap and include_forces)
     if _application_precision_budget is not None:
         from .force_aware_numerics import TargetErrorBudget
 
@@ -1232,6 +1294,27 @@ def ks_resource_request(
             "KS resource-ledger planning does not yet support independent XC/VV10 grids"
         )
     requires_tau = "tau" in model.functional.ingredients
+    if packed_cap:
+        from . import _native
+        from ._named_ks import select_named_program
+
+        if requires_tau or model.has_range_exchange or model.has_nonlocal_correlation:
+            raise NotImplementedError(
+                "packed ERI plans require local LDA/GGA and full-range J/K"
+            )
+        if library is None:
+            library = _native.load_library(device="cpu")
+        symbol = (
+            _CPU_PACKED_FORCE_FLEET_SYMBOL
+            if packed_forces
+            else _CPU_PACKED_FLEET_SYMBOL
+        )
+        if not hasattr(library, symbol) or not select_named_program(
+            library, model.method_ir, _native.BACKEND_CPU_REFERENCE
+        ):
+            raise NotImplementedError(
+                "packed ERI plans require a linked native KS program and inventory"
+            )
     if requires_tau and not automatic and backend == "cpu":
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"
@@ -1397,6 +1480,12 @@ def ks_resource_request(
             or max(electrons.nalpha, electrons.nbeta) > orbital["nbf"]
         ):
             raise ValueError("KS spin populations do not fit the AO space")
+        if packed_cap and (
+            orbital["representation"] != "spherical" or orbital["maximum_angular"] > 3
+        ):
+            raise ValueError(
+                "packed Coulomb ERIs require a real spherical s/p/d/f basis"
+            )
         require_basis(
             selected,
             atoms,
@@ -1518,7 +1607,8 @@ def ks_resource_request(
     cpu_forces = backend == "cpu" and (
         include_forces
         or (
-            isinstance(selected, BasisSet)
+            not packed_cap
+            and isinstance(selected, BasisSet)
             and any(element.ecp_core_electrons for element in selected.elements)
             and all(item["orbital"]["maximum_angular"] <= 2 for item in items)
         )
@@ -1583,6 +1673,17 @@ def ks_resource_request(
         controls["fleet_inventory"] = (
             "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
         )
+        if packed_cap:
+            inventory_name = (
+                "native-cpu-packed-force-v1"
+                if packed_forces
+                else "native-cpu-packed-v1"
+            )
+            controls.update(
+                cpu_packed_eri_maximum_bytes=packed_cap,
+                host_inventory=inventory_name,
+                fleet_inventory=inventory_name,
+            )
     if backend == "cuda":
         controls.update(
             device_id=device_id,
@@ -1659,19 +1760,66 @@ def ks_resource_request(
             )
         if has_ecp:
             controls["ecp_host_inventory"] = _ecp_inventory_owner(library)
-    native_inventory = _native_host_fleet_inventory(
-        library,
-        items,
-        backend=backend,
-        workspace_floor=CPU_FORCE_HOST_CAP if cpu_forces else 0,
-        retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + force_host_cap)
-        if backend == "cuda"
-        else 0,
-        diis_history=diis_history,
-        max_iterations=history_iterations,
-        requires_first_ao_derivatives=requires_first_ao_derivatives,
-        model=model,
-    )
+    try:
+        dense_forces = False
+        native_inventory = None
+        if (
+            backend == "cpu"
+            and cpu_forces
+            and not packed_cap
+            and _allow_native_dense_forces
+            and hasattr(library, _CPU_FORCE_FLEET_SYMBOL)
+            and not automatic
+            and not requires_tau
+            and not model.has_range_exchange
+            and not model.has_nonlocal_correlation
+            and all(item["orbital"]["maximum_angular"] <= 3 for item in items)
+        ):
+            from . import _native
+            from ._named_ks import select_named_program
+
+            if select_named_program(
+                library, model.method_ir, _native.BACKEND_CPU_REFERENCE
+            ):
+                native_inventory = _native_host_fleet_inventory(
+                    library,
+                    items,
+                    backend=backend,
+                    dense_forces=True,
+                    diis_history=diis_history,
+                    max_iterations=history_iterations,
+                    requires_first_ao_derivatives=requires_first_ao_derivatives,
+                    model=model,
+                )
+                dense_forces = native_inventory is not None
+        if dense_forces:
+            controls.update(
+                host_inventory="native-cpu-force-v1",
+                fleet_inventory="native-cpu-force-v1",
+            )
+            identity = replace(identity, schedule=json.dumps(controls, sort_keys=True))
+        else:
+            native_inventory = _native_host_fleet_inventory(
+                library,
+                items,
+                backend=backend,
+                workspace_floor=CPU_FORCE_HOST_CAP
+                if cpu_forces and not packed_forces
+                else 0,
+                retained_allowance=(SNAPSHOT_GRID_CACHE_BYTES + force_host_cap)
+                if backend == "cuda"
+                else 0,
+                packed_cap=packed_cap,
+                packed_forces=packed_forces,
+                diis_history=diis_history,
+                max_iterations=history_iterations,
+                requires_first_ao_derivatives=requires_first_ao_derivatives,
+                model=model,
+            )
+    except _PackedEriCapacityExceeded as error:
+        return ResourceRequest(
+            name, identity, (), exclusions, infeasible_reason=str(error)
+        )
     if native_inventory is not None:
         host, totals, host_phase_peak = native_inventory
         if backend == "cuda":
@@ -1715,7 +1863,11 @@ def ks_resource_request(
     # retained across calls and overlaps the next setup/SCF replay; reserve it
     # separately rather than treating serialized execution as retired storage.
     # Keep the established diagnostic labels; kind records allocation lifetime.
-    if cpu_forces:
+    if packed_forces or dense_forces:
+        exclusions += (
+            "native integral recurrence temporaries and BLAS/runtime internals",
+        )
+    elif cpu_forces:
         exclusions += (
             "force JIT/compiler processes, loaded code, BLAS/runtime internal storage",
         )

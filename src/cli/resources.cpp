@@ -8,16 +8,21 @@
 #include <limits>
 #include <vector>
 
+#include "cli/hessian.hpp"
 #include "cli/json.hpp"
+#include "cli/molecular_system.hpp"
 #include "cli/native_basis.hpp"
 #include "dft/grid.hpp"
+#include "integrals/s_integrals.hpp"
 #include "runtime/resource_planning.hpp"
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
 #include "scf/incremental_direct_jk_control.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/ks_device_resources.hpp"
 #include "scf/ks_host_resources.hpp"
+#include "scf/preliminary_guess.hpp"
 
 extern "C" int generativeqc_resource_small_hf_cuda_v2(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, const std::uint8_t*,
@@ -32,6 +37,14 @@ extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t
 extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
                                                       std::size_t, std::size_t, int,
                                                       std::uint64_t*);
+extern "C" generativeqc_status generativeqc_resource_preliminary_cpu_v1(
+    generativeqc_context*, const generativeqc_system*, const generativeqc_initial_guess_options*,
+    std::uint32_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_preliminary_cpu_shape_v2(
+    const generativeqc_initial_guess_options*, const std::uint64_t*, std::size_t,
+    const std::int32_t*, std::size_t, const generativeqc::scf::initial_guess::HuckelShellShape*,
+    std::size_t, int, std::int64_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint64_t*,
+    std::size_t);
 
 namespace generativeqc::cli {
 namespace {
@@ -164,7 +177,7 @@ Bytes ks_inventory_tile_points(const RunOptions& options) {
 scf::KsHostResourceShape ks_host_shape(const Topology& shape,
                                        std::span<const generativeqc_atom> atom_values, Bytes spins,
                                        const RunOptions& options, Bytes ecp_terms,
-                                       Bytes ecp_workspace, bool pbe) {
+                                       Bytes ecp_workspace, bool first_ao_derivatives) {
   return {atom_values.size(),
           shape.nbf,
           shape.cartesian_nbf,
@@ -179,7 +192,7 @@ scf::KsHostResourceShape ks_host_shape(const Topology& shape,
           ks_inventory_tile_points(options),
           options.diis_history,
           options.max_iterations.value_or(100),
-          pbe,
+          first_ao_derivatives,
           false,
           ecp_workspace};
 }
@@ -213,6 +226,17 @@ bool pbe_dispersion_inventory(const RunOptions& options) {
                       return std::string_view(a.component_id) == b.component_id &&
                              a.coefficient == b.coefficient;
                     });
+}
+
+/** These exact named B3LYP programs share the CPU GGA jet and full-range J/K
+ * allocation layout. The same carrier alone would also match unqualified graphs. */
+bool cpu_b3lyp_inventory(const RunOptions& options) {
+  const auto* program = options.composition;
+  if (options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || !program || !program->cpu)
+    return false;
+  for (const auto selector : {"b3lyp-rks", "b3lyp-uks", "b3lyp-d3(bj)-rks", "b3lyp-d3(bj)-uks"})
+    if (program == method_generated::find_method(selector)) return true;
+  return false;
 }
 
 // The CLI repeats topology metadata; the native owner performs the same full
@@ -265,17 +289,167 @@ Json cuda_df_candidates(const Topology& orbital, const Topology& auxiliary, Byte
   return candidates;
 }
 
-}  // namespace
+/** Pack the same compact topology as the Python resource adapter. The CLI
+ * does not expand a second basis or normalize a context for automatic sizing. */
+std::array<Bytes, 6> automatic_preliminary_layout(const RunOptions& options,
+                                                  std::span<const generativeqc_atom> atoms,
+                                                  const NativeBasisData& basis,
+                                                  const Topology& orbital, std::int64_t electrons,
+                                                  std::uint32_t spins) {
+  const std::array shape{orbital.nbf, orbital.cartesian_nbf, orbital.shells, orbital.primitives,
+                         orbital.angular};
+  std::vector<std::int32_t> numbers;
+  numbers.reserve(atoms.size());
+  for (const auto& atom : atoms) numbers.push_back(atom.atomic_number);
+  std::vector<scf::initial_guess::HuckelShellShape> rows;
+  if (options.initial_guess.kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU) {
+    rows.reserve(basis.shells.size());
+    for (const auto& shell : basis.shells)
+      rows.push_back({shell.atom_index, shell.angular_momentum, shell.primitive_count});
+  }
+  const bool has_ecp =
+      !basis.ecp_terms.empty() ||
+      std::ranges::any_of(basis.core_electrons, [](auto core) { return core != 0; });
+  std::array<Bytes, 6> result{};
+  if (generativeqc_resource_preliminary_cpu_shape_v2(
+          &options.initial_guess, shape.data(), shape.size(), numbers.data(), numbers.size(),
+          rows.data(), rows.size(), basis.representation, electrons, options.multiplicity, has_ecp,
+          spins, result.data(), result.size()))
+    throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "native automatic initial-guess inventory rejected topology or policy");
+  return result;
+}
 
-int resources_command(const RunOptions& options, std::span<const generativeqc_atom> atoms) {
+/** Explicit layouts use the normalized system, but never prepare a Fock plan,
+ * grid, correction or initial density in the dry run. */
+std::optional<std::array<Bytes, 5>> explicit_preliminary_layout(
+    const RunOptions& options, std::span<const generativeqc_atom> atoms,
+    const NativeBasisData& basis, bool rhf, Context* context, const System* system, Json& plan) {
+  std::optional<Context> local_context;
+  std::optional<System> local_system;
+  if (!system) {
+    const generativeqc_context_descriptor cpu{sizeof(cpu), GENERATIVEQC_ABI_VERSION, -1,
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE};
+    local_context.emplace(cpu);
+    context = &*local_context;
+    const generativeqc_system_descriptor geometry{
+        sizeof(geometry),
+        GENERATIVEQC_ABI_VERSION,
+        atoms.data(),
+        static_cast<std::uint32_t>(atoms.size()),
+        basis.shells.data(),
+        static_cast<std::uint32_t>(basis.shells.size()),
+        basis.primitives.data(),
+        static_cast<std::uint32_t>(basis.primitives.size()),
+        options.charge,
+        options.multiplicity,
+        basis.representation};
+    local_system.emplace(make_molecular_system(*context, geometry, basis));
+    system = &*local_system;
+  }
+  std::array<Bytes, 5> layout{};
+  const auto status = generativeqc_resource_preliminary_cpu_v1(
+      context->get(), system->get(), &options.initial_guess, rhf && options.forces, layout.data(),
+      layout.size());
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    plan["diagnostic"] = generativeqc_context_get_last_detail(context->get());
+    return std::nullopt;
+  }
+  return layout;
+}
+
+bool append_preliminary_inventory(const RunOptions& options,
+                                  std::span<const generativeqc_atom> atoms,
+                                  const NativeBasisData& basis, const Topology& orbital,
+                                  std::int64_t electrons, std::uint32_t spins, bool rhf,
+                                  Context* context, const System* system, Json& plan,
+                                  Bytes& retained, Bytes& workspace) {
+  const bool automatic = options.automatic_initial_guess();
+  std::array<Bytes, 6> layout{};
+  if (automatic) {
+    try {
+      layout = automatic_preliminary_layout(options, atoms, basis, orbital, electrons, spins);
+    } catch (const Error& error) {
+      plan["diagnostic"] = error.what();
+      return false;
+    }
+  } else {
+    const auto explicit_layout =
+        explicit_preliminary_layout(options, atoms, basis, rhf, context, system, plan);
+    if (!explicit_layout) return false;
+    std::ranges::copy(*explicit_layout, layout.begin());
+  }
+  const auto [required, cap, seed, scratch, disposition, kind] = layout;
+  using Disposition = scf::initial_guess::CpuPreliminaryInventory::Disposition;
+  const auto decision = static_cast<Disposition>(disposition);
+  const char* outcome = decision == Disposition::Attempt          ? "attempt"
+                        : decision == Disposition::BudgetSkipped  ? "budget_skipped"
+                        : decision == Disposition::TargetDeclined ? "target_declined"
+                                                                  : "source_declined";
+  const auto fleet_seed = product({seed, options.batch});
+  plan["initial_guess_inventory"] = {
+      {"owner",
+       automatic ? "native-cpu-direct-preliminary-v2" : "native-cpu-direct-preliminary-v1"},
+      {"kind", options.initial_guess_name},
+      {"disposition", outcome},
+      {"required_numeric_bytes", required},
+      {"maximum_numeric_bytes", cap},
+      {"fleet_seed_bytes", fleet_seed},
+      {"serialized_workspace_bytes", scratch},
+      {"max_iterations", options.initial_guess.max_iterations
+                             ? options.initial_guess.max_iterations
+                             : scf::initial_guess::PreliminaryOptions{}.max_iterations}};
+  if (automatic)
+    plan["initial_guess_inventory"]["resolved_kind"] =
+        kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL  ? "huckel"
+        : kind == GENERATIVEQC_INITIAL_GUESS_MINAO ? "minao"
+                                                   : "none";
+  // Conservatively overlap the primal envelope and cold source. The fleet
+  // can retain every seed, but never constructs all scratch/source owners at once.
+  retained = sum({retained, fleet_seed});
+  workspace = sum({workspace, scratch});
+  return true;
+}
+
+std::int64_t electron_count(const RunOptions& options, std::span<const generativeqc_atom> atoms,
+                            const NativeBasisData& basis) {
+  std::int64_t electrons = -static_cast<std::int64_t>(options.charge);
+  for (const auto& atom : atoms) electrons += atom.atomic_number;
+  for (const auto core : basis.core_electrons) electrons -= core;
+  return electrons;
+}
+
+Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc_atom> atoms,
+                        const HessianInvocation* derivative,
+                        const NativeBasisData* expanded_basis = nullptr,
+                        std::optional<std::size_t> native_minimum = std::nullopt,
+                        Context* context = nullptr, const System* system = nullptr) {
+  auto options = supplied;
+  if (derivative) {
+    options.max_iterations = options.max_iterations.value_or(250);
+    options.energy_tolerance = options.energy_tolerance.value_or(1e-12);
+    options.density_tolerance = options.density_tolerance.value_or(1e-10);
+    options.dispersion_memory_bytes = derivative->dispersion_bytes;
+  }
   const bool hf =
       options.method == GENERATIVEQC_METHOD_RHF || options.method == GENERATIVEQC_METHOD_UHF;
-  const bool correction_program = pbe_dispersion_inventory(options);
+  const bool cpu_backend = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  const bool cpu_pbe0_bj =
+      cpu_backend && options.composition && options.composition->cpu &&
+      (options.composition == method_generated::find_method("pbe0-d3(bj)-rks") ||
+       options.composition == method_generated::find_method("pbe0-d3(bj)-uks"));
+  // The CPU host inventory already covers the full ERI provider and matrix
+  // workspace for ordinary J/K. Do not extend that proof to CUDA hybrid arenas.
+  const bool cpu_pbe0 =
+      cpu_backend && (options.method_name == "pbe0-rks" || options.method_name == "pbe0-uks");
+  const bool cpu_b3lyp = cpu_b3lyp_inventory(options);
+  const bool correction_program = pbe_dispersion_inventory(options) || cpu_pbe0_bj ||
+                                  (cpu_b3lyp && options.composition->dispersion.kind);
   const bool d4 = correction_program && options.composition->dispersion.kind == 3;
-  const bool pbe = options.method_name.starts_with("pbe") || correction_program;
+  const bool gga = options.method_name.starts_with("pbe") || correction_program || cpu_b3lyp;
   const bool ks = options.method_name == "lda-rks" || options.method_name == "lda-uks" ||
                   options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
-                  correction_program;
+                  cpu_pbe0 || cpu_b3lyp || correction_program;
   Json budget = {
       {"schema_version", 1},
       {"host_bytes", options.host_bytes ? Json(*options.host_bytes) : Json()},
@@ -309,15 +483,44 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
                {"exclusions",
                 {"caller-owned inputs and outputs",
                  "allocator bookkeeping, object/runtime overhead, CUDA contexts/modules/pools"}}};
-  const auto emit = [&]() {
-    plan["identity"] = canonical_hash(plan);
-    std::cout << plan.dump(2) << '\n';
-    return plan["status"] == "feasible" ? 0 : 2;
-  };
+  const auto finish = [&]() { return std::move(plan); };
+  const method_generated::Method* derivative_program{};
+  const Bytes packed_cap =
+      derivative ? derivative->cpu_packed_eri_bytes : options.cpu_packed_eri_bytes;
+  const bool ks_forces = ks && options.forces;
+  if (derivative) {
+    plan["property"] = derivative->operation;
+    if (!cpu_backend || options.batch != 1 || options.forces || !ks ||
+        options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE ||
+        options.auxiliary_basis_explicit || options.precision != GENERATIVEQC_PRECISION_FP64 ||
+        options.initial_guess.kind || options.nonlocal_grid) {
+      plan["diagnostic"] =
+          "derivative inventory requires one linked Direct FP64 CPU KS item and its energy "
+          "inventory";
+      return finish();
+    }
+    derivative_program = linked_cpu_hessian_program(options);
+    if (!derivative_program) {
+      plan["diagnostic"] = "native CPU Hessian has no exact linked total MethodIR";
+      return finish();
+    }
+    plan["exclusions"][0] =
+        "caller storage outside the raw Hessian/HVP panel and CLI JSON encoding";
+    plan["exclusions"].push_back(
+        "optional derivative workspace is not included in the minimum peak");
+    plan["exclusions"].push_back("final-frame export scratch and implicit BLAS workspace");
+  }
   if (!hf && !ks) {
     plan["diagnostic"] =
-        "native resource inventory requires RHF/UHF, LDA/PBE RKS/UKS or a named PBE D3/D4 program";
-    return emit();
+        "native resource inventory requires RHF/UHF, LDA/PBE RKS/UKS, a named "
+        "PBE D3/D4 program, or qualified CPU PBE0/B3LYP energy";
+    return finish();
+  }
+  if (!derivative && packed_cap &&
+      (!cpu_backend || !ks || !options.composition || options.composition->range_omega != 0 ||
+       options.composition->nonlocal.variant)) {
+    plan["diagnostic"] = "packed ERI inventory requires a linked full-range CPU KS program";
+    return finish();
   }
   // This inventory admits only mean-field methods, never correlated references.
   const auto convergence = resolve_scf_convergence(options, false);
@@ -338,51 +541,85 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
           "incremental Direct-J/K resource inventory is unsupported: anchor/delta storage and "
           "closure history lack a qualified inventory; unset or disable both "
           "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK and GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK";
-      return emit();
+      return finish();
     }
   }
   if (options.precision != GENERATIVEQC_PRECISION_FP64) {
     plan["diagnostic"] = "this inventory covers FP64 allocation policies";
-    return emit();
+    return finish();
   }
-  if (ks && (options.forces || options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)) {
-    plan["diagnostic"] =
-        "KS dry-run inventory currently covers conventional electronic energy only";
-    return emit();
+  if (ks && options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE) {
+    plan["diagnostic"] = "KS dry-run inventory currently requires Direct J/K";
+    return finish();
   }
-  NativeBasisData basis;
-  try {
-    basis = expand_basis_input(
-        options.basis_name, atoms,
-        options.representation_explicit ? std::optional(options.representation) : std::nullopt);
-  } catch (const std::invalid_argument& error) {
-    throw UsageError(error.what());
+  if (ks_forces) {
+    plan["property"] = "forces";
+    if (!cpu_backend || options.nonlocal_grid || options.basis_program ||
+        !integrals::has_packaged_cpu_eri_shell_derivatives()) {
+      plan["diagnostic"] = "force inventory requires linked Direct FP64 CPU KS derivatives";
+      return finish();
+    }
+    plan["exclusions"].push_back("integral recurrence temporaries and BLAS/runtime internals");
   }
+  NativeBasisData local_basis;
+  if (!expanded_basis) {
+    try {
+      local_basis = expand_basis_input(
+          options.basis_name, atoms,
+          options.representation_explicit ? std::optional(options.representation) : std::nullopt);
+    } catch (const std::invalid_argument& error) {
+      throw UsageError(error.what());
+    }
+    expanded_basis = &local_basis;
+  }
+  const auto& basis = *expanded_basis;
   const auto orbital = topology(basis);
   const Bytes spins =
-      correction_program
+      correction_program || cpu_b3lyp
           ? options.composition->spin
           : (options.method_name.ends_with("uhf") || options.method_name.ends_with("uks") ? 2 : 1);
-  std::int64_t electrons = -static_cast<std::int64_t>(options.charge);
-  for (const auto& atom : atoms) electrons += atom.atomic_number;
-  for (const auto core : basis.core_electrons) electrons -= core;
+  const auto electrons = electron_count(options, atoms, basis);
   const auto unpaired = static_cast<std::int64_t>(options.multiplicity) - 1;
   if (electrons < 0 || unpaired > electrons || (electrons - unpaired) % 2 ||
       (spins == 1 && unpaired) || static_cast<Bytes>((electrons + unpaired) / 2) > orbital.nbf)
     throw UsageError("invalid electron count, multiplicity or basis spin population");
   const bool fitted = options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE;
-  const bool cpu = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-                   options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  if (options.initial_guess.kind &&
+      (!cpu_backend || fitted || spins != 1 || options.basis_program)) {
+    plan["diagnostic"] = "initial-guess inventory requires a Direct FP64 CPU RHF/RKS target";
+    return finish();
+  }
+  const bool cpu =
+      cpu_backend || options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
   if (options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CUDA &&
       options.backend != GENERATIVEQC_BACKEND_CUDA)
     throw UsageError("CUDA density fitting requires --backend cuda");
   plan["backend"] = cpu ? "cpu" : "cuda";
   if (orbital.angular > (cpu ? 4u : 3u)) {
     plan["diagnostic"] = "orbital angular momentum exceeds the native inventory domain";
-    return emit();
+    return finish();
   }
   plan["representation"] =
       basis.representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
+  if (ks_forces && orbital.angular > 3) {
+    plan["diagnostic"] = "CPU KS force inventory requires an s/p/d/f orbital basis";
+    return finish();
+  }
+  if (packed_cap) {
+    if (basis.representation != GENERATIVEQC_BASIS_SPHERICAL || orbital.angular > 3) {
+      plan["diagnostic"] = "packed Coulomb ERIs require a real spherical s/p/d/f basis";
+      return finish();
+    }
+    // Use the provider's exact allocation extent, not the caller's ceiling.
+    // This inventory already requires one linked Direct CPU KS system.
+    const auto required = product({options.batch, scf::cpu_ks_packed_value_bytes(orbital.nbf)});
+    plan["packed_eri_inventory"] = {{"retained_bytes", required}, {"cap_bytes", packed_cap}};
+    if (required > packed_cap) {
+      plan["status"] = "infeasible";
+      plan["diagnostic"] = "packed spherical ERI capacity exceeded";
+      return finish();
+    }
+  }
   if (!basis.identity.empty()) plan["basis_identity"] = basis.identity;
   Json primitive_identity = Json::array(), shell_identity = Json::array(), elements = Json::array();
   for (const auto& primitive : basis.primitives)
@@ -424,7 +661,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["ecp_workspace"] = ecp_workspace;
     if (fitted) {
       plan["diagnostic"] = "ECP density fitting is not qualified";
-      return emit();
+      return finish();
     }
   }
   std::optional<Topology> auxiliary;
@@ -450,7 +687,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       auxiliary = orbital;
     if (auxiliary->angular > (cpu ? 4u : 3u)) {
       plan["diagnostic"] = "auxiliary angular momentum exceeds the native inventory domain";
-      return emit();
+      return finish();
     }
     plan["auxiliary"] = topology_json(*auxiliary);
   }
@@ -474,15 +711,15 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
   } else if (cpu && ks) {
     scf::CpuKsHostFleetResources fleet;
     plan["item_inventory"] = ks_inventory(fleet.append(
-        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, pbe),
-        options.batch));
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, gga),
+        options.batch, scf::cpu_ks_host_execution(packed_cap != 0, ks_forces)));
     const auto aggregate = fleet.inventory();
     retained = aggregate[12];
     workspace = aggregate[13];
   } else if (hf && fitted) {
     if (auxiliary->nbf > 128) {
       plan["diagnostic"] = "CUDA DF inventory requires <=128 auxiliary AOs";
-      return emit();
+      return finish();
     }
     std::array<Bytes, 2> ordinary{};
     if (generativeqc_resource_small_hf_cuda_v2(
@@ -492,7 +729,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
             ordinary.data(), ordinary.size())) {
       plan["diagnostic"] =
           "CUDA DF inventory requires a CUDA library and ordinary <=16-AO topology";
-      return emit();
+      return finish();
     }
     try {
       const auto candidates = cuda_df_candidates(
@@ -531,24 +768,24 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       plan["status"] = "infeasible";
       plan["diagnostic"] = error.what();
     }
-    return emit();
+    return finish();
   } else if (ks) {
     const Bytes points = ks_grid_points(atoms, options);
     std::array<Bytes, 3> capacities{};
     Bytes quadrature = 0, matrix_provider = 0;
     if (generativeqc_resource_ks_cuda_v1(orbital.nbf, atoms.size(), orbital.shells,
                                          orbital.primitives, points, options.diis_history, spins,
-                                         pbe ? 1 : 0, ks_inventory_tile_points(options),
+                                         gga ? 1 : 0, ks_inventory_tile_points(options),
                                          capacities.data(), capacities.size()) ||
         generativeqc_resource_quadrature_cuda_v1(atoms.size(), points, &quadrature) ||
         generativeqc_resource_ks_matrix_provider_cuda_v1(orbital.nbf, &matrix_provider)) {
       plan["diagnostic"] =
           "KS CUDA inventory requires a CUDA library and valid launch/DIIS dimensions";
-      return emit();
+      return finish();
     }
     scf::KsHostFleetResources host_fleet;
     plan["item_inventory"] = ks_inventory(host_fleet.append(
-        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, pbe),
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, gga),
         options.batch, scf::KsHostExecution::cuda_fused));
     const auto host_inventory = host_fleet.inventory();
     retained = host_inventory[12];
@@ -583,7 +820,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
             values.data(), values.size())) {
       plan["diagnostic"] =
           "CUDA HF inventory requires a CUDA library and ordinary <=16-AO s/p/d/f topology";
-      return emit();
+      return finish();
     }
     scf::CudaHfFleetResources fleet;
     try {
@@ -602,19 +839,19 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
     plan["cuda_hf_fleet_composition"] = "native-declared-capacity";
   } else {
     plan["diagnostic"] = "this CUDA provider has no qualified native dry-run inventory";
-    return emit();
+    return finish();
   }
   if (correction_program) {
     // Named KS retains a separate correction owner per item. Ask the existing
     // D3/D4 owner for its complete fleet, including replicated CUDA tables;
     // standalone ragged-owner sizing would undercount that retained storage.
-    // This energy-only CLI has no Python compatibility-gradient consumer.
+    // The native correction owner covers both energy and analytic forces.
     if (atoms.size() > std::numeric_limits<std::uint32_t>::max() || (d4 && atoms.size() > 256) ||
         std::any_of(atoms.begin(), atoms.end(), [](const auto& atom) {
           return atom.atomic_number < 1 || atom.atomic_number > 86;
         })) {
       plan["diagnostic"] = "correction inventory rejects the element or per-item atom domain";
-      return emit();
+      return finish();
     }
     const std::vector<std::uint32_t> counts(options.batch,
                                             static_cast<std::uint32_t>(atoms.size()));
@@ -648,7 +885,7 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       correction.abi_version = GENERATIVEQC_ABI_VERSION;
       generativeqc::check(generativeqc_ks_d4_resource_query_v1(options.backend, counts.data(),
                                                                options.batch, &correction));
-      if (!append(correction, "native-ks-d4-layout-v1")) return emit();
+      if (!append(correction, "native-ks-d4-layout-v1")) return finish();
     } else {
       generativeqc_d3_runtime_diagnostic correction{};
       correction.struct_size = sizeof(correction);
@@ -658,10 +895,50 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       if (generativeqc_ks_d3_resource_query_v1(options.backend, counts.data(), options.batch,
                                                &correction) != GENERATIVEQC_STATUS_SUCCESS) {
         plan["diagnostic"] = "native D3 correction inventory rejects this system/batch shape";
-        return emit();
+        return finish();
       }
-      if (!append(correction, "native-ks-d3-layout-v1")) return emit();
+      if (!append(correction, "native-ks-d3-layout-v1")) return finish();
     }
+  }
+  if (options.initial_guess.kind &&
+      !append_preliminary_inventory(options, atoms, basis, orbital, electrons, spins, hf, context,
+                                    system, plan, retained, workspace))
+    return finish();
+  bool derivative_cap_exceeded = false;
+  if (derivative_program) {
+    const auto controls = cpu_hessian_controls(options, atoms, *derivative);
+    std::size_t minimum_bytes = native_minimum.value_or(0);
+    if (!native_minimum) {
+      const generativeqc_context_descriptor descriptor{sizeof(descriptor), GENERATIVEQC_ABI_VERSION,
+                                                       -1, GENERATIVEQC_BACKEND_CPU_REFERENCE};
+      Context context(descriptor);
+      const auto system = make_cpu_hessian_system(context, options, atoms, basis);
+      const auto status = generativeqc_ks_hessian_cpu_minimum_bytes_v1(
+          context.get(), system.get(), derivative_program->identity.data(),
+          derivative->operation == "hessian", &controls, &minimum_bytes);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        plan["status"] =
+            status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ? "infeasible" : "unsupported";
+        plan["diagnostic"] = generativeqc_context_get_last_detail(context.get());
+        return finish();
+      }
+    }
+    plan["derivative_inventory"] = {{"owner", "native-cpu-stationary-hessian-v1"},
+                                    {"method_identity", derivative_program->identity},
+                                    {"minimum_numeric_bytes", minimum_bytes},
+                                    {"numeric_bytes", controls.numeric_bytes},
+                                    {"integral_bytes", controls.integral_bytes},
+                                    {"response_bytes", controls.response_bytes},
+                                    {"grid_bytes", controls.grid_bytes},
+                                    {"output_bytes", controls.output_bytes},
+                                    {"ecp_bytes", controls.ecp_bytes},
+                                    {"dispersion_bytes", controls.dispersion_bytes}};
+    // The bound includes the derivative's terminal numeric panels. Retain the entire
+    // primal peak, since this inventory does not prove any particular release boundary.
+    workspace = sum({workspace, minimum_bytes});
+    if (derivative->operation == "hvp")
+      workspace = sum({workspace, product({3, atoms.size(), sizeof(double)})});
+    derivative_cap_exceeded = minimum_bytes > controls.numeric_bytes;
   }
   // Each native fleet already applies batch multiplicity to retained storage.
   const Bytes resident_device =
@@ -681,6 +958,78 @@ int resources_command(const RunOptions& options, std::span<const generativeqc_at
       break;
     }
   }
-  return emit();
+  if (derivative_cap_exceeded) {
+    plan["status"] = "infeasible";
+    plan["diagnostic"] =
+        "CPU Hessian aggregate numerical reservation exceeds --numeric-budget-bytes";
+  }
+  if (derivative_program && plan["status"] == "feasible" && options.host_bytes) {
+    auto& inventory = plan["derivative_inventory"];
+    const auto floor = inventory.at("minimum_numeric_bytes").get<Bytes>();
+    const auto minimum_peak = plan["peak_bytes"].at("host").get<Bytes>();
+    const auto limit = limits.at("host").get<Bytes>();
+    // Only the slack beyond the full mandatory peak can fund optional derivative storage.
+    const auto optional = std::min(derivative->numeric_bytes - floor, limit - minimum_peak);
+    inventory["selected_numeric_cap_bytes"] = floor + optional;
+    inventory["selected_host_peak_bytes"] = minimum_peak + optional;
+  }
+  return finish();
+}
+}  // namespace
+
+bool automatic_preliminary_target_declined(const RunOptions& options,
+                                           std::span<const generativeqc_atom> atoms,
+                                           const NativeBasisData& expanded_basis) {
+  // The CLI model gate admits only one spin channel; no execution receipt
+  // for an otherwise eligible target must stay an error.
+  const auto [required, cap, seed, scratch, disposition, kind] =
+      automatic_preliminary_layout(options, atoms, expanded_basis, topology(expanded_basis),
+                                   electron_count(options, atoms, expanded_basis), 1);
+  using Disposition = scf::initial_guess::CpuPreliminaryInventory::Disposition;
+  return disposition == static_cast<Bytes>(Disposition::TargetDeclined) && kind == 0;
+}
+
+CpuHessianHostAdmission admit_cpu_hessian_host_budget(const RunOptions& options,
+                                                      std::span<const generativeqc_atom> atoms,
+                                                      const HessianInvocation& derivative,
+                                                      const NativeBasisData& expanded_basis,
+                                                      std::size_t minimum_bytes) {
+  const auto plan = resource_inventory(options, atoms, &derivative, &expanded_basis, minimum_bytes);
+  const auto& status = plan.at("status");
+  if (status != "feasible")
+    throw Error(status == "infeasible" ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                       : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                plan.at("diagnostic").get<std::string>());
+  const auto& inventory = plan.at("derivative_inventory");
+  return {plan.at("peak_bytes").at("host").get<Bytes>(),
+          inventory.at("selected_host_peak_bytes").get<Bytes>(),
+          plan.at("limits").at("host").get<Bytes>(),
+          inventory.at("selected_numeric_cap_bytes").get<Bytes>()};
+}
+
+CpuHostAdmission admit_cpu_host_budget(const RunOptions& options,
+                                       std::span<const generativeqc_atom> atoms,
+                                       const NativeBasisData& expanded_basis, Context* context,
+                                       const System* system) {
+  if (!options.host_bytes || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+      options.method == GENERATIVEQC_METHOD_UHF ||
+      options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE || options.basis_program ||
+      options.owned_device_bytes)
+    throw UsageError("run --host-bytes requires a supported Direct FP64 CPU RHF or KS inventory");
+  const auto plan =
+      resource_inventory(options, atoms, nullptr, &expanded_basis, std::nullopt, context, system);
+  if (plan.at("status") != "feasible")
+    throw Error(plan.at("status") == "infeasible" ? GENERATIVEQC_STATUS_OUT_OF_MEMORY
+                                                  : GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                plan.at("diagnostic").get<std::string>());
+  return {plan.at("peak_bytes").at("host").get<Bytes>(), plan.at("limits").at("host").get<Bytes>()};
+}
+
+int resources_command(const RunOptions& options, std::span<const generativeqc_atom> atoms,
+                      const HessianInvocation* derivative) {
+  auto plan = resource_inventory(options, atoms, derivative);
+  plan["identity"] = canonical_hash(plan);
+  std::cout << plan.dump(2) << '\n';
+  return plan["status"] == "feasible" ? 0 : 2;
 }
 }  // namespace generativeqc::cli

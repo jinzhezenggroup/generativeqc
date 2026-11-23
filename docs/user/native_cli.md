@@ -57,13 +57,22 @@ package CI checks, see [build and CUDA configuration](../developer/build.md).
 Tagged releases, when published, are listed on
 [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
 
-## Native CPU B3LYP Hessian and HVP
+(native-cpu-b3lyp-hessian-and-hvp)=
+## Native CPU Hessian and HVP
 
 With the default stationary CPU primitive inventory enabled,
 `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` links canonical
 Gaussian/VWN-RPA B3LYP RKS/UKS and its canonical uncut two-body D3(BJ), ATM-off
-composition into the native CPU executable. Both commands use the same native
-batch/response owner as the Python API, with no interpreter or runtime compiler.
+composition into the native CPU executable. The default Hessian inventory also
+admits all-electron `lda-rks`, `pbe-rks`, `pbe-d3(bj)-rks`, `pbe0-rks`, and
+`pbe0-d3(bj)-rks` with Cartesian or real-spherical AOs. Both commands use
+the same Direct FP64 batch/response owner as the Python API, with no
+interpreter or runtime compiler. Explicit range-PBE `--method-ir` requests are
+CUDA-only and are never substituted with bare PBE on CPU.
+For dense CPU LDA/PBE, `--response-recycle-block-size N` requests a native
+recycled GMRES group of two to four directions. An infeasible group fails
+instead of selecting a different solver; this flag is not available for HVP
+or CUDA.
 
 The Hessian option defaults to the selected
 `GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` value. Disabling the primitive
@@ -111,12 +120,16 @@ control does not qualify heavy-element or 25--40-atom transition-state work.
 
 `--cpu-packed-eri-budget-bytes N` opts into exact packed full-range ERI values
 for supported direct FP64 CPU jobs with real-spherical s/p/d/f orbital bases.
-The same flag is available for `saddle`, and the Python equivalent is
-`Calculator(cpu_packed_eri_maximum_bytes=N)`. This is a cap on the retained
-value arrays in one prepared batch, not on derivative scratch or process RSS.
-An insufficient cap fails preparation without a dense retry. Omit the option
-to retain the ordinary value source. This does not change the method or
-derivative admission criteria.
+The same flag is available for `run` (including `--forces`) and `saddle`.
+On `run`, the cap covers the retained value array, not derivative scratch or
+process RSS; analytic forces still require the prepared context's force
+capability. An insufficient cap fails preparation without a dense retry. Omit
+the option to retain the ordinary value source. In Python, the equivalent
+provider option is `Calculator(cpu_packed_eri_maximum_bytes=N)`. Combining it
+with a Python `ResourceBudget` keeps the default energy-only. Request forces
+explicitly on `singlepoint`, or pass the result of `estimate_resources` with
+`properties=("energy", "forces")` to `prepare_batch`. The force plan requires
+native derivatives for every item; an energy-only batch cannot upgrade to it.
 
 ## Native molecular transition-state task
 
@@ -147,7 +160,7 @@ closure is an explicit error, never a request to compile or fall back at runtime
 This opt-in path replaces the old Python/CuPy CLI worker, including the response
 solver and stationary assembly, rather than merely precompiling isolated leaves.
 `--compiler-python`, `--compiler-library`, `--cache` and `--timeout-seconds` are
-obsolete and rejected. WB97M-V CUDA and the CPU B3LYP route above have separate
+obsolete and rejected. WB97M-V CUDA and the CPU Hessian route above have separate
 linked inventories and resource semantics; neither substitutes for the other.
 
 `--precision auto` selects mixed SCF proposals with strict final closure for
@@ -630,14 +643,14 @@ replaced by a binary-only shortcut.
 
 ## Choose a preliminary density
 
-`run --initial-guess none|hf|lda|minao|huckel` forwards an explicit cold-start
+`run --initial-guess none|auto|hf|lda|minao|huckel` forwards a cold-start
 policy to native preparation. The CLI default is `none`, which retains the
 core-density start. Provider admission and bounded fallback follow the same
 [initial-guess contract](initial_guesses.md) as the SDK and Python API.
 
 ```bash
 generativeqc run molecule.xyz --method rhf --basis sto-3g \
-  --initial-guess huckel --initial-guess-bytes 268435456 --forces --json
+  --initial-guess auto --initial-guess-bytes 268435456 --forces --json
 ```
 
 `--initial-guess-max-iterations` limits preliminary iterations; its native
@@ -648,15 +661,29 @@ preparation records `budget_skipped` and uses the native core-density fallback.
 The target's convergence controls remain `--max-iterations`,
 `--energy-tolerance` and `--density-tolerance`.
 
-An explicit provider adds an `initial_guess` JSON record with the actual
+`auto` is opt-in for Direct FP64 CPU RHF/RKS with an expandable Gaussian basis.
+Native model discovery prefers Hückel and uses MINAO if only that automatic
+provider is available. The prepared target checks the actual element, ECP,
+and electron population. A domain miss uses the core density and reports
+`target_declined`, not `budget_skipped`. CUDA, fitted and unrestricted targets
+are outside the CLI's automatic mode.
+
+A resolved provider adds an `initial_guess` JSON record with the actual
 outcome, preliminary work, target attempts, discarded target work, numeric
 capacity and preparation time. Text output reports the provider, outcome and
 numeric capacity. SDK callers can copy the same native record through
 `Calculation::initial_guess_diagnostic()`; an unavailable record is `nullopt`.
+Automatic CLI output adds `resolved_kind`, which is `none` on a domain miss.
 
-These controls currently apply to `run`. Other commands reject them rather
-than ignoring a requested policy or omitting its capacity from a dry-run plan.
-Unsupported method/backend/provider combinations fail at native admission.
+For a supported Direct FP64 CPU RHF/RKS target, pass the same controls to
+`resources` and `run --host-bytes`. The dry run reports the native numeric
+requirement and whether the selected cap permits an attempt. It does not
+predict that the preliminary solve will converge. A cap that would skip
+preparation, or an automatic domain miss, does not reserve a seed or source
+workspace. A short *total*
+host budget does not change the requested guess or silently choose the
+core start: `run` rejects it before preparing SCF. Other commands do not
+accept an active cold-start policy in their inventories.
 
 ## Run correlated methods
 
@@ -689,33 +716,74 @@ reserve/headroom use exact integer rounding. Zero caps permit no allocation.
 `--diis-history 0` resolves to the native default of eight history vectors for
 both execution and planning; it does not disable DIIS or erase its capacities.
 
-Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE RKS/UKS energy plans,
+Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE/PBE0/B3LYP RKS/UKS energy plans,
 small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
 and conventional CUDA KS energy arenas. ECP workspace uses the same generated
 two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
 auxiliary-size and other provider admission limits remain fail-closed.
 Unqualified correlated, tau-dependent, force, density-fitted KS and other
 inventories return JSON `status: unsupported` and exit 2; budget failures return
-`infeasible` and exit 2; feasible plans exit 0. The Python
-`Calculator.estimate_resources` estimator is the entry point that plans a
-qualified force context, because its per-context capability record knows which
-workspace the force consumer reserves. Output includes phase capacities, fleet
+`infeasible` and exit 2; feasible plans exit 0. Output includes phase capacities, fleet
 peaks, resident storage, effective limits, controls, topology/source identities
 and exclusions.
 `scope: native-cli-allocation-inventory-v1` is not a Python `ResourcePlan`
 checkpoint, process-RSS cap or free-memory guarantee.
 
+Add `--forces` to plan the linked Direct FP64 CPU KS force inventory for the
+listed LDA/PBE/PBE0/B3LYP energy programs and supported named corrections. A
+force plan covers s/p/d/f bases. With
+`--cpu-packed-eri-budget-bytes`, planning charges the exact retained spherical
+ERI bytes across all `--batch` copies, separately from the modeled host peak.
+For a single supported Direct CPU RHF/KS calculation, pass the same method, basis,
+initial-guess and force/packed flags
+to `run --host-bytes N` to check the modeled host peak before SCF preparation.
+`--host-reserve-bytes` and `--headroom-fraction` reduce the available limit.
+`run --json` reports the modeled peak and effective limit in
+`resource_admission`; the prepared owner still decides force capability.
+These limits do not bound integral recurrence temporaries or process RSS.
+
+For a single linked Direct FP64 CPU LDA/PBE RKS, PBE-D3(BJ) RKS, PBE0 or
+PBE0-D3(BJ) RKS/UKS, or
+canonical B3LYP RKS/UKS system (bare or D3(BJ)), add `--property hessian` or
+`--property hvp` to include the native mandatory derivative reservation. B3LYP
+also uses the native scalar ECP inventories when admitted by the endpoint.
+No direction file is needed to size an HVP.
+The host peak conservatively overlaps the derivative with the complete energy
+and correction inventories. The dry-run accepts the same derivative byte flags
+as execution, including `--dispersion-budget-bytes`. With
+`--cpu-packed-eri-budget-bytes`, the inventory charges the exact retained packed
+value array instead of the dense array and keeps the ordinary conservative setup
+allowance. `packed_eri_inventory` reports the retained bytes and the separate
+packed cap. It requires a linked endpoint that admits a real-spherical s/p/d/f
+basis. This option also applies to linked CPU LDA/PBE spherical contexts.
+Pass `--host-bytes` to CPU `hessian` or `hvp` to enforce the same combined limit
+before SCF, after deducting any `--host-reserve-bytes` and `--headroom-fraction`. Remaining
+capacity can fund optional derivative storage up to `--numeric-budget-bytes`.
+The dry-run reports the minimum modeled peak as `peak_bytes.host` and, with a
+host limit, the selected caps in `derivative_inventory`. Execution reports
+the same admission in `diagnostics.resource_admission`. These modeled caps
+are not an allocation promise for optional response schedules, solver
+convergence, work limits, or process RSS. Without a host limit,
+`--numeric-budget-bytes` still caps the derivative itself. CUDA and methods
+without a matching primal inventory do not accept a combined
+Hessian/HVP host budget.
+
 Named PBE D3(BJ), D3(0), and D4(BJ-EEQ-ATM) RKS/UKS energy inventories
 combine the existing PBE inventory with the corresponding public native
 correction-capacity query.
 The electronic graph is checked against the compiled PBE catalog; a shared
-carrier enum does not admit hybrid or range-separated graphs. Correction plan and
+carrier enum does not admit hybrid or range-separated graphs. On CPU, canonical
+PBE0-D3(BJ) RKS combines the ordinary CPU PBE0 inventory with the same native D3
+capacity query. The bare and D3(BJ)-corrected canonical CPU B3LYP variants
+use the same full-range hybrid allocation layout, with the D3 owner charged
+only for the corrected variants. This does not admit B3LYP-D4, other B3LYP
+variants, CUDA hybrids or density fitting. Correction plan and
 execution storage remains resident per item, including replicated CUDA tables.
 `correction_inventory` reports those capacities and the equal-share minimum
 for `--dispersion-memory-bytes`. Both this local limit and the complete host/
-device budgets must fit. The legacy `pbe-d4-rks` selector, gCP composites, forces
-and density-fitted KS remain outside this dry-run scope. No compatibility force
-owner is reserved by this energy-only CLI inventory.
+device budgets must fit. The legacy `pbe-d4-rks` selector, gCP composites, CUDA
+KS forces and density-fitted KS remain outside this dry-run scope. No
+compatibility force owner is reserved.
 
 ## Stable subcommand namespace
 

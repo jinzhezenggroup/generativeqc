@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "dft/global_hybrid_fock.hpp"
+#include "response/recycle.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -70,17 +71,31 @@ HostKsResponse::HostKsResponse(const VerifiedKsFinalState& state, const core::Sy
                                const scf::PreparedFockPlan& fock, HostGgaResponseShape grid_shape,
                                std::string_view method_identity, HostGgaTileReader reader,
                                ValidateCurrent validate_current, std::size_t max_numeric_bytes,
-                               double minimum_orbital_gap)
+                               double minimum_orbital_gap, bool recycle_rhs_groups)
     : state_(state),
       system_(system),
       fock_(fock),
       identity_(state.identity),
       validate_current_(std::move(validate_current)),
       shape_(grid_shape),
-      max_numeric_bytes_(max_numeric_bytes) {
+      max_numeric_bytes_(max_numeric_bytes),
+      recycle_rhs_groups_(recycle_rhs_groups) {
   const auto* binding = host_hessian_aot::find_method(method_identity);
   const auto& model = identity_.model;
   const auto& strategy = identity_.determinant.model;
+  // The semilocal binding is for canonical unscaled J-only RKS, not a
+  // PBE carrier with custom coefficients or a missing hybrid exchange term.
+  const bool electronic_match =
+      binding && host_hessian_aot::semilocal_only(binding->point_domain)
+          ? strategy.spec.spin == scf::FockSpin::Restricted &&
+                strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
+                strategy.spec.coulomb.coefficient == 1.0 &&
+                strategy.spec.coulomb.op == scf::FockOperator::FullRange &&
+                strategy.spec.coulomb.omega == 0.0 && !strategy.spec.exchange.present &&
+                model.semilocal_exchange_scale == 1.0 && model.semilocal_correlation_scale == 1.0
+          : global_hybrid_coefficients_match(strategy.spec, model.functional, model.spins,
+                                             model.semilocal_exchange_scale,
+                                             model.semilocal_correlation_scale);
   if (!binding || !validate_current_ || !reader || !std::isfinite(minimum_orbital_gap) ||
       minimum_orbital_gap < 0 || strategy.backend != scf::FockBackend::Cpu ||
       strategy.precision != scf::FockPrecision::Float64 || strategy != fock_.strategy() ||
@@ -89,10 +104,7 @@ HostKsResponse::HostKsResponse(const VerifiedKsFinalState& state, const core::Sy
       model.spins != shape_.spins || model.device != -1 || model.range_correction ||
       model.nonlocal_correlation ||
       strategy.spec.coulomb.approximation != scf::FockApproximation::Exact ||
-      strategy.spec.exchange.approximation != scf::FockApproximation::Exact ||
-      !global_hybrid_coefficients_match(strategy.spec, model.functional, model.spins,
-                                        model.semilocal_exchange_scale,
-                                        model.semilocal_correlation_scale) ||
+      strategy.spec.exchange.approximation != scf::FockApproximation::Exact || !electronic_match ||
       -strategy.spec.exchange.coefficient * (shape_.spins == 1 ? 2.0 : 1.0) !=
           binding->exact_exchange ||
       !state.stationarity_tolerance || !std::isfinite(*state.stationarity_tolerance) ||
@@ -165,9 +177,9 @@ HostKsResponse::HostKsResponse(const VerifiedKsFinalState& state, const core::Sy
         diagonal_[offset++] =
             channel.orbital_energies[virtual_index] - channel.orbital_energies[occupied];
   }
-  xc_ = std::make_unique<HostGgaXcResponse>(shape_, xc_bytes, density_, binding->xc_identity,
-                                            binding->coefficient_response_identity,
-                                            std::move(reader), [this] { validate(); });
+  xc_ = std::make_unique<HostGgaXcResponse>(
+      shape_, xc_bytes, density_, binding->xc_identity, binding->coefficient_response_identity,
+      std::move(reader), [this] { validate(); }, binding->point_domain);
   auto spin_reference = reference_;
   if (restricted) {
     std::transform(density_.begin(), density_.end(), half_density_.begin(),
@@ -336,7 +348,7 @@ void HostKsResponse::apply_density(std::span<const double> density, std::span<do
 
 std::size_t HostKsResponse::batch_workspace_bytes(std::size_t directions) const {
   const auto xc_bytes = HostGgaXcResponse::batch_workspace_bytes(shape_, directions);
-  if (directions == 1) return 0;
+  if (directions == 1 || recycle_rhs_groups_) return 0;
   auto elements = response_checked_multiply(2 * directions * shape_.spins, matrix_size_);
   elements = response_checked_add(
       elements, response_checked_multiply(directions * (shape_.spins == 1 ? 5 : 1), dimension_));
@@ -347,6 +359,13 @@ HostKsResponseResources HostKsResponse::resources(const response::GmresOptions& 
                                                   std::size_t directions) const {
   const auto plan = response::prepare_response(*problem_, options);
   const auto batch_bytes = batch_workspace_bytes(directions);
+  if (recycle_rhs_groups_) {
+    const auto base = response_checked_add(persistent_bytes_, action_array_bound_bytes_);
+    const auto capacity = response::recycled_batch_resources(dimension_, options, directions,
+                                                             max_numeric_bytes_ - base);
+    return {persistent_bytes_, action_array_bound_bytes_, capacity.peak_bytes, capacity.admitted,
+            0};
+  }
   const auto action_bytes = response_checked_multiply(directions, action_array_bound_bytes_);
   const auto gmres_bytes = response_checked_multiply(directions, plan.workspace_bytes);
   const auto base =
@@ -541,10 +560,16 @@ std::vector<HostKsResponseDiagnostic> HostKsResponse::solve_batch(
       dimension_, [this](auto input, auto output) { apply_current(input, output); },
       response::LinearResponseSymmetry::Symmetric, {},
       [this, workspace](auto actions) { apply_batch_current(actions, workspace); });
-  const auto plan = response::prepare_response_batch(checked, options, count,
-                                                     current.gmres_workspace_bytes, count);
-  const auto result = response::solve_response_batch(
-      plan, checked, std::span<const response::ResponseSolveRequest>(borrowed.data(), count));
+  const std::span<const response::ResponseSolveRequest> group(borrowed.data(), count);
+  const auto result = [&] {
+    if (recycle_rhs_groups_)
+      return response::solve_recycled_response_batch(checked, options, group,
+                                                     current.gmres_workspace_bytes);
+    const auto plan = response::prepare_response_batch(checked, options, count,
+                                                       current.gmres_workspace_bytes, count);
+    return response::solve_response_batch(plan, checked, group);
+  }();
+  if (!result.complete()) throw std::logic_error("admitted CPU CPKS batch capacity changed");
   bool converged = result.complete();
   for (std::size_t index = 0; index < count; ++index) {
     diagnostics[index] = diagnostic(result.responses[index]);

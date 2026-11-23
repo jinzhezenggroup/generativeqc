@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <span>
 
 #include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
@@ -32,6 +33,39 @@ std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
                                                std::size_t atom_count);
 void validate_preliminary_target(const core::System& system, const ResolvedFockBuild& strategy,
                                  const ScfOptions& options);
+
+/** Metadata-only cold-start layout for an exact CPU RHF/RKS target. A prepared
+ * seed may survive its source, but the source and scratch are serialized.
+ * The caller must establish the target's representation/provider constraints.
+ */
+struct CpuPreliminaryInventory {
+  std::uint64_t required_numeric_bytes{}, maximum_numeric_bytes{};
+  std::uint64_t seed_bytes{}, workspace_bytes{};
+  enum class Disposition : std::uint64_t {
+    Attempt = 0,
+    BudgetSkipped = 1,
+    SourceDeclined = 2,
+    TargetDeclined = 3
+  };
+  Disposition disposition{Disposition::Attempt};
+};
+CpuPreliminaryInventory cpu_direct_preliminary_inventory(const core::System& system,
+                                                         const PreliminaryOptions& policy,
+                                                         bool rhf_forces);
+
+struct CpuPreliminaryBasisShape {
+  std::size_t atoms, orbitals, cartesian, shells, primitives;
+  unsigned angular;
+};
+struct HuckelShellShape;
+/** Same inventory for compact Direct FP64 CPU HF/KS topology. Automatic
+ * policies may decline a target that would reject an explicit choice. No
+ * scientific state is constructed. Only Huckel needs shell rows. */
+CpuPreliminaryInventory cpu_direct_preliminary_inventory(
+    const CpuPreliminaryBasisShape& shape, const PreliminaryOptions& policy,
+    std::span<const std::int32_t> atomic_numbers, std::span<const HuckelShellShape> shell_shapes,
+    int representation, std::int64_t electrons, unsigned multiplicity, bool has_ecp,
+    unsigned spin_channels);
 
 /** Resolve AUTO_CPU/AUTO_HUCKEL_CPU to their provider or no policy for this topology.
  * Controls are validated before fallback. Explicit choices remain unchanged.

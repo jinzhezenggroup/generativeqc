@@ -46,14 +46,15 @@ The tiny analytic RHF reference and the bounded `NativeRHFState`
 HVP/Hessian tools retain their all-electron conventional RHF scope
 (at most 12 Cartesian AOs/four atoms). Separately, a qualified
 public Calculator Hessian/HVP endpoint exists for CPU direct
-all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS;
+all-electron strict-FP64 closed-shell LDA/PBE RKS, including real-spherical
+AOs with the linked native package;
 see [DFT Hessians](dft_hessian.md).
 
 Explicitly outside this contract, and left fail-closed rather than approximated:
 
 - **DFT public execution beyond the qualified domain** — the Calculator endpoint
-  is limited to CPU direct all-electron Cartesian strict-FP64 closed-shell
-  LDA/PBE RKS; its raw matrix is never post-hoc symmetrized;
+  does not extend derivative support to unqualified contexts; its raw matrix
+  is never post-hoc symmetrized;
 - **one global end-to-end Hessian memory cap** is not claimed: dense output and
   generated integral work are explicitly bounded, while response/provider
   contracts remain independently bounded and reported;

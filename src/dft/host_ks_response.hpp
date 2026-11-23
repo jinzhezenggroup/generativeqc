@@ -66,7 +66,7 @@ class HostKsResponse {
                  const scf::PreparedFockPlan& fock, HostGgaResponseShape grid_shape,
                  std::string_view method_identity, HostGgaTileReader reader,
                  ValidateCurrent validate_current, std::size_t max_numeric_bytes,
-                 double minimum_orbital_gap = 1e-12);
+                 double minimum_orbital_gap = 1e-12, bool recycle_rhs_groups = false);
 
   [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
   [[nodiscard]] HostKsResponseResources resources(const response::GmresOptions& options,
@@ -126,6 +126,7 @@ class HostKsResponse {
   ValidateCurrent validate_current_;
   HostGgaResponseShape shape_;
   std::size_t dimension_{}, matrix_size_{}, max_numeric_bytes_{};
+  bool recycle_rhs_groups_{};
   std::size_t persistent_bytes_{}, action_array_bound_bytes_{}, fock_actions_{};
   std::unique_ptr<double[]> panels_;
   std::span<double> density_, direction_, xc_output_, zero_, half_density_;

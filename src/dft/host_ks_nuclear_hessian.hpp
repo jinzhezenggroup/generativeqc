@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -24,6 +25,11 @@ struct HostKsHessianLimits {
   integrals::EcpDirectionLimits ecp;
   dispersion::HostD3ColumnLimits dispersion;
   double energy_absolute_tolerance{}, energy_relative_tolerance{};
+  /** Extra allowance outside the mandatory composition, shared by retained
+   * matrix and batch panels. The parent may already reserve more for its grid
+   * than this owner's suballocation requires; that slack cannot fund panels.
+   */
+  std::size_t max_optional_numeric_bytes{std::numeric_limits<std::size_t>::max()};
 };
 
 struct HostKsHessianResources {
