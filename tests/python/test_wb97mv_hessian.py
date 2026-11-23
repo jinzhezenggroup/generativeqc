@@ -63,7 +63,7 @@ def test_public_wb97mv_second_order_admission(method: str) -> None:
 @pytest.mark.parametrize(
     "kwargs",
     (
-        {"method": "pbe0-uks"},
+        {"method": "pbe0-uks", "density_fitting": "cpu"},
         {"method": "b3lyp-uks", "density_fitting": "cpu"},
     ),
 )

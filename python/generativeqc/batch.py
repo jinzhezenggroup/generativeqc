@@ -334,6 +334,7 @@ class PreparedBatch:
         self._resource_ledger = None
         self._resource_prepare = None
         self._fixed_ks_resource_replay = None
+        self._allow_native_dense_force_replay = True
         dispersion_request = None
         resource_native_name = None
         native_graph = calculator._dispersion_method_ir
@@ -1334,7 +1335,10 @@ class PreparedBatch:
             replay[1]
             if replay is not None and inputs == replay[0]
             else calculator._resource_request(
-                self._systems, **options, properties=self._planned_properties
+                self._systems,
+                **options,
+                properties=self._planned_properties,
+                _allow_native_dense_forces=self._allow_native_dense_force_replay,
             )
         )
         if expected != next(
@@ -2020,6 +2024,10 @@ class PreparedBatch:
                     error.resource_diagnostics = self.resource_diagnostics
                 raise
         if execution_plan is not None and all(item.succeeded for item in result.items):
+            if execution_plan is not self.resource_plan:
+                # The replay upgrade was admitted against the conservative
+                # force inventory, not an unprepared native dense owner.
+                self._allow_native_dense_force_replay = False
             self.resource_plan = execution_plan
             if self._calculator._capabilities.family == "density_functional":
                 self._planned_properties = frozenset(current.identity.observables)

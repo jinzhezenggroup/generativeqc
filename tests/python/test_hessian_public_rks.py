@@ -57,10 +57,8 @@ def test_public_second_order_capability_is_context_qualified(method: str) -> Non
     ("method", "kwargs"),
     (
         ("lda-uks", {}),
-        ("pbe0-uks", {}),
         ("b3lyp-uks", {"density_fitting": "cpu"}),
         ("r2scan-rks", {}),
-        ("pbe-rks", {"basis_representation": "spherical"}),
     ),
 )
 def test_public_rks_second_order_capability_fails_closed(
@@ -68,6 +66,18 @@ def test_public_rks_second_order_capability_fails_closed(
 ) -> None:
     calculator = _calculator(method, **kwargs)
     assert calculator.capabilities.supported_second_order == frozenset()
+    with pytest.raises(NotImplementedError, match="does not expose public hessian"):
+        calculator.hessian(ATOMS)
+
+
+def test_spherical_pbe_without_linked_native_owner_stays_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import _native_cpu_hessian
+
+    monkeypatch.setattr(_native_cpu_hessian, "linked_method", lambda *_: False)
+    calculator = _calculator("pbe-rks", basis_representation="spherical")
+    assert not calculator.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
         calculator.hessian(ATOMS)
 

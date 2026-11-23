@@ -908,6 +908,9 @@ def with_initial_guess_resources(
     both complete inventories may overestimate serialized/transient overlap,
     but cannot hide a preliminary owner behind the target's declared budget.
     """
+    # Preliminary capacity cannot repair a missing base allocation contract.
+    if request.unsupported_reason is not None:
+        return request
     policy = initial_guess_for_systems(calculator, systems)
     if policy is None:
         return request
