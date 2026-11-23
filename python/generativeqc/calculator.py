@@ -376,27 +376,41 @@ class Calculator:
                 method = automatic_libxc_resolution.method
             else:
                 composite = _COMPOSITE_METHOD_ALIASES.get(canonical_method)
+                carrier_id = _METHODS.get(canonical_method)
+                native_graph = None
+                if device == "cpu" and (
+                    carrier_id is None
+                    or carrier_id in _method_manifest.NATIVE_DFT_METHOD_IDS
+                ):
+                    from ._named_ks import resolve_named_graph
+
+                    selected_library = _native.load_library(
+                        device=device, device_id=int(device_id)
+                    )
+                    native_graph = resolve_named_graph(
+                        selected_library,
+                        canonical_method,
+                        _native.BACKEND_CPU_REFERENCE,
+                    )
                 if composite is not None:
                     identifier, spin = composite
-                    method = resolve_method(identifier, spin=spin)
-                elif canonical_method not in _METHODS:
+                    method = (
+                        native_graph
+                        if native_graph is not None
+                        else resolve_method(identifier, spin=spin)
+                    )
+                elif carrier_id is not None:
+                    # A stable ABI carrier still preserves user-supplied KS
+                    # options; only its default graph comes from discovery.
+                    discovered_native_graph = native_graph
+                else:
                     from .ks import (
                         KsOptions,
                         _named_dft_carrier_for_ir,
                         resolve_ks_method,
                     )
 
-                    if device == "cpu":
-                        from ._named_ks import resolve_named_graph
-
-                        selected_library = _native.load_library(
-                            device=device, device_id=int(device_id)
-                        )
-                        discovered_native_graph = resolve_named_graph(
-                            selected_library,
-                            canonical_method,
-                            _native.BACKEND_CPU_REFERENCE,
-                        )
+                    discovered_native_graph = native_graph
                     if discovered_native_graph is not None:
                         discovered_ir = discovered_native_graph
                     else:

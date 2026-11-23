@@ -104,6 +104,12 @@ library without that optional lookup retains explicit numeric-ID compatibility;
 a selected lookup/query error or inconsistent publication does not rediscover a
 default library or fall back to cached/Python capability metadata. Public aliases,
 explicit compiler compositions and later contextual admission remain separate.
+For CPU KS selectors present in the shared native catalog, the installed
+library selects the default graph, including the public LDA, D4 and composite
+aliases. Python attaches a detached `MethodIR` view and verifies its identity;
+explicit functional or composition options on stable carriers still undergo
+their normal validation. A missing catalog entry retains the explicit
+compiler/compatibility route, but a selected catalog error does not retry it.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
 method-, basis- and backend-specific domain listed in [Supported methods](../user/hessians.md#supported-methods).

@@ -77,6 +77,33 @@ class RuntimeTests(unittest.TestCase):
             *arguments,
         )
 
+    def test_named_ks_aliases_reuse_complete_programs(self) -> None:
+        molecule = SOURCE / "tests/data/h2_bohr.xyz"
+        for alias, canonical in (
+            ("lda-rks", "lda_xc_pw-rks"),
+            ("pbe-d4-rks", "pbe-d4(bj-eeq-atm)-rks"),
+            ("wb97m-v", "wb97m-v-rks"),
+            ("r2scan-3c", "r2scan-3c-rks"),
+        ):
+            with self.subTest(alias=alias):
+                energies = []
+                for selector in (alias, canonical):
+                    result = self.cli(
+                        "run",
+                        str(molecule),
+                        "--units",
+                        "bohr",
+                        "--backend",
+                        "cpu",
+                        "--method",
+                        selector,
+                        "--json",
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    result = json.loads(result.stdout)
+                    energies.append(result["energy_hartree"])
+                self.assertAlmostEqual(*energies, delta=2e-11)
+
     def test_packed_cpu_ks_force_and_preparation_refusals(self) -> None:
         if os.environ.get("GENERATIVEQC_TEST_CPU_FORCE_AOT") == "0":
             self.skipTest("this build explicitly omits linked CPU analytic forces")

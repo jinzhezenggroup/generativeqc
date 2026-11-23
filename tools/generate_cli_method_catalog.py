@@ -371,6 +371,27 @@ def _q(value: str) -> str:
     return json.dumps(value, ensure_ascii=True)
 
 
+def selector_aliases(items: tuple[Row, ...]) -> tuple[tuple[str, str], ...]:
+    """Bind public spellings to existing programs without cloning MethodIR rows."""
+    manifest = json.loads((ROOT / "manifests/public_methods.json").read_text("utf-8"))
+    aliases = dict(manifest["named_ks_aliases"])
+    catalog = {row.name: row for row in items}
+    for entry in manifest["composite_methods"]:
+        suffix = {"unpolarized": "rks", "polarized": "uks"}[entry["spin"]]
+        target = f"{entry['identifier'].lower()}-{suffix}"
+        if catalog[target].source != entry["identifier"]:
+            raise ValueError(f"composite selector disagrees with MethodIR: {target}")
+        for selector in (entry["name"], *entry.get("aliases", ())):
+            if selector != target:
+                if selector in aliases:
+                    raise ValueError(f"duplicate native KS selector alias: {selector}")
+                aliases[selector] = target
+    for alias, target in aliases.items():
+        if alias in catalog or alias != alias.lower() or target not in catalog:
+            raise ValueError(f"invalid native KS selector alias: {alias} -> {target}")
+    return tuple(sorted(aliases.items()))
+
+
 def _bound_basis_cpp() -> list[str]:
     """Compile the existing audited snapshot, without another basis registry.
 
@@ -525,6 +546,10 @@ def render(items: tuple[Row, ...]) -> str:
             *rows_cpp,
             "}};",
             "inline constexpr const Method* find_method(std::string_view name) noexcept {",
+            *(
+                f"  if (name == {_q(alias)}) name = {_q(target)};"
+                for alias, target in selector_aliases(items)
+            ),
             "  for (const auto& entry : kMethods)",
             "    if (entry.name == name ||",
             '        (name.starts_with("libxc-rks:") && entry.name.starts_with("libxc:") &&',

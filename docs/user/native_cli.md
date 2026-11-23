@@ -480,7 +480,9 @@ generated C++ constants carry the exact semilocal components, coefficients,
 full-/short-/long-range exchange, nonlocal correlation, supported D3/D4 corrections,
 SCF domain, spin and MethodIR identity.
 The native method manifest remains the authority for stable C ABI IDs; these
-composition names are not new ABI IDs. CLI singlepoints and optimization use
+composition names are not new ABI IDs. The same manifest supplies exceptional
+public spellings for the shared KS catalog without cloning scientific programs.
+CLI singlepoints and optimization use
 the [named C/C++ preparation API](native_cpp.md#complete-named-ks-programs), which
 owns complete method assembly and execution.
 

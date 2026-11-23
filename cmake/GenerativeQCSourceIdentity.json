@@ -61,6 +61,7 @@
     "cmake/GenerativeQCSources.cmake",
     "cmake/GenerativeQCTests.cmake",
     "cmake/GenerativeQCSourceIdentity.cmake",
+    "manifests/public_methods.json",
     "cmake/3rdparty/implib_manifest.json",
     "tools/generate_build_identity.py",
     "tools/generate_cuda_implib.py",

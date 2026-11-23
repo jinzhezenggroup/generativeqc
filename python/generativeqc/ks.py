@@ -55,6 +55,7 @@ from generativeqc_compiler.xc.spec import (
 )
 
 from ._api_types import Shell
+from ._generated_methods import NAMED_KS_ALIASES
 from .basis import BasisSet
 
 SCF_DOMAIN = SCF_DOMAIN_BY_VERSION[1]
@@ -95,18 +96,6 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
     return None
 
 
-# DFT scientific identity belongs to the compiler catalog, not the native ABI
-# manifest.  Keep only genuine compatibility spellings here; ordinary
-# <MethodIR-name>-rks/-uks selectors are discovered from METHOD_CATALOG.
-_LEGACY_KS_SELECTORS = {
-    "lda-rks": ("LDA_XC_PW", "unpolarized"),
-    "lda-uks": ("LDA_XC_PW", "polarized"),
-    "pbe-d4-rks": ("PBE-D4(BJ-EEQ-ATM)", "unpolarized"),
-    "wb97m-v": ("WB97M-V", "unpolarized"),
-    "wb97m-v-rks": ("WB97M-V", "unpolarized"),
-}
-
-
 def _public_dft_identifier_index() -> dict[str, str]:
     result = {identifier.lower(): identifier for identifier in METHOD_CATALOG}
     for alias, canonical in METHOD_ALIASES.items():
@@ -141,9 +130,7 @@ def _public_dft_binding(method: typing.Any) -> tuple[str, str]:
             if identifier is None:
                 raise ValueError(f"unknown DFT method selector {method!r}")
             return identifier, spin
-    legacy = _LEGACY_KS_SELECTORS.get(selector)
-    if legacy is not None:
-        return legacy
+    selector = NAMED_KS_ALIASES.get(selector, selector)
     if selector.endswith("-rks"):
         spin, stem = "unpolarized", selector[:-4]
     elif selector.endswith("-uks"):
@@ -1067,7 +1054,12 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
         return resolution.method, resolution.plan.semilocal.functional
     identifier, spin = _public_dft_binding(method)
     method_ir = resolve_method(identifier, spin=spin)
+    return method_ir, _named_functional(method_ir, identifier)
 
+
+def _named_functional(method_ir: MethodIR, identifier: str) -> FunctionalSpec:
+    """Project only the named default; user composition is validated separately."""
+    spin = method_ir.spin
     # MethodIR is authoritative for scientific composition.  The native ABI
     # registry owns stable provider IDs only and is deliberately not a DFT
     # discovery whitelist.
@@ -1087,25 +1079,25 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
             raise RuntimeError(
                 "MethodIR semilocal node disagrees with native KS XC catalog"
             )
-        return method_ir, runtime_functional
+        return runtime_functional
 
     if _is_pbe_d4_composition(method_ir):
-        return method_ir, functional("PBE", spin=spin)
+        return functional("PBE", spin=spin)
 
     electronic_projection = _dispersion_electronic_projection(method_ir)
     if electronic_projection is not None:
         semilocal = _native_semilocal(electronic_projection)
         ks_coefficients(electronic_projection)
-        return method_ir, semilocal
+        return semilocal
 
     semilocal = _native_semilocal(method_ir)
     ks_coefficients(method_ir)
-    return method_ir, semilocal
+    return semilocal
 
 
 def public_dft_selectors() -> tuple[str, ...]:
     """Enumerate compiler-owned DFT selectors that pass current native lowerer gates."""
-    selectors = set(_LEGACY_KS_SELECTORS)
+    selectors = set(NAMED_KS_ALIASES)
     # Ordinary aliases remain resolvable without duplicating catalog rows.
     identifiers = set(METHOD_CATALOG)
     identifiers.update(d4_composite_method_identifiers())
@@ -1201,7 +1193,7 @@ def resolve_ks_options(
         named_ir, expected = resolve_ks_method(method)
     else:
         named_ir = _named_graph
-        expected = _native_semilocal(electronic_method_ir(named_ir))
+        expected = _named_functional(named_ir, named_ir.identifier)
     options = KsOptions() if options is None else options
     if not isinstance(options, KsOptions):
         raise TypeError("ks_options must be KsOptions")

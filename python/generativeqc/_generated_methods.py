@@ -35,12 +35,15 @@ def _load_manifest() -> dict[str, Any]:
         raise TypeError("public method manifest requires methods")
     if not isinstance(payload.get("composite_methods", []), list):
         raise TypeError("public method manifest composite_methods must be a list")
+    if not isinstance(payload.get("named_ks_aliases", {}), dict):
+        raise TypeError("public method manifest named_ks_aliases must be a mapping")
     return payload
 
 
 _PAYLOAD = _load_manifest()
 _METHODS = _PAYLOAD["methods"]
 _COMPOSITES = _PAYLOAD.get("composite_methods", [])
+NAMED_KS_ALIASES = MappingProxyType(_PAYLOAD.get("named_ks_aliases", {}))
 
 METHOD_CONSTANTS = MappingProxyType(
     {f"METHOD_{method['symbol']}": int(method["abi_id"]) for method in _METHODS}

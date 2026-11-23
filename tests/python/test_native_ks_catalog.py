@@ -153,6 +153,15 @@ def library() -> Any:
 @pytest.mark.parametrize(
     ("selector", "identifier", "spin"),
     (
+        ("lda-rks", "LDA_XC_PW", "unpolarized"),
+        ("lda-uks", "LDA_XC_PW", "polarized"),
+        ("pbe-rks", "PBE", "unpolarized"),
+        ("pbe-uks", "PBE", "polarized"),
+        ("r2scan-rks", "R2SCAN", "unpolarized"),
+        ("r2scan-uks", "R2SCAN", "polarized"),
+        ("pbe-d4-rks", "PBE-D4(BJ-EEQ-ATM)", "unpolarized"),
+        ("wb97m-v", "WB97M-V", "unpolarized"),
+        ("r2scan-3c", "R2SCAN-3c", "unpolarized"),
         ("pbeh-rks", "PBEH", "unpolarized"),
         ("b3lypg-uks", "B3LYPG", "polarized"),
         ("pbe-d3(bj)-uks", "PBE-D3(BJ)", "polarized"),
@@ -183,8 +192,9 @@ def test_cpu_constructor_binds_the_native_named_selector(
     assert calculator.method_ir.spin == spin
 
 
+@pytest.mark.parametrize("selector", ["pbeh-rks", "lda-rks", "pbe-rks", "r2scan-3c"])
 def test_cpu_constructor_cannot_retry_a_native_identity_mismatch(
-    library: Any, monkeypatch: pytest.MonkeyPatch
+    library: Any, monkeypatch: pytest.MonkeyPatch, selector: str
 ) -> None:
     from generativeqc import _named_ks
 
@@ -198,11 +208,15 @@ def test_cpu_constructor_cannot_retry_a_native_identity_mismatch(
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v1", mismatched)
     with pytest.raises(RuntimeError, match="native KS catalog identity disagrees"):
-        Calculator(method="pbeh-rks")
+        Calculator(method=selector)
 
 
+@pytest.mark.parametrize(
+    ("selector", "canonical"),
+    [("pbeh-rks", "PBEH"), ("lda-rks", "LDA_XC_PW"), ("r2scan-3c", "R2SCAN-3c")],
+)
 def test_cpu_constructor_preserves_older_catalog_compatibility(
-    library: Any, monkeypatch: pytest.MonkeyPatch
+    library: Any, monkeypatch: pytest.MonkeyPatch, selector: str, canonical: str
 ) -> None:
     class PreviousLibrary:
         def __getattr__(self, name: str) -> Any:
@@ -211,8 +225,8 @@ def test_cpu_constructor_preserves_older_catalog_compatibility(
             return getattr(library, name)
 
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: PreviousLibrary())
-    calculator = Calculator(method="pbeh-rks")
-    assert calculator.method_ir.identity == resolve_method("PBEH").identity
+    calculator = Calculator(method=selector)
+    assert calculator.method_ir.identity == resolve_method(canonical).identity
 
 
 def program(descriptor: Any) -> tuple:

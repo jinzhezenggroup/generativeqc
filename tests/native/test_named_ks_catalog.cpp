@@ -184,6 +184,29 @@ void test_complete_catalog() {
   }
 }
 
+void test_public_alias_bindings() {
+  for (const auto& [selector, canonical] :
+       std::array<std::pair<std::string_view, std::string_view>, 5>{{
+           {"lda-rks", "lda_xc_pw-rks"},
+           {"lda-uks", "lda_xc_pw-uks"},
+           {"pbe-d4-rks", "pbe-d4(bj-eeq-atm)-rks"},
+           {"wb97m-v", "wb97m-v-rks"},
+           {"r2scan-3c", "r2scan-3c-rks"},
+       }}) {
+    using generativeqc::methods::named_ks::find_method;
+    const auto* expected = find_method(canonical);
+    require(expected && find_method(selector) == expected,
+            "public alias did not select the existing canonical native program");
+    generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
+                                               nullptr, 0};
+    require(generativeqc_ks_catalog_lookup_v1(selector.data(), selector.size(),
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE, &binding) == 0 &&
+                binding.identifier && binding.identity && binding.identifier == expected->source &&
+                binding.identity == expected->identity && binding.spin == expected->spin,
+            "public alias did not publish the canonical MethodIR binding");
+  }
+}
+
 void test_identity_and_transaction_boundaries() {
   const auto* entry = generativeqc::methods::named_ks::find_method("pbe0-rks");
   require(entry && entry->cpu, "PBE0 fixture unavailable");
@@ -715,6 +738,7 @@ int main(int argc, char**) {
     }
     test_bound_basis_and_system_factory();
     test_complete_catalog();
+    test_public_alias_bindings();
     test_cpu_df_inventory_identity();
     test_cpu_df_native_host_budget();
     test_identity_and_transaction_boundaries();
