@@ -230,6 +230,45 @@ void validate_sources(generativeqc_batch& batch, std::size_t index,
   }
 }
 
+const dft::host_hessian_aot::MethodBinding& live_binding(
+    const dft::CudaKsFinalStateToken& token,
+    const methods::detail::KsHostDerivativeSources& source) {
+  const dft::host_hessian_aot::MethodBinding* binding{};
+  for (const auto& candidate : dft::host_hessian_aot::method_bindings())
+    if (candidate.functional == token.identity.model.functional &&
+        candidate.scf_domain == token.identity.model.scf_domain_version &&
+        candidate.spins == token.identity.model.spins &&
+        candidate.exact_exchange == -token.identity.determinant.model.spec.exchange.coefficient *
+                                        (candidate.spins == 1 ? 2.0 : 1.0))
+      binding = &candidate;
+  if (!binding)
+    throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                               "CPU Hessian has no exact linked electronic MethodIR");
+  validate_linked_system(*source.system, *binding, *source.dispersion);
+  if (dft::host_hessian_aot::semilocal_only(binding->point_domain) &&
+      (token.identity.model.semilocal_exchange_scale != 1.0 ||
+       token.identity.model.semilocal_correlation_scale != 1.0))
+    throw methods::MethodError(
+        GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+        "native CPU semilocal Hessian requires canonical unscaled electronics");
+  return *binding;
+}
+
+std::size_t minimum_bytes_for_shape(const core::System& system, std::size_t aos,
+                                    const dft::host_hessian_aot::MethodBinding& binding,
+                                    std::size_t directions, bool dense, bool corrected,
+                                    const generativeqc_ks_host_hessian_options_v1& options) {
+  const auto atoms = system.atoms.size();
+  if (!atoms || !aos) throw std::invalid_argument("CPU Hessian requires a nonempty system/basis");
+  const auto first =
+      dft::HostKsNuclearIntegrals::direction_bytes(atoms, aos, binding.spins, binding.identity);
+  const auto curvature = dft::HostKsNuclearIntegralCurvature::column_bytes(
+      atoms, aos, binding.spins, binding.identity);
+  return mandatory_reservation(system, aos, binding.spins, dense ? size_mul(3, atoms) : directions,
+                               !dense && directions > 1, corrected, first, curvature, options)
+      .total_bytes;
+}
+
 generativeqc_ks_host_hessian_receipt_v1 execute(
     generativeqc_batch& batch, std::size_t index,
     const generativeqc_ks_host_hessian_options_v1& options, std::span<const double> external,
@@ -257,17 +296,7 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   reject_sources(external.data(), external.size_bytes(), source);
   reject_sources(options.expected_atoms,
                  size_mul(options.expected_atom_count, sizeof(generativeqc_atom)), source);
-  const dft::host_hessian_aot::MethodBinding* binding{};
-  for (const auto& candidate : dft::host_hessian_aot::method_bindings())
-    if (candidate.functional == token.identity.model.functional &&
-        candidate.scf_domain == token.identity.model.scf_domain_version &&
-        candidate.spins == token.identity.model.spins &&
-        candidate.exact_exchange == -token.identity.determinant.model.spec.exchange.coefficient *
-                                        (candidate.spins == 1 ? 2.0 : 1.0))
-      binding = &candidate;
-  if (!binding)
-    throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                               "CPU Hessian has no exact linked electronic MethodIR");
+  const auto* binding = &live_binding(token, source);
   const bool semilocal_only = dft::host_hessian_aot::semilocal_only(binding->point_domain);
   if (recycle_width && (!semilocal_only || binding->spins != 1))
     throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
@@ -276,12 +305,6 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                "sequential CPU Hessian requires linked LDA/PBE RKS response");
   const auto& correction = *source.dispersion;
-  validate_linked_system(*source.system, *binding, correction);
-  if (semilocal_only && (token.identity.model.semilocal_exchange_scale != 1.0 ||
-                         token.identity.model.semilocal_correlation_scale != 1.0))
-    throw methods::MethodError(
-        GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-        "native CPU semilocal Hessian requires canonical unscaled electronics");
   const auto atoms = source.system->atoms.size(), basis = source.basis->nao;
   const auto spins = token.identity.model.spins;
   runtime::df_progress::number("atoms", atoms);
@@ -677,16 +700,8 @@ generativeqc_status cpu_hessian_minimum_bytes(
     const auto& source = system->data;
     const bool corrected = correction.kind != 0;
     validate_linked_system(source, *binding, correction);
-    const auto atoms = source.atoms.size(), aos = molecule::ao_count(source);
-    if (!atoms || !aos) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    const auto first =
-        dft::HostKsNuclearIntegrals::direction_bytes(atoms, aos, binding->spins, binding->identity);
-    const auto curvature = dft::HostKsNuclearIntegralCurvature::column_bytes(
-        atoms, aos, binding->spins, binding->identity);
-    const auto plan =
-        mandatory_reservation(source, aos, binding->spins, dense ? size_mul(3, atoms) : directions,
-                              !dense && directions > 1, corrected, first, curvature, *options);
-    *minimum_bytes = plan.total_bytes;
+    *minimum_bytes = minimum_bytes_for_shape(source, molecule::ao_count(source), *binding,
+                                             directions, dense, corrected, *options);
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
     (void)dense;
@@ -713,6 +728,50 @@ extern "C" generativeqc_status generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1(
     std::size_t* minimum_bytes) {
   return cpu_hessian_minimum_bytes(context, system, method, false, directions, options,
                                    minimum_bytes);
+}
+
+extern "C" generativeqc_status generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1(
+    generativeqc_batch* batch, std::size_t index, std::size_t directions,
+    const generativeqc_ks_host_hessian_options_v1* options, std::size_t* minimum_bytes) {
+  if (!batch || !batch->context || !batch->plan || !directions || !options || !minimum_bytes)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  auto* context = batch->context;
+  std::lock_guard<std::recursive_mutex> lock(context->mutex);
+  if (!generativeqc::api::valid_descriptor(options)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (index >= batch->atom_counts.size() || !batch->atom_counts[index] ||
+      !options->expected_atoms || options->expected_atom_count != batch->atom_counts[index] ||
+      options->expected_multiplicity < 1 || !options->grid_bytes || !options->response_bytes ||
+      !options->output_bytes || !options->integral_bytes || !options->ecp_bytes ||
+      !options->dispersion_bytes || !options->max_d3_pairs)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  try {
+    const auto geometry_bytes = size_mul(options->expected_atom_count, sizeof(generativeqc_atom));
+    if (overlap(minimum_bytes, sizeof(*minimum_bytes), options, sizeof(*options)) ||
+        overlap(minimum_bytes, sizeof(*minimum_bytes), batch, sizeof(*batch)) ||
+        overlap(minimum_bytes, sizeof(*minimum_bytes), options->expected_atoms, geometry_bytes))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+#if GENERATIVEQC_HAS_HOST_HESSIAN
+    using namespace generativeqc;
+    dft::CudaKsFinalStateToken token;
+    std::string detail;
+    require(methods::detail::dft_final_state_token(*batch->plan, index, token, detail), detail);
+    methods::detail::KsHostDerivativeSources source;
+    require(methods::detail::borrow_dft_host_derivative_sources(*batch->plan, index, token, source,
+                                                                detail),
+            detail);
+    reject_sources(minimum_bytes, sizeof(*minimum_bytes), source);
+    validate_sources(*batch, index, token, source, *options);
+    const auto& binding = live_binding(token, source);
+    *minimum_bytes = minimum_bytes_for_shape(*source.system, source.basis->nao, binding, directions,
+                                             false, source.dispersion->kind != 0, *options);
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    context->last_detail = "CPU Hessian requires a linked native host AOT package; no fallback";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
 }
 
 extern "C" generativeqc_status generativeqc_ks_hessian_cpu_default_options_v1(

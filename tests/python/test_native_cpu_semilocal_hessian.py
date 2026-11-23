@@ -109,6 +109,110 @@ def test_hvp_panel_admits_exact_host_and_output_capacities(
             calculator.hessian_vector_products(ATOMS, invalid)
 
 
+def test_prepared_hvp_replays_only_the_accepted_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculator = Calculator(
+        method="pbe-d3(bj)-rks",
+        ks_options=KsOptions(grid=GridSpec(12, 6, 12)),
+    )
+    if not hasattr(
+        calculator._library, "generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1"
+    ) or not linked_method(calculator._library, calculator.method_ir.identity):
+        pytest.skip("linked prepared CPU KS HVP panels are unavailable")
+    small = (("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7)))
+    directions = np.stack((MOTION, -0.5 * MOTION))
+    moved = np.asarray([atom[1] for atom in ATOMS]) + 0.07 * MOTION
+    moved_atoms = tuple((atom[0], xyz) for atom, xyz in zip(ATOMS, moved, strict=True))
+    initial_reference = calculator.hessian_vector_products(ATOMS, directions)
+    moved_reference = calculator.hessian_vector_products(moved_atoms, directions)
+
+    def no_scf_or_new_system(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail("prepared HVP attempted to execute SCF or rebuild its system")
+
+    with calculator.prepare_batch([small, ATOMS]) as batch:
+        with pytest.raises(RuntimeError, match="no successful current final state"):
+            batch.hessian_vector_products(1, directions)
+        batch.execute(strict=True, properties=("energy",))
+        with monkeypatch.context() as scoped:
+            scoped.setattr(batch, "execute", no_scf_or_new_system)
+            scoped.setattr(calculator, "_create_native_system", no_scf_or_new_system)
+            initial = batch.hessian_vector_products(1, directions)
+            np.testing.assert_array_equal(initial.value, initial_reference.value)
+            second_panel = batch.hessian_vector_products(1, directions[:1])
+            np.testing.assert_allclose(
+                second_panel.value, initial.value[:1], atol=2e-8, rtol=0
+            )
+        assert initial.diagnostics["scf_fock_builds"] == 0
+        assert (
+            initial.diagnostics["d3_pair_visits"]
+            == initial_reference.diagnostics["d3_pair_visits"]
+        )
+        batch.execute([None, moved], strict=True, properties=("energy",))
+        with pytest.raises(RuntimeError, match="geometry disagrees"):
+            batch.hessian_vector_products(1, directions)
+        exact = batch.hessian_vector_products(1, directions, coordinates=moved)
+        np.testing.assert_allclose(
+            exact.value, moved_reference.value, atol=2e-8, rtol=0
+        )
+        failed = batch.execute(
+            [None, np.full_like(moved, np.nan)], properties=("energy",)
+        )
+        assert failed.failure_indices == (1,)
+        with pytest.raises(RuntimeError, match="final state|geometry disagrees"):
+            batch.hessian_vector_products(1, directions, coordinates=moved)
+        batch.execute([None, moved], strict=True, properties=("energy",))
+        np.testing.assert_allclose(
+            batch.hessian_vector_products(1, directions, coordinates=moved).value,
+            moved_reference.value,
+            atol=2e-8,
+            rtol=0,
+        )
+    with pytest.raises(RuntimeError, match="closed"):
+        batch.hessian_vector_products(1, directions)
+
+
+def test_prepared_hvp_admits_exact_fleet_budget() -> None:
+    def make(limit: int | None = None) -> Calculator:
+        return Calculator(
+            method="pbe-rks",
+            ks_options=KsOptions(grid=GridSpec(12, 6, 12)),
+            resource_budget=ResourceBudget()
+            if limit is None
+            else ResourceBudget(host_bytes=limit),
+        )
+
+    calculator = make()
+    if not hasattr(
+        calculator._library, "generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1"
+    ) or not linked_method(calculator._library, calculator.method_ir.identity):
+        pytest.skip("linked prepared CPU KS HVP panels are unavailable")
+    systems = [(("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))), ATOMS]
+    directions = np.stack((MOTION, -MOTION))
+    with calculator.prepare_batch(systems) as batch:
+        batch.execute(strict=True, properties=("energy",))
+        plan = batch.resource_plan
+        full = batch.hessian_vector_products(1, directions)
+        assert batch.resource_plan is plan
+    sizing = full.diagnostics["resource_admission"]
+    minimum = full.diagnostics["minimum_numeric_bytes"]
+    exact = (
+        sizing["plan_host_peak_bytes"] - sizing["derivative_host_cap_bytes"] + minimum
+    )
+    with make(exact).prepare_batch(systems) as batch:
+        batch.execute(strict=True, properties=("energy",))
+        result = batch.hessian_vector_products(1, directions)
+        assert result.diagnostics["resource_admission"]["plan_host_peak_bytes"] == exact
+        np.testing.assert_allclose(result.value, full.value, atol=2e-8, rtol=0)
+    with make(exact - 1).prepare_batch(systems) as batch:
+        batch.execute(strict=True, properties=("energy",))
+        with pytest.raises(MemoryError, match="no supported plan fits"):
+            batch.hessian_vector_products(1, directions)
+        plan = batch.resource_plan
+        assert batch.hessian_vector_products(1, directions[:1]).value.shape == (1, 3, 3)
+        assert batch.resource_plan is plan
+
+
 @pytest.mark.parametrize(
     ("representation", "basis_name"),
     (("cartesian", "sto-3g"), ("spherical", "def2-svp")),

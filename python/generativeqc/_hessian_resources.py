@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
     from ._native_cpu_hessian import _Options as _CpuOptions
     from ._native_hessian import _Options
+    from .batch import PreparedBatch
     from .calculator import Atom, Calculator
 
 HESSIAN_RESOURCE_OWNER = "ks-hessian"
@@ -73,8 +74,85 @@ def plan_cpu_hessian(
     )
     correction = calculator._dispersion_resource_request(systems, scf)
     prerequisites = (scf,) if correction is None else (scf, correction)
-    last_phase = _last_phase(prerequisites)
     topology = {"scf": scf.identity.identity, "atoms": len(atoms)}
+    return _compose_cpu_hessian(
+        library,
+        budget,
+        prerequisites,
+        scf.identity.method,
+        topology,
+        dense,
+        options,
+        minimum,
+        staging_bytes,
+        direction_count,
+    )
+
+
+def plan_prepared_cpu_hvp(
+    batch: PreparedBatch,
+    index: int,
+    direction_count: int,
+    options: _CpuOptions,
+    minimum: int,
+    staging_bytes: int,
+) -> tuple[ResourcePlan, ResourceRequest]:
+    """Overlap the action with the actual selected fleet, not a new one-item SCF."""
+    base = batch.resource_plan
+    selections = dict(base.selections)
+    if HESSIAN_RESOURCE_OWNER in selections:
+        raise ValueError("prepared HVP requires a primal-only ResourcePlan")
+    prerequisites = tuple(
+        replace(
+            owner,
+            candidates=tuple(
+                candidate
+                for candidate in owner.candidates
+                if candidate.name == selections[owner.name]
+            ),
+        )
+        for owner in base.requests
+    )
+    primary = next((owner for owner in prerequisites if owner.name == "ks"), None)
+    if primary is None:
+        raise ValueError("prepared HVP requires the admitted KS fleet reservation")
+    topology = {
+        "scf": primary.identity.identity,
+        "atoms": batch._atom_counts[index],
+        "system_index": index,
+    }
+    return _compose_cpu_hessian(
+        batch._library,
+        base.budget,
+        prerequisites,
+        primary.identity.method,
+        topology,
+        False,
+        options,
+        minimum,
+        staging_bytes,
+        direction_count,
+    )
+
+
+def _compose_cpu_hessian(
+    library: object,
+    budget: ResourceBudget,
+    prerequisites: tuple[ResourceRequest, ...],
+    method: str,
+    topology: dict[str, str | int],
+    dense: bool,
+    options: _CpuOptions,
+    minimum: int,
+    staging_bytes: int,
+    direction_count: int | None,
+) -> tuple[ResourcePlan, ResourceRequest]:
+    """Use the same native composition for a new or already prepared owner."""
+    if not hasattr(library, "generativeqc_resource_compose_v1"):
+        raise NotImplementedError(
+            "native CPU Hessian lacks shared ResourceBudget planning"
+        )
+    last_phase = _last_phase(prerequisites)
     if direction_count is not None:
         topology["directions"] = direction_count
 
@@ -82,7 +160,7 @@ def plan_cpu_hessian(
         return ResourceRequest(
             HESSIAN_RESOURCE_OWNER,
             ResourceIdentity(
-                method=scf.identity.method,
+                method=method,
                 provider=CPU_HESSIAN_PROVIDER,
                 backend="cpu",
                 precision="fp64",

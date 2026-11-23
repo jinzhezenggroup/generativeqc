@@ -211,6 +211,7 @@ void run_linked_cpu(const char* selector) {
   action.fill(37);
   const auto sentinel = action;
   (void)rejection([&] { batch.ks_cpu_hvp(0, direction, action, options); });
+  (void)rejection([&] { batch.ks_cpu_hvp_batch_minimum_bytes(0, 2, options); });
   require(action == sentinel, "unsolved CPU batch modified the caller output");
 
   auto solved = batch.execute({}, false);
@@ -224,6 +225,12 @@ void run_linked_cpu(const char* selector) {
     seeds[direction.size() + index] = -.5 * direction[index];
   }
   const auto hvp_batch = batch.ks_cpu_hvp_batch(0, seeds, actions, options);
+  std::size_t panel_floor{};
+  generativeqc::check(generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1(
+      context.get(), system.get(), named_selector, 2, &options, &panel_floor));
+  require(batch.ks_cpu_hvp_batch_minimum_bytes(0, 2, options) == panel_floor &&
+              panel_floor <= hvp_batch.numeric_reservation_bytes,
+          "prepared and pre-SCF panel floors diverged");
   require(hvp_batch.completed_directions == 2 && hvp_batch.d3_pair_visits == 2 * hvp.d3_pair_visits,
           "SDK multi-HVP lost a requested direction or additive correction");
   for (std::size_t index = 0; index < direction.size(); ++index)

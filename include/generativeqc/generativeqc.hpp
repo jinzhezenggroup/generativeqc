@@ -1023,6 +1023,25 @@ class Batch {
     return receipt;
   }
 
+  /** @native-contract generativeqc::Batch::ks_cpu_hvp_batch_minimum_bytes
+   * @behavior Quote an action panel directly from the accepted CPU KS item.
+   * @inputs Original item index, positive direction count, and expected geometry/options
+   * as for ks_cpu_hvp_batch.
+   * @outputs Width-one reservation floor, including complete action publication.
+   * @errors Throws Error if the accepted item or budget is inadmissible.
+   * @lifetime Synchronous; serialize batch and context operations.
+   * @execution Borrows the native normalized sources; does not run SCF or response.
+   * @units Capacity in bytes; direction count is dimensionless.
+   */
+  std::size_t ks_cpu_hvp_batch_minimum_bytes(
+      std::size_t index, std::size_t directions,
+      const generativeqc_ks_host_hessian_options_v1& options) {
+    std::size_t minimum{};
+    check(generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1(handle_, index, directions, &options,
+                                                            &minimum));
+    return minimum;
+  }
+
   /** @native-contract generativeqc::Batch::execute
    * @behavior Run the fleet and return input-ordered per-item results.
    * @inputs coordinates is empty to reuse all prepared geometries, or has size() optional

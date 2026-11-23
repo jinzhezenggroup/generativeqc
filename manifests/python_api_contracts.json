@@ -1333,6 +1333,17 @@
         "values": "docs/reference/python_execution_contracts.md#python-batch-values"
       }
     },
+    "generativeqc/batch.py:PreparedBatch.hessian_vector_products": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_execution_contracts.md#python-batch-backends",
+        "errors": "docs/reference/python_execution_contracts.md#python-batch-errors",
+        "ownership": "docs/reference/python_execution_contracts.md#python-batch-ownership",
+        "values": "docs/reference/python_execution_contracts.md#python-batch-values"
+      }
+    },
     "generativeqc/batch.py:PreparedBatch.initialize_from": {
       "kind": "function",
       "profile": "execution",

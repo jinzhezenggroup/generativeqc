@@ -2101,6 +2101,66 @@ class PreparedBatch:
                 self._planned_properties = frozenset(current.identity.observables)
         return result
 
+    def hessian_vector_products(
+        self,
+        index: int,
+        directions: typing.Any,
+        *,
+        coordinates: Sequence[Sequence[float]] | np.ndarray | None = None,
+        output_budget_bytes: int = 64 << 20,
+        integral_budget_bytes: int = 64 << 20,
+        grid_budget_bytes: int = 128 << 20,
+        solver_options: typing.Any = None,
+        max_eri_primitives: int | None = None,
+        max_map_terms: int | None = None,
+        numeric_budget_bytes: int | None = None,
+        response_budget_bytes: int | None = None,
+    ) -> typing.Any:
+        """Apply linked CPU KS Hessian directions to one accepted batch item.
+
+        Execute with KS export enabled before requesting an action. The index
+        is in original input order. By default authenticate the preparation
+        geometry; after replay at moved coordinates, supply that exact geometry
+        in Bohr. A stale, failed, missing or unsupported state raises rather
+        than running another SCF. Each panel is detached and published only on
+        complete success. The derivative capacity is composed with any existing
+        reserved fleet without changing its plan. Serialize with replay and
+        close. See :ref:`python-batch-values`, :ref:`python-batch-errors`, and
+        :ref:`python-batch-ownership`.
+        """
+        from ._native_cpu_hessian import run_prepared_panel
+
+        self._ensure_open()
+        if type(index) is not int or not 0 <= index < self.system_count:
+            raise ValueError("prepared HVP requires a valid original system index")
+        atoms = self._systems[index]
+        if coordinates is not None:
+            raw = np.asarray(coordinates)
+            if raw.shape != (len(atoms), 3) or raw.dtype.kind not in "iuf":
+                raise ValueError("coordinates must be finite with shape (natoms, 3)")
+            with np.errstate(over="ignore", invalid="ignore"):
+                xyz = np.asarray(raw, dtype=np.float64)
+            if not np.isfinite(xyz).all():
+                raise ValueError("coordinates must be finite with shape (natoms, 3)")
+            atoms = tuple(
+                Atom(atom.atomic_number, tuple(float(value) for value in position))
+                for atom, position in zip(atoms, xyz, strict=True)
+            )
+        return run_prepared_panel(
+            self,
+            index,
+            atoms,
+            directions,
+            integral_budget_bytes=integral_budget_bytes,
+            grid_budget_bytes=grid_budget_bytes,
+            output_budget_bytes=output_budget_bytes,
+            solver_options=solver_options,
+            max_eri_primitives=max_eri_primitives,
+            max_map_terms=max_map_terms,
+            numeric_budget_bytes=numeric_budget_bytes,
+            response_budget_bytes=response_budget_bytes,
+        )
+
     def save_checkpoint(
         self, path: typing.Any, *, max_bytes: typing.Any = 256 << 20
     ) -> typing.Any:

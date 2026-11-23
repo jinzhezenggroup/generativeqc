@@ -497,6 +497,7 @@ def execute_batch(
     index: int = 0,
     recycle_block_size: int | None = None,
     sequential_block_size: int | None = None,
+    derivative_plan: tuple[Any, Any] | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Consume the current accepted native state without starting another SCF.
 
@@ -529,42 +530,50 @@ def execute_batch(
     if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
     resource_admission = None
-    if batch.resource_plan is not None:
+    resource_plan, request = (
+        (batch.resource_plan, batch._hessian_request)
+        if derivative_plan is None
+        else derivative_plan
+    )
+    if resource_plan is not None:
         from ._hessian_resources import CPU_HESSIAN_CAPACITY, CPU_HESSIAN_PROVIDER
 
-        request = batch._hessian_request
         product = "hessian" if dense else "hvp" if directions is None else "hvp-batch"
+        topology = {} if request is None else json.loads(request.identity.topology)
         if (
-            len(batch._atom_counts) != 1
-            or request is None
+            request is None
             or request.identity.provider != CPU_HESSIAN_PROVIDER
             or request.identity.observables != (product,)
-            or request not in batch.resource_plan.requests
+            or request not in resource_plan.requests
+            or (
+                (derivative_plan is None and len(batch._atom_counts) != 1)
+                or (
+                    derivative_plan is not None
+                    and topology.get("system_index") != index
+                )
+            )
             or (
                 direction_count is not None
-                and json.loads(request.identity.topology).get("directions")
-                != direction_count
+                and topology.get("directions") != direction_count
             )
         ):
             raise NotImplementedError(
                 "budgeted CPU Hessian execution requires its composed derivative reservation"
             )
-        selected = dict(batch.resource_plan.selections)[request.name]
+        selected = dict(resource_plan.selections)[request.name]
         candidate = next(item for item in request.candidates if item.name == selected)
         (capacity,) = (
             row.bytes for row in candidate.estimates if row.name == CPU_HESSIAN_CAPACITY
         )
         options.numeric_bytes = min(options.numeric_bytes, capacity)
         resource_admission = {
-            "plan_host_peak_bytes": batch.resource_plan.peak_bytes["host"],
-            "effective_host_limit_bytes": batch.resource_plan.budget.limits().get(
-                "host"
-            ),
+            "plan_host_peak_bytes": resource_plan.peak_bytes["host"],
+            "effective_host_limit_bytes": resource_plan.budget.limits().get("host"),
             "derivative_host_cap_bytes": capacity,
             "scope_exclusions": tuple(
                 dict.fromkeys(
                     exclusion
-                    for owner in batch.resource_plan.requests
+                    for owner in resource_plan.requests
                     for exclusion in owner.scope_exclusions
                 )
             ),
@@ -740,6 +749,147 @@ def execute_batch(
     )
 
 
+def _direction_panel(directions: Any, atoms: int) -> np.ndarray:
+    """Inspect shape before accounting for or allocating the FP64 snapshot."""
+    panel = np.asarray(directions)
+    if (
+        panel.ndim != 3
+        or not len(panel)
+        or panel.shape[1:] != (atoms, 3)
+        or panel.dtype.kind not in "iuf"
+    ):
+        raise ValueError(
+            "directions must be a nonempty finite real array with shape (nrhs, natoms, 3)"
+        )
+    return panel
+
+
+def _pack_direction_panel(directions: np.ndarray) -> np.ndarray:
+    """Detach the finite FP64 input before borrowing the native item."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        panel = np.asarray(directions, dtype=np.float64)
+    detached = np.frombuffer(panel.tobytes(), dtype=np.float64).reshape(panel.shape)
+    if not np.isfinite(detached).all():
+        raise ValueError("directions must be finite and representable in FP64")
+    return detached
+
+
+def run_prepared_panel(
+    batch: PreparedBatch,
+    index: int,
+    atoms: tuple[Atom, ...],
+    directions: Any,
+    *,
+    integral_budget_bytes: int,
+    grid_budget_bytes: int,
+    output_budget_bytes: int,
+    solver_options: GMRESOptions | None,
+    max_eri_primitives: int | None,
+    max_map_terms: int | None,
+    numeric_budget_bytes: int | None,
+    response_budget_bytes: int | None,
+) -> NativeKsHVPResult:
+    """Quote and execute an action on the existing primal without changing its plan."""
+    from dataclasses import replace
+
+    started = time.perf_counter()
+    calculator = batch._calculator
+    library = batch._library
+    query = getattr(library, "generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1", None)
+    if (
+        not calculator._native_cpu_second_order
+        or query is None
+        or not hasattr(library, "generativeqc_ks_hvp_cpu_batch_v1")
+    ):
+        raise NotImplementedError(
+            "prepared HVP panels require a linked native CPU KS owner"
+        )
+    controls = {
+        "integral_budget_bytes": integral_budget_bytes,
+        "grid_budget_bytes": grid_budget_bytes,
+        "output_budget_bytes": output_budget_bytes,
+        "solver_options": solver_options,
+        "max_eri_primitives": max_eri_primitives,
+        "max_map_terms": max_map_terms,
+        "numeric_budget_bytes": numeric_budget_bytes,
+        "response_budget_bytes": response_budget_bytes,
+    }
+    charge, multiplicity = batch.charges[index], batch.multiplicities[index]
+    options = _options(
+        integral_budget_bytes,
+        grid_budget_bytes,
+        output_budget_bytes,
+        calculator._dispersion_memory_budget_bytes,
+        solver_options,
+        max_eri_primitives,
+        max_map_terms,
+        numeric_budget_bytes=numeric_budget_bytes,
+        response_budget_bytes=response_budget_bytes,
+    )
+    panel = _direction_panel(directions, len(atoms))
+    coordinates = 3 * len(atoms)
+    if _output_panel_bytes(coordinates, False, len(panel)) > options.output_bytes:
+        raise ValueError("native CPU result/staging exceeds output_budget_bytes")
+    _bind_batch(calculator, batch, atoms, charge, multiplicity, index, options)
+    query.argtypes = [
+        ct.c_void_p,
+        ct.c_size_t,
+        ct.c_size_t,
+        ct.POINTER(_Options),
+        ct.POINTER(ct.c_size_t),
+    ]
+    query.restype = ct.c_int
+    minimum = ct.c_size_t()
+    _native.check(
+        library,
+        query(batch._batch, index, len(panel), ct.byref(options), ct.byref(minimum)),
+        context=batch._context,
+    )
+    if minimum.value > options.numeric_bytes:
+        raise MemoryError(
+            "CPU Hessian aggregate numerical reservation exceeded "
+            f"(required={minimum.value}, cap={options.numeric_bytes})"
+        )
+    derivative_plan = None
+    if batch.resource_plan is not None:
+        from ._hessian_resources import plan_prepared_cpu_hvp
+
+        derivative_plan = plan_prepared_cpu_hvp(
+            batch,
+            index,
+            len(panel),
+            options,
+            minimum.value,
+            ct.sizeof(_native.AtomDescriptor) * len(atoms) + panel.size * 8,
+        )
+    # Release the quote's geometry before marshalling the execution request.
+    del options
+    result = execute_batch(
+        calculator,
+        batch,
+        atoms,
+        charge=charge,
+        multiplicity=multiplicity,
+        directions=_pack_direction_panel(panel),
+        index=index,
+        derivative_plan=derivative_plan,
+        **controls,
+    )
+    return replace(
+        result,
+        _diagnostics=MappingProxyType(
+            {
+                **result.diagnostics,
+                "endpoint_seconds": time.perf_counter() - started,
+                "prepared_batch_index": index,
+                "reused_accepted_scf": True,
+                "scf_fock_builds": 0,
+                "minimum_numeric_bytes": minimum.value,
+            }
+        ),
+    )
+
+
 def run_native_cpu(
     calculator: Calculator,
     atoms: tuple[Atom, ...],
@@ -783,16 +933,7 @@ def run_native_cpu(
     )
     coordinates = 3 * len(atoms)
     if directions is not None:
-        directions = np.asarray(directions)
-        if (
-            directions.ndim != 3
-            or not len(directions)
-            or directions.shape[1:] != (len(atoms), 3)
-            or directions.dtype.kind not in "iuf"
-        ):
-            raise ValueError(
-                "directions must be a nonempty finite real array with shape (nrhs, natoms, 3)"
-            )
+        directions = _direction_panel(directions, len(atoms))
     direction_count = None if directions is None else len(directions)
     dense = direction is None and directions is None
     panel_bytes = _output_panel_bytes(coordinates, dense, direction_count)
@@ -831,13 +972,7 @@ def run_native_cpu(
             )
             batch_controls.update(resource_plan=plan, _hessian_request=request)
     if directions is not None:
-        with np.errstate(over="ignore", invalid="ignore"):
-            directions = np.asarray(directions, dtype=np.float64)
-        directions = np.frombuffer(directions.tobytes(), dtype=np.float64).reshape(
-            (direction_count, len(atoms), 3)
-        )
-        if not np.isfinite(directions).all():
-            raise ValueError("directions must be finite and representable in FP64")
+        directions = _pack_direction_panel(directions)
     with calculator.prepare_batch(
         [atoms],
         charges=[charge],

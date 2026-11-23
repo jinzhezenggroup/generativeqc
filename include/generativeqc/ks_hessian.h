@@ -246,6 +246,20 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_batch_minimum_bytes
     size_t directions, const generativeqc_ks_host_hessian_options_v1* options,
     size_t* minimum_bytes);
 
+/** @native-contract generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1
+ * @behavior Quote the mandatory CPU action-panel bytes from the accepted batch item.
+ * @inputs Live batch, original input index, positive number of Cartesian directions,
+ * and initialized host options with the expected geometry, charge and multiplicity.
+ * @outputs Detached width-one numerical floor, using the live normalized sources.
+ * @lifetime Synchronous; serialize operations on the batch and its context.
+ * @errors Missing, stale, unsupported or over-budget sources leave the output unchanged.
+ * @execution Does not normalize a new system, copy a response frame, or run SCF.
+ * @units Capacity in bytes; direction count is dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1(
+    generativeqc_batch* batch, size_t index, size_t directions,
+    const generativeqc_ks_host_hessian_options_v1* options, size_t* minimum_bytes);
+
 #ifdef __cplusplus
 }
 #endif

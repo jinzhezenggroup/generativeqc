@@ -165,6 +165,17 @@ published and force requests are rejected. Explicit `singlepoint(...,
 properties=("energy",))` CPU DFT calls select this energy-only mode automatically.
 SCF convergence alone is not a certificate of an exportable canonical projector.
 
+`PreparedBatch.hessian_vector_products(index, directions, coordinates=...)`
+uses the current verified CPU KS state of one item without running SCF. It
+returns the same immutable action panel as `Calculator.hessian_vector_products`.
+Use the original input index and a nonempty real `(nrhs, natoms_i, 3)` direction
+array. `coordinates=None` authenticates the original prepared geometry; after
+moving an item, pass its exact accepted `(natoms_i, 3)` coordinates in Bohr.
+The operation retains the fleet and composes the action's numerical floor with
+any selected resource reservation, without replanning the primal or publishing
+partial actions. It requires an exportable, accepted state and linked CPU KS
+second-order sources. Missing, failed or stale state is not retried through SCF.
+
 (python-batch-errors)=
 ## Batch failures and strict mode
 
@@ -198,7 +209,7 @@ resources promptly. Repeated close is safe; execution and native diagnostic
 queries after close raise. Finalization is best-effort cleanup, not a substitute
 for deterministic close.
 
-A prepared batch is not concurrently re-entrant. Execution, checkpointing,
+A prepared batch is not concurrently re-entrant. Execution, HVP, checkpointing,
 projection, warm-start controls, diagnostics and close must not race on one
 plan. Use separate prepared plans for concurrent callers. Successful executions
 can update warm densities. `set_warm_start_updates(False)` freezes existing

@@ -226,6 +226,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::ks_cpu_hessian_sequential](#native-cpp-generativeqc-batch-ks-cpu-hessian-sequential)
 - [generativeqc::Batch::ks_cpu_hvp](#native-cpp-generativeqc-batch-ks-cpu-hvp)
 - [generativeqc::Batch::ks_cpu_hvp_batch](#native-cpp-generativeqc-batch-ks-cpu-hvp-batch)
+- [generativeqc::Batch::ks_cpu_hvp_batch_minimum_bytes](#native-cpp-generativeqc-batch-ks-cpu-hvp-batch-minimum-bytes)
 - [generativeqc::Batch::execute](#native-cpp-generativeqc-batch-execute)
 - [generativeqc::Batch::clear_warm_starts](#native-cpp-generativeqc-batch-clear-warm-starts)
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
@@ -256,6 +257,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_hessian_cpu_sequential_v1](#native-c-generativeqc-ks-hessian-cpu-sequential-v1)
 - [generativeqc_ks_hvp_cpu_batch_v1](#native-c-generativeqc-ks-hvp-cpu-batch-v1)
 - [generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1](#native-c-generativeqc-ks-hvp-cpu-batch-minimum-bytes-v1)
+- [generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1](#native-c-generativeqc-ks-hvp-cpu-prepared-minimum-bytes-v1)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
@@ -6017,6 +6019,30 @@ equal sizes and one or more complete 3*N directions for N atoms.
 
 **Units.** Hartree/Bohr^2 action on each supplied direction; capacities in bytes.
 
+(native-cpp-generativeqc-batch-ks-cpu-hvp-batch-minimum-bytes)=
+## generativeqc::Batch::ks_cpu_hvp_batch_minimum_bytes
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+std :: size_t ks_cpu_hvp_batch_minimum_bytes ( std :: size_t index , std :: size_t directions , const generativeqc_ks_host_hessian_options_v1 & options )
+```
+
+**Behavior.** Quote an action panel directly from the accepted CPU KS item.
+
+**Inputs.** Original item index, positive direction count, and expected geometry/options
+as for ks_cpu_hvp_batch.
+
+**Outputs.** Width-one reservation floor, including complete action publication.
+
+**Errors.** Throws Error if the accepted item or budget is inadmissible.
+
+**Lifetime.** Synchronous; serialize batch and context operations.
+
+**Execution.** Borrows the native normalized sources; does not run SCF or response.
+
+**Units.** Capacity in bytes; direction count is dimensionless.
+
 (native-cpp-generativeqc-batch-execute)=
 ## generativeqc::Batch::execute
 
@@ -6712,6 +6738,30 @@ directions is a positive count of complete Cartesian perturbations, not a count 
 unchanged. Success does not guarantee numerical convergence or execution-time work admission.
 
 **Execution.** Shape-only native planning; does not solve SCF or allocate response panels.
+
+**Units.** Capacity in bytes; direction count is dimensionless.
+
+(native-c-generativeqc-ks-hvp-cpu-prepared-minimum-bytes-v1)=
+## generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1 ( generativeqc_batch * batch , size_t index , size_t directions , const generativeqc_ks_host_hessian_options_v1 * options , size_t * minimum_bytes ) ;
+```
+
+**Behavior.** Quote the mandatory CPU action-panel bytes from the accepted batch item.
+
+**Inputs.** Live batch, original input index, positive number of Cartesian directions,
+and initialized host options with the expected geometry, charge and multiplicity.
+
+**Outputs.** Detached width-one numerical floor, using the live normalized sources.
+
+**Lifetime.** Synchronous; serialize operations on the batch and its context.
+
+**Errors.** Missing, stale, unsupported or over-budget sources leave the output unchanged.
+
+**Execution.** Does not normalize a new system, copy a response frame, or run SCF.
 
 **Units.** Capacity in bytes; direction count is dimensionless.
 
