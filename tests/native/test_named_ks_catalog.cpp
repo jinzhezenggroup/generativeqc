@@ -562,9 +562,9 @@ void test_cpu_df_native_host_budget() {
       context.get(), system.get(), &method, packed_wire, &legacy_calculation));
   generativeqc_calculation_destroy(legacy_calculation);
   generativeqc_batch* legacy_batch = nullptr;
-  generativeqc::check(generativeqc_batch_prepare_named_ks_v1(
-      context.get(), fleet_systems.data(), fleet_systems.size(), &method, packed_wire, 0,
-      &legacy_batch));
+  generativeqc::check(generativeqc_batch_prepare_named_ks_v1(context.get(), fleet_systems.data(),
+                                                             fleet_systems.size(), &method,
+                                                             packed_wire, 0, &legacy_batch));
   generativeqc_batch_destroy(legacy_batch);
 
   const auto quote = [&](bool forces, std::size_t copies) {
@@ -598,10 +598,9 @@ void test_cpu_df_native_host_budget() {
     generativeqc::Calculation baseline(context, system, method, ordinary);
     const auto expected = baseline.execute(properties);
     const auto actual = bounded.execute(properties);
-    require(
-        actual.iterations == expected.iterations && actual.energy == expected.energy &&
-            actual.forces == expected.forces,
-        "bounded native calculation changed the science");
+    require(actual.iterations == expected.iterations && actual.energy == expected.energy &&
+                actual.forces == expected.forces,
+            "bounded native calculation changed the science");
 
     named.cpu_df_host_maximum_bytes = quote(forces, 2) - 1;
     auto* rejected_batch = reinterpret_cast<generativeqc_batch*>(1);
