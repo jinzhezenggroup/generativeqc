@@ -743,7 +743,9 @@ cases above), pass the same method, basis, fitting, initial-guess and force/pack
 to `run --host-bytes N` to check the modeled host peak before SCF preparation.
 `--host-reserve-bytes` and `--headroom-fraction` reduce the available limit.
 `run --json` reports the modeled peak and effective limit in
-`resource_admission`; the prepared owner still decides force capability.
+`resource_admission`. For CPU DF-KS, native preparation also checks the actual
+system and auxiliary handles against that limit and retains the admitted
+property set. The prepared owner still decides force capability.
 These limits do not bound opaque library allocations or process RSS. CPU DF-KS
 plans exclude the materialized DF derivative diagnostic, second-order products
 and preliminary guesses. An energy quote does not authorize force replay.

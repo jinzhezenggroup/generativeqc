@@ -1114,7 +1114,7 @@
     "generativeqc::prepare_named_ks": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/ks.hpp",
-      "signature_sha256": "f5916c49cd9aa138ca44cccc26990bc46734a7d8e182968dcf087edea97db05d",
+      "signature_sha256": "df34a6049bac45148db4bf1ba43075b549ce09dd7d6b98903f904e6d400eae61",
       "required_facets": [
         "behavior",
         "errors",

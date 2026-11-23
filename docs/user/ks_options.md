@@ -36,7 +36,10 @@ For linked, all-electron FP64 CPU LDA/PBE RKS/UKS, `density_fitting="cpu"`
 supports `ResourceBudget(host_bytes=...)` for energy or energy plus forces.
 Use `properties=("energy", "forces")` to quote the force plan, which requires
 native prepared derivatives and `ks_export=True` for batch replay. An energy
-plan cannot be upgraded to forces. The native inventory uses the actual
+plan cannot be upgraded to forces. Native preparation checks the modeled host
+capacity against the actual orbital and auxiliary systems and retains the
+admitted property set for replay. It does not cap whole-process RSS.
+The native inventory uses the actual
 auxiliary basis, including the same-as-orbital default. One explicit auxiliary
 basis currently requires one system per plan. These plans exclude guesses,
 corrections, materialized DF derivative diagnostics and second derivatives.

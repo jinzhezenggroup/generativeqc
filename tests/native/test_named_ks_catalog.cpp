@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -21,6 +22,11 @@ extern "C" generativeqc_status generativeqc_ks_catalog_plan_v1(const char*, std:
                                                                generativeqc_backend,
                                                                generativeqc_ks_options*,
                                                                std::uint32_t*);
+extern "C" int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t*, std::size_t,
+                                                        std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_df_force_fleet_v1(const std::uint64_t*, std::size_t,
+                                                              std::uint64_t, std::uint64_t*,
+                                                              std::size_t);
 
 namespace {
 void require(bool condition, const char* message) {
@@ -38,6 +44,15 @@ struct OriginalNamedKsDescriptor {
 
 static_assert(sizeof(OriginalNamedKsDescriptor) ==
               offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes));
+
+// A client built with packed ERIs passes no CPU DF host admission suffix.
+struct PackedNamedKsDescriptor {
+  OriginalNamedKsDescriptor prefix;
+  std::uint64_t cpu_packed_eri_maximum_bytes;
+};
+
+static_assert(sizeof(PackedNamedKsDescriptor) ==
+              offsetof(generativeqc_named_ks_descriptor, cpu_df_host_maximum_bytes));
 
 const generativeqc_named_ks_descriptor* original_wire(const OriginalNamedKsDescriptor& original) {
   // Pass the historical wire bytes; neither caller nor callee should read a
@@ -507,6 +522,115 @@ void test_bound_basis_and_system_factory() {
           "method-owned and explicit bound basis differ after input destruction");
 }
 
+void test_cpu_df_native_host_budget() {
+  const auto* program = generativeqc::methods::named_ks::find_method("pbe-rks");
+  require(program && program->cpu, "CPU PBE catalog entry is required");
+  generativeqc::Context context({sizeof(generativeqc_context_descriptor), GENERATIVEQC_ABI_VERSION,
+                                 0, GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+  generativeqc::System system(context, atoms, "sto-3g");
+  const std::array<const generativeqc_system*, 2> fleet_systems{system.get(), system.get()};
+  const std::array<const generativeqc::System*, 2> sdk_fleet{&system, &system};
+  auto method = generativeqc::default_method_descriptor("pbe-rks");
+  method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  method.diis_history = 8;
+  method.max_iterations = 100;
+  auto grid = controls();
+  grid.grid_version = 1;
+  grid.radial_points = 8;
+  grid.angular_polar = 4;
+  grid.angular_azimuth = 8;
+  grid.tile_points = 101;
+  grid.force_tile_points = 400;
+  method.ks_options = &grid;
+  constexpr auto energy = GENERATIVEQC_PROPERTY_ENERGY;
+  constexpr auto both = energy | GENERATIVEQC_PROPERTY_FORCES;
+  const generativeqc_named_ks_descriptor ordinary{sizeof(ordinary),
+                                                  GENERATIVEQC_ABI_VERSION,
+                                                  "pbe-rks",
+                                                  program->identity.data(),
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0};
+  const PackedNamedKsDescriptor packed{
+      {sizeof(packed), ordinary.abi_version, ordinary.name, ordinary.identity, 0}, 0};
+  const auto* packed_wire = original_wire(packed.prefix);
+  generativeqc_calculation* legacy_calculation = nullptr;
+  generativeqc::check(generativeqc_calculation_prepare_named_ks_v1(
+      context.get(), system.get(), &method, packed_wire, &legacy_calculation));
+  generativeqc_calculation_destroy(legacy_calculation);
+  generativeqc_batch* legacy_batch = nullptr;
+  generativeqc::check(generativeqc_batch_prepare_named_ks_v1(
+      context.get(), fleet_systems.data(), fleet_systems.size(), &method, packed_wire, 0,
+      &legacy_batch));
+  generativeqc_batch_destroy(legacy_batch);
+
+  const auto quote = [&](bool forces, std::size_t copies) {
+    const std::array<std::uint64_t, 22> shape{
+        2, 2, 2, 2, 6, 1, 0, 0, 512, 8, 4, forces ? 400u : 101u, 8, 100, 1, 0, 0, 2, 2, 2, 6, 0};
+    std::array<std::uint64_t, 44> shapes{};
+    std::array<std::uint64_t, 47> values{};
+    std::copy(shape.begin(), shape.end(), shapes.begin());
+    std::copy(shape.begin(), shape.end(), shapes.begin() + shape.size());
+    const auto query = forces ? generativeqc_resource_ks_cpu_df_force_fleet_v1
+                              : generativeqc_resource_ks_cpu_df_fleet_v1;
+    require(query(shapes.data(), copies * shape.size(), 0, values.data(), 15 + 16 * copies) == 0,
+            "CPU DF fixture capacity could not be quoted");
+    return values[14];
+  };
+  for (bool forces : {false, true}) {
+    const auto properties = forces ? both : energy;
+    auto named = ordinary;
+    named.cpu_df_host_properties = properties;
+    named.cpu_df_host_maximum_bytes = quote(forces, 1) - 1;
+    auto* rejected_single = reinterpret_cast<generativeqc_calculation*>(1);
+    require(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
+                                                         &named, &rejected_single) ==
+                    GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                !rejected_single,
+            "one-byte-short native calculation published an owner");
+    ++named.cpu_df_host_maximum_bytes;
+    generativeqc::Calculation bounded(context, system, method, named);
+    require(bounded.supported_properties() == properties,
+            "calculation did not retain its budgeted properties");
+    generativeqc::Calculation baseline(context, system, method, ordinary);
+    const auto expected = baseline.execute(properties);
+    const auto actual = bounded.execute(properties);
+    require(
+        actual.iterations == expected.iterations && actual.energy == expected.energy &&
+            actual.forces == expected.forces,
+        "bounded native calculation changed the science");
+
+    named.cpu_df_host_maximum_bytes = quote(forces, 2) - 1;
+    auto* rejected_batch = reinterpret_cast<generativeqc_batch*>(1);
+    require(generativeqc_batch_prepare_named_ks_v1(
+                context.get(), fleet_systems.data(), fleet_systems.size(), &method, &named, 0,
+                &rejected_batch) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                !rejected_batch,
+            "one-byte-short native fleet published an owner");
+    ++named.cpu_df_host_maximum_bytes;
+    auto batch = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, named);
+    named = {};
+    for (const auto& item : batch.execute({}, forces)) {
+      require(item.converged && item.iterations == expected.iterations &&
+                  item.energy == expected.energy &&
+                  item.forces == expected.forces.value_or(std::vector<double>{}),
+              "bounded native fleet changed the science");
+    }
+    if (!forces) {
+      try {
+        (void)batch.execute({}, true);
+        require(false, "an energy-only native fleet replayed forces");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                "unbudgeted fleet force replay returned the wrong status");
+      }
+    }
+  }
+}
+
 void dump_bound_basis() {
   const auto* entry = generativeqc::methods::named_ks::find_method("r2scan-3c-rks");
   std::cout << std::setprecision(17);
@@ -537,6 +661,7 @@ int main(int argc, char**) {
     test_bound_basis_and_system_factory();
     test_complete_catalog();
     test_cpu_df_inventory_identity();
+    test_cpu_df_native_host_budget();
     test_identity_and_transaction_boundaries();
     test_borrowed_controls_and_extension_aliases();
     test_named_preparation_failures_and_lifetime();

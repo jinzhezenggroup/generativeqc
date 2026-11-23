@@ -757,9 +757,9 @@ GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void);
  * identity may be NULL; otherwise it must match the exact 64-character MethodIR
  * digest. A positive dispersion budget is required by corrected programs. For
  * batches it bounds the aggregate correction owners, divided equally per item.
- * Set struct_size to sizeof this descriptor. The original size through
- * dispersion_maximum_bytes remains accepted by the v1 entry points and
- * implies zero packed ERI budget. Other sizes are rejected. */
+ * Set struct_size to sizeof this descriptor. The v1 entry points also accept
+ * the earlier prefixes ending at dispersion_maximum_bytes or
+ * cpu_packed_eri_maximum_bytes; omitted fields are zero. */
 typedef struct generativeqc_named_ks_descriptor {
   uint32_t struct_size;
   uint32_t abi_version;
@@ -770,6 +770,14 @@ typedef struct generativeqc_named_ks_descriptor {
    * the ordinary source. A positive budget requires full-range FP64 CPU
    * values and a real-spherical s/p/d/f basis; no dense retry on refusal. */
   uint64_t cpu_packed_eri_maximum_bytes;
+  /** Effective modeled host limit in bytes, after reserve and headroom.
+   * Applied to actual CPU FP64 semilocal DF-J systems before preparation.
+   * This is not an allocator-wide or process-RSS cap. */
+  uint64_t cpu_df_host_maximum_bytes;
+  /** ENERGY or ENERGY|FORCES freezes the admitted replay property set.
+   * Zero disables host admission and requires a zero maximum. */
+  generativeqc_property_flags cpu_df_host_properties;
+  uint32_t reserved;
 } generativeqc_named_ks_descriptor;
 
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
@@ -3391,12 +3399,14 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_create_named_ks_v1(
  * headers. descriptor.method must be the PBE_RKS/PBE_UKS transport carrier matching the
  * named program's spin. ks_options, when supplied, contributes execution controls only;
  * the catalog owns every scientific primitive. NULL ks_options selects level-3 quadrature,
- * device-fused XC and a 256 MiB nonlocal budget.
+ * device-fused XC and a 256 MiB nonlocal budget. The optional CPU DF host limit
+ * binds the modeled retained/scratch capacity and the named replay properties.
  * @outputs Clears the output slot on entry and publishes an owned calculation on success.
  * @lifetime Copies all inputs; context must outlive the returned calculation.
  * @errors Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
  * and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
- * actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
+ * actual normalized orbital snapshot. A short effective CPU DF host limit
+ * returns OUT_OF_MEMORY before scientific preparation. Usual ABI and numerical gates apply.
  * @execution Synchronous native preparation, without Python, SCF or reference engines.
  * @units Energy in Hartree, coordinates in Bohr, capacities in bytes.
  */
@@ -3409,7 +3419,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_v
  * @behavior Prepare a complete named KS program for an input-ordered native batch.
  * @inputs systems/system_count and flags follow generativeqc_batch_prepare. The method and
  * named descriptors follow generativeqc_calculation_prepare_named_ks_v1, including exact
- * identity checks and execution-control-only ks_options.
+ * identity checks and execution-control-only ks_options. The CPU DF host limit
+ * covers the aggregate retained fleet plus the largest serialized workspace.
  * @outputs Clears the output slot on entry; success publishes one owning batch.
  * @lifetime Copies inputs and retains the context, which must outlive the batch.
  * @errors Uses the same fail-closed preparation statuses as the single-system endpoint.

@@ -354,6 +354,17 @@ class NamedKsDescriptor(ctypes.Structure):
     ]
 
 
+class NamedKsCpuDfHostDescriptor(ctypes.Structure):
+    """Size-tagged native capacity limit for a named CPU DF-J endpoint."""
+
+    _fields_ = [
+        ("base", NamedKsDescriptor),
+        ("cpu_df_host_maximum_bytes", ctypes.c_uint64),
+        ("cpu_df_host_properties", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32),
+    ]
+
+
 class RksColdFockOptions(ctypes.Structure):
     """Bounded native RKS orbital-proposal policy, separate from MethodIR."""
 

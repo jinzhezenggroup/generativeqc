@@ -1045,10 +1045,16 @@ int run(RunOptions options) {
     if (!row) return {context, system, method, resources.get()};
     if (resources)
       throw UsageError("named KS native preparation does not support --owned-device-bytes");
-    return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
-                                          options.grid, options.nonlocal_memory_bytes,
-                                          options.dispersion_memory_bytes, row->identity.data(),
-                                          options.nonlocal_grid, options.cpu_packed_eri_bytes);
+    const bool cpu_df_budget =
+        host_admission && options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+    return generativeqc::prepare_named_ks(
+        context, system, method, std::string(row->name), options.grid,
+        options.nonlocal_memory_bytes, options.dispersion_memory_bytes, row->identity.data(),
+        options.nonlocal_grid, options.cpu_packed_eri_bytes,
+        cpu_df_budget ? host_admission->effective_limit_bytes : 0,
+        cpu_df_budget
+            ? GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u)
+            : 0u);
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.

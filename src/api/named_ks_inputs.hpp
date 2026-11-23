@@ -13,18 +13,23 @@
 
 namespace generativeqc::api {
 
-/** Copy the validated descriptor into current-size storage. A v1 caller
- * supplies the original prefix only; never dereference its appended field. */
+/** Copy a recognized size into zero-filled current storage before reading any
+ * optional field. Old bindings need not allocate the appended suffix. */
 inline generativeqc_named_ks_descriptor copy_named_ks_descriptor(const void* input) {
   std::array<std::uint32_t, 2> header{};
   std::memcpy(header.data(), input, sizeof(header));
   constexpr auto prefix = offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes);
+  constexpr auto packed = offsetof(generativeqc_named_ks_descriptor, cpu_df_host_maximum_bytes);
   if (header[1] != GENERATIVEQC_ABI_VERSION ||
-      (header[0] != prefix && header[0] != sizeof(generativeqc_named_ks_descriptor)))
+      (header[0] != prefix && header[0] != packed &&
+       header[0] != sizeof(generativeqc_named_ks_descriptor)))
     throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                                "named KS descriptor ABI mismatch");
   generativeqc_named_ks_descriptor result{};
   std::memcpy(&result, input, header[0]);
+  if (result.reserved || (!result.cpu_df_host_properties && result.cpu_df_host_maximum_bytes))
+    throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                               "invalid CPU DF host admission controls");
   return result;
 }
 

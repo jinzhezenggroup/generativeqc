@@ -50,19 +50,20 @@ struct KsGrid {
  * nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
  * packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
  * zero keeps the ordinary provider. Forces still use the prepared derivative owner.
+ * cpu_df_host_bytes and cpu_df_host_properties optionally admit a named CPU
+ * semilocal DF-J calculation against an effective modeled host limit.
  * @outputs Returns one owned Calculation.
  * @lifetime All inputs are copied at preparation; context must outlive the calculation.
  * @errors Throws Error on unsupported methods, identity mismatch or native admission failure.
  * @execution Synchronous, with no Python or external reference execution.
  * @units Grid coordinates in Bohr, memory budgets in bytes.
  */
-inline Calculation prepare_named_ks(Context& context, const System& system,
-                                    generativeqc_method_descriptor method, const std::string& name,
-                                    KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
-                                    std::uint64_t dispersion_bytes = 256ull << 20,
-                                    const char* identity = nullptr,
-                                    std::optional<KsGrid> nonlocal_grid = std::nullopt,
-                                    std::uint64_t packed_eri_bytes = 0) {
+inline Calculation prepare_named_ks(
+    Context& context, const System& system, generativeqc_method_descriptor method,
+    const std::string& name, KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
+    std::uint64_t dispersion_bytes = 256ull << 20, const char* identity = nullptr,
+    std::optional<KsGrid> nonlocal_grid = std::nullopt, std::uint64_t packed_eri_bytes = 0,
+    std::uint64_t cpu_df_host_bytes = 0, generativeqc_property_flags cpu_df_host_properties = 0) {
   generativeqc_ks_nonlocal_grid_options extended{};
   auto& options = extended.base.base;
   options.struct_size = nonlocal_grid ? sizeof(extended) : sizeof(options);
@@ -89,9 +90,10 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
     extended.grid = &nonlocal_options;
   }
   method.ks_options = &options;
-  const generativeqc_named_ks_descriptor named{sizeof(named),    GENERATIVEQC_ABI_VERSION,
-                                               name.c_str(),     identity,
-                                               dispersion_bytes, packed_eri_bytes};
+  const generativeqc_named_ks_descriptor named{
+      sizeof(named),     GENERATIVEQC_ABI_VERSION, name.c_str(),
+      identity,          dispersion_bytes,         packed_eri_bytes,
+      cpu_df_host_bytes, cpu_df_host_properties,   0};
   return Calculation(context, system, method, named);
 }
 

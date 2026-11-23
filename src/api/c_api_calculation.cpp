@@ -5,6 +5,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/named_ks_inputs.hpp"
 #include "api/native_method_inputs.hpp"
@@ -61,9 +62,17 @@ generativeqc_status prepare_candidate(
           "auxiliary handle role requires its matching method and density-fitting backend";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
+    generativeqc_property_flags admitted_properties{};
+    if (named_inputs && named_inputs->selection.cpu_df_host_properties) {
+      generativeqc::api::CpuDfKsHostAdmission admission(*named_inputs,
+                                                        context->state.executed_backend);
+      admission.append(system->data, generativeqc::api::native_auxiliary_basis(*descriptor));
+      admitted_properties = admission.properties();
+    }
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
+    candidate->cpu_df_host_properties = admitted_properties;
     if (pending) {
       if (context->provider_initialization_calculation)
         throw std::runtime_error("context retains an explicit provider owner");
@@ -92,6 +101,10 @@ generativeqc_status prepare_candidate(
           named_inputs ? named_inputs->selection.dispersion_maximum_bytes : 0,
           named_inputs ? named_inputs->selection.cpu_packed_eri_maximum_bytes : 0);
     }
+    if (admitted_properties &&
+        (candidate->plan->supported_properties() & admitted_properties) != admitted_properties)
+      throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                 "prepared CPU DF KS owner lacks a budgeted property");
     *calculation = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
@@ -360,6 +373,7 @@ generativeqc_status generativeqc_calculation_get_supported_properties_v1(
   if (!calculation || !properties) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
   *properties = calculation->plan->supported_properties();
+  if (calculation->cpu_df_host_properties) *properties &= calculation->cpu_df_host_properties;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -419,6 +433,11 @@ static generativeqc_status execute_calculation(generativeqc_calculation* calcula
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   const bool omit_forces = output->forces == nullptr && output->force_count == 0;
+  if (!generativeqc::api::cpu_df_host_replay_allowed(calculation->cpu_df_host_properties,
+                                                     !omit_forces)) {
+    calculation->context->last_detail = "replay is outside the admitted CPU DF KS host budget";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   if (output->forces == nullptr && !omit_forces) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }

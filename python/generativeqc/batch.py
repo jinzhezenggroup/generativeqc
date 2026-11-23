@@ -592,6 +592,21 @@ class PreparedBatch:
                         ),
                         cpu_packed_eri_maximum_bytes=calculator._cpu_packed_eri_maximum_bytes,
                         cold_rks_fock=_cold_rks_fock,
+                        **(
+                            {
+                                "cpu_df_host_budget": (
+                                    self.resource_plan.peak_bytes["host"],
+                                    _native.PROPERTY_ENERGY
+                                    | (
+                                        _native.PROPERTY_FORCES
+                                        if self._cpu_df_force_plan
+                                        else 0
+                                    ),
+                                )
+                            }
+                            if self._cpu_df_plan
+                            else {}
+                        ),
                     )
                 if _cold_rks_fock is not None:
                     raise NotImplementedError(

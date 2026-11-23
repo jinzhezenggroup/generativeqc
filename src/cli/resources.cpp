@@ -739,6 +739,9 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
       shape.cpu_df =
           scf::CpuKsDfHostShape{auxiliary->nbf, auxiliary->cartesian_nbf, auxiliary->shells,
                                 auxiliary->primitives, auxiliary->angular};
+      shape.tile_points = options.grid.tile_points ? options.grid.tile_points : 256;
+      if (ks_forces)
+        shape.tile_points = std::max(shape.tile_points, options.grid.force_tile_points);
       plan["host_fleet_composition"] = "native-declared-capacity";
     }
     plan["item_inventory"] = ks_inventory(

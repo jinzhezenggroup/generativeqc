@@ -803,6 +803,8 @@ class Batch {
    * @behavior Prepare a batch using the native named KS graph and correction catalog.
    * @inputs Live context, nonempty systems, solver controls, named selector and optional
    * exact MethodIR identity; optional resources select retained CUDA admission.
+   * An optional CPU DF host limit in the named descriptor binds fleet capacity
+   * and the allowed replay properties.
    * @outputs Returns the owning native Batch.
    * @lifetime Native preparation copies inputs and shares supplied resources; the context
    * must outlive the batch. Descriptors and their pointer fields are borrowed only here.

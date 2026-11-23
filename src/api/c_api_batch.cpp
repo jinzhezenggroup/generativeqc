@@ -9,6 +9,7 @@
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_batch_capabilities.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/ks_dispersion.hpp"
 #include "api/named_ks_inputs.hpp"
@@ -124,7 +125,7 @@ generativeqc_status generativeqc_ks_batch_supported_properties_v1(
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   const auto value = batch->plan->supported_properties(index);
   if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  *output = *value;
+  *output = batch->cpu_df_host_properties ? *value & batch->cpu_df_host_properties : *value;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -163,9 +164,12 @@ static generativeqc_status prepare_batch(
     }
     generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
+    std::optional<generativeqc::api::CpuDfKsHostAdmission> cpu_host_admission;
     if (named) {
       named_inputs.emplace(*descriptor, named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
+      if (named_inputs->selection.cpu_df_host_properties)
+        cpu_host_admission.emplace(*named_inputs, context->state.executed_backend);
     }
 
     std::vector<generativeqc::core::System> native_systems;
@@ -183,12 +187,16 @@ static generativeqc_status prepare_batch(
             "auxiliary handle role requires its matching method and density-fitting backend";
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       }
+      if (cpu_host_admission)
+        cpu_host_admission->append(systems[i]->data,
+                                   generativeqc::api::native_auxiliary_basis(*descriptor));
       native_systems.push_back(systems[i]->data);
       atom_counts.push_back(static_cast<std::uint32_t>(systems[i]->data.atoms.size()));
     }
     auto candidate = std::make_unique<generativeqc_batch>();
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
+    if (cpu_host_admission) candidate->cpu_df_host_properties = cpu_host_admission->properties();
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
@@ -206,6 +214,15 @@ static generativeqc_status prepare_batch(
                                                                : nullptr,
         named_inputs ? named_inputs->selection.dispersion_maximum_bytes : 0,
         named_inputs ? named_inputs->selection.cpu_packed_eri_maximum_bytes : 0, cold_damping);
+    if (cpu_host_admission && cpu_host_admission->forces()) {
+      for (std::uint32_t index = 0; index < system_count; ++index) {
+        const auto properties = candidate->plan->supported_properties(index);
+        if (!properties || !(*properties & GENERATIVEQC_PROPERTY_FORCES))
+          throw generativeqc::methods::MethodError(
+              GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+              "prepared CPU DF KS item lacks budgeted analytic forces");
+      }
+    }
     *batch = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
@@ -880,6 +897,11 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
+    if (!generativeqc::api::cpu_df_host_replay_allowed(batch->cpu_df_host_properties,
+                                                       compute_forces)) {
+      batch->context->last_detail = "replay is outside the admitted CPU DF KS host budget";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     std::vector<generativeqc::methods::BatchItemResult> native;
     if (selective_forces) {
       // The additive bridge uses the existing output descriptors as per-item

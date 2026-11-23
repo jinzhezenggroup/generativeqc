@@ -267,6 +267,7 @@ def prepare_named_batch(
     *,
     cpu_packed_eri_maximum_bytes: int = 0,
     cold_rks_fock: _native.RksColdFockOptions | None = None,
+    cpu_df_host_budget: tuple[int, int] | None = None,
 ) -> int:
     """Pass controls plus a pinned full identity to the selected library."""
     if cold_rks_fock is not None:
@@ -305,6 +306,10 @@ def prepare_named_batch(
         maximum_bytes,
         cpu_packed_eri_maximum_bytes,
     )
+    if cpu_df_host_budget is not None:
+        named.struct_size = ct.sizeof(_native.NamedKsCpuDfHostDescriptor)
+        extended = _native.NamedKsCpuDfHostDescriptor(named, *cpu_df_host_budget, 0)
+        named = extended.base
     # The complete catalog graph owns its spin. PBE here is only the existing
     # ABI transport carrier, including when the public alias is legacy PBE-D4.
     method.method = (

@@ -135,6 +135,7 @@ def _cpu_host_shape(
     max_iterations: int,
     requires_first_ao_derivatives: bool,
     model: typing.Any,
+    df_forces: bool = False,
 ) -> tuple[int, ...]:
     """Marshal the same compact topology for the per-item and fleet ABIs.
 
@@ -154,7 +155,9 @@ def _cpu_host_shape(
         item["grid_points"],
         model.grid.radial_points,
         model.grid.angular_polar,
-        model.tile_points or 256,
+        max(
+            model.tile_points or 256, (model.force_tile_points or 0) if df_forces else 0
+        ),
         diis_history,
         max_iterations,
         int(requires_first_ao_derivatives),
@@ -280,7 +283,9 @@ def _native_host_fleet_inventory(
         value
         for item in items
         for value in (
-            *_cpu_host_shape(item, library=library, **options),
+            *_cpu_host_shape(
+                item, library=library, df_forces=cpu_fitted_forces, **options
+            ),
             *(
                 (
                     item["auxiliary"][key]

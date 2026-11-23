@@ -2326,7 +2326,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_v
 headers. descriptor.method must be the PBE_RKS/PBE_UKS transport carrier matching the
 named program's spin. ks_options, when supplied, contributes execution controls only;
 the catalog owns every scientific primitive. NULL ks_options selects level-3 quadrature,
-device-fused XC and a 256 MiB nonlocal budget.
+device-fused XC and a 256 MiB nonlocal budget. The optional CPU DF host limit
+binds the modeled retained/scratch capacity and the named replay properties.
 
 **Outputs.** Clears the output slot on entry and publishes an owned calculation on success.
 
@@ -2334,7 +2335,8 @@ device-fused XC and a 256 MiB nonlocal budget.
 
 **Errors.** Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
 and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
-actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
+actual normalized orbital snapshot. A short effective CPU DF host limit
+returns OUT_OF_MEMORY before scientific preparation. Usual ABI and numerical gates apply.
 
 **Execution.** Synchronous native preparation, without Python, SCF or reference engines.
 
@@ -2353,7 +2355,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1 ( ge
 
 **Inputs.** systems/system_count and flags follow generativeqc_batch_prepare. The method and
 named descriptors follow generativeqc_calculation_prepare_named_ks_v1, including exact
-identity checks and execution-control-only ks_options.
+identity checks and execution-control-only ks_options. The CPU DF host limit
+covers the aggregate retained fleet plus the largest serialized workspace.
 
 **Outputs.** Clears the output slot on entry; success publishes one owning batch.
 
@@ -5681,6 +5684,8 @@ static Batch prepare_named_ks ( Context & context , std :: span < const System *
 
 **Inputs.** Live context, nonempty systems, solver controls, named selector and optional
 exact MethodIR identity; optional resources select retained CUDA admission.
+An optional CPU DF host limit in the named descriptor binds fleet capacity
+and the allowed replay properties.
 
 **Outputs.** Returns the owning native Batch.
 
@@ -6032,7 +6037,7 @@ selects the force schedule independently with automatic SCF tiling.
 Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 
 ```cpp
-inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt , std :: uint64_t packed_eri_bytes = 0 )
+inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt , std :: uint64_t packed_eri_bytes = 0 , std :: uint64_t cpu_df_host_bytes = 0 , generativeqc_property_flags cpu_df_host_properties = 0 )
 ```
 
 **Behavior.** Prepare a catalog KS graph, including range exchange, nonlocal correlation and
@@ -6044,6 +6049,8 @@ execution policy; this helper replaces method.ks_options with those controls.
 nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
 packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
 zero keeps the ordinary provider. Forces still use the prepared derivative owner.
+cpu_df_host_bytes and cpu_df_host_properties optionally admit a named CPU
+semilocal DF-J calculation against an effective modeled host limit.
 
 **Outputs.** Returns one owned Calculation.
 
