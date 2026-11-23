@@ -960,6 +960,26 @@ class Batch {
     return receipt;
   }
 
+  /** @native-contract generativeqc::Batch::ks_cpu_hessian_sequential
+   * @behavior Compute a raw LDA/PBE CPU RKS Hessian with one independent CPKS solve at a time.
+   * @inputs Same accepted state, options and dense output as ks_cpu_hessian. Supports Cartesian
+   * and real-spherical AOs, with linked PBE-D3(BJ) correction when prepared.
+   * @outputs Row-major matrix and a detached work receipt.
+   * @errors Throws Error on refusal without changing output; never substitutes another schedule.
+   * @lifetime Borrows only for the synchronous call; serialize batch and context operations.
+   * @units Matrix in Hartree/Bohr^2; capacities in bytes.
+   */
+  generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian_sequential(
+      std::size_t index, std::span<double> output,
+      const generativeqc_ks_host_hessian_options_v1& options) {
+    generativeqc_ks_host_hessian_receipt_v1 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hessian_cpu_sequential_v1(handle_, index, &options, output.data(),
+                                                    output.size(), &receipt));
+    return receipt;
+  }
+
   /** @native-contract generativeqc::Batch::ks_cpu_hvp
    * @behavior Apply the CPU KS Hessian without constructing a dense matrix.
    * @inputs Original input index, finite direction and disjoint output spans of exactly 3*N
@@ -979,6 +999,27 @@ class Batch {
     receipt.abi_version = GENERATIVEQC_ABI_VERSION;
     check(generativeqc_ks_hessian_cpu_v1(handle_, index, &options, direction.data(),
                                          direction.size(), output.data(), output.size(), &receipt));
+    return receipt;
+  }
+
+  /** @native-contract generativeqc::Batch::ks_cpu_hvp_batch
+   * @behavior Apply one accepted CPU KS Hessian to multiple independent Cartesian directions.
+   * @inputs Same state and options as ks_cpu_hvp; disjoint packed input and output spans with
+   * equal sizes and one or more complete 3*N directions for N atoms.
+   * @outputs Direction-major actions and a detached aggregate work receipt.
+   * @errors Throws Error on malformed or failed requests without changing output.
+   * @lifetime Synchronous; serialize batch and context operations.
+   * @units Hartree/Bohr^2 action on each supplied direction; capacities in bytes.
+   */
+  generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hvp_batch(
+      std::size_t index, std::span<const double> directions, std::span<double> output,
+      const generativeqc_ks_host_hessian_options_v1& options) {
+    generativeqc_ks_host_hessian_receipt_v1 receipt{};
+    receipt.struct_size = sizeof(receipt);
+    receipt.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_ks_hvp_cpu_batch_v1(handle_, index, &options, directions.data(),
+                                           directions.size(), output.data(), output.size(),
+                                           &receipt));
     return receipt;
   }
 

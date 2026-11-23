@@ -218,12 +218,46 @@ void run_linked_cpu(const char* selector) {
               solved[0].executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
           "named SDK batch did not solve on CPU");
   const auto hvp = batch.ks_cpu_hvp(0, direction, action, options);
+  std::array<double, 12> seeds{}, actions{};
+  for (std::size_t index = 0; index < direction.size(); ++index) {
+    seeds[index] = direction[index];
+    seeds[direction.size() + index] = -.5 * direction[index];
+  }
+  const auto hvp_batch = batch.ks_cpu_hvp_batch(0, seeds, actions, options);
+  require(hvp_batch.completed_directions == 2 && hvp_batch.d3_pair_visits == 2 * hvp.d3_pair_visits,
+          "SDK multi-HVP lost a requested direction or additive correction");
+  for (std::size_t index = 0; index < direction.size(); ++index)
+    require(std::abs(actions[index] - action[index]) < 2e-8 &&
+                std::abs(actions[direction.size() + index] + .5 * action[index]) < 2e-8,
+            "SDK action panel violates scalar parity or linearity");
   std::array<double, 36> matrix{};
   const auto dense = batch.ks_cpu_hessian(0, matrix, options);
+  generativeqc_ks_host_hessian_receipt_v1 sequential_work{};
   require(hvp_floor == hvp.numeric_reservation_bytes &&
               dense_floor == hvp_floor + dense.output_bytes - hvp.output_bytes,
           "CPU Hessian query does not match the executed mandatory reservation");
   if (semilocal) {
+    std::array<double, 36> sequential{};
+    sequential_work = batch.ks_cpu_hessian_sequential(0, sequential, options);
+    require(sequential_work.completed_directions == direction.size() &&
+                sequential_work.first_eri_primitives == dense.first_eri_primitives &&
+                sequential_work.curvature_eri_primitives == dense.curvature_eri_primitives &&
+                sequential_work.d3_pair_visits == dense.d3_pair_visits,
+            "sequential CPU Hessian did not preserve the complete stationary work");
+    for (std::size_t element = 0; element < matrix.size(); ++element)
+      require(std::abs(sequential[element] - matrix[element]) < 2e-8,
+              "sequential SDK changed the raw derivative");
+    auto sequential_limit = options;
+    sequential_limit.output_bytes = sequential_work.output_bytes;
+    std::array<double, 36> sequential_replay{};
+    batch.ks_cpu_hessian_sequential(0, sequential_replay, sequential_limit);
+    require(sequential_replay == sequential, "sequential Hessian could not use exact output bytes");
+    --sequential_limit.output_bytes;
+    require(rejection([&] {
+              batch.ks_cpu_hessian_sequential(0, sequential_replay, sequential_limit);
+            }) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+                sequential_replay == sequential,
+            "one-byte-short sequential SDK call published output");
     std::array<double, 36> recycled{};
     const auto work = batch.ks_cpu_hessian_recycled(0, recycled, options, 4);
     require(work.completed_directions == direction.size() && work.gmres_workspace_bytes > 0,
@@ -252,6 +286,10 @@ void run_linked_cpu(const char* selector) {
                     GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                 refused == sentinel_matrix,
             "semilocal UKS must refuse the unqualified recycled schedule before publication");
+    require(rejection([&] { batch.ks_cpu_hessian_sequential(0, refused, options); }) ==
+                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                refused == sentinel_matrix,
+            "semilocal UKS must refuse the unqualified sequential schedule before publication");
   }
   const bool corrected = std::string_view(selector).find("d3(bj)") != std::string_view::npos;
   require(hvp.completed_directions == 1 && dense.completed_directions == direction.size() &&
@@ -327,10 +365,20 @@ void run_linked_cpu(const char* selector) {
             << ",\"d3_pair_visits\":" << hvp.d3_pair_visits << ",\"value\":[";
   for (std::size_t coordinate = 0; coordinate < initial_action.size(); ++coordinate)
     std::cout << (coordinate ? "," : "") << initial_action[coordinate];
-  std::cout << "],\"dense_d3_pair_visits\":" << dense.d3_pair_visits << ",\"matrix\":[";
+  std::cout << "],\"hvp_panel\":[";
+  for (std::size_t element = 0; element < actions.size(); ++element)
+    std::cout << (element ? "," : "") << actions[element];
+  std::cout << "],\"panel_d3_pair_visits\":" << hvp_batch.d3_pair_visits
+            << ",\"dense_d3_pair_visits\":" << dense.d3_pair_visits << ",\"matrix\":[";
   for (std::size_t element = 0; element < matrix.size(); ++element)
     std::cout << (element ? "," : "") << matrix[element];
-  std::cout << "]}\n";
+  std::cout << ']';
+  if (semilocal)
+    std::cout << ",\"sequential\":{\"output_bytes\":" << sequential_work.output_bytes
+              << ",\"response_iterations\":" << sequential_work.response_iterations
+              << ",\"induced_fock_actions\":" << sequential_work.induced_fock_actions
+              << ",\"d3_pair_visits\":" << sequential_work.d3_pair_visits << '}';
+  std::cout << "}\n";
 }
 }  // namespace
 

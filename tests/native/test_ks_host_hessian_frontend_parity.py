@@ -107,6 +107,79 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
 
         cpp = run(sdk, "--cpu", method)
         cli_action = run(*hvp_command)
+        panel_file = Path(directory) / "directions.json"
+        panel_command = (cli, "hvp", *command[1:], "--directions", str(panel_file))
+        seed = np.asarray(direction)
+        panel = np.stack((seed, -0.5 * seed))
+        panel_file.write_text(json.dumps(panel.tolist()))
+        cli_panel = run(*panel_command)
+        python_panel = calculator.hessian_vector_products(
+            atoms, panel, multiplicity=multiplicity
+        )
+        for values, diagnostic in (
+            (cli_panel["value"], cli_panel["diagnostics"]),
+            (python_panel.value, python_panel.diagnostics),
+        ):
+            assert np.shape(values) == panel.shape
+            np.testing.assert_allclose(
+                np.asarray(values).ravel(), cpp["hvp_panel"], atol=2e-8, rtol=0
+            )
+            assert diagnostic["response_strategy"] == "independent"
+            assert (
+                diagnostic["direction_count"] == diagnostic["completed_directions"] == 2
+            )
+            assert diagnostic["d3_pair_visits"] == cpp["panel_d3_pair_visits"]
+        if method == "pbe-d3(bj)-rks":
+            panel = np.stack(
+                (seed, -0.5 * seed, np.zeros_like(seed), seed[::-1], 2 * seed)
+            )
+            panel_file.write_text(json.dumps(panel.tolist()))
+            unbounded = run(*panel_command)
+            output_bytes = str(unbounded["diagnostics"]["output_bytes"])
+            output_flag = ("--output-budget-bytes", output_bytes)
+            resource = run(
+                cli,
+                "resources",
+                *command[1:],
+                "--property",
+                "hvp",
+                "--hvp-directions",
+                str(len(panel)),
+                *output_flag,
+            )
+            inventory = resource["derivative_inventory"]
+            assert inventory["direction_count"] == len(panel)
+            assert (
+                inventory["minimum_numeric_bytes"]
+                == unbounded["diagnostics"]["minimum_numeric_bytes"]
+            )
+            peak = resource["peak_bytes"]["host"]
+            exact = run(*panel_command, *output_flag, "--host-bytes", str(peak))
+            assert (
+                exact["diagnostics"]["resource_admission"]["minimum_host_peak_bytes"]
+                == peak
+            )
+            np.testing.assert_allclose(
+                exact["value"], unbounded["value"], atol=2e-8, rtol=0
+            )
+            for limit, short in (
+                ("--host-bytes", peak - 1),
+                ("--output-budget-bytes", int(output_bytes) - 1),
+            ):
+                trace = Path(directory) / f"panel-{limit[2:]}.jsonl"
+                rejected = subprocess.run(
+                    (*panel_command, limit, str(short)),
+                    env=dict(runtime, GENERATIVEQC_DF_PROGRESS_TRACE=str(trace)),
+                    text=True,
+                    capture_output=True,
+                    timeout=60,
+                    check=False,
+                )
+                assert (
+                    rejected.returncode != 0
+                    and not rejected.stdout
+                    and not trace.exists()
+                )
         cli_matrix = run(cli, "hessian", *command[1:])
         if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks", "pbe-d3(bj)-uks"):
             packed = ("--cpu-packed-eri-budget-bytes", "48")
@@ -148,6 +221,43 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             assert "allocation inventory exceeds host budget" in shortage.stderr
             assert not short_trace.exists()
         if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks"):
+            sequential_command = (cli, "hessian", *command[1:], "--response-sequential")
+            sequential_budget = cpp["sequential"]["output_bytes"]
+            cli_sequential = run(
+                *sequential_command, "--output-budget-bytes", str(sequential_budget)
+            )
+            python_sequential = calculator.hessian(atoms, strategy="sequential")
+            for diagnostic in (
+                cli_sequential["diagnostics"],
+                python_sequential.diagnostics,
+            ):
+                assert diagnostic["response_strategy"] == "sequential"
+                assert diagnostic["response_concurrent_rhs"] == 1
+                assert diagnostic["completed_directions"] == 6
+                for work in (
+                    "response_iterations",
+                    "induced_fock_actions",
+                    "d3_pair_visits",
+                ):
+                    assert diagnostic[work] == cpp["sequential"][work]
+            for values in (cli_sequential["matrix"], python_sequential.matrix):
+                np.testing.assert_allclose(
+                    np.asarray(values).ravel(), cpp["matrix"], atol=2e-8, rtol=0
+                )
+            rejected = subprocess.run(
+                (
+                    *sequential_command,
+                    "--output-budget-bytes",
+                    str(sequential_budget - 1),
+                ),
+                env=runtime,
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+            assert rejected.returncode != 0 and not rejected.stdout
+            assert "output" in rejected.stderr.lower()
             cli_recycled = run(
                 cli, "hessian", *command[1:], "--response-recycle-block-size", "4"
             )

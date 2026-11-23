@@ -111,7 +111,7 @@ class NativeBatch {
   std::vector<generativeqc_atom> centers;
   generativeqc_ks_host_hessian_options_v1 options = api::default_host_hessian_options();
 
-  NativeBatch(unsigned spins, bool bj, bool polarization = false)
+  NativeBatch(unsigned spins, bool bj, bool polarization = false, std::string method_name = {})
       : atoms(spins + 1), dimension(3 * atoms) {
     generativeqc_context_descriptor context_options{};
     context_options.struct_size = sizeof(context_options);
@@ -146,7 +146,9 @@ class NativeBatch {
     options.expected_atoms = centers.data();
     options.expected_atom_count = centers.size();
     options.expected_multiplicity = spins;
-    const auto name = std::string(bj ? "b3lyp-d3(bj)" : "b3lyp") + (spins == 1 ? "-rks" : "-uks");
+    const auto name = method_name.empty() ? std::string(bj ? "b3lyp-d3(bj)" : "b3lyp") +
+                                                (spins == 1 ? "-rks" : "-uks")
+                                          : method_name;
     const auto* named = methods::named_ks::find_method(name);
     require(named && named->cpu, "missing exact native total-method program");
     require(generativeqc_ks_hessian_cpu_method_v1(named->identity.data()),
@@ -514,6 +516,137 @@ void projected_endpoint_case(unsigned spins) {
             << " projected_eri=" << projected_receipt.curvature_eri_primitives
             << " public_eri=" << public_receipt.curvature_eri_primitives << '\n';
 }
+void sequential_endpoint_case() {
+  NativeBatch fixture(1, false, false, "pbe-rks");
+  fixture.run();
+  std::vector<double> sequential(fixture.dimension * fixture.dimension),
+      baseline(sequential.size());
+  auto receipt = api::empty_host_hessian_receipt();
+  auto reference = api::empty_host_hessian_receipt();
+  const auto apply_sequential = [&] {
+    return generativeqc_ks_hessian_cpu_sequential_v1(
+        fixture.batch, 0, &fixture.options, sequential.data(), sequential.size(), &receipt);
+  };
+  fixture.check(fixture.apply(nullptr, baseline, reference));
+  fixture.check(apply_sequential());
+  require(receipt.completed_directions == fixture.dimension && receipt.induced_fock_actions > 0 &&
+              receipt.first_eri_primitives == reference.first_eri_primitives &&
+              receipt.curvature_eri_primitives == reference.curvature_eri_primitives,
+          "sequential response lost full derivative work or geometry-source reuse");
+  for (std::size_t index = 0; index < baseline.size(); ++index)
+    require(std::abs(sequential[index] - baseline[index]) < 2e-8,
+            "sequential and automatic CPU Hessians disagree");
+
+  // Both output panels are a single transaction, even after a solver starts.
+  const auto saved = fixture.options;
+  fixture.options.output_bytes = receipt.output_bytes;
+  fixture.check(apply_sequential());
+  const auto before = sequential;
+  const auto before_receipt = receipt;
+  const auto unchanged = [&] {
+    return sequential == before && std::memcmp(&receipt, &before_receipt, sizeof(receipt)) == 0;
+  };
+  --fixture.options.output_bytes;
+  require(apply_sequential() != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "one-byte-short sequential output budget published output or receipt");
+  fixture.options = saved;
+  fixture.options.max_iterations = 1;
+  fixture.options.relative_tolerance = 1e-14;
+  fixture.options.absolute_tolerance = 1e-16;
+  require(apply_sequential() == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && unchanged(),
+          "nonconverged sequential response published output or receipt");
+  fixture.options = saved;
+  fixture.centers[1].z += .01;
+  require(apply_sequential() != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "sequential response accepted different presentation geometry");
+}
+void multivector_endpoint_case(unsigned spins, bool corrected) {
+  NativeBatch fixture(spins, corrected, false, spins == 1 ? "pbe-rks" : "");
+  fixture.run();
+  const auto width = fixture.dimension;
+  constexpr std::size_t count = 5;
+  std::vector<double> directions(count * width), output(directions.size(), -751.0);
+  for (std::size_t index = 0; index < width; ++index) {
+    directions[width + index] = .19 * std::cos(2.0 * index);
+    directions[2 * width + index] = .13 * std::sin(static_cast<double>(index));
+    directions[3 * width + index] = directions[width + index];
+    directions[4 * width + index] = directions[width + index] - directions[2 * width + index];
+  }
+  const auto call = [&](auto input, auto result, auto& receipt) {
+    return generativeqc_ks_hvp_cpu_batch_v1(fixture.batch, 0, &fixture.options, input.data(),
+                                            input.size(), result.data(), result.size(), &receipt);
+  };
+  auto receipt = api::empty_host_hessian_receipt();
+  fixture.check(call(std::span<const double>(directions), std::span(output), receipt));
+  const auto grouped = receipt;
+  require(grouped.completed_directions == count && grouped.raw_symmetry_error == 0 &&
+              (grouped.d3_pair_visits > 0) == corrected,
+          "native multi-HVP did not publish complete action-only work");
+  std::uint64_t first_eri{}, curvature_eri{}, d3_pairs{};
+  for (std::size_t index = 0; index < count; ++index) {
+    std::vector<double> expected(width);
+    auto work = api::empty_host_hessian_receipt();
+    fixture.check(fixture.apply(directions.data() + index * width, expected, work));
+    first_eri += work.first_eri_primitives;
+    curvature_eri += work.curvature_eri_primitives;
+    d3_pairs += work.d3_pair_visits;
+    for (std::size_t row = 0; row < width; ++row)
+      require(std::abs(output[index * width + row] - expected[row]) < 2e-8,
+              "multi-HVP changed a direction or its action");
+  }
+  require(grouped.first_eri_primitives == first_eri &&
+              grouped.curvature_eri_primitives == curvature_eri &&
+              grouped.d3_pair_visits == d3_pairs,
+          "multi-HVP lost a first derivative, curvature or correction work term");
+
+  const auto original = fixture.options;
+  fixture.options.output_bytes = grouped.output_bytes;
+  const auto grouped_output = output;
+  fixture.check(call(std::span<const double>(directions), std::span(output), receipt));
+  require(receipt.completed_directions == count &&
+              receipt.numeric_reservation_bytes < grouped.numeric_reservation_bytes,
+          "exact output capacity did not execute the width-one fallback");
+  for (std::size_t index = 0; index < output.size(); ++index)
+    require(std::abs(output[index] - grouped_output[index]) < 2e-8,
+            "streamed and concurrent multi-HVP schedules disagree");
+
+  const auto before = output;
+  const auto before_receipt = receipt;
+  const auto unchanged = [&] {
+    return output == before && std::memcmp(&receipt, &before_receipt, sizeof(receipt)) == 0;
+  };
+  const std::span<const double> seeds(directions);
+  --fixture.options.output_bytes;
+  require(call(seeds, std::span(output), receipt) != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "short multi-HVP capacity published partial results");
+  fixture.options = original;
+  require(call(seeds.first(seeds.size() - 1), std::span(output), receipt) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "ragged direction panel published results");
+  require(call(seeds.first(0), std::span(output).first(0), receipt) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "empty direction panel did not fail atomically");
+  require(call(seeds, std::span(directions), receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "overlapping multi-HVP input/output was admitted");
+  directions.back() = std::numeric_limits<double>::quiet_NaN();
+  require(call(seeds, std::span(output), receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "a nonfinite last seed was not rejected before publication");
+  directions.back() = directions[2 * width - 1] - directions[3 * width - 1];
+  fixture.options.output_bytes = grouped.output_bytes;
+  fixture.options.max_iterations = 1;
+  fixture.options.relative_tolerance = 1e-14;
+  fixture.options.absolute_tolerance = 1e-16;
+  std::vector<double> zero(width);
+  auto zero_work = api::empty_host_hessian_receipt();
+  fixture.check(call(seeds.first(width), std::span(zero), zero_work));
+  require(call(seeds, std::span(output), receipt) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              unchanged(),
+          "a late failed CPKS solve published a successful earlier action");
+}
 }  // namespace
 
 int main() {
@@ -535,6 +668,9 @@ int main() {
     for (const auto spins : {1U, 2U})
       for (const auto bj : {false, true}) endpoint_case(spins, bj);
     for (const auto spins : {1U, 2U}) projected_endpoint_case(spins);
+    sequential_endpoint_case();
+    multivector_endpoint_case(1, false);
+    multivector_endpoint_case(2, true);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

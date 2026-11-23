@@ -34,8 +34,12 @@ in `_bytes` are integer byte capacities, never atom counts.
 Hartree/Bohr². `hessian_vector_product` accepts a finite real direction of shape
 `(natoms, 3)` and returns a detached record whose `value` has shape
 `(natoms, 3)`, containing that matrix applied to the direction; no rotational/translational projection or post-hoc symmetrization is
-implied. Integral workspace and full-Hessian publication have separate byte
-budgets. See the [energy/force/Hessian conventions](../learn/energy-force-hessian.md).
+implied. `hessian_vector_products` accepts a nonempty `(nrhs, natoms, 3)` panel
+and returns direction and action arrays of the same shape and order. The linked
+CPU KS owner uses one accepted state and does not form a dense Hessian. Byte
+and work limits apply to the whole panel, and the result is published only if
+every action succeeds. This panel API does not fall back on older libraries or
+other backends. See the [energy/force/Hessian conventions](../learn/energy-force-hessian.md).
 
 (python-calculation-errors)=
 ## Calculation failure and publication

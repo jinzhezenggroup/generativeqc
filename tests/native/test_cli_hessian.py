@@ -38,7 +38,7 @@ class HessianCli(unittest.TestCase):
         self, *arguments: str, operation: str = "hvp", trace: Path | None = None
     ) -> subprocess.CompletedProcess:
         command = [str(CLI), operation, str(self.xyz), "--units", "bohr", "--json"]
-        if operation == "hvp":
+        if operation == "hvp" and "--directions" not in arguments:
             command += ["--direction", str(self.direction)]
         return subprocess.run(
             [*command, *arguments],
@@ -143,6 +143,19 @@ class HessianCli(unittest.TestCase):
             "only hvp",
         )
 
+    def test_action_panel_rejects_ambiguous_or_malformed_requests(self) -> None:
+        panel = self.root / "Panel With Spaces.json"
+        flags = ("--directions", str(panel))
+        self.rejected(
+            self.call(*flags, "--direction", str(self.direction), "--backend", "cpu"),
+            "mutually exclusive",
+        )
+        self.rejected(self.call(*flags, "--backend", "cuda"), "requires linked CPU hvp")
+        self.rejected(self.call(*flags, operation="hessian"), "only hvp")
+        for malformed in ([], [[[1, 2, 3]]], [[[1, 2, 3], [1, 2, "nan"]]]):
+            panel.write_text(json.dumps(malformed))
+            self.rejected(self.call(*flags, "--backend", "cpu"), "natoms-by-3")
+
     def test_recycle_groups_require_dense_cpu(self) -> None:
         flags = ("--response-recycle-block-size", "3")
         self.rejected(
@@ -151,6 +164,27 @@ class HessianCli(unittest.TestCase):
         self.rejected(
             self.call(*flags, "--backend", "cuda", operation="hessian"),
             "requires a dense CPU hessian",
+        )
+
+    def test_sequential_requires_an_unambiguous_dense_cpu_request(self) -> None:
+        for arguments, operation in (
+            (("--backend", "cpu"), "hvp"),
+            (("--backend", "cuda"), "hessian"),
+        ):
+            self.rejected(
+                self.call("--response-sequential", *arguments, operation=operation),
+                "requires a dense CPU hessian",
+            )
+        self.rejected(
+            self.call(
+                "--response-sequential",
+                "--response-recycle-block-size",
+                "3",
+                "--backend",
+                "cpu",
+                operation="hessian",
+            ),
+            "mutually exclusive",
         )
 
     def test_wrong_method_precision_and_provider_never_touch_cuda(self) -> None:

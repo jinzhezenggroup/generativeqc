@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
-from generativeqc import Atom, Calculator, GridSpec, KsOptions
+from generativeqc import Atom, Calculator, GridSpec, KsOptions, ResourceBudget
 from generativeqc._dft_gradient import StationaryKsState
 from generativeqc._native_cpu_hessian import linked_method
 from generativeqc.response_solver import GMRESOptions
@@ -18,12 +18,95 @@ from test_dft_complete_cpu import independent_global_hybrid_gradient
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from generativeqc.batch import PreparedBatch
+
 ATOMS = (
     ("O", (0.01, -0.04, 0.02)),
     ("H", (1.42, 0.13, 1.06)),
     ("H", (-1.37, -0.09, 1.10)),
 )
 MOTION = np.array(((0.12, -0.07, 0.04), (-0.08, 0.06, 0.15), (-0.04, 0.01, -0.19)))
+
+
+def test_hvp_panel_admits_exact_host_and_output_capacities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check a count-bound plan and atomic, pre-SCF rejection of short budgets."""
+
+    def make(budget: ResourceBudget | None) -> Calculator:
+        return Calculator(
+            method="pbe-rks",
+            device="cpu",
+            basis="sto-3g",
+            basis_representation="cartesian",
+            ks_options=KsOptions(
+                grid=GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
+            ),
+            resource_budget=budget,
+        )
+
+    calculator = make(None)
+    if not linked_method(
+        calculator._library, calculator.method_ir.identity
+    ) or not hasattr(
+        calculator._library, "generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1"
+    ):
+        pytest.skip("linked CPU KS HVP panels are unavailable")
+    directions = np.stack((MOTION, MOTION[::-1], -0.5 * MOTION))
+    probe = calculator.hessian_vector_products(ATOMS, directions)
+    output_bytes = probe.diagnostics["output_bytes"]
+    uncapped = make(ResourceBudget()).hessian_vector_products(
+        ATOMS, directions, output_budget_bytes=output_bytes
+    )
+    sizing = uncapped.diagnostics["resource_admission"]
+    numeric = uncapped.diagnostics["numeric_reservation_bytes"]
+    exact = (
+        sizing["plan_host_peak_bytes"] - sizing["derivative_host_cap_bytes"] + numeric
+    )
+    bounded = make(ResourceBudget(host_bytes=exact)).hessian_vector_products(
+        ATOMS, directions, output_budget_bytes=output_bytes
+    )
+    assert bounded.diagnostics["numeric_reservation_bytes"] == numeric
+    assert bounded.diagnostics["resource_admission"]["plan_host_peak_bytes"] == exact
+    np.testing.assert_allclose(bounded.value, probe.value, atol=2e-8, rtol=0)
+
+    mutable = directions.copy()
+    prepare = calculator.prepare_batch
+
+    def changed_input(*args: Any, **kwargs: Any) -> PreparedBatch:
+        mutable.fill(0)
+        return prepare(*args, **kwargs)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(calculator, "prepare_batch", changed_input)
+        frozen = calculator.hessian_vector_products(ATOMS, mutable)
+    np.testing.assert_array_equal(frozen.direction, directions)
+    np.testing.assert_array_equal(frozen.value, probe.value)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("an inadmissible HVP panel reached SCF preparation")
+
+    monkeypatch.setattr(Calculator, "prepare_batch", forbidden)
+    with pytest.raises(MemoryError, match="no supported plan fits"):
+        make(ResourceBudget(host_bytes=exact - 1)).hessian_vector_products(
+            ATOMS, directions, output_budget_bytes=output_bytes
+        )
+    with pytest.raises(ValueError, match="output_budget_bytes"):
+        calculator.hessian_vector_products(
+            ATOMS, directions, output_budget_bytes=output_bytes - 1
+        )
+    with pytest.raises(MemoryError, match="numerical reservation exceeded"):
+        calculator.hessian_vector_products(
+            ATOMS, directions, numeric_budget_bytes=numeric - 1
+        )
+    for invalid in (
+        directions[:0],
+        directions[0],
+        directions + np.nan,
+        directions.astype(complex),
+    ):
+        with pytest.raises(ValueError, match="directions must be"):
+            calculator.hessian_vector_products(ATOMS, invalid)
 
 
 @pytest.mark.parametrize(
@@ -149,6 +232,20 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
     error = np.max(np.abs(dense.matrix - reference_matrix))
     record_property("max_total_hessian_error", float(error))
     np.testing.assert_allclose(dense.matrix, reference_matrix, atol=3e-7, rtol=0)
+    if spin == "rks" and hasattr(
+        corrected._library, "generativeqc_ks_hessian_cpu_sequential_v1"
+    ):
+        sequential = corrected.hessian(
+            atoms, strategy="sequential", solver_options=solver, **molecular_state
+        )
+        np.testing.assert_allclose(
+            sequential.matrix, reference_matrix, atol=3e-7, rtol=0
+        )
+        assert (
+            sequential.diagnostics["d3_pair_visits"]
+            == dense.diagnostics["d3_pair_visits"]
+        )
+        assert sequential.diagnostics["response_concurrent_rhs"] == 1
     dispersion_action = (
         reference_d3(step * MOTION)[1] - reference_d3(-step * MOTION)[1]
     ) / (2 * step)
@@ -271,6 +368,65 @@ def test_linked_hessian_against_reconverged_gradient(
         record_property(f"raw_matrix_max_error_at_{step}", error)
     assert errors[1] < 3e-7, errors
     assert errors[1] < 0.4 * errors[0], errors
+
+    if hasattr(calculator._library, "generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1"):
+        seeds = np.stack((MOTION, MOTION[::-1], np.zeros_like(MOTION), -0.5 * MOTION))
+        panel = calculator.hessian_vector_products(ATOMS, seeds, solver_options=solver)
+        actions = panel.value
+        assert panel.diagnostics["response_residual_norm"] < 2e-10
+        assert panel.diagnostics["completed_directions"] == len(seeds)
+        assert panel.diagnostics["response_strategy"] == "independent"
+        assert not actions.flags.writeable and not panel.direction.flags.writeable
+        np.testing.assert_array_equal(panel.direction, seeds)
+        np.testing.assert_allclose(
+            actions.reshape((-1, MOTION.size)),
+            seeds.reshape((-1, MOTION.size)) @ reference.T,
+            atol=3e-7,
+            rtol=0,
+        )
+        step = 3e-4
+        for seed, value in zip(seeds[:2], actions[:2], strict=True):
+            expected = (gradient(step * seed) - gradient(-step * seed)) / (2 * step)
+            np.testing.assert_allclose(value.ravel(), expected, atol=2e-7, rtol=0)
+
+    if hasattr(calculator._library, "generativeqc_ks_hessian_cpu_sequential_v1"):
+        partitions = (
+            (None, 1, MOTION.size) if representation == "cartesian" else (None,)
+        )
+        for partition in partitions:
+            sequential = calculator.hessian(
+                ATOMS,
+                strategy="sequential",
+                block_size=partition,
+                solver_options=solver,
+            )
+            diagnostics = sequential.diagnostics
+            size = 4 if partition is None else partition
+            assert diagnostics["response_strategy"] == "sequential"
+            assert diagnostics["response_concurrent_rhs"] == 1
+            assert diagnostics["block_size"] == size
+            assert diagnostics["block_count"] == (MOTION.size + size - 1) // size
+            assert diagnostics["nuclear_response_solves"] == MOTION.size
+            assert diagnostics["response_residual_norm"] < 2e-10
+            assert not sequential.matrix.flags.writeable
+            np.testing.assert_allclose(sequential.matrix, reference, atol=3e-7, rtol=0)
+            np.testing.assert_allclose(
+                sequential.matrix, dense.matrix, atol=2e-8, rtol=0
+            )
+        with pytest.raises(ValueError, match="block_size must be between"):
+            calculator.hessian(ATOMS, strategy="sequential", block_size=True)
+        if representation == "cartesian":
+            compatibility_result = object()
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    Calculator,
+                    "_run_public_rks_second_order",
+                    lambda *_args, **_kwargs: compatibility_result,
+                )
+                assert (
+                    calculator.hessian(ATOMS, strategy="blocked")
+                    is compatibility_result
+                )
 
     if hasattr(calculator._library, "generativeqc_ks_hessian_cpu_recycled_v1"):
         widths = (2, 3, 4) if representation == "cartesian" else (4,)

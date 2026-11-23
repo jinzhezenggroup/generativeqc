@@ -410,10 +410,13 @@ def orbital_frame(
     )
 
 
-def _output_panel_bytes(coordinates: int, dense: bool) -> int:
+def _output_panel_bytes(
+    coordinates: int, dense: bool, direction_count: int | None = None
+) -> int:
     """Account for the native candidate, caller result and scalar column staging."""
-    elements = coordinates * coordinates if dense else coordinates
-    return 8 * (2 * elements + 3 * coordinates + 2)
+    elements = coordinates * (coordinates if dense else direction_count or 1)
+    panels = 3 if direction_count is not None and direction_count > 1 else 2
+    return 8 * (panels * elements + 3 * coordinates + 2)
 
 
 def _minimum_bytes(
@@ -423,17 +426,23 @@ def _minimum_bytes(
     multiplicity: int,
     dense: bool,
     options: _Options,
+    direction_count: int | None = None,
 ) -> int:
     """Ask the derivative owner to size the normalized system without SCF."""
     library = calculator._library
-    query = getattr(library, "generativeqc_ks_hessian_cpu_minimum_bytes_v1", None)
+    query_name = (
+        "generativeqc_ks_hessian_cpu_minimum_bytes_v1"
+        if direction_count is None
+        else "generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1"
+    )
+    query = getattr(library, query_name, None)
     if query is None:
         raise NotImplementedError("native CPU Hessian lacks pre-SCF byte sizing")
     query.argtypes = [
         ct.c_void_p,
         ct.c_void_p,
         ct.c_char_p,
-        ct.c_uint32,
+        ct.c_uint32 if direction_count is None else ct.c_size_t,
         ct.POINTER(_Options),
         ct.POINTER(ct.c_size_t),
     ]
@@ -455,7 +464,7 @@ def _minimum_bytes(
                 context,
                 system,
                 calculator.method_ir.identity.encode("ascii"),
-                dense,
+                dense if direction_count is None else direction_count,
                 ct.byref(options),
                 ct.byref(minimum),
             ),
@@ -476,6 +485,7 @@ def execute_batch(
     charge: int,
     multiplicity: int,
     direction: np.ndarray | None = None,
+    directions: np.ndarray | None = None,
     integral_budget_bytes: int = 64 << 20,
     grid_budget_bytes: int = 128 << 20,
     output_budget_bytes: int = 64 << 20,
@@ -486,6 +496,7 @@ def execute_batch(
     response_budget_bytes: int | None = None,
     index: int = 0,
     recycle_block_size: int | None = None,
+    sequential_block_size: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Consume the current accepted native state without starting another SCF.
 
@@ -506,12 +517,15 @@ def execute_batch(
     )
     _bind_batch(calculator, batch, atoms, charge, multiplicity, index, options)
     coordinates = 3 * len(atoms)
-    shape = (coordinates, coordinates) if direction is None else (len(atoms), 3)
+    direction_count = None if directions is None else len(directions)
+    dense = direction is None and directions is None
     if direction is not None:
         from ._native_hessian import checked_direction
 
         direction = checked_direction(direction, len(atoms))
-    panel_bytes = _output_panel_bytes(coordinates, direction is None)
+    seeds = direction if directions is None else directions
+    shape = (coordinates, coordinates) if seeds is None else seeds.shape
+    panel_bytes = _output_panel_bytes(coordinates, dense, direction_count)
     if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
     resource_admission = None
@@ -519,13 +533,18 @@ def execute_batch(
         from ._hessian_resources import CPU_HESSIAN_CAPACITY, CPU_HESSIAN_PROVIDER
 
         request = batch._hessian_request
-        product = "hessian" if direction is None else "hvp"
+        product = "hessian" if dense else "hvp" if directions is None else "hvp-batch"
         if (
             len(batch._atom_counts) != 1
             or request is None
             or request.identity.provider != CPU_HESSIAN_PROVIDER
             or request.identity.observables != (product,)
             or request not in batch.resource_plan.requests
+            or (
+                direction_count is not None
+                and json.loads(request.identity.topology).get("directions")
+                != direction_count
+            )
         ):
             raise NotImplementedError(
                 "budgeted CPU Hessian execution requires its composed derivative reservation"
@@ -552,7 +571,27 @@ def execute_batch(
         }
     pointer = ct.POINTER(ct.c_double)
     library = calculator._library
-    if recycle_block_size is None:
+    if directions is not None:
+        if (
+            direction is not None
+            or recycle_block_size is not None
+            or sequential_block_size is not None
+        ):
+            raise ValueError("native HVP panel cannot use a dense or scalar schedule")
+        execute = library.generativeqc_ks_hvp_cpu_batch_v1
+        source_types = [pointer, ct.c_size_t]
+        source = (directions.ctypes.data_as(pointer), directions.size)
+    elif sequential_block_size is not None:
+        if (
+            direction is not None
+            or recycle_block_size is not None
+            or not 1 <= sequential_block_size <= coordinates
+        ):
+            raise ValueError("native sequential Hessian requires dense independent RHS")
+        execute = library.generativeqc_ks_hessian_cpu_sequential_v1
+        source_types = []
+        source = ()
+    elif recycle_block_size is None:
         execute = library.generativeqc_ks_hessian_cpu_v1
         source_types = [pointer, ct.c_size_t]
         source = (
@@ -654,6 +693,16 @@ def execute_batch(
         diagnostics["block_count"] = (
             coordinates + recycle_block_size - 1
         ) // recycle_block_size
+    if sequential_block_size is not None:
+        # Preserve the caller's logical partition without allocating group panels.
+        diagnostics.update(
+            strategy="sequential",
+            response_strategy="sequential",
+            response_concurrent_rhs=1,
+            block_size=sequential_block_size,
+            block_count=(coordinates + sequential_block_size - 1)
+            // sequential_block_size,
+        )
     if calculator._d3_second_order_spec is not None:
         diagnostics["dispersion"] = {
             "electronic_response_solves": 0,
@@ -677,10 +726,14 @@ def execute_batch(
         ).encode("ascii")
     )
     identity.update(memoryview(value).cast("B"))
-    if direction is not None:
-        identity.update(memoryview(direction).cast("B"))
+    if seeds is not None:
+        if directions is not None:
+            diagnostics.update(
+                response_strategy="independent", direction_count=direction_count
+            )
+        identity.update(memoryview(seeds).cast("B"))
         return NativeKsHVPResult(
-            direction, value, identity.hexdigest(), MappingProxyType(diagnostics)
+            seeds, value, identity.hexdigest(), MappingProxyType(diagnostics)
         )
     return NativeKsHessianResult(
         value, identity.hexdigest(), MappingProxyType(diagnostics)
@@ -694,6 +747,7 @@ def run_native_cpu(
     charge: int,
     multiplicity: int,
     direction: np.ndarray | None = None,
+    directions: Any = None,
     integral_budget_bytes: int = 64 << 20,
     grid_budget_bytes: int = 128 << 20,
     output_budget_bytes: int = 64 << 20,
@@ -703,6 +757,7 @@ def run_native_cpu(
     numeric_budget_bytes: int | None = None,
     response_budget_bytes: int | None = None,
     recycle_block_size: int | None = None,
+    sequential_block_size: int | None = None,
 ) -> NativeKsHVPResult | NativeKsHessianResult:
     """Detach one native response, retaining electronic and total primal energies.
 
@@ -727,7 +782,20 @@ def run_native_cpu(
         response_budget_bytes=response_budget_bytes,
     )
     coordinates = 3 * len(atoms)
-    panel_bytes = _output_panel_bytes(coordinates, direction is None)
+    if directions is not None:
+        directions = np.asarray(directions)
+        if (
+            directions.ndim != 3
+            or not len(directions)
+            or directions.shape[1:] != (len(atoms), 3)
+            or directions.dtype.kind not in "iuf"
+        ):
+            raise ValueError(
+                "directions must be a nonempty finite real array with shape (nrhs, natoms, 3)"
+            )
+    direction_count = None if directions is None else len(directions)
+    dense = direction is None and directions is None
+    panel_bytes = _output_panel_bytes(coordinates, dense, direction_count)
     if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
     batch_controls = {}
@@ -735,9 +803,10 @@ def run_native_cpu(
         calculator._resource_budget is not None
         or numeric_budget_bytes is not None
         or response_budget_bytes is not None
+        or direction_count is not None
     ):
         minimum = _minimum_bytes(
-            calculator, atoms, charge, multiplicity, direction is None, options
+            calculator, atoms, charge, multiplicity, dense, options, direction_count
         )
         if minimum > options.numeric_bytes:
             raise MemoryError(
@@ -752,14 +821,23 @@ def run_native_cpu(
                 atoms,
                 charge=charge,
                 multiplicity=multiplicity,
-                dense=direction is None,
+                dense=dense,
                 budget=calculator._resource_budget,
                 options=options,
                 minimum=minimum,
                 staging_bytes=len(atoms) * ct.sizeof(_native.AtomDescriptor)
-                + (0 if direction is None else 2 * coordinates * 8),
+                + (0 if dense else 2 * (direction_count or 1) * coordinates * 8),
+                direction_count=direction_count,
             )
             batch_controls.update(resource_plan=plan, _hessian_request=request)
+    if directions is not None:
+        with np.errstate(over="ignore", invalid="ignore"):
+            directions = np.asarray(directions, dtype=np.float64)
+        directions = np.frombuffer(directions.tobytes(), dtype=np.float64).reshape(
+            (direction_count, len(atoms), 3)
+        )
+        if not np.isfinite(directions).all():
+            raise ValueError("directions must be finite and representable in FP64")
     with calculator.prepare_batch(
         [atoms],
         charges=[charge],
@@ -775,6 +853,7 @@ def run_native_cpu(
             charge=charge,
             multiplicity=multiplicity,
             direction=direction,
+            directions=directions,
             integral_budget_bytes=integral_budget_bytes,
             grid_budget_bytes=grid_budget_bytes,
             output_budget_bytes=output_budget_bytes,
@@ -784,6 +863,7 @@ def run_native_cpu(
             numeric_budget_bytes=numeric_budget_bytes,
             response_budget_bytes=response_budget_bytes,
             recycle_block_size=recycle_block_size,
+            sequential_block_size=sequential_block_size,
         )
     return replace(
         result,

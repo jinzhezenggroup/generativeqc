@@ -123,10 +123,14 @@ class HostKsNuclearHessian {
    */
   std::vector<HostKsHessianDiagnostic> apply_coordinates(std::size_t first, std::size_t count,
                                                          const response::GmresOptions& options);
+  /** Apply one admitted group of packed external Cartesian directions. The
+   * same publication gate and assembly arena as coordinate batches apply. */
+  std::vector<HostKsHessianDiagnostic> apply_directions(std::span<const double> directions,
+                                                        const response::GmresOptions& options);
   /** Borrowed until the next action/admission; no caller or extra output panel
    * is hidden outside the admitted batch assembly arena.
    */
-  [[nodiscard]] std::span<const double> coordinate_column(std::size_t index) const;
+  [[nodiscard]] std::span<const double> batch_column(std::size_t index) const;
   [[nodiscard]] HostKsHessianResources resources(const response::GmresOptions& options) const;
   [[nodiscard]] HostKsHessianWork work() const noexcept;
 

@@ -96,8 +96,8 @@ typedef struct generativeqc_ks_host_hessian_options_v1 {
   double symmetry_absolute_tolerance, symmetry_relative_tolerance;
 } generativeqc_ks_host_hessian_options_v1;
 
-/** Detached CPU receipt. Work counters sum over completed directions; residual
- * fields describe the last direction. Reservations are not measured peak RSS.
+/** Detached CPU receipt. Work counters sum over completed directions and the
+ * residual fields report maxima. Reservations are not measured peak RSS.
  */
 typedef struct generativeqc_ks_host_hessian_receipt_v1 {
   size_t struct_size;
@@ -195,6 +195,56 @@ GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_recycled_v1(
     generativeqc_batch* batch, size_t index, const generativeqc_ks_host_hessian_options_v1* options,
     size_t block_size, double* output, size_t output_count,
     generativeqc_ks_host_hessian_receipt_v1* receipt);
+
+/** @native-contract generativeqc_ks_hessian_cpu_sequential_v1
+ * @behavior Differentiate a verified Direct FP64 LDA/PBE RKS item with Cartesian or
+ * real-spherical AOs; PBE may include linked D3(BJ).
+ * @inputs Same live batch, expected system, options and detached buffers as CPU v1 dense.
+ * @outputs Raw row-major matrix and complete derivative work receipt.
+ * @lifetime Synchronous; retains no caller buffers.
+ * @errors Invalid, unsupported, stale, nonconverged and over-budget requests publish nothing.
+ * @execution Stream one physical CPKS solve at a time, without recycled initial guesses or
+ * concurrent RHS actions. Geometry-only source reuse remains available when it fits.
+ * @units Geometry in Bohr; Hessian in Hartree/Bohr^2.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_sequential_v1(
+    generativeqc_batch* batch, size_t index, const generativeqc_ks_host_hessian_options_v1* options,
+    double* output, size_t output_count, generativeqc_ks_host_hessian_receipt_v1* receipt);
+
+/** @native-contract generativeqc_ks_hvp_cpu_batch_v1
+ * @behavior Apply the stationary CPU KS Hessian to multiple directions of one accepted item,
+ * without constructing the dense molecular Hessian.
+ * @inputs Same state and options as generativeqc_ks_hessian_cpu_v1. For N atoms, provide a
+ * nonempty contiguous array of complete 3N-entry finite Cartesian directions. Counts are in
+ * doubles; output_count equals direction_count. All caller/source buffers must be disjoint.
+ * @outputs Actions in input order with the same layout, and one detached aggregate receipt.
+ * @lifetime Synchronous; retains no caller buffers. Serialize batch/context operations.
+ * @errors Invalid, stale, unsupported, over-budget or failed response leaves both destinations
+ * unchanged. Output, integral, grid, and applicable correction work gates cover the whole batch.
+ * @execution Independent FP64 CPKS solves on the same state. Concurrent RHS actions use bounded
+ * groups when admitted; otherwise columns stream without changing the response equations.
+ * @units Geometry in Bohr; Hartree/Bohr^2 action on the supplied direction.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_batch_v1(
+    generativeqc_batch* batch, size_t index, const generativeqc_ks_host_hessian_options_v1* options,
+    const double* directions, size_t direction_count, double* output, size_t output_count,
+    generativeqc_ks_host_hessian_receipt_v1* receipt);
+
+/** @native-contract generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1
+ * @behavior Size the mandatory CPU action-panel reservation before preparing the SCF state.
+ * @inputs Same normalized system, exact method and options as the CPU Hessian byte query;
+ * directions is a positive count of complete Cartesian perturbations, not a count of doubles.
+ * @outputs Detached width-one numerical floor including the whole action publication and snapshot.
+ * @lifetime Synchronous; borrows no buffers on return. Serialize context operations.
+ * @errors Invalid shape, unsupported system or insufficient component capacity leaves output
+ * unchanged. Success does not guarantee numerical convergence or execution-time work admission.
+ * @execution Shape-only native planning; does not solve SCF or allocate response panels.
+ * @units Capacity in bytes; direction count is dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1(
+    generativeqc_context* context, const generativeqc_system* system, const char* method,
+    size_t directions, const generativeqc_ks_host_hessian_options_v1* options,
+    size_t* minimum_bytes);
 
 #ifdef __cplusplus
 }

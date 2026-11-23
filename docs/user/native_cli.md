@@ -71,9 +71,10 @@ the same Direct FP64 batch/response owner as the Python API, with no
 interpreter or runtime compiler. Explicit range-PBE `--method-ir` requests are
 CUDA-only and are never substituted with bare PBE on CPU.
 For dense CPU LDA/PBE RKS, `--response-recycle-block-size N` requests a native
-recycled GMRES group of two to four directions. An infeasible group fails
-instead of selecting a different solver; this flag is not available for HVP
-or CUDA.
+recycled GMRES group of two to four directions. `--response-sequential` instead
+streams independent solves without recycling or batching RHS actions. The flags
+are mutually exclusive and unavailable for HVP or CUDA. If the chosen schedule
+cannot run, the command fails without substituting a different solver.
 
 The Hessian option defaults to the selected
 `GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT` value. Disabling the primitive
@@ -87,6 +88,15 @@ generativeqc hvp radical.xyz --method 'b3lyp-d3(bj)-uks' --multiplicity 2 \
   --basis sto-3g --representation spherical --backend cpu \
   --direction direction.json --json
 ```
+
+For several directions of the same CPU geometry, use `hvp --directions
+directions.json` instead of `--direction`. The file and JSON `value` have shape
+`(nrhs, natoms, 3)` in input order, including when `nrhs` is one. The native
+owner solves SCF once and returns the entire action panel or no result. Use
+`resources --property hvp --hvp-directions N` with the same method, basis and
+resource controls to query the minimum host reservation without reading a
+direction file or running SCF. Native numeric byte caps exclude CLI JSON
+conversion overhead.
 
 Charge, multiplicity, basis and native grid are forwarded, not replaced with
 a cheaper calculation. These examples are interface examples, not chemistry

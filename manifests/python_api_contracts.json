@@ -1573,6 +1573,17 @@
         "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
       }
     },
+    "generativeqc/calculator.py:Calculator.hessian_vector_products": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_execution_contracts.md#python-calculation-backends",
+        "errors": "docs/reference/python_execution_contracts.md#python-calculation-errors",
+        "ownership": "docs/reference/python_execution_contracts.md#python-calculation-ownership",
+        "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
+      }
+    },
     "generativeqc/calculator.py:Calculator.initial_guess": {
       "kind": "function",
       "profile": "accessor",

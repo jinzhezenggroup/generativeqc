@@ -223,7 +223,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::ks_hvp](#native-cpp-generativeqc-batch-ks-hvp)
 - [generativeqc::Batch::ks_cpu_hessian](#native-cpp-generativeqc-batch-ks-cpu-hessian)
 - [generativeqc::Batch::ks_cpu_hessian_recycled](#native-cpp-generativeqc-batch-ks-cpu-hessian-recycled)
+- [generativeqc::Batch::ks_cpu_hessian_sequential](#native-cpp-generativeqc-batch-ks-cpu-hessian-sequential)
 - [generativeqc::Batch::ks_cpu_hvp](#native-cpp-generativeqc-batch-ks-cpu-hvp)
+- [generativeqc::Batch::ks_cpu_hvp_batch](#native-cpp-generativeqc-batch-ks-cpu-hvp-batch)
 - [generativeqc::Batch::execute](#native-cpp-generativeqc-batch-execute)
 - [generativeqc::Batch::clear_warm_starts](#native-cpp-generativeqc-batch-clear-warm-starts)
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
@@ -251,6 +253,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_hessian_cpu_minimum_bytes_v1](#native-c-generativeqc-ks-hessian-cpu-minimum-bytes-v1)
 - [generativeqc_ks_hessian_cpu_v1](#native-c-generativeqc-ks-hessian-cpu-v1)
 - [generativeqc_ks_hessian_cpu_recycled_v1](#native-c-generativeqc-ks-hessian-cpu-recycled-v1)
+- [generativeqc_ks_hessian_cpu_sequential_v1](#native-c-generativeqc-ks-hessian-cpu-sequential-v1)
+- [generativeqc_ks_hvp_cpu_batch_v1](#native-c-generativeqc-ks-hvp-cpu-batch-v1)
+- [generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1](#native-c-generativeqc-ks-hvp-cpu-batch-minimum-bytes-v1)
 - [generativeqc_precision_admission_query_v1](#native-c-generativeqc-precision-admission-query-v1)
 - [generativeqc_precision_candidate_query_v1](#native-c-generativeqc-precision-candidate-query-v1)
 - [generativeqc_precision_controls_query_v1](#native-c-generativeqc-precision-controls-query-v1)
@@ -5946,6 +5951,28 @@ real-spherical AOs; PBE may include linked D3(BJ).
 
 **Units.** Matrix in Hartree/Bohr^2; capacities in bytes.
 
+(native-cpp-generativeqc-batch-ks-cpu-hessian-sequential)=
+## generativeqc::Batch::ks_cpu_hessian_sequential
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hessian_sequential ( std :: size_t index , std :: span < double > output , const generativeqc_ks_host_hessian_options_v1 & options )
+```
+
+**Behavior.** Compute a raw LDA/PBE CPU RKS Hessian with one independent CPKS solve at a time.
+
+**Inputs.** Same accepted state, options and dense output as ks_cpu_hessian. Supports Cartesian
+and real-spherical AOs, with linked PBE-D3(BJ) correction when prepared.
+
+**Outputs.** Row-major matrix and a detached work receipt.
+
+**Errors.** Throws Error on refusal without changing output; never substitutes another schedule.
+
+**Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
+
+**Units.** Matrix in Hartree/Bohr^2; capacities in bytes.
+
 (native-cpp-generativeqc-batch-ks-cpu-hvp)=
 ## generativeqc::Batch::ks_cpu_hvp
 
@@ -5967,6 +5994,28 @@ doubles each, and initialized CPU options identifying the accepted system.
 **Lifetime.** Borrows only for the synchronous call; serialize batch and context operations.
 
 **Units.** Hartree/Bohr^2 action on the supplied direction; capacities in bytes.
+
+(native-cpp-generativeqc-batch-ks-cpu-hvp-batch)=
+## generativeqc::Batch::ks_cpu_hvp_batch
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_ks_host_hessian_receipt_v1 ks_cpu_hvp_batch ( std :: size_t index , std :: span < const double > directions , std :: span < double > output , const generativeqc_ks_host_hessian_options_v1 & options )
+```
+
+**Behavior.** Apply one accepted CPU KS Hessian to multiple independent Cartesian directions.
+
+**Inputs.** Same state and options as ks_cpu_hvp; disjoint packed input and output spans with
+equal sizes and one or more complete 3*N directions for N atoms.
+
+**Outputs.** Direction-major actions and a detached aggregate work receipt.
+
+**Errors.** Throws Error on malformed or failed requests without changing output.
+
+**Lifetime.** Synchronous; serialize batch and context operations.
+
+**Units.** Hartree/Bohr^2 action on each supplied direction; capacities in bytes.
 
 (native-cpp-generativeqc-batch-execute)=
 ## generativeqc::Batch::execute
@@ -6587,6 +6636,84 @@ A requested group that does not fit is not replaced by an independent schedule.
 Every response still passes the physical residual test.
 
 **Units.** Block size in RHS directions; geometry in Bohr; Hessian in Hartree/Bohr^2.
+
+(native-c-generativeqc-ks-hessian-cpu-sequential-v1)=
+## generativeqc_ks_hessian_cpu_sequential_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hessian_cpu_sequential_v1 ( generativeqc_batch * batch , size_t index , const generativeqc_ks_host_hessian_options_v1 * options , double * output , size_t output_count , generativeqc_ks_host_hessian_receipt_v1 * receipt ) ;
+```
+
+**Behavior.** Differentiate a verified Direct FP64 LDA/PBE RKS item with Cartesian or
+real-spherical AOs; PBE may include linked D3(BJ).
+
+**Inputs.** Same live batch, expected system, options and detached buffers as CPU v1 dense.
+
+**Outputs.** Raw row-major matrix and complete derivative work receipt.
+
+**Lifetime.** Synchronous; retains no caller buffers.
+
+**Errors.** Invalid, unsupported, stale, nonconverged and over-budget requests publish nothing.
+
+**Execution.** Stream one physical CPKS solve at a time, without recycled initial guesses or
+concurrent RHS actions. Geometry-only source reuse remains available when it fits.
+
+**Units.** Geometry in Bohr; Hessian in Hartree/Bohr^2.
+
+(native-c-generativeqc-ks-hvp-cpu-batch-v1)=
+## generativeqc_ks_hvp_cpu_batch_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_batch_v1 ( generativeqc_batch * batch , size_t index , const generativeqc_ks_host_hessian_options_v1 * options , const double * directions , size_t direction_count , double * output , size_t output_count , generativeqc_ks_host_hessian_receipt_v1 * receipt ) ;
+```
+
+**Behavior.** Apply the stationary CPU KS Hessian to multiple directions of one accepted item,
+without constructing the dense molecular Hessian.
+
+**Inputs.** Same state and options as generativeqc_ks_hessian_cpu_v1. For N atoms, provide a
+nonempty contiguous array of complete 3N-entry finite Cartesian directions. Counts are in
+doubles; output_count equals direction_count. All caller/source buffers must be disjoint.
+
+**Outputs.** Actions in input order with the same layout, and one detached aggregate receipt.
+
+**Lifetime.** Synchronous; retains no caller buffers. Serialize batch/context operations.
+
+**Errors.** Invalid, stale, unsupported, over-budget or failed response leaves both destinations
+unchanged. Output, integral, grid, and applicable correction work gates cover the whole batch.
+
+**Execution.** Independent FP64 CPKS solves on the same state. Concurrent RHS actions use bounded
+groups when admitted; otherwise columns stream without changing the response equations.
+
+**Units.** Geometry in Bohr; Hartree/Bohr^2 action on the supplied direction.
+
+(native-c-generativeqc-ks-hvp-cpu-batch-minimum-bytes-v1)=
+## generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1 ( generativeqc_context * context , const generativeqc_system * system , const char * method , size_t directions , const generativeqc_ks_host_hessian_options_v1 * options , size_t * minimum_bytes ) ;
+```
+
+**Behavior.** Size the mandatory CPU action-panel reservation before preparing the SCF state.
+
+**Inputs.** Same normalized system, exact method and options as the CPU Hessian byte query;
+directions is a positive count of complete Cartesian perturbations, not a count of doubles.
+
+**Outputs.** Detached width-one numerical floor including the whole action publication and snapshot.
+
+**Lifetime.** Synchronous; borrows no buffers on return. Serialize context operations.
+
+**Errors.** Invalid shape, unsupported system or insufficient component capacity leaves output
+unchanged. Success does not guarantee numerical convergence or execution-time work admission.
+
+**Execution.** Shape-only native planning; does not solve SCF or allocate response panels.
+
+**Units.** Capacity in bytes; direction count is dimensionless.
 
 (native-c-generativeqc-precision-admission-query-v1)=
 ## generativeqc_precision_admission_query_v1

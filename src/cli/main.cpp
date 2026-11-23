@@ -281,6 +281,8 @@ void print_usage(std::ostream& out) {
   out << "Native compiler AD Hessian/HVP options (linked CPU/CUDA AOT; no Python/JIT):\n"
          "  --method-ir FILE.json  Range-separated PBE MethodIR payload (instead of --method)\n"
          "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
+         "  --directions FILE.json  CPU HVP only: nonempty nrhs-by-natoms-by-3 panel\n"
+         "  resources --property hvp --hvp-directions N  Plan a CPU HVP panel by count\n"
          "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
          "  --response-budget-bytes N --max-nonlocal-pairs N\n"
@@ -293,6 +295,7 @@ void print_usage(std::ostream& out) {
          "  --nonlocal-grid-azimuth-points N (specify all three for a separate WB97M-V grid)\n"
          "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n"
          "  CPU dense LDA/PBE RKS: --response-recycle-block-size N (2..4)\n"
+         "                        --response-sequential (one independent RHS at a time)\n"
          "  --response-cache-precision fp64|fp32-proposal (dense hessian only)\n";
   out << "Native saddle options (CPU B3LYP RKS/UKS; no Python/JIT or preoptimization):\n"
          "  --masses FILE.json       Required ordered positive masses in dalton\n"
@@ -659,6 +662,9 @@ RunOptions parse_run(int argc, char** argv,
       if (property != "hessian" && property != "hvp")
         throw UsageError("resources --property requires hessian or hvp");
       resource_derivative->operation = property;
+    } else if (resource_derivative && option == "--hvp-directions") {
+      if (resource_derivative->hvp_directions) throw UsageError("duplicate --hvp-directions");
+      resource_derivative->hvp_directions = parse_positive_u32(value(), "hvp directions");
     } else if ((singlepoint || resources) && option == "--cpu-packed-eri-budget-bytes") {
       options.cpu_packed_eri_bytes = parse_bytes(value(), "CPU packed ERI bytes");
       if (!options.cpu_packed_eri_bytes)
@@ -910,6 +916,9 @@ RunOptions parse_run(int argc, char** argv,
   }
   if (derivative_limit_explicit && !derivative_inventory)
     throw UsageError("derivative byte limits require resources --property hessian or hvp");
+  if (resource_derivative && resource_derivative->hvp_directions &&
+      resource_derivative->operation != "hvp")
+    throw UsageError("--hvp-directions requires resources --property hvp");
   if (derivative_inventory && dispersion_memory_explicit)
     throw UsageError("derivative resource inventories use --dispersion-budget-bytes");
   if (options.automatic_initial_guess()) {
@@ -1498,7 +1507,7 @@ int main(int argc, char** argv) {
       std::vector<char*> arguments;
       for (auto& argument : invocation.run_arguments) arguments.push_back(argument.data());
       const auto options = parse_run(static_cast<int>(arguments.size()), arguments.data());
-      return generativeqc::cli::hessian_command(options, read_xyz(options), invocation);
+      return generativeqc::cli::hessian_command(options, read_xyz(options), std::move(invocation));
     }
     if (command == "run") {
       if (argc == 3 &&

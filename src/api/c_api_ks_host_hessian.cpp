@@ -129,13 +129,13 @@ struct MandatoryReservation {
 /** The base reservation charges whole grid/response caps, not their later sampled usage.
  * Optional density-dependent storage is neither promised nor sized here. */
 MandatoryReservation mandatory_reservation(const core::System& system, std::size_t aos,
-                                           std::size_t spins, bool matrix, bool corrected,
+                                           std::size_t spins, std::size_t columns,
+                                           bool snapshot_directions, bool corrected,
                                            std::size_t first_bytes, std::size_t curvature_bytes,
                                            const generativeqc_ks_host_hessian_options_v1& options) {
   MandatoryReservation result;
   const auto atoms = system.atoms.size();
   const auto dimension = size_mul(3, atoms);
-  const auto columns = matrix ? dimension : 1;
   budget(size_add(first_bytes, curvature_bytes), options.integral_bytes,
          "CPU Hessian integral storage cap exceeded");
   result.first_ecp = integrals::ecp_direction_plan(system).limits;
@@ -151,8 +151,9 @@ MandatoryReservation mandatory_reservation(const core::System& system, std::size
   }
   const auto output_elements = size_mul(dimension, columns);
   const auto fields = size_add(2, size_mul(2, dimension));
-  result.panel_bytes =
-      size_mul(size_add(size_mul(2, output_elements), size_add(dimension, fields)), sizeof(double));
+  result.panel_bytes = size_mul(
+      size_add(size_mul(snapshot_directions ? 3 : 2, output_elements), size_add(dimension, fields)),
+      sizeof(double));
   budget(result.panel_bytes, options.output_bytes, "CPU Hessian output/staging cap exceeded");
   result.frame_bytes =
       size_mul(size_mul(spins, size_add(size_mul(4, size_mul(aos, aos)), aos)), sizeof(double));
@@ -233,12 +234,15 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     generativeqc_batch& batch, std::size_t index,
     const generativeqc_ks_host_hessian_options_v1& options, std::span<const double> external,
     std::span<double> output, const generativeqc_ks_host_hessian_receipt_v1* receipt,
-    std::size_t recycle_width) {
+    std::size_t recycle_width, bool sequential) {
   const auto started = std::chrono::steady_clock::now();
   const bool matrix = external.empty();
   const auto dimension = size_mul(3, batch.atom_counts[index]);
-  const auto columns = matrix ? dimension : 1;
-  runtime::df_progress::Scope progress(matrix ? "cpu_hessian" : "cpu_hessian_vector");
+  const auto columns = matrix ? dimension : external.size() / dimension;
+  const bool multivector = !matrix && columns > 1;
+  runtime::df_progress::Scope progress(matrix        ? "cpu_hessian"
+                                       : multivector ? "cpu_hessian_vector_batch"
+                                                     : "cpu_hessian_vector");
   runtime::df_progress::number("columns", columns);
   dft::CudaKsFinalStateToken token;
   std::string detail;
@@ -268,6 +272,9 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   if (recycle_width && (!semilocal_only || binding->spins != 1))
     throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                "recycled CPU Hessian requires linked LDA/PBE RKS response");
+  if (sequential && (!semilocal_only || binding->spins != 1))
+    throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                               "sequential CPU Hessian requires linked LDA/PBE RKS response");
   const auto& correction = *source.dispersion;
   validate_linked_system(*source.system, *binding, correction);
   if (semilocal_only && (token.identity.model.semilocal_exchange_scale != 1.0 ||
@@ -298,7 +305,7 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   };
   const auto curvature = curvature_plan(dft::HostNuclearIntegralCurvatureSchedule::Column);
   const auto mandatory =
-      mandatory_reservation(*source.system, basis, spins, matrix, bj.has_value(),
+      mandatory_reservation(*source.system, basis, spins, columns, multivector, bj.has_value(),
                             first.numeric_bytes, curvature.numeric_bytes, options);
   auto reservation = mandatory.total_bytes;
   budget(reservation, options.numeric_bytes,
@@ -356,8 +363,8 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   dft::HostKsHessianLimits limits;
   limits.max_numeric_bytes = options.numeric_bytes - frame_bytes - panel_bytes - geometry_bytes;
   limits.max_optional_numeric_bytes = options.numeric_bytes - reservation;
-  limits.max_assembly_numeric_bytes =
-      size_add(mandatory.assembly_bytes, matrix ? options.output_bytes - panel_bytes : 0);
+  limits.max_assembly_numeric_bytes = size_add(
+      mandatory.assembly_bytes, (matrix || multivector) ? options.output_bytes - panel_bytes : 0);
   limits.max_nuclear_pairs =
       atoms % 2 ? size_mul(atoms, (atoms - 1) / 2) : size_mul(atoms / 2, atoms - 1);
   limits.response.max_numeric_bytes = options.response_bytes;
@@ -439,9 +446,11 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
           : size_mul(columns, curvature.map_terms);
   work_budget(size_add(size_mul(first_passes, first.map_terms), curvature_terms),
               options.max_map_terms, "CPU Hessian complete integral-map work cap exceeded");
-  const auto response_width = recycle_width ? requested_width
-                              : matrix      ? owner.admit_response_batch(solver)
-                                            : 1;
+  const auto response_width =
+      recycle_width           ? requested_width
+      : matrix && !sequential ? owner.admit_response_batch(solver)
+      : multivector ? owner.admit_response_batch(solver, std::min(columns, std::size_t{4}))
+                    : 1;
   owner.admit_response_cache(solver);
   const auto resources = owner.resources(solver);
   if (!resources.admitted)
@@ -458,7 +467,9 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
   const char* integral_schedule = "column";
   if (matrix_integrals) integral_schedule = projected_integrals ? "projected_matrix" : "matrix";
   runtime::df_progress::label("frozen_integral_schedule", integral_schedule);
-  runtime::df_progress::label("response_rhs_schedule", recycle_width ? "recycled" : "independent");
+  runtime::df_progress::label("response_rhs_schedule", recycle_width ? "recycled"
+                                                       : sequential  ? "sequential"
+                                                                     : "independent");
   runtime::df_progress::number("independent_response_width", recycle_width ? 1 : response_width);
   if (recycle_width) runtime::df_progress::number("recycled_response_width", response_width);
   if (coordinate_sources) {
@@ -476,7 +487,11 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
                                  owner.work().integrals.eri_matrix_second_partials);
   }
   std::vector<double> right(dimension), column(fields), candidate(output.size());
-  if (!matrix) std::copy(external.begin(), external.end(), right.begin());
+  std::vector<double> directions;
+  if (multivector)
+    directions.assign(external.begin(), external.end());
+  else if (!matrix)
+    std::copy(external.begin(), external.end(), right.begin());
   auto result = api::empty_host_hessian_receipt();
   result.numeric_reservation_bytes = reservation;
   result.frame_bytes = frame_bytes;
@@ -520,17 +535,26 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     if (response_width > 1) {
       const auto local = coordinate % response_width;
       if (!local) {
-        group = owner.apply_coordinates(coordinate, std::min(response_width, columns - coordinate),
-                                        solver);
+        const auto count = std::min(response_width, columns - coordinate);
+        if (matrix)
+          group = owner.apply_coordinates(coordinate, count, solver);
+        else
+          group = owner.apply_directions(std::span<const double>(directions)
+                                             .subspan(coordinate * dimension, count * dimension),
+                                         solver);
         for (std::size_t index = 0; index < group.size(); ++index)
           require_response(group[index], coordinate + index);
       }
       diagnostic = group[local];
-      values = owner.coordinate_column(local);
+      values = owner.batch_column(local);
     } else {
       if (matrix) {
         std::fill(right.begin(), right.end(), 0);
         right[coordinate] = 1;
+      } else if (multivector) {
+        const auto direction =
+            std::span<const double>(directions).subspan(coordinate * dimension, dimension);
+        std::copy(direction.begin(), direction.end(), right.begin());
       }
       diagnostic = owner.apply(right, column, solver);
       require_response(diagnostic, coordinate);
@@ -546,7 +570,8 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     result.total_energy = values[0];
     result.d3_energy = values[0] - diagnostic.verified_energy;
     for (std::size_t row = 0; row < dimension; ++row)
-      candidate[matrix ? row * dimension + coordinate : row] = values[2 + dimension + row];
+      candidate[matrix ? row * dimension + coordinate : coordinate * dimension + row] =
+          values[2 + dimension + row];
     add_ecp(result, diagnostic.first_ecp_work);
     add_ecp(result, diagnostic.curvature_ecp_work);
     result.d3_pair_visits = size_add(result.d3_pair_visits,
@@ -595,8 +620,12 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     }
   }
   validate();
-  if (!matrix && !std::equal(right.begin(), right.end(), external.begin()))
-    throw std::invalid_argument("CPU Hessian external direction changed before publication");
+  if (!matrix) {
+    const auto snapshot =
+        multivector ? std::span<const double>(directions) : std::span<const double>(right);
+    if (!std::equal(snapshot.begin(), snapshot.end(), external.begin()))
+      throw std::invalid_argument("CPU Hessian external direction changed before publication");
+  }
   result.execution_seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
   std::copy(candidate.begin(), candidate.end(), output.begin());
@@ -619,11 +648,12 @@ extern "C" std::uint32_t generativeqc_ks_hessian_cpu_method_v1(const char* ident
 #endif
 }
 
-extern "C" generativeqc_status generativeqc_ks_hessian_cpu_minimum_bytes_v1(
+namespace {
+generativeqc_status cpu_hessian_minimum_bytes(
     generativeqc_context* context, const generativeqc_system* system, const char* method,
-    std::uint32_t dense, const generativeqc_ks_host_hessian_options_v1* options,
+    bool dense, std::size_t directions, const generativeqc_ks_host_hessian_options_v1* options,
     std::size_t* minimum_bytes) {
-  if (!context || !system || !method || dense > 1 || !options || !minimum_bytes)
+  if (!context || !system || !method || !directions || !options || !minimum_bytes)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(context->mutex);
   if (!generativeqc::api::valid_descriptor(options)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
@@ -653,17 +683,36 @@ extern "C" generativeqc_status generativeqc_ks_hessian_cpu_minimum_bytes_v1(
         dft::HostKsNuclearIntegrals::direction_bytes(atoms, aos, binding->spins, binding->identity);
     const auto curvature = dft::HostKsNuclearIntegralCurvature::column_bytes(
         atoms, aos, binding->spins, binding->identity);
-    const auto plan = mandatory_reservation(source, aos, binding->spins, dense != 0, corrected,
-                                            first, curvature, *options);
+    const auto plan =
+        mandatory_reservation(source, aos, binding->spins, dense ? size_mul(3, atoms) : directions,
+                              !dense && directions > 1, corrected, first, curvature, *options);
     *minimum_bytes = plan.total_bytes;
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
+    (void)dense;
     context->last_detail = "CPU Hessian requires a linked native host AOT package; no fallback";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
   }
+}
+}  // namespace
+
+extern "C" generativeqc_status generativeqc_ks_hessian_cpu_minimum_bytes_v1(
+    generativeqc_context* context, const generativeqc_system* system, const char* method,
+    std::uint32_t dense, const generativeqc_ks_host_hessian_options_v1* options,
+    std::size_t* minimum_bytes) {
+  if (dense > 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return cpu_hessian_minimum_bytes(context, system, method, dense != 0, 1, options, minimum_bytes);
+}
+
+extern "C" generativeqc_status generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1(
+    generativeqc_context* context, const generativeqc_system* system, const char* method,
+    std::size_t directions, const generativeqc_ks_host_hessian_options_v1* options,
+    std::size_t* minimum_bytes) {
+  return cpu_hessian_minimum_bytes(context, system, method, false, directions, options,
+                                   minimum_bytes);
 }
 
 extern "C" generativeqc_status generativeqc_ks_hessian_cpu_default_options_v1(
@@ -708,7 +757,8 @@ generativeqc_status dispatch_cpu_hessian(generativeqc_batch* batch, std::size_t 
                                          const double* direction, std::size_t direction_count,
                                          double* output, std::size_t output_count,
                                          generativeqc_ks_host_hessian_receipt_v1* receipt,
-                                         std::size_t recycle_width) {
+                                         std::size_t recycle_width, bool sequential = false,
+                                         bool external_batch = false) {
   if (!batch || !batch->context || !batch->plan || !options || !receipt || !output)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
@@ -720,10 +770,12 @@ generativeqc_status dispatch_cpu_hessian(generativeqc_batch* batch, std::size_t 
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     const auto dimension = size_mul(3, batch->atom_counts[index]);
     if (recycle_width > dimension) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    if (external_batch && (!direction || !direction_count || direction_count % dimension))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     if (!options->expected_atoms || options->expected_atom_count != batch->atom_counts[index] ||
         options->expected_multiplicity < 1 ||
-        (direction ? direction_count != dimension : direction_count != 0) ||
-        output_count != (direction ? dimension : size_mul(dimension, dimension)) ||
+        (!external_batch && (direction ? direction_count != dimension : direction_count != 0)) ||
+        output_count != (direction ? direction_count : size_mul(dimension, dimension)) ||
         !options->numeric_bytes || !options->integral_bytes || !options->grid_bytes ||
         !options->response_bytes || !options->ecp_bytes || !options->dispersion_bytes ||
         !options->output_bytes || !options->max_eri_primitives || !options->max_map_terms ||
@@ -761,10 +813,11 @@ generativeqc_status dispatch_cpu_hessian(generativeqc_batch* batch, std::size_t 
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 #if GENERATIVEQC_HAS_HOST_HESSIAN
     const auto result = execute(*batch, index, *options, {direction, direction_count},
-                                {output, output_count}, receipt, recycle_width);
+                                {output, output_count}, receipt, recycle_width, sequential);
     *receipt = result;
     return GENERATIVEQC_STATUS_SUCCESS;
 #else
+    (void)sequential;
     batch->context->last_detail =
         "CPU Hessian requires a linked native host AOT package; no fallback";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -791,6 +844,23 @@ extern "C" generativeqc_status generativeqc_ks_hessian_cpu_recycled_v1(
   if (block_size < 2 || block_size > 4) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return dispatch_cpu_hessian(batch, index, options, nullptr, 0, output, output_count, receipt,
                               block_size);
+}
+
+extern "C" generativeqc_status generativeqc_ks_hessian_cpu_sequential_v1(
+    generativeqc_batch* batch, std::size_t index,
+    const generativeqc_ks_host_hessian_options_v1* options, double* output,
+    std::size_t output_count, generativeqc_ks_host_hessian_receipt_v1* receipt) {
+  return dispatch_cpu_hessian(batch, index, options, nullptr, 0, output, output_count, receipt, 0,
+                              true);
+}
+
+extern "C" generativeqc_status generativeqc_ks_hvp_cpu_batch_v1(
+    generativeqc_batch* batch, std::size_t index,
+    const generativeqc_ks_host_hessian_options_v1* options, const double* directions,
+    std::size_t direction_count, double* output, std::size_t output_count,
+    generativeqc_ks_host_hessian_receipt_v1* receipt) {
+  return dispatch_cpu_hessian(batch, index, options, directions, direction_count, output,
+                              output_count, receipt, 0, false, true);
 }
 
 extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(

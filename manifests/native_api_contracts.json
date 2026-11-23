@@ -116,6 +116,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::Batch::ks_cpu_hessian_sequential": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "1c1301e588f6ca3590f9659aabc3f676b797278e797f029c13e96e02edee821b",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::Batch::ks_cpu_hvp": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -128,6 +143,14 @@
         "outputs",
         "units"
       ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::Batch::ks_cpu_hvp_batch": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "85f0da007b51ef8e21b28d954c8b09a545cd054cb6bb77876aa609b47e96cc14",
+      "required_facets": ["behavior", "errors", "inputs", "lifetime", "outputs", "units"],
       "fields": [],
       "field_declarations": []
     },
@@ -3070,6 +3093,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_ks_hessian_cpu_sequential_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/ks_hessian.h",
+      "signature_sha256": "340ba1f96d38c45a10073a23b05794150e888325883176fa211c92beeed4ee1d",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_ks_hessian_cpu_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/ks_hessian.h",
@@ -3095,6 +3134,22 @@
         "execution",
         "outputs"
       ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/ks_hessian.h",
+      "signature_sha256": "a3df045938bdc11904dbe6f7568e6712f92891b6d68f2310551372c294feae8f",
+      "required_facets": ["behavior", "errors", "execution", "inputs", "lifetime", "outputs", "units"],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_ks_hvp_cpu_batch_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/ks_hessian.h",
+      "signature_sha256": "cf67c426ca436de8de3913a3561a0fe0055bd6d6600b3c79a65d563c4f79fa42",
+      "required_facets": ["behavior", "errors", "execution", "inputs", "lifetime", "outputs", "units"],
       "fields": [],
       "field_declarations": []
     },

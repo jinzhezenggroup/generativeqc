@@ -476,21 +476,30 @@ class HostKsNuclearHessian::Impl {
     return 1;
   }
 
-  std::vector<HostKsHessianDiagnostic> apply_coordinates(std::size_t first, std::size_t count,
-                                                         const response::GmresOptions& options) {
+  std::vector<HostKsHessianDiagnostic> apply_group(std::size_t first, std::size_t count,
+                                                   std::span<const double> directions,
+                                                   const response::GmresOptions& options) {
     SourceInvocation guard(busy);
     batch_ready = false;
     validate();
-    if (!batch_storage || !count || count > batch_width || first >= dimension ||
-        count > dimension - first)
-      throw std::invalid_argument("stationary Hessian coordinate batch is not admitted");
+    if (!batch_storage || !count || count > batch_width)
+      throw std::invalid_argument("stationary Hessian response batch is not admitted");
+    if (directions.empty() ? (first >= dimension || count > dimension - first)
+                           : directions.size() != size_mul(count, dimension))
+      throw std::invalid_argument("stationary Hessian response batch shape mismatch");
+    finite(directions);
     if (integral_matrix_source && !integral_matrix_ready)
       throw std::logic_error("stationary Hessian frozen integral matrix is not prepared");
     std::array<HostKsNuclearRequest, 4> requests;
     for (std::size_t index = 0; index < count; ++index) {
       const auto direction = batch_right.subspan(index * dimension, dimension);
-      std::fill(direction.begin(), direction.end(), 0.0);
-      direction[first + index] = 1.0;
+      if (directions.empty()) {
+        std::fill(direction.begin(), direction.end(), 0.0);
+        direction[first + index] = 1.0;
+      } else {
+        const auto external = directions.subspan(index * dimension, dimension);
+        std::copy(external.begin(), external.end(), direction.begin());
+      }
       requests[index] = {direction, batch_density.subspan(index * matrices, matrices),
                          batch_weighted.subspan(index * matrices, matrices)};
     }
@@ -645,12 +654,16 @@ std::size_t HostKsNuclearHessian::admit_response_batch(const response::GmresOpti
 }
 std::vector<HostKsHessianDiagnostic> HostKsNuclearHessian::apply_coordinates(
     std::size_t first, std::size_t count, const response::GmresOptions& options) {
-  return impl_->apply_coordinates(first, count, options);
+  return impl_->apply_group(first, count, {}, options);
 }
-std::span<const double> HostKsNuclearHessian::coordinate_column(std::size_t index) const {
+std::vector<HostKsHessianDiagnostic> HostKsNuclearHessian::apply_directions(
+    std::span<const double> directions, const response::GmresOptions& options) {
+  return impl_->apply_group(0, directions.size() / impl_->dimension, directions, options);
+}
+std::span<const double> HostKsNuclearHessian::batch_column(std::size_t index) const {
   impl_->validate();
   if (!impl_->batch_ready || index >= impl_->batch_count)
-    throw std::logic_error("stationary Hessian coordinate batch is not complete");
+    throw std::logic_error("stationary Hessian response batch is not complete");
   return impl_->batch_columns.subspan(index * impl_->fields, impl_->fields);
 }
 HostKsHessianDiagnostic HostKsNuclearHessian::apply(std::span<const double> right,

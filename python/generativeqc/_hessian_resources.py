@@ -52,6 +52,7 @@ def plan_cpu_hessian(
     options: _CpuOptions,
     minimum: int,
     staging_bytes: int,
+    direction_count: int | None = None,
 ) -> tuple[ResourcePlan, ResourceRequest]:
     """Compose the native mandatory byte floor with all live primal owners."""
     library = calculator._library
@@ -73,6 +74,9 @@ def plan_cpu_hessian(
     correction = calculator._dispersion_resource_request(systems, scf)
     prerequisites = (scf,) if correction is None else (scf, correction)
     last_phase = _last_phase(prerequisites)
+    topology = {"scf": scf.identity.identity, "atoms": len(atoms)}
+    if direction_count is not None:
+        topology["directions"] = direction_count
 
     def request(capacity: int) -> ResourceRequest:
         return ResourceRequest(
@@ -82,11 +86,21 @@ def plan_cpu_hessian(
                 provider=CPU_HESSIAN_PROVIDER,
                 backend="cpu",
                 precision="fp64",
-                topology=json.dumps(
-                    {"scf": scf.identity.identity, "atoms": len(atoms)}
+                topology=json.dumps(topology),
+                observables=(
+                    "hessian"
+                    if dense
+                    else "hvp"
+                    if direction_count is None
+                    else "hvp-batch",
                 ),
-                observables=("hessian" if dense else "hvp",),
-                schedule="scalar-columns" if dense else "action-only",
+                schedule=(
+                    "scalar-columns"
+                    if dense
+                    else "action-only"
+                    if direction_count is None
+                    else "independent-action-panel"
+                ),
             ),
             (
                 ResourceCandidate(

@@ -3961,6 +3961,72 @@ class Calculator:
             ),
         )
 
+    def hessian_vector_products(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        directions: typing.Any,
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        output_budget_bytes: int = 64 << 20,
+        integral_budget_bytes: int = 64 << 20,
+        grid_budget_bytes: int = 128 << 20,
+        solver_options: typing.Any = None,
+        max_eri_primitives: int | None = None,
+        max_map_terms: int | None = None,
+        numeric_budget_bytes: int | None = None,
+        response_budget_bytes: int | None = None,
+    ) -> typing.Any:
+        """Apply the linked CPU KS Hessian to several directions of one geometry.
+
+        ``directions`` is a nonempty finite real array of shape
+        ``(nrhs, natoms, 3)``. Return immutable direction and action arrays of
+        that shape, in input order, with an aggregate native work receipt.
+        Directions use Bohr and act on a Hessian in Hartree/Bohr squared.
+
+        One accepted SCF state serves the complete panel. Width-limited groups
+        of independent solves share native response actions when admitted;
+        otherwise the same solves stream individually without building a
+        Hessian. Output and work caps cover the whole panel. A ``ResourceBudget``
+        is composed with the native panel floor before SCF. Failure publishes
+        nothing. Unsupported methods, CUDA and older libraries do not select
+        a Python numerical fallback. See :ref:`python-calculation-backends`,
+        :ref:`python-calculation-values`, :ref:`python-calculation-errors` and
+        :ref:`python-calculation-ownership`.
+        """
+        from ._native_cpu_hessian import run_native_cpu
+
+        if not self._native_cpu_second_order or not all(
+            hasattr(self._library, name)
+            for name in (
+                "generativeqc_ks_hvp_cpu_batch_v1",
+                "generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1",
+            )
+        ):
+            raise NotImplementedError("HVP panels require a linked native CPU KS owner")
+        native_atoms = self._checked_rks_second_order_atoms(
+            atoms, multiplicity=multiplicity, endpoint="hvp"
+        )
+        if directions is None:
+            raise ValueError(
+                "directions must be a nonempty finite real array with shape (nrhs, natoms, 3)"
+            )
+        return run_native_cpu(
+            self,
+            native_atoms,
+            charge=charge,
+            multiplicity=multiplicity,
+            directions=directions,
+            output_budget_bytes=output_budget_bytes,
+            integral_budget_bytes=integral_budget_bytes,
+            grid_budget_bytes=grid_budget_bytes,
+            solver_options=solver_options,
+            max_eri_primitives=max_eri_primitives,
+            max_map_terms=max_map_terms,
+            numeric_budget_bytes=numeric_budget_bytes,
+            response_budget_bytes=response_budget_bytes,
+        )
+
     def hessian(
         self,
         atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
@@ -3999,8 +4065,10 @@ class Calculator:
         RKS/UKS, bare and named D3(BJ), and canonical bare Cartesian LDA/PBE RKS.
         The aggregate owner defaults to scalar response. Native LDA/PBE also
         accept recycled groups of two to four RHS when the library links that
-        schedule. Block GMRES and other group widths remain on the bounded
-        compatibility path. The native output
+        schedule. Linked native LDA/PBE can also stream explicit ``"sequential"``
+        requests, with one independent solve at a time. The requested ``block_size``
+        then describes a logical partition only. Block GMRES and wider recycle
+        groups remain on the bounded compatibility path where supported. The native output
         reservation includes two matrix panels plus one direction and one native
         column; the common corrected-output gate remains conservative. Native
         CPU defaults use physical response rtol=1e-10 and atol=1e-12; an explicitly
@@ -4038,6 +4106,19 @@ class Calculator:
             atoms, multiplicity=multiplicity, endpoint="hessian"
         )
         coordinates = 3 * len(native_atoms)
+        sequential_width = None
+        if (
+            self._native_cpu_second_order
+            and not self._native_cpu_scalar_only_second_order
+            and strategy == "sequential"
+            and hasattr(self._library, "generativeqc_ks_hessian_cpu_sequential_v1")
+        ):
+            sequential_width = min(4, coordinates) if block_size is None else block_size
+            if (
+                type(sequential_width) is not int
+                or not 1 <= sequential_width <= coordinates
+            ):
+                raise ValueError("block_size must be between 1 and 3*natoms")
         recycle_width = None
         if (
             self._native_cpu_second_order
@@ -4054,6 +4135,7 @@ class Calculator:
             self._native_cpu_scalar_only_second_order
             or (block_size in (None, 1) and strategy in (None, "scalar"))
             or recycle_width is not None
+            or sequential_width is not None
         )
         if (
             self._native_cpu_second_order
@@ -4065,7 +4147,7 @@ class Calculator:
         ):
             raise NotImplementedError(
                 "spherical or corrected CPU LDA/PBE Hessian requires native scalar or recycled "
-                "groups of two through four"
+                "groups of two through four, or a linked native sequential schedule"
             )
         if max_eri_primitives is not None and not use_native_cpu:
             raise NotImplementedError(
@@ -4105,11 +4187,16 @@ class Calculator:
 
             if (
                 recycle_width is None
+                and sequential_width is None
                 and block_size is not None
                 and (type(block_size) is not int or block_size != 1)
             ):
                 raise ValueError("native CPU Hessian requires block_size=None or 1")
-            if recycle_width is None and strategy not in (None, "scalar"):
+            if (
+                recycle_width is None
+                and sequential_width is None
+                and strategy not in (None, "scalar")
+            ):
                 raise NotImplementedError(
                     "native CPU Hessian supports only strategy='scalar'"
                 )
@@ -4127,6 +4214,7 @@ class Calculator:
                 numeric_budget_bytes=numeric_budget_bytes,
                 response_budget_bytes=response_budget_bytes,
                 recycle_block_size=recycle_width,
+                sequential_block_size=sequential_width,
             )
         if self._cuda_rks_second_order:
             from ._native_hessian import run_native_cuda

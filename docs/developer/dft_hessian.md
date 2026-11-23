@@ -274,10 +274,14 @@ real-spherical AOs,
 `Calculator.hessian()` dispatch to the linked native owner below. The linked
 recycled variant processes groups of two to four RHS using the same stationary
 assembly, the native recycle vector owner and scalar GMRES. A fresh recycle
-space starts every group. Without the binding, or for true block GMRES or
-other group widths, Python retains the Cartesian-only compatibility domain and
-uses
-the bounded `generativeqc.rks_hessian_directional` and
+space starts every group. The linked sequential variant uses one independent
+solve at a time, without either recycling or batched operator actions. Its
+`block_size` preserves the logical partition in diagnostics but does not size
+native group buffers. All three schedules share the native stationary state,
+physical residual and all-or-nothing publication gates. Without the relevant
+binding, or for true block GMRES or unsupported recycle widths, Python retains
+the Cartesian-only compatibility domain and uses the bounded
+`generativeqc.rks_hessian_directional` and
 `generativeqc.rks_hessian` path. Both paths publish the raw result and report
 the executed owner in diagnostics. WB97M-V uses the separate compiler-AD
 owner described below.
@@ -649,13 +653,20 @@ metric/RHS/D/W/physical-residual maps remain the scientific owners. RKS retains
 the two-spin singlet embedding; UKS retains its coupled spin response. Portable
 scalar contraction fallbacks and two/three-direction tails are supported.
 
-Full raw matrices select the independent batch width before allocating XC
-partials or the AO prefix. Admission includes every simultaneous Krylov state,
+On the automatic CPU schedule, full raw matrices select the independent batch
+width before allocating XC partials or the AO prefix. Admission includes every simultaneous Krylov state,
 per-direction source/map/D/W panel, explicit XC packing workspace and staged
 assembly column inside the original response/aggregate limits. Additional
 assembly uses only unused output/aggregate allowance; insufficient capacity or
 optional allocation failure retains the ordinary scalar column schedule.
-Standalone HVPs retain that schedule. The physical column assembler and raw
+Standalone HVPs retain that schedule. The CPU C ABI
+`generativeqc_ks_hvp_cpu_batch_v1` and C++ SDK `Batch::ks_cpu_hvp_batch` also
+accept a packed panel of arbitrary Cartesian directions for one accepted
+item. They never materialize a dense Hessian; bounded independent groups
+reuse the same response/column assembler, with a width-one fallback.
+Output admission includes the full direction snapshot and result staging;
+work limits and publication apply to the complete panel, not each group.
+The physical column assembler and raw
 symmetry gate are shared, and per-direction ECP/D3 work is retained separately
 for the completed endpoint receipt. Batch failure publishes no partial group.
 Neither compact component controls nor a component timing qualifies an installed

@@ -523,7 +523,7 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
       return finish();
     }
     plan["exclusions"][0] =
-        "caller storage outside the raw Hessian/HVP panel and CLI JSON encoding";
+        "caller storage outside the raw Hessian/HVP panel and CLI JSON conversion";
     plan["exclusions"].push_back(
         "optional derivative workspace is not included in the minimum peak");
     plan["exclusions"].push_back("final-frame export scratch and implicit BLAS workspace");
@@ -946,9 +946,9 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
                                                        -1, GENERATIVEQC_BACKEND_CPU_REFERENCE};
       Context context(descriptor);
       const auto system = make_cpu_hessian_system(context, options, atoms, basis);
-      const auto status = generativeqc_ks_hessian_cpu_minimum_bytes_v1(
-          context.get(), system.get(), derivative_program->identity.data(),
-          derivative->operation == "hessian", &controls, &minimum_bytes);
+      const auto status = cpu_hessian_minimum_bytes(context.get(), system.get(),
+                                                    derivative_program->identity.data(),
+                                                    *derivative, controls, &minimum_bytes);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
         plan["status"] =
             status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ? "infeasible" : "unsupported";
@@ -970,7 +970,10 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     // primal peak, since this inventory does not prove any particular release boundary.
     workspace = sum({workspace, minimum_bytes});
     if (derivative->operation == "hvp")
-      workspace = sum({workspace, product({3, atoms.size(), sizeof(double)})});
+      workspace = sum({workspace, product({std::max(derivative->hvp_directions, std::size_t{1}), 3,
+                                           atoms.size(), sizeof(double)})});
+    if (derivative->hvp_directions)
+      plan["derivative_inventory"]["direction_count"] = derivative->hvp_directions;
     derivative_cap_exceeded = minimum_bytes > controls.numeric_bytes;
   }
   // Each native fleet already applies batch multiplicity to retained storage.
