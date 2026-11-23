@@ -454,7 +454,15 @@ def test_force_workspace_replay_uses_native_admission_and_preserves_rollback(
     }
     probe = Calculator(**options)
     energy = probe.estimate_resources([H2], properties=("energy",))
-    forces = probe.estimate_resources([H2], properties=("energy", "forces"))
+    # An energy-only handle cannot bind the native dense force preparation
+    # retroactively. Test the exact conservative reservation used by upgrades.
+    force_request = probe._resource_request(
+        [H2],
+        properties=("energy", "forces"),
+        ks_options=probe.ks_options,
+        _allow_native_dense_forces=False,
+    )
+    forces = plan_resources((force_request,), ResourceBudget(), library=probe._library)
     assert forces.peak_bytes["host"] > energy.peak_bytes["host"]
     host = (
         energy.peak_bytes["host"]
@@ -503,6 +511,11 @@ def test_force_workspace_replay_uses_native_admission_and_preserves_rollback(
             assert result.succeeded and result.forces is not None
             assert batch.resource_plan.to_dict() != original
             assert batch.resource_plan.selections == plan.selections
+            replay = batch.execute(properties=("energy", "forces"), strict=True).items[
+                0
+            ]
+            assert replay.succeeded and replay.warm_start_used
+            assert replay.forces == pytest.approx(result.forces, abs=1e-8)
             step = 2e-4
             energies = []
             for direction in (-1, 1):

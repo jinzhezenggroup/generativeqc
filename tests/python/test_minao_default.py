@@ -106,7 +106,7 @@ def test_cpu_default_and_explicit_hcore(native: None, method: str) -> None:
     )
     assert automatic_plan.candidates == explicit_plan.candidates
     schedule = json.loads(automatic_plan.identity.schedule)
-    assert schedule["initial_guess_execution"] == "native-auto-huckel-cpu-v1"
+    assert schedule["initial_guess_execution"] == "native-auto-cpu-v1"
     assert schedule["initial_guess_resolved_kinds"] == [5]
 
 
@@ -307,14 +307,19 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
             initial_guess=InitialGuessSpec("minao"),
             **options,
         )
-    monkeypatch.setattr(
-        automatic._library,
-        "generativeqc_initial_guess_capabilities_v1",
-        lambda: _native.INITIAL_GUESS_CAPABILITY_MINAO,
-    )
-    monkeypatch.setattr(
-        _native, "load_library", lambda *args, **kwargs: automatic._library
-    )
+
+    class LegacyGuessLibrary:
+        @staticmethod
+        def generativeqc_initial_guess_capabilities_v1() -> int:
+            return _native.INITIAL_GUESS_CAPABILITY_MINAO
+
+        def __getattr__(self, name: str) -> object:
+            if name == "generativeqc_initial_guess_default_kind_v1":
+                raise AttributeError(name)
+            return getattr(automatic._library, name)
+
+    legacy_library = LegacyGuessLibrary()
+    monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: legacy_library)
     legacy = Calculator(method, basis, device="cpu", **options)
     assert legacy.initial_guess == InitialGuessSpec("minao")
     assert initial_guess_for_systems(legacy, systems[:1]) == legacy.initial_guess

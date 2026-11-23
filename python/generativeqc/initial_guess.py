@@ -908,11 +908,11 @@ def with_initial_guess_resources(
     both complete inventories may overestimate serialized/transient overlap,
     but cannot hide a preliminary owner behind the target's declared budget.
     """
-    # Preliminary capacity cannot repair a missing base allocation contract.
-    if request.unsupported_reason is not None:
-        return request
     policy = initial_guess_for_systems(calculator, systems)
     if policy is None:
+        return request
+    # Preliminary capacity cannot repair a missing base allocation contract.
+    if request.unsupported_reason is not None:
         return request
     schedule = {
         **json.loads(request.identity.schedule),
@@ -921,7 +921,7 @@ def with_initial_guess_resources(
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
     # A missing target inventory stays unsupported; do not query its
     # preliminary owner's policy or replace the target's diagnostic.
-    if not request.candidates or request.unsupported_reason is not None:
+    if not request.candidates:
         return replace(request, identity=identity)
     native = _with_native_cpu_preliminary_resources(
         request, calculator, systems, policy, schedule
