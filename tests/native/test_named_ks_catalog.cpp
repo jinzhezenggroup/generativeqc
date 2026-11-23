@@ -578,13 +578,13 @@ void test_cpu_df_native_host_budget() {
                               : generativeqc_resource_ks_cpu_df_fleet_v1;
     require(query(shapes.data(), copies * shape.size(), 0, values.data(), 15 + 16 * copies) == 0,
             "CPU DF fixture capacity could not be quoted");
-    return values[14];
+    return values;
   };
   for (bool forces : {false, true}) {
     const auto properties = forces ? both : energy;
     auto named = ordinary;
     named.cpu_df_host_properties = properties;
-    named.cpu_df_host_maximum_bytes = quote(forces, 1) - 1;
+    named.cpu_df_host_maximum_bytes = quote(forces, 1)[14] - 1;
     auto* rejected_single = reinterpret_cast<generativeqc_calculation*>(1);
     require(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
                                                          &named, &rejected_single) ==
@@ -602,7 +602,7 @@ void test_cpu_df_native_host_budget() {
                 actual.forces == expected.forces,
             "bounded native calculation changed the science");
 
-    named.cpu_df_host_maximum_bytes = quote(forces, 2) - 1;
+    named.cpu_df_host_maximum_bytes = quote(forces, 2)[14] - 1;
     auto* rejected_batch = reinterpret_cast<generativeqc_batch*>(1);
     require(generativeqc_batch_prepare_named_ks_v1(
                 context.get(), fleet_systems.data(), fleet_systems.size(), &method, &named, 0,
@@ -627,6 +627,62 @@ void test_cpu_df_native_host_budget() {
                 "unbudgeted fleet force replay returned the wrong status");
       }
     }
+  }
+
+  const auto calculation_quote = quote(false, 1);
+  const auto fleet_quote = quote(true, 2);
+  const auto retained = calculation_quote[12] + fleet_quote[12];
+  const auto scratch = std::max(calculation_quote[13], fleet_quote[13]);
+  auto single = ordinary;
+  single.cpu_df_host_properties = energy;
+  single.cpu_df_host_maximum_bytes = calculation_quote[14];
+  auto fleet = ordinary;
+  fleet.cpu_df_host_properties = both;
+  fleet.cpu_df_host_maximum_bytes = fleet_quote[14];
+  for (const auto limit : {retained + scratch - 1, retained + scratch}) {
+    auto pool = std::make_unique<generativeqc::HostResources>(limit);
+    single.host_resources = fleet.host_resources = pool->get();
+    const auto expect_snapshot = [&](std::uint64_t bytes, std::uint64_t workspace,
+                                     std::uint64_t count) {
+      const auto snapshot = pool->snapshot();
+      require(snapshot.maximum_bytes == limit && snapshot.retained_bytes == bytes &&
+                  snapshot.workspace_bytes == workspace && snapshot.owner_count == count,
+              "shared CPU host capacity snapshot differs from the admitted owner set");
+    };
+    auto owner = std::make_unique<generativeqc::Calculation>(context, system, method, single);
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    if (limit < retained + scratch) {
+      auto* rejected = reinterpret_cast<generativeqc_batch*>(1);
+      require(generativeqc_batch_prepare_named_ks_v1(
+                  context.get(), fleet_systems.data(), fleet_systems.size(), &method, &fleet, 0,
+                  &rejected) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                  !rejected,
+              "one-byte-short shared capacity published a fleet");
+      expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+      owner.reset();
+      expect_snapshot(0, 0, 0);
+      auto retry = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+      expect_snapshot(fleet_quote[12], fleet_quote[13], 1);
+      continue;
+    }
+    auto* bad_flags = reinterpret_cast<generativeqc_batch*>(1);
+    require(generativeqc_batch_prepare_named_ks_v1(
+                context.get(), fleet_systems.data(), fleet_systems.size(), &method, &fleet,
+                0x80000000u, &bad_flags) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                !bad_flags,
+            "invalid fleet setup published a shared lease");
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    {
+      auto both_owners = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+      expect_snapshot(retained, scratch, 2);
+    }
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    auto batch = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+    pool.reset();
+    const auto expected = owner->execute(energy);
+    for (const auto& result : batch.execute({}, true))
+      require(result.converged && result.energy == expected.energy && result.forces.size() == 6,
+              "closed host metadata invalidated a live scientific owner");
   }
 }
 

@@ -105,7 +105,14 @@
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
       "signature_sha256": "61e27f3f8f268a4b50bedaff534d119aba1b99e335a3b04b432b93c63bb6b109",
-      "required_facets": ["behavior", "errors", "inputs", "lifetime", "outputs", "units"],
+      "required_facets": [
+        "behavior",
+        "errors",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
       "fields": [],
       "field_declarations": []
     },
@@ -624,6 +631,56 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::HostResources": {
+      "kind": "cpp-type",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "7942439510e3b2cda9f53266fc51ca5f9c33b33f1455845d5ed653b1c02732c6",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::HostResources::HostResources": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "83c2b6d28bd10b08defb49d31578a328c5e6e0b20fa5841e39aa81a7643b0e7a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::HostResources::get": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "fcf2c0e2845eabc75d5ccea467ee824075f63fd42c2e51dce70535139be0e3f9",
+      "required_facets": [
+        "behavior",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::HostResources::snapshot": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "4460674d096fbeade4a4cdbdc38ac45afd4897af791bf4f245b314aee2759e79",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::KsComposition": {
       "kind": "cpp-type",
       "header": "include/generativeqc/ks.hpp",
@@ -1114,7 +1171,7 @@
     "generativeqc::prepare_named_ks": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/ks.hpp",
-      "signature_sha256": "df34a6049bac45148db4bf1ba43075b549ce09dd7d6b98903f904e6d400eae61",
+      "signature_sha256": "e585e8406570174de6db55ab5e26c215e6a433c9348d1d0be57c44209355b57d",
       "required_facets": [
         "behavior",
         "errors",
@@ -2762,6 +2819,50 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_host_resources_create_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "f21150a90a082acc8f31979b85d8415e4d9c1a3ba0b1488aef3eb1a91b8f0de1",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_host_resources_destroy_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "8b270a1b54d15cdcd37b0f1c520cb376181a6ac96ae57ce62a732463c75e40ba",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_host_resources_snapshot_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "ebb8fdc57ede4348ee613fdecb47fd124ea4ea06c048bcc8952641c23887b95e",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_initial_guess_auto_kind_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -2941,7 +3042,15 @@
       "kind": "c-function",
       "header": "include/generativeqc/ks_hessian.h",
       "signature_sha256": "a7983f54bbdf35d3ff5f27abd964fb822cf44ca929292860b36ea883674d3520",
-      "required_facets": ["behavior", "errors", "execution", "inputs", "lifetime", "outputs", "units"],
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
       "fields": [],
       "field_declarations": []
     },
@@ -2949,7 +3058,15 @@
       "kind": "c-function",
       "header": "include/generativeqc/ks_hessian.h",
       "signature_sha256": "9d0243c09eeb92c0f9df4741b17f0c857f00a3b96265f38830654ea68737ced5",
-      "required_facets": ["behavior", "errors", "execution", "inputs", "lifetime", "outputs", "units"],
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
       "fields": [],
       "field_declarations": []
     },

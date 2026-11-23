@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Any
 
 import numpy as np
 import pytest
-from generativeqc import Atom, Calculator, KsOptions
+from generativeqc import (
+    Atom,
+    Calculator,
+    HostResources,
+    KsOptions,
+    ResourceAllocationError,
+)
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 
 
@@ -42,6 +49,72 @@ WATER = [
     ("H", (0.0, -1.43233673, 1.10715266)),
     ("H", (0.0, 1.43233673, 1.10715266)),
 ]
+
+
+def test_cpu_df_shared_host_leases() -> None:
+    """Independent Python contexts share native retained and scratch capacity."""
+    h2 = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
+    calc = Calculator(
+        method="pbe-rks",
+        device="cpu",
+        density_fitting="cpu",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec.treutler(0)),
+    )
+    energy = ("energy",)
+    forces = ("energy", "forces")
+    energy_plan = calc.estimate_resources([h2], properties=energy).require_feasible()
+    force_plan = calc.estimate_resources([WATER], properties=forces).require_feasible()
+    resident = [plan.resident_bytes["host"] for plan in (energy_plan, force_plan)]
+    workspace = [
+        plan.peak_bytes["host"] - held
+        for plan, held in zip((energy_plan, force_plan), resident, strict=True)
+    ]
+    assert min(resident) > 0 and max(workspace) > 0
+    capacity = sum(resident) + max(workspace)
+    h2_options = {"resource_plan": energy_plan, "ks_export": False, "warm_start": False}
+    water_options = {"resource_plan": force_plan, "warm_start": False}
+    with HostResources(capacity - 1) as short:
+        with calc.prepare_batch([h2], host_resources=short, **h2_options):
+            busy = short.snapshot()
+            assert (busy.retained_bytes, busy.workspace_bytes, busy.owner_count) == (
+                resident[0],
+                workspace[0],
+                1,
+            )
+            with pytest.raises(ResourceAllocationError):
+                calc.prepare_batch([WATER], host_resources=short, **water_options)
+            assert short.snapshot() == busy
+        assert short.snapshot().owner_count == 0
+        with calc.prepare_batch([WATER], host_resources=short, **water_options):
+            assert short.snapshot().owner_count == 1
+
+    with calc.prepare_batch([WATER], **water_options) as reference:
+        expected = reference.execute(properties=forces, strict=True).items[0]
+    with (
+        HostResources(capacity) as pool,
+        calc.prepare_batch([h2], host_resources=pool, **h2_options) as first,
+        calc.prepare_batch([WATER], host_resources=pool, **water_options) as second,
+    ):
+        snapshot = pool.snapshot()
+        assert (
+            snapshot.maximum_bytes,
+            snapshot.retained_bytes,
+            snapshot.workspace_bytes,
+        ) == (capacity, sum(resident), max(workspace))
+        assert snapshot.owner_count == 2
+        pool.close()
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            h2_run = workers.submit(first.execute, properties=energy, strict=True)
+            water_run = workers.submit(second.execute, properties=forces, strict=True)
+            assert h2_run.result().items[0].converged
+            actual = water_run.result().items[0]
+        assert (actual.energy, actual.iterations, actual.fock_builds) == (
+            expected.energy,
+            expected.iterations,
+            expected.fock_builds,
+        )
+        np.testing.assert_array_equal(actual.forces, expected.forces)
 
 
 @pytest.mark.parametrize("explicit_auxiliary", [True, False])

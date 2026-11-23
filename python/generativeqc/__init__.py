@@ -91,6 +91,7 @@ from .force_aware_scf import (
     ScfForceErrorEstimate,
     ScfForceErrorEstimator,
 )
+from .host_resources import HostResources, HostResourceSnapshot
 from .initial_guess import InitialGuessSpec
 from .ks import FunctionalSpec, KsOptions
 from .ks_diagnostics import (
@@ -206,6 +207,8 @@ __all__ = [
     "HFConvergence",
     "HFPhysicalResidualAudit",
     "HarmonicAnalysis",
+    "HostResourceSnapshot",
+    "HostResources",
     "InactiveEigensolverProfileEntry",
     "InitialGuessSpec",
     "KsDiagnostic",

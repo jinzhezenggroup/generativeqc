@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "api/host_resources.hpp"
 #include "api/named_ks_inputs.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "molecule/basis.hpp"
@@ -19,7 +20,8 @@ class CpuDfKsHostAdmission {
  public:
   CpuDfKsHostAdmission(const NamedKsInputs& named, generativeqc_backend backend)
       : limit_(named.selection.cpu_df_host_maximum_bytes),
-        properties_(named.selection.cpu_df_host_properties) {
+        properties_(named.selection.cpu_df_host_properties),
+        shared_(named.selection.host_resources ? named.selection.host_resources->ledger : nullptr) {
     if (properties_ != GENERATIVEQC_PROPERTY_ENERGY &&
         properties_ != (GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES))
       throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -64,6 +66,22 @@ class CpuDfKsHostAdmission {
   generativeqc_property_flags properties() const noexcept { return properties_; }
   bool forces() const noexcept { return properties_ & GENERATIVEQC_PROPERTY_FORCES; }
 
+  std::unique_lock<std::mutex> use_workspace() const {
+    return shared_ ? shared_->use_workspace() : std::unique_lock<std::mutex>{};
+  }
+
+  /** The local per-owner gate has already authenticated this inventory. */
+  std::shared_ptr<runtime::HostResourceLease> reserve() const {
+    if (!shared_) return nullptr;
+    const auto inventory = fleet_.inventory();
+    try {
+      return std::make_shared<runtime::HostResourceLease>(shared_, inventory[12], inventory[13]);
+    } catch (const std::bad_alloc&) {
+      throw methods::MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                 "shared host capacity exceeds the limit");
+    }
+  }
+
  private:
   static scf::CpuKsDfHostShape describe(const core::System& system) {
     if (!system.ecp_terms.empty() ||
@@ -82,6 +100,7 @@ class CpuDfKsHostAdmission {
 
   std::uint64_t limit_;
   generativeqc_property_flags properties_;
+  std::shared_ptr<runtime::HostResourceLedger> shared_;
   dft::GridSpec grid_;
   std::uint64_t spins_{}, diis_{}, iterations_{}, tile_{};
   bool first_ao_derivatives_{};

@@ -172,6 +172,8 @@ static generativeqc_status prepare_batch(
         cpu_host_admission.emplace(*named_inputs, context->state.executed_backend);
     }
 
+    std::unique_lock<std::mutex> host_workspace;
+    std::shared_ptr<generativeqc::runtime::HostResourceLease> host_lease;
     std::vector<generativeqc::core::System> native_systems;
     native_systems.reserve(system_count);
     std::vector<std::uint32_t> atom_counts;
@@ -190,12 +192,19 @@ static generativeqc_status prepare_batch(
       if (cpu_host_admission)
         cpu_host_admission->append(systems[i]->data,
                                    generativeqc::api::native_auxiliary_basis(*descriptor));
-      native_systems.push_back(systems[i]->data);
+      else
+        native_systems.push_back(systems[i]->data);
       atom_counts.push_back(static_cast<std::uint32_t>(systems[i]->data.atoms.size()));
+    }
+    if (cpu_host_admission) {
+      host_workspace = cpu_host_admission->use_workspace();
+      host_lease = cpu_host_admission->reserve();
+      for (std::uint32_t i = 0; i < system_count; ++i) native_systems.push_back(systems[i]->data);
     }
     auto candidate = std::make_unique<generativeqc_batch>();
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
+    candidate->host_lease = host_lease;
     if (cpu_host_admission) candidate->cpu_df_host_properties = cpu_host_admission->properties();
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
@@ -873,6 +882,8 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
   }
 
   try {
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     generativeqc::methods::Coordinates coordinates;
     if (inputs != nullptr) {
       coordinates.resize(system_count);

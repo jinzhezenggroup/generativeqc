@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
     from pathlib import Path
 
+    from .host_resources import HostResources
     from .spin_roots import SpinRootPolicy, SpinRootResult
 
 
@@ -3532,6 +3533,7 @@ class Calculator:
         inactive_eigensolver_profiling: bool = False,
         ks_export: bool = True,
         resource_plan: typing.Any = None,
+        host_resources: HostResources | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
@@ -3543,6 +3545,8 @@ class Calculator:
         CPU DFT callers may set ``ks_export=False`` for energy-only execution
         without a stationary derivative snapshot. Such batches reject forces
         and cannot supply Hessian/response consumers; ordinary SCF gates remain.
+        ``host_resources`` additionally reserves against a shared modeled host
+        cap for a native CPU DF-J resource plan.
 
         Systems, charges and multiplicities use :ref:`python-batch-values`.
         Preparation validates/copies system data into a separately owned plan.
@@ -3572,6 +3576,7 @@ class Calculator:
             inactive_eigensolver_profiling=inactive_eigensolver_profiling,
             ks_export=ks_export,
             resource_plan=resource_plan,
+            host_resources=host_resources,
             _hessian_request=_hessian_request,
             _resource_properties=_resource_properties,
         )

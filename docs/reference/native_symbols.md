@@ -21,6 +21,9 @@ capability authorities, serialization, and status handling.
 - [generativeqc_initial_guess_auto_system_kind_v2](#native-c-generativeqc-initial-guess-auto-system-kind-v2)
 - [generativeqc_calculation_get_initial_guess_diagnostic](#native-c-generativeqc-calculation-get-initial-guess-diagnostic)
 - [generativeqc_batch_get_initial_guess_diagnostic](#native-c-generativeqc-batch-get-initial-guess-diagnostic)
+- [generativeqc_host_resources_create_v1](#native-c-generativeqc-host-resources-create-v1)
+- [generativeqc_host_resources_destroy_v1](#native-c-generativeqc-host-resources-destroy-v1)
+- [generativeqc_host_resources_snapshot_v1](#native-c-generativeqc-host-resources-snapshot-v1)
 - [generativeqc_device_resources_create](#native-c-generativeqc-device-resources-create)
 - [generativeqc_device_resources_destroy](#native-c-generativeqc-device-resources-destroy)
 - [generativeqc_device_resources_read](#native-c-generativeqc-device-resources-read)
@@ -226,6 +229,10 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
 - [generativeqc::Batch::last_density_fitting_metric_diagnostics](#native-cpp-generativeqc-batch-last-density-fitting-metric-diagnostics)
 - [generativeqc::KsGrid](#native-cpp-generativeqc-ksgrid)
+- [generativeqc::HostResources](#native-cpp-generativeqc-hostresources)
+- [generativeqc::HostResources::HostResources](#native-cpp-generativeqc-hostresources-hostresources)
+- [generativeqc::HostResources::snapshot](#native-cpp-generativeqc-hostresources-snapshot)
+- [generativeqc::HostResources::get](#native-cpp-generativeqc-hostresources-get)
 - [generativeqc::prepare_named_ks](#native-cpp-generativeqc-prepare-named-ks)
 - [generativeqc::KsComposition](#native-cpp-generativeqc-kscomposition)
 - [generativeqc::KsComposition::KsComposition](#native-cpp-generativeqc-kscomposition-kscomposition)
@@ -515,6 +522,70 @@ to the caller. Keep the owner and its context alive throughout the call.
 and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Capacity is bytes and preparation_seconds is seconds; work counters are counts.
+
+(native-c-generativeqc-host-resources-create-v1)=
+## generativeqc_host_resources_create_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_create_v1 ( uint64_t maximum_bytes , generativeqc_host_resources * * resources ) ;
+```
+
+**Behavior.** Create an explicit shared cap for modeled native host reservations.
+Supported owners sum retained capacity and serialize their setup/replay workspace.
+
+**Inputs.** maximum_bytes is the effective cap after any caller margins; zero is valid.
+
+**Outputs.** Clears the output slot and publishes one metadata handle on success.
+
+**Lifetime.** Destroy the metadata handle with generativeqc_host_resources_destroy_v1.
+Successfully prepared owners retain their reservations independently.
+
+**Errors.** A null output returns INVALID_ARGUMENT; allocation failure returns OUT_OF_MEMORY.
+
+**Execution.** Synchronous metadata operation, with no context or backend initialization.
+
+**Units.** Bytes of modeled capacity, excluding opaque library allocations and process RSS.
+
+(native-c-generativeqc-host-resources-destroy-v1)=
+## generativeqc_host_resources_destroy_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API void generativeqc_host_resources_destroy_v1 ( generativeqc_host_resources * resources ) ;
+```
+
+**Behavior.** Close the shared cap's metadata handle without revoking outstanding leases.
+
+**Inputs.** A live matching handle, or NULL for a no-op.
+
+**Lifetime.** No further use of the handle is allowed. Prepared owners stay valid.
+
+**Execution.** Must not race another call borrowing this metadata handle.
+
+(native-c-generativeqc-host-resources-snapshot-v1)=
+## generativeqc_host_resources_snapshot_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_snapshot_v1 ( const generativeqc_host_resources * resources , generativeqc_host_resource_snapshot * output ) ;
+```
+
+**Behavior.** Return the sum of retained reservations, the largest serialized workspace
+reservation and the count of active owners (including in-flight preparations).
+
+**Inputs.** A live handle and output tagged with sizeof and GENERATIVEQC_ABI_VERSION.
+
+**Outputs.** One coherent snapshot; no fields are changed on failure.
+
+**Errors.** Null inputs return INVALID_ARGUMENT; incompatible output tags return ABI_MISMATCH.
+
+**Execution.** May run during preparation or replay on another context using this cap.
+
+**Units.** The limit, retained and workspace fields are modeled bytes, not allocator telemetry.
 
 (native-c-generativeqc-device-resources-create)=
 ## generativeqc_device_resources_create
@@ -6031,13 +6102,77 @@ selects the force schedule independently with automatic SCF tiling.
 
 **Units.** coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
 
+(native-cpp-generativeqc-hostresources)=
+## generativeqc::HostResources
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+class HostResources
+```
+
+**Behavior.** Own the metadata handle for a shared modeled native host cap.
+
+**Lifetime.** Prepared owners retain their leases independently of this handle.
+
+**Execution.** Do not race destruction with borrowing or querying the handle.
+
+(native-cpp-generativeqc-hostresources-hostresources)=
+## generativeqc::HostResources::HostResources
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+explicit HostResources ( std :: uint64_t maximum_bytes )
+```
+
+**Behavior.** Construct a metadata-only shared host cap.
+
+**Inputs.** maximum_bytes is the effective modeled cap; zero is valid.
+
+**Errors.** Throws Error if the native handle could not be created.
+
+**Execution.** Synchronous; initializes no compute backend.
+
+(native-cpp-generativeqc-hostresources-snapshot)=
+## generativeqc::HostResources::snapshot
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+generativeqc_host_resource_snapshot snapshot ( ) const
+```
+
+**Behavior.** Read one coherent modeled-reservation snapshot.
+
+**Outputs.** Retained bytes, largest serialized workspace, cap and owner count.
+
+**Errors.** Throws Error on native failure or a moved-from object.
+
+**Execution.** Safe with native preparation and execution on separate contexts.
+
+(native-cpp-generativeqc-hostresources-get)=
+## generativeqc::HostResources::get
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+const generativeqc_host_resources * get ( ) const noexcept
+```
+
+**Behavior.** Borrow the native metadata handle for synchronous preparation.
+
+**Outputs.** A non-owning handle, or NULL after move.
+
+**Lifetime.** The wrapper must outlive uses of the borrowed handle.
+
 (native-cpp-generativeqc-prepare-named-ks)=
 ## generativeqc::prepare_named_ks
 
 Source: [ks.hpp](../../include/generativeqc/ks.hpp)
 
 ```cpp
-inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt , std :: uint64_t packed_eri_bytes = 0 , std :: uint64_t cpu_df_host_bytes = 0 , generativeqc_property_flags cpu_df_host_properties = 0 )
+inline Calculation prepare_named_ks ( Context & context , const System & system , generativeqc_method_descriptor method , const std :: string & name , KsGrid grid = { } , std :: uint64_t nonlocal_bytes = 256 ull < < 20 , std :: uint64_t dispersion_bytes = 256 ull < < 20 , const char * identity = nullptr , std :: optional < KsGrid > nonlocal_grid = std :: nullopt , std :: uint64_t packed_eri_bytes = 0 , std :: uint64_t cpu_df_host_bytes = 0 , generativeqc_property_flags cpu_df_host_properties = 0 , const generativeqc_host_resources * host_resources = nullptr )
 ```
 
 **Behavior.** Prepare a catalog KS graph, including range exchange, nonlocal correlation and
@@ -6050,7 +6185,8 @@ nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
 packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
 zero keeps the ordinary provider. Forces still use the prepared derivative owner.
 cpu_df_host_bytes and cpu_df_host_properties optionally admit a named CPU
-semilocal DF-J calculation against an effective modeled host limit.
+semilocal DF-J calculation against an effective modeled host limit. Pass
+host_resources to additionally reserve from a shared cap.
 
 **Outputs.** Returns one owned Calculation.
 

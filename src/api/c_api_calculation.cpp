@@ -63,15 +63,20 @@ generativeqc_status prepare_candidate(
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     generativeqc_property_flags admitted_properties{};
+    std::unique_lock<std::mutex> host_workspace;
+    std::shared_ptr<runtime::HostResourceLease> host_lease;
     if (named_inputs && named_inputs->selection.cpu_df_host_properties) {
       generativeqc::api::CpuDfKsHostAdmission admission(*named_inputs,
                                                         context->state.executed_backend);
       admission.append(system->data, generativeqc::api::native_auxiliary_basis(*descriptor));
       admitted_properties = admission.properties();
+      host_workspace = admission.use_workspace();
+      host_lease = admission.reserve();
     }
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
+    candidate->host_lease = std::move(host_lease);
     candidate->cpu_df_host_properties = admitted_properties;
     if (pending) {
       if (context->provider_initialization_calculation)
@@ -478,6 +483,8 @@ static generativeqc_status execute_calculation(generativeqc_calculation* calcula
   if (mp2 && !ccsdt) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 
   try {
+    auto host_workspace = calculation->host_lease ? calculation->host_lease->use_workspace()
+                                                  : std::unique_lock<std::mutex>{};
     // NULL/zero is an execution request, not merely a copy-out choice: the
     // backend must not launch or assemble analytic-force work in this mode.
     generativeqc::methods::Result native = calculation->plan->execute(

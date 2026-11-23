@@ -7,10 +7,43 @@
 
 #include "api/device_resources.hpp"
 #include "api/error.hpp"
+#include "api/host_resources.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/prepared_device_resources.hpp"
 
 extern "C" {
+
+generativeqc_status generativeqc_host_resources_create_v1(uint64_t maximum_bytes,
+                                                          generativeqc_host_resources** output) {
+  if (!output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *output = nullptr;
+  try {
+    auto resources = std::make_unique<generativeqc_host_resources>();
+    resources->ledger = std::make_shared<generativeqc::runtime::HostResourceLedger>(maximum_bytes);
+    *output = resources.release();
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception();
+  }
+}
+
+void generativeqc_host_resources_destroy_v1(generativeqc_host_resources* resources) {
+  delete resources;
+}
+
+generativeqc_status generativeqc_host_resources_snapshot_v1(
+    const generativeqc_host_resources* resources, generativeqc_host_resource_snapshot* output) {
+  if (!resources || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(output)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  try {
+    const auto state = resources->ledger->snapshot();
+    *output = {sizeof(*output),      GENERATIVEQC_ABI_VERSION, state.maximum_bytes,
+               state.retained_bytes, state.workspace_bytes,    state.owner_count};
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception();
+  }
+}
 
 generativeqc_status generativeqc_device_resources_create(
     const generativeqc_device_resource_descriptor* descriptor,

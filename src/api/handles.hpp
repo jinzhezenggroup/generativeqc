@@ -16,7 +16,8 @@ struct generativeqc_calculation;
 
 namespace generativeqc::runtime {
 struct DeviceResourceLedger;
-}
+class HostResourceLease;
+}  // namespace generativeqc::runtime
 
 struct generativeqc_context {
   mutable std::recursive_mutex mutex;
@@ -86,6 +87,8 @@ struct generativeqc_calculation {
   generativeqc_context* context{};
   bool pending_provider_initialization{};
   generativeqc_property_flags cpu_df_host_properties{};
+  /** Release the lease after the plan destroys its retained providers. */
+  std::shared_ptr<generativeqc::runtime::HostResourceLease> host_lease;
   /** Survives metadata-handle close; declared first so the plan releases last charges. */
   std::shared_ptr<generativeqc::runtime::DeviceResourceLedger> resource_ledger;
   std::unique_ptr<generativeqc::methods::PreparedCalculation> plan;
@@ -107,6 +110,7 @@ struct generativeqc_calculation {
 struct generativeqc_batch {
   generativeqc_context* context{};
   generativeqc_property_flags cpu_df_host_properties{};
+  std::shared_ptr<generativeqc::runtime::HostResourceLease> host_lease;
   /** Declared before the scientific plan so providers/buffers release first.
    * Frontend metadata handles may close without detaching retained charges. */
   std::shared_ptr<generativeqc::runtime::DeviceResourceLedger> resource_ledger;

@@ -44,6 +44,19 @@ auxiliary basis, including the same-as-orbital default. One explicit auxiliary
 basis currently requires one system per plan. These plans exclude guesses,
 corrections, materialized DF derivative diagnostics and second derivatives.
 
+Use `HostResources(maximum_bytes)` with `Calculator.prepare_batch(...,
+resource_plan=plan, host_resources=pool)` to share an effective modeled cap
+across independent prepared batches in this domain. Each plan still must pass
+its own admission; the shared cap additionally covers the sum of all live
+retained reservations plus the largest workspace. Setup and replay using the
+same cap serialize that workspace, even across different contexts. Different
+caps provide no aggregate guarantee. `pool.snapshot()` reports modeled bytes,
+not live allocator measurements. Destroying a batch frees its reservation;
+closing `pool` only closes the metadata handle and does not revoke live leases.
+The same reservation is available to C and C++ single-system and fleet
+preparation through the named KS descriptor. Checkpoint/export or other
+operations outside the energy/force plan have no capacity guarantee from it.
+
 An omitted functional resolves to `LDA_X+LDA_C_PW` or
 `GGA_X_PBE+GGA_C_PBE`, with unit coefficients. RKS resolves an unpolarized
 composition; UKS resolves a polarized one. An explicit `FunctionalSpec` must

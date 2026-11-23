@@ -147,6 +147,7 @@ typedef struct generativeqc_system generativeqc_system;
 typedef struct generativeqc_calculation generativeqc_calculation;
 typedef struct generativeqc_batch generativeqc_batch;
 typedef struct generativeqc_device_resources generativeqc_device_resources;
+typedef struct generativeqc_host_resources generativeqc_host_resources;
 
 typedef struct generativeqc_d3_batch generativeqc_d3_batch;
 typedef struct generativeqc_d4_batch generativeqc_d4_batch;
@@ -758,8 +759,8 @@ GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void);
  * digest. A positive dispersion budget is required by corrected programs. For
  * batches it bounds the aggregate correction owners, divided equally per item.
  * Set struct_size to sizeof this descriptor. The v1 entry points also accept
- * the earlier prefixes ending at dispersion_maximum_bytes or
- * cpu_packed_eri_maximum_bytes; omitted fields are zero. */
+ * earlier prefixes ending at dispersion_maximum_bytes, cpu_packed_eri_maximum_bytes,
+ * or reserved; omitted fields are zero. */
 typedef struct generativeqc_named_ks_descriptor {
   uint32_t struct_size;
   uint32_t abi_version;
@@ -778,6 +779,9 @@ typedef struct generativeqc_named_ks_descriptor {
    * Zero disables host admission and requires a zero maximum. */
   generativeqc_property_flags cpu_df_host_properties;
   uint32_t reserved;
+  /** Optional shared reservation for the same modeled capacity. Requires a
+   * nonzero admitted property mask. Borrowed only during preparation. */
+  const generativeqc_host_resources* host_resources;
 } generativeqc_named_ks_descriptor;
 
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
@@ -1573,6 +1577,51 @@ typedef struct generativeqc_device_resource_diagnostic {
   uint64_t capacity_reserved_bytes;
   generativeqc_device_resource_admission admission;
 } generativeqc_device_resource_diagnostic;
+
+/** Live modeled host reservations, not allocated bytes or process RSS. */
+typedef struct generativeqc_host_resource_snapshot {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint64_t maximum_bytes;
+  uint64_t retained_bytes;
+  uint64_t workspace_bytes;
+  uint64_t owner_count;
+} generativeqc_host_resource_snapshot;
+
+/** @native-contract generativeqc_host_resources_create_v1
+ * @behavior Create an explicit shared cap for modeled native host reservations.
+ * Supported owners sum retained capacity and serialize their setup/replay workspace.
+ * @inputs maximum_bytes is the effective cap after any caller margins; zero is valid.
+ * @outputs Clears the output slot and publishes one metadata handle on success.
+ * @lifetime Destroy the metadata handle with generativeqc_host_resources_destroy_v1.
+ * Successfully prepared owners retain their reservations independently.
+ * @errors A null output returns INVALID_ARGUMENT; allocation failure returns OUT_OF_MEMORY.
+ * @execution Synchronous metadata operation, with no context or backend initialization.
+ * @units Bytes of modeled capacity, excluding opaque library allocations and process RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_create_v1(
+    uint64_t maximum_bytes, generativeqc_host_resources** resources);
+
+/** @native-contract generativeqc_host_resources_destroy_v1
+ * @behavior Close the shared cap's metadata handle without revoking outstanding leases.
+ * @inputs A live matching handle, or NULL for a no-op.
+ * @lifetime No further use of the handle is allowed. Prepared owners stay valid.
+ * @execution Must not race another call borrowing this metadata handle.
+ */
+GENERATIVEQC_API void generativeqc_host_resources_destroy_v1(
+    generativeqc_host_resources* resources);
+
+/** @native-contract generativeqc_host_resources_snapshot_v1
+ * @behavior Return the sum of retained reservations, the largest serialized workspace
+ * reservation and the count of active owners (including in-flight preparations).
+ * @inputs A live handle and output tagged with sizeof and GENERATIVEQC_ABI_VERSION.
+ * @outputs One coherent snapshot; no fields are changed on failure.
+ * @errors Null inputs return INVALID_ARGUMENT; incompatible output tags return ABI_MISMATCH.
+ * @execution May run during preparation or replay on another context using this cap.
+ * @units The limit, retained and workspace fields are modeled bytes, not allocator telemetry.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_snapshot_v1(
+    const generativeqc_host_resources* resources, generativeqc_host_resource_snapshot* output);
 
 /** @native-contract generativeqc_device_resources_create
  * @behavior Derive allowance-separated numeric admission from selected capacity lifetimes.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 import typing
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -39,6 +39,7 @@ from ._result_translation import (
     read_correlation_result as _read_correlation_result,
 )
 from ._warm_state import WarmStartState
+from .host_resources import HostResources
 from .ks_diagnostics import (
     KsDiagnostic,
     KsTransportDiagnostic,
@@ -231,6 +232,7 @@ class PreparedBatch:
         inactive_eigensolver_profiling: bool = False,
         ks_export: bool = True,
         resource_plan: typing.Any = None,
+        host_resources: HostResources | None = None,
         _cold_rks_fock: _native.RksColdFockOptions | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
@@ -239,10 +241,13 @@ class PreparedBatch:
 
         Charges and multiplicities default to zero and one per system. Explicit
         sequences must match the nonempty batch; an optional resource plan must
-        match the requested systems, method, and calculator budget.
+        match the requested systems, method, and calculator budget. A shared
+        host cap additionally requires a supported CPU DF-J resource plan.
         """
         if not systems:
             raise ValueError("a batch requires at least one system")
+        if host_resources is not None and not isinstance(host_resources, HostResources):
+            raise TypeError("host_resources must be a HostResources instance")
         if _cold_rks_fock is not None and (
             resource_plan is not None or len(systems) != 1
         ):
@@ -446,6 +451,10 @@ class PreparedBatch:
                 raise NotImplementedError(
                     "CUDA resource plans exclude optional profiling allocations"
                 )
+        if host_resources is not None and not self._cpu_df_plan:
+            raise NotImplementedError(
+                "shared host resources require a native CPU DF KS plan"
+            )
         self._model_signature = calculator._model_signature()
         fixed_cuda_d4 = (
             resource_native_name is not None
@@ -574,40 +583,49 @@ class PreparedBatch:
                 if native_name is not None:
                     from ._named_ks import prepare_named_batch
 
-                    return prepare_named_batch(
-                        self._library,
-                        self._context,
-                        handle_array,
-                        count,
-                        method,
-                        flags,
-                        ctypes.byref(self._batch),
-                        native_name,
-                        native_graph,
-                        calculator._dispersion_memory_budget_bytes,
-                        resources=(
-                            self._resource_ledger.handle
-                            if self._resource_ledger is not None
-                            else None
-                        ),
-                        cpu_packed_eri_maximum_bytes=calculator._cpu_packed_eri_maximum_bytes,
-                        cold_rks_fock=_cold_rks_fock,
-                        **(
-                            {
-                                "cpu_df_host_budget": (
-                                    self.resource_plan.peak_bytes["host"],
-                                    _native.PROPERTY_ENERGY
-                                    | (
-                                        _native.PROPERTY_FORCES
-                                        if self._cpu_df_force_plan
-                                        else 0
-                                    ),
-                                )
-                            }
-                            if self._cpu_df_plan
-                            else {}
-                        ),
+                    borrow = (
+                        host_resources._borrow(self._library)
+                        if host_resources is not None
+                        else nullcontext()
                     )
+                    with borrow as shared:
+                        return prepare_named_batch(
+                            self._library,
+                            self._context,
+                            handle_array,
+                            count,
+                            method,
+                            flags,
+                            ctypes.byref(self._batch),
+                            native_name,
+                            native_graph,
+                            calculator._dispersion_memory_budget_bytes,
+                            resources=(
+                                self._resource_ledger.handle
+                                if self._resource_ledger is not None
+                                else None
+                            ),
+                            cpu_packed_eri_maximum_bytes=calculator._cpu_packed_eri_maximum_bytes,
+                            cold_rks_fock=_cold_rks_fock,
+                            **(
+                                {"host_resources": shared} if shared is not None else {}
+                            ),
+                            **(
+                                {
+                                    "cpu_df_host_budget": (
+                                        self.resource_plan.peak_bytes["host"],
+                                        _native.PROPERTY_ENERGY
+                                        | (
+                                            _native.PROPERTY_FORCES
+                                            if self._cpu_df_force_plan
+                                            else 0
+                                        ),
+                                    )
+                                }
+                                if self._cpu_df_plan
+                                else {}
+                            ),
+                        )
                 if _cold_rks_fock is not None:
                     raise NotImplementedError(
                         "cold RKS Fock damping requires named native KS"

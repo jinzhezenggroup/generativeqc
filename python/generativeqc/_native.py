@@ -365,6 +365,15 @@ class NamedKsCpuDfHostDescriptor(ctypes.Structure):
     ]
 
 
+class NamedKsSharedHostDescriptor(ctypes.Structure):
+    """Optional shared ledger for a budgeted named KS owner."""
+
+    _fields_ = [
+        ("base", NamedKsCpuDfHostDescriptor),
+        ("host_resources", ctypes.c_void_p),
+    ]
+
+
 class RksColdFockOptions(ctypes.Structure):
     """Bounded native RKS orbital-proposal policy, separate from MethodIR."""
 

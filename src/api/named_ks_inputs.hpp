@@ -20,14 +20,16 @@ inline generativeqc_named_ks_descriptor copy_named_ks_descriptor(const void* inp
   std::memcpy(header.data(), input, sizeof(header));
   constexpr auto prefix = offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes);
   constexpr auto packed = offsetof(generativeqc_named_ks_descriptor, cpu_df_host_maximum_bytes);
+  constexpr auto local_host = offsetof(generativeqc_named_ks_descriptor, host_resources);
   if (header[1] != GENERATIVEQC_ABI_VERSION ||
-      (header[0] != prefix && header[0] != packed &&
+      (header[0] != prefix && header[0] != packed && header[0] != local_host &&
        header[0] != sizeof(generativeqc_named_ks_descriptor)))
     throw methods::MethodError(GENERATIVEQC_STATUS_ABI_MISMATCH,
                                "named KS descriptor ABI mismatch");
   generativeqc_named_ks_descriptor result{};
   std::memcpy(&result, input, header[0]);
-  if (result.reserved || (!result.cpu_df_host_properties && result.cpu_df_host_maximum_bytes))
+  if (result.reserved || (!result.cpu_df_host_properties &&
+                          (result.cpu_df_host_maximum_bytes || result.host_resources)))
     throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                                "invalid CPU DF host admission controls");
   return result;
