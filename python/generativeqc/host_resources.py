@@ -46,6 +46,7 @@ class HostResources:
     """
 
     def __init__(self, maximum_bytes: int) -> None:
+        """Create a shared cap in modeled bytes, without preparing a calculation."""
         if type(maximum_bytes) is not int or not 0 <= maximum_bytes < 2**64:
             raise ValueError("maximum_bytes must be a nonnegative uint64")
         library = _native.load_library(device="cpu")
@@ -100,8 +101,10 @@ class HostResources:
             self._close()
 
     def __enter__(self) -> Self:
+        """Return the open cap for use in a context manager."""
         with self._borrow(self._library):
             return self
 
     def __exit__(self, *_exc: object) -> None:
+        """Close metadata without revoking leases or suppressing exceptions."""
         self.close()
