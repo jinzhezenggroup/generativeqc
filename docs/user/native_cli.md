@@ -734,18 +734,19 @@ checkpoint, process-RSS cap or free-memory guarantee.
 
 Add `--forces` to plan the linked Direct FP64 CPU KS force inventory for the
 listed LDA/PBE/PBE0/B3LYP energy programs and supported named corrections. A
-force plan covers s/p/d/f bases. With
-`--cpu-packed-eri-budget-bytes`, planning charges the exact retained spherical
+force plan covers s/p/d/f bases. The flag also plans forces for linked,
+all-electron FP64 CPU LDA/PBE RKS/UKS with a single full-range DF J provider.
+With `--cpu-packed-eri-budget-bytes`, planning charges the exact retained spherical
 ERI bytes across all `--batch` copies, separately from the modeled host peak.
 For a single supported CPU calculation (Direct RHF/KS or the semilocal DF-KS
-energy cases above), pass the same method, basis, fitting, initial-guess and force/packed flags
+cases above), pass the same method, basis, fitting, initial-guess and force/packed flags
 to `run --host-bytes N` to check the modeled host peak before SCF preparation.
 `--host-reserve-bytes` and `--headroom-fraction` reduce the available limit.
 `run --json` reports the modeled peak and effective limit in
 `resource_admission`; the prepared owner still decides force capability.
 These limits do not bound opaque library allocations or process RSS. CPU DF-KS
-energy plans exclude the materialized DF derivative diagnostic, DF forces,
-second-order products and preliminary guesses.
+plans exclude the materialized DF derivative diagnostic, second-order products
+and preliminary guesses. An energy quote does not authorize force replay.
 
 For a single linked Direct FP64 CPU LDA, PBE, PBE0 or canonical B3LYP RKS/UKS
 system (including the named two-body D3(BJ) variants other than LDA), add
@@ -790,7 +791,7 @@ execution storage remains resident per item, including replicated CUDA tables.
 `correction_inventory` reports those capacities and the equal-share minimum
 for `--dispersion-memory-bytes`. Both this local limit and the complete host/
 device budgets must fit. The legacy `pbe-d4-rks` selector, gCP composites, CUDA
-KS forces and density-fitted KS remain outside this dry-run scope. No
+KS forces and density-fitted corrections remain outside this dry-run scope. No
 compatibility force owner is reserved.
 
 ## Stable subcommand namespace

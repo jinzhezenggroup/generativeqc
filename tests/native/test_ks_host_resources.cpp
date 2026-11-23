@@ -13,6 +13,9 @@ extern "C" int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t*, std::
                                                      std::uint64_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t*, std::size_t,
                                                         std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_df_force_fleet_v1(const std::uint64_t*, std::size_t,
+                                                              std::uint64_t, std::uint64_t*,
+                                                              std::size_t);
 extern "C" int generativeqc_resource_ks_cpu_packed_fleet_v1(const std::uint64_t*, std::size_t,
                                                             std::uint64_t, std::uint64_t*,
                                                             std::size_t);
@@ -287,12 +290,43 @@ void test_df_fleet_bridge() {
   shapes[22 + 18] = shapes[22 + 17] = std::numeric_limits<std::uint64_t>::max();
   require(query() != 0 && values[0] == 7, "DF capacity overflow was not rejected");
 }
+
+void test_df_force_fleet_bridge() {
+  // With a large auxiliary basis, both the metric VJP and Cartesian lift
+  // exceed the ordinary SCF phase. The larger one, not their sum, dominates.
+  std::array<std::uint64_t, 22> shape{3, 7, 8,  4, 12, 2, 2,   0,   64,  4,   4,
+                                      8, 6, 40, 1, 0,  0, 256, 300, 160, 370, 3};
+  std::array<std::uint64_t, 31> force{}, energy{};
+  const auto force_query = [&] {
+    return generativeqc_resource_ks_cpu_df_force_fleet_v1(shape.data(), shape.size(), 0,
+                                                          force.data(), force.size());
+  };
+  require(
+      force_query() == 0 && generativeqc_resource_ks_cpu_df_fleet_v1(
+                                shape.data(), shape.size(), 0, energy.data(), energy.size()) == 0,
+      "valid fitted force topology refused");
+  const auto reverse = 3 * 8 * 49 * 256 + 12 * 8 * 256 * 256 + 128 * 256;
+  const auto projection = 128 * (8 + 7 + 256 + 300 + 7 * 8 + 256 * 300);
+  const auto lift = 8 * (256 * 256 + 49 * 256 + 300 * 300 + 64 * 300) + projection;
+  const auto expected_source = std::max(reverse, lift) + 8 * 49 + 64 * 9;
+  const auto frame = 8 * 2 * (4 * 49 + 7);
+  require(force[30] == expected_source + frame && force[30] > energy[30] &&
+              force[13] == std::max(force[29], force[30]) && force[15 + 5] == energy[15 + 5] &&
+              force[12] == energy[12] + 24 * 3,
+          "DF forces did not price the metric response phase independently of the retained fit");
+  force.fill(9);
+  shape[21] = 4;
+  require(force_query() != 0 &&
+              std::all_of(force.begin(), force.end(), [](auto value) { return value == 9; }),
+          "DF derivative fallback topology published a bounded-force inventory");
+}
 }  // namespace
 
 int main() {
   test_fleet_owner();
   test_fleet_bridge();
   test_df_fleet_bridge();
+  test_df_force_fleet_bridge();
   test_packed_fleet_bridge();
   test_packed_force_fleet_bridge();
   const std::array<std::uint64_t, 17> shape{2,  2, 2,   2, 6,   1, 0, 0, 6144,

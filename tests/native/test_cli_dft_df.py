@@ -425,14 +425,21 @@ class NativeDftDfCliTests(unittest.TestCase):
             delta=1.0e-9,
         )
 
-    def test_cpu_df_energy_host_admission(self) -> None:
+    def test_cpu_df_host_admission(self) -> None:
         for method, extra in (
             ("lda_xc_pw-rks", ()),
+            ("lda_xc_pw-rks", ("--forces",)),
             (
                 "pbe-rks",
-                ("--representation", "spherical", "--auxiliary-basis", "def2-svp"),
+                (
+                    "--forces",
+                    "--representation",
+                    "spherical",
+                    "--auxiliary-basis",
+                    "def2-svp",
+                ),
             ),
-            ("pbe-uks", ("--charge", "1", "--multiplicity", "2")),
+            ("pbe-uks", ("--forces", "--charge", "1", "--multiplicity", "2")),
         ):
             with self.subTest(method=method):
                 flags = (
@@ -462,10 +469,10 @@ class NativeDftDfCliTests(unittest.TestCase):
                 self.assertEqual(short.stdout, "")
                 self.assertIn("exceeds host budget", short.stderr)
 
-        for method, flags in (("pbe-rks", ("--forces",)), ("pbe0-rks", ())):
+        for flags in ((), ("--forces",)):
             unsupported = self.call_xyz(
                 MOLECULE,
-                method,
+                "pbe0-rks",
                 "--density-fitting",
                 "cpu",
                 *flags,

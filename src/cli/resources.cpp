@@ -502,9 +502,8 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   const Bytes packed_cap =
       derivative ? derivative->cpu_packed_eri_bytes : options.cpu_packed_eri_bytes;
   const bool ks_forces = ks && options.forces;
-  const bool cpu_ks_df = cpu_program && !ks_forces && !derivative && !packed_cap &&
-                         !options.nonlocal_grid && !options.basis_program &&
-                         !options.initial_guess.kind &&
+  const bool cpu_ks_df = cpu_program && !derivative && !packed_cap && !options.nonlocal_grid &&
+                         !options.basis_program && !options.initial_guess.kind &&
                          options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
                          method_generated::cpu_df_energy_program(ks_program->identity);
   if (derivative) {
@@ -573,14 +572,14 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     return finish();
   }
   if (cpu_ks_df && scf::cpu_materialized_df_derivatives_requested()) {
-    plan["diagnostic"] = "CPU DF energy inventory excludes materialized DF derivatives";
+    plan["diagnostic"] = "CPU DF inventory excludes materialized DF derivatives";
     return finish();
   }
   if (ks_forces) {
     plan["property"] = "forces";
     if (!cpu_backend || options.nonlocal_grid || options.basis_program ||
-        !integrals::has_packaged_cpu_eri_shell_derivatives()) {
-      plan["diagnostic"] = "force inventory requires linked Direct FP64 CPU KS derivatives";
+        (!cpu_ks_df && !integrals::has_packaged_cpu_eri_shell_derivatives())) {
+      plan["diagnostic"] = "force inventory requires linked native FP64 CPU KS derivatives";
       return finish();
     }
     plan["exclusions"].push_back("integral recurrence temporaries and BLAS/runtime internals");

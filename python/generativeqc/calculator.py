@@ -4418,7 +4418,7 @@ class Calculator:
         )
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
         resource_plan = None
-        # CPU DF energy uses the batch owner's pre-allocation admission once,
+        # CPU DF uses the batch owner's pre-allocation admission once,
         # rather than constructing an internal plan only to revalidate it as
         # an external one. Bind the exact property set to that preparation.
         batch_admits_cpu_df = (
@@ -4430,7 +4430,7 @@ class Calculator:
                 _native.DENSITY_FITTING_CPU_REFERENCE,
                 _native.DENSITY_FITTING_AUTO,
             )
-            and requested_properties == {"energy"}
+            and requested_properties <= {"energy", "forces"}
         )
         if (
             not batch_admits_cpu_df

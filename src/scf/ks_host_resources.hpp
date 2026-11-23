@@ -16,7 +16,7 @@
 
 namespace generativeqc::scf {
 
-/** Auxiliary topology for the single full-range, value-only CPU DF J owner.
+/** Auxiliary topology for the single full-range CPU DF J owner.
  * Public dimensions describe retained factors; Cartesian dimensions describe
  * the generated integral build before any spherical projection. */
 struct CpuKsDfHostShape {
@@ -140,10 +140,10 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
   if (forces && (shape.nonlocal_correlation || shape.maximum_angular > 3))
     throw std::invalid_argument("CPU KS force inventory requires local XC and s/p/d/f topology");
   const auto& df = shape.cpu_df;
-  if (df && (execution != KsHostExecution::cpu || shape.nonlocal_correlation || shape.ecp_terms ||
-             shape.ecp_workspace || shape.maximum_angular > 3 || !df->aos ||
-             df->cartesian_aos < df->aos || !df->shells || df->shells > df->aos ||
-             df->primitives < df->shells || df->maximum_angular > 3))
+  if (df &&
+      (!cpu || packed_eri || shape.nonlocal_correlation || shape.ecp_terms || shape.ecp_workspace ||
+       shape.maximum_angular > 3 || !df->aos || df->cartesian_aos < df->aos || !df->shells ||
+       df->shells > df->aos || df->primitives < df->shells || df->maximum_angular > 3))
     throw std::invalid_argument("CPU DF KS inventory requires all-electron s/p/d/f topology");
   const auto orbital_square = product({shape.orbital_aos, shape.orbital_aos});
   const auto cartesian_square = product({shape.cartesian_aos, shape.cartesian_aos});
@@ -168,7 +168,7 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
   const auto eri_values =
       packed_eri ? cpu_ks_packed_value_bytes(shape.orbital_aos) : product({8, orbital_fourth});
   Bytes provider = sum({product({16, orbital_square}), eri_values});
-  Bytes df_setup = 0, df_apply = 0;
+  Bytes df_setup = 0, df_apply = 0, df_force_source = 0;
   if (df) {
     const auto coordinates = product({3, shape.atoms});
     const auto metric = product({8, df->aos, df->aos});
@@ -193,6 +193,20 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     const auto whitening = sum({product({4, metric}), product({64, df->aos})});
     df_setup = sum({projection, std::max({one_electron_setup, cartesian_raw, whitening})});
     df_apply = sum({product({8, df->aos}), product({16, orbital_square})});
+    if (forces) {
+      // Only the full-range J pullback consumes this inventory. The fitted
+      // copy, its adjoint and the raw adjoint coexist during metric response;
+      // allow for both metric eigensolves, matrix-function VJP and J vectors.
+      const auto reverse =
+          sum({product({3, tensor}), product({12, metric}), product({128, df->aos})});
+      // The reverse temporaries retire before the public weights are lifted
+      // to Cartesian. Generated derivatives then scatter directly to atoms;
+      // no coordinate-sized dA/dM tensor is admitted here.
+      const auto pullback = sum({metric, tensor, cartesian_raw, projection});
+      const auto total_density = shape.spins == 2 ? product({8, orbital_square}) : 0;
+      df_force_source =
+          sum({std::max(reverse, pullback), total_density, product({64, coordinates})});
+    }
   }
   const auto nonlocal_provider = shape.nonlocal_correlation ? product({48, shape.grid_points}) : 0;
   Bytes solver = 0;
@@ -240,8 +254,9 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     const auto xc = dft::cpu_stationary_xc_workspace_bytes(shape.atoms, shape.orbital_aos,
                                                            shape.grid_points, tile);
     const auto sources = product({96, shape.atoms});
-    force_workspace = sum({frame, std::max({Bytes{dft::cpu_stationary_force_source_bytes},
-                                            sum({xc, sources}), product({7 * 24, shape.atoms})})});
+    const auto integral = df ? df_force_source : Bytes{dft::cpu_stationary_force_source_bytes};
+    force_workspace =
+        sum({frame, std::max({integral, sum({xc, sources}), product({7 * 24, shape.atoms})})});
   }
   // Bound the radial shell descriptors and up to three cached angular rules,
   // including the original and temporary polar vectors during CUDA setup.

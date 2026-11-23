@@ -186,6 +186,8 @@ def pyscf_energy_gradient(
     raw_atoms: Any,
     multiplicity: int,
     functional: str,
+    *,
+    charge: int = 0,
 ) -> tuple[float, np.ndarray]:
     """Independent DF-SCF plus auxiliary/metric and moving-grid response."""
     pyscf = pytest.importorskip("pyscf")
@@ -213,6 +215,7 @@ def pyscf_energy_gradient(
         basis=basis_dict(calc._basis),
         unit="Bohr",
         cart=calc._representation_name == "cartesian",
+        charge=charge,
         spin=multiplicity - 1,
         verbose=0,
     )
@@ -258,6 +261,130 @@ def pyscf_energy_gradient(
     gradient = mf.nuc_grad_method()
     gradient.grid_response = True
     return mf.e_tot, np.asarray(gradient.kernel())
+
+
+@pytest.mark.parametrize("unrestricted", (False, True))
+def test_cpu_df_force_host_budget(
+    unrestricted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exact force plan publishes the same native result and work as baseline."""
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.common.resources import ResourceBudget
+    from generativeqc_compiler.dft import NativeAO
+
+    method = "pbe-uks" if unrestricted else "pbe-rks"
+    atoms = (
+        [
+            ("O", (0.0, 0.0, 0.12)),
+            ("H", (1.45, 0.04, -1.02)),
+            ("H", (-1.37, -0.11, -1.07)),
+        ]
+        if unrestricted
+        else WATER
+    )
+    charge = 1 if unrestricted else 0
+    multiplicity = 2 if unrestricted else 1
+    basis_name = "sto-3g" if unrestricted else "def2-svp"
+    calc = Calculator(
+        method=method,
+        device="cpu",
+        basis=basis_name,
+        basis_representation="spherical",
+        auxiliary_basis=None if unrestricted else "def2-tzvp",
+        density_fitting="cpu",
+        initial_guess=None,
+        ks_options=KsOptions(grid=GridSpec.treutler(0)),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    properties = ("energy", "forces")
+    options = {
+        "charges": [charge],
+        "multiplicities": [multiplicity],
+    }
+    peak = (
+        calc.estimate_resources(
+            [atoms],
+            charges=[charge],
+            multiplicities=[multiplicity],
+            properties=properties,
+        )
+        .require_feasible()
+        .peak_bytes["host"]
+    )
+    exact, short = (
+        calc.estimate_resources(
+            [atoms],
+            charges=[charge],
+            multiplicities=[multiplicity],
+            properties=properties,
+            budget=ResourceBudget(host_bytes=peak + delta),
+        )
+        for delta in (0, -1)
+    )
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        pytest.fail(
+            "force plan attempted compatibility derivatives or early allocation"
+        )
+
+    with calc.prepare_batch([atoms], **options) as batch:
+        expected = batch.execute(strict=True, properties=properties).items[0]
+    with (
+        calc.prepare_batch([atoms], resource_plan=exact, **options) as batch,
+        NativeAO(
+            atoms,
+            basis=basis_name,
+            representation="spherical",
+            charge=charge,
+            multiplicity=multiplicity,
+        ) as basis,
+    ):
+        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden)
+        actual = batch.execute(strict=True, properties=properties).items[0]
+        state = StationaryKsState.from_native(batch, basis, allow_reference_domain=True)
+        try:
+            energy, gradient = pyscf_energy_gradient(
+                calc, state, atoms, multiplicity, "PBE", charge=charge
+            )
+        finally:
+            state._source.close()
+        assert (actual.energy, actual.iterations, actual.fock_builds) == (
+            expected.energy,
+            expected.iterations,
+            expected.fock_builds,
+        )
+        np.testing.assert_array_equal(actual.forces, expected.forces)
+        assert actual.energy == pytest.approx(energy, abs=1e-8)
+        np.testing.assert_allclose(actual.forces, -gradient, atol=3e-7, rtol=0)
+        with monkeypatch.context() as environment:
+            environment.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "1")
+            with pytest.raises(
+                NotImplementedError, match="materialized DF derivatives"
+            ):
+                batch.execute(properties=properties)
+        moved = list(atoms)
+        element, (x_coord, y_coord, z_coord) = moved[-1]
+        moved[-1] = (element, (x_coord, y_coord, z_coord + 0.003))
+        updated = batch.execute(
+            coordinates=[[coords for _, coords in moved]],
+            strict=True,
+            properties=properties,
+        ).items[0]
+        assert updated.warm_start_used
+        assert batch.resource_plan == exact
+    moved_reference = calc.singlepoint(
+        moved, charge=charge, multiplicity=multiplicity, properties=properties
+    )
+    assert updated.energy == pytest.approx(moved_reference.energy, abs=1e-9)
+    np.testing.assert_allclose(
+        updated.forces, moved_reference.forces, atol=2e-7, rtol=0
+    )
+    monkeypatch.setattr(calc, "_create_native_system", forbidden)
+    with pytest.raises(MemoryError):
+        calc.prepare_batch([atoms], resource_plan=short, **options)
+    with pytest.raises(ValueError, match="ks_export=True"):
+        calc.prepare_batch([atoms], ks_export=False, resource_plan=exact, **options)
 
 
 @pytest.mark.parametrize(

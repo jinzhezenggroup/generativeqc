@@ -302,7 +302,8 @@ class PreparedBatch:
         self._planned_properties = _resource_properties
         self._packed_force_plan = False
         self._dense_force_plan = False
-        self._cpu_df_energy_plan = False
+        self._cpu_df_plan = False
+        self._cpu_df_force_plan = False
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         self._output_aware_cpu_forces = qualified_direct_semilocal_context(calculator)
@@ -360,8 +361,13 @@ class PreparedBatch:
                 request, resource_native_name = request
             else:
                 resource_native_name = native_cpu_df_program(request)
-                self._cpu_df_energy_plan = resource_native_name is not None
-                if not self._cpu_df_energy_plan:
+                self._cpu_df_plan = resource_native_name is not None
+                self._cpu_df_force_plan = (
+                    self._cpu_df_plan and "forces" in request.identity.observables
+                )
+                if self._cpu_df_force_plan and not ks_export:
+                    raise ValueError("CPU DF force plans require ks_export=True")
+                if not self._cpu_df_plan:
                     resource_native_name = select_resource_program(calculator, request)
             # Implicit calculator budgets also create a plan here; its force
             # authority has the same preparation and replay requirements.
@@ -452,7 +458,7 @@ class PreparedBatch:
             fixed_cuda_d4
             or self._packed_force_plan
             or self._dense_force_plan
-            or self._cpu_df_energy_plan
+            or self._cpu_df_plan
         ):
             # These plans cover the full output set across replay. No shape
             # query is needed until the planning or scientific inputs change.
@@ -462,7 +468,7 @@ class PreparedBatch:
             )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
-            if not (fixed_cuda_d4 or self._cpu_df_energy_plan)
+            if not (fixed_cuda_d4 or self._cpu_df_plan)
             else calculator._basis_metadata_from_snapshot(
                 atoms,
                 charge=charge,
@@ -529,7 +535,7 @@ class PreparedBatch:
             if (
                 calculator._cpu_packed_eri_maximum_bytes
                 or self._dense_force_plan
-                or self._cpu_df_energy_plan
+                or self._cpu_df_plan
             ):
                 native_graph = calculator.method_ir
             if native_name is not None and calculator._cuda_intrinsic_pbe_d4:
@@ -559,9 +565,9 @@ class PreparedBatch:
                 raise NotImplementedError(
                     "native dense force plans require linked named KS"
                 )
-            if self._cpu_df_energy_plan and native_name is None:
+            if self._cpu_df_plan and native_name is None:
                 raise NotImplementedError(
-                    "CPU DF energy plans require linked named KS preparation"
+                    "CPU DF plans require linked named KS preparation"
                 )
 
             def prepare() -> typing.Any:
@@ -652,6 +658,10 @@ class PreparedBatch:
                 if self._packed_force_plan and not self._native_dft_force_eligible():
                     raise NotImplementedError(
                         "packed force plans require native derivatives for every prepared item"
+                    )
+                if self._cpu_df_force_plan and not self._native_dft_force_eligible():
+                    raise NotImplementedError(
+                        "CPU DF force plans require native derivatives for every prepared item"
                     )
                 if (
                     self._dense_force_plan
@@ -1372,7 +1382,7 @@ class PreparedBatch:
         if (
             self._packed_force_plan
             or self._dense_force_plan
-            or self._cpu_df_energy_plan
+            or self._cpu_df_plan
             or not self._output_aware_cpu_forces
         ) and properties <= frozenset(expected.identity.observables):
             return expected, self.resource_plan
@@ -1487,7 +1497,7 @@ class PreparedBatch:
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
         compute_forces = "forces" in requested
-        if compute_forces and self._cpu_df_energy_plan:
+        if compute_forces and self._cpu_df_plan and not self._cpu_df_force_plan:
             raise NotImplementedError("CPU DF KS host resource plans cover energy only")
         if (
             compute_forces
@@ -1522,6 +1532,10 @@ class PreparedBatch:
         if compute_forces and self._dense_force_plan and not all(native_dft_forces):
             raise NotImplementedError(
                 "native dense force budgets cannot fund compatibility derivatives"
+            )
+        if compute_forces and self._cpu_df_force_plan and not all(native_dft_forces):
+            raise NotImplementedError(
+                "CPU DF force budgets cannot fund compatibility derivatives"
             )
         if (
             public_dft_forces

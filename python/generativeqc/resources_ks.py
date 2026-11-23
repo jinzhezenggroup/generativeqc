@@ -96,6 +96,7 @@ _CPU_PACKED_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_fleet_v1"
 _CPU_PACKED_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_force_fleet_v1"
 _CPU_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_force_fleet_v1"
 _CPU_DF_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_df_fleet_v1"
+_CPU_DF_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_df_force_fleet_v1"
 
 
 def native_cpu_df_program(request: ResourceRequest) -> bytes | None:
@@ -103,7 +104,10 @@ def native_cpu_df_program(request: ResourceRequest) -> bytes | None:
     if request.name != "ks" or request.identity.backend != "cpu":
         return None
     controls = json.loads(request.identity.schedule)
-    if controls.get("fleet_inventory") != "native-cpu-df-v1":
+    if controls.get("fleet_inventory") not in (
+        "native-cpu-df-v1",
+        "native-cpu-df-force-v1",
+    ):
         return None
     return controls["cpu_df_named_program"].encode("ascii")
 
@@ -234,6 +238,7 @@ def _native_host_fleet_inventory(
     packed_forces: bool = False,
     dense_forces: bool = False,
     cpu_fitted: bool = False,
+    cpu_fitted_forces: bool = False,
     **options: typing.Any,
 ) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
     """Query all retained owners and serialized workspace before publication.
@@ -247,7 +252,9 @@ def _native_host_fleet_inventory(
         raise ValueError("KS host inventory requires cpu or cuda backend")
     cuda = backend == "cuda"
     if cpu_fitted:
-        symbol = _CPU_DF_FLEET_SYMBOL
+        symbol = (
+            _CPU_DF_FORCE_FLEET_SYMBOL if cpu_fitted_forces else _CPU_DF_FLEET_SYMBOL
+        )
     elif dense_forces:
         symbol = _CPU_FORCE_FLEET_SYMBOL
     elif packed_forces:
@@ -323,7 +330,7 @@ def _native_host_fleet_inventory(
         return None
     if cpu_fitted and status == 2:
         raise NotImplementedError(
-            "CPU DF energy inventory excludes materialized DF derivatives"
+            "CPU DF inventory excludes materialized DF derivatives"
         )
     if status:
         raise ValueError(
@@ -1291,6 +1298,7 @@ def ks_resource_request(
     from .ks import _automatic_semilocal_name
 
     cpu_fitted = backend == "cpu" and _fitted is not None
+    cpu_fitted_forces = cpu_fitted and include_forces
     automatic_name = None if cpu_fitted else _automatic_semilocal_name(model.method_ir)
     automatic = automatic_name is not None
     automatic_cuda = automatic and backend == "cuda"
@@ -1389,11 +1397,11 @@ def ks_resource_request(
     if cpu_fitted:
         from ._named_ks import select_cpu_df_energy_program
 
-        if not include_forces and precision == "fp64":
+        if precision == "fp64":
             cpu_df_name = select_cpu_df_energy_program(library, model.method_ir)
         if cpu_df_name is None:
             raise NotImplementedError(
-                "CPU DF KS host resource plans require linked FP64 LDA/PBE energy"
+                "CPU DF KS host resource plans require linked FP64 LDA/PBE energy or forces"
             )
     elif _fitted is not None:
         # Named corrections lower to an ingredient carrier (e.g. pbe-rks
@@ -1731,9 +1739,12 @@ def ks_resource_request(
             "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
         )
         if cpu_df_name is not None:
+            inventory_name = (
+                "native-cpu-df-force-v1" if cpu_fitted_forces else "native-cpu-df-v1"
+            )
             controls.update(
-                host_inventory="native-cpu-df-v1",
-                fleet_inventory="native-cpu-df-v1",
+                host_inventory=inventory_name,
+                fleet_inventory=inventory_name,
                 cpu_df_named_program=cpu_df_name.decode("ascii"),
             )
         if packed_cap:
@@ -1784,7 +1795,9 @@ def ks_resource_request(
         backend,
         precision,
         json.dumps({"items": items}),
-        ("energy", "forces") if cuda_force_inventory or cpu_forces else ("energy",),
+        ("energy", "forces")
+        if cuda_force_inventory or cpu_forces or cpu_fitted_forces
+        else ("energy",),
         json.dumps(controls, sort_keys=True),
     )
     exclusions = (
@@ -1875,6 +1888,7 @@ def ks_resource_request(
                 packed_cap=packed_cap,
                 packed_forces=packed_forces,
                 cpu_fitted=cpu_fitted,
+                cpu_fitted_forces=cpu_fitted_forces,
                 diis_history=diis_history,
                 max_iterations=history_iterations,
                 requires_first_ao_derivatives=requires_first_ao_derivatives,

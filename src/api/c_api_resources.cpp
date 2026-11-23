@@ -1565,6 +1565,18 @@ int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t* shapes, std::s
   return ks_cpu_fleet(shapes, shape_count, workspace_floor, 0, values, value_count, false, true);
 }
 
+/** Same fitted topology as v1, with the serialized full-range J pullback.
+ * The prepared endpoint must still authenticate the actual force provider.
+ * Materialized derivatives are outside this inventory and publish nothing.
+ */
+int generativeqc_resource_ks_cpu_df_force_fleet_v1(const std::uint64_t* shapes,
+                                                   std::size_t shape_count,
+                                                   std::uint64_t workspace_floor,
+                                                   std::uint64_t* values, std::size_t value_count) {
+  if (generativeqc::scf::cpu_materialized_df_derivatives_requested()) return 2;
+  return ks_cpu_fleet(shapes, shape_count, workspace_floor, 0, values, value_count, true, true);
+}
+
 /** Same host shape and transactional output layout, for caller-validated
  * spherical s/p/d/f bases. A short whole-fleet packed cap returns 1 without
  * publication; invalid shape/capacity returns -1. No dense retry or sizing. */
