@@ -67,8 +67,13 @@ catalog checksum. `generativeqc_bundled_basis_catalog_sha256` identifies the
 compiled source pack; supplying it as the expected checksum binds external
 metadata to that exact catalog. The C++ `System(context, atoms, basis_name, ...)`
 constructor uses the same expansion and existing normalization/validation owner.
+`generativeqc_builtin_basis_resolve_name_v1` resolves a byte-counted selector
+without atoms or a context. The CLI and installed Python `Calculator` use the
+same case and underscore aliases. Python checks the native catalog checksum
+before attaching its packaged reproducibility metadata; an older library
+without the resolver retains portable name lookup.
 These paths read no basis files, import no Python and invoke no compiler at
-runtime. They do not broaden any method/backend capability.
+runtime in the native SDK and CLI. They do not broaden any method/backend capability.
 
 For caller-supplied FP64 data, `generativeqc_system_create_basis_template_v1`
 accepts the same atom-only system descriptor and an element-local template

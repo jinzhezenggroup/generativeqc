@@ -51,14 +51,16 @@ GRID = GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
 SOLVER = GMRESOptions(atol=1e-12, rtol=1e-11)
 
 
-def test_unlinked_pbe0_uks_does_not_advertise_cpu_second_order(
+@pytest.mark.parametrize("method", ("lda-uks", "pbe-uks", "pbe0-uks"))
+def test_unlinked_uks_does_not_advertise_cpu_second_order(
+    method: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Omitting the exact total binding cannot select the Python RKS owner."""
     monkeypatch.setattr(
         "generativeqc._native_cpu_hessian.linked_method", lambda *_: False
     )
-    calculator = Calculator(method="pbe0-uks", device="cpu", basis="sto-3g")
+    calculator = Calculator(method=method, device="cpu", basis="sto-3g")
     assert not calculator.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
         calculator.hessian(WATER, charge=1, multiplicity=2)
@@ -280,16 +282,45 @@ def test_linked_pbe0_bj_curvature_matches_reconverged_forces(case: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("molecule", "direction", "basis_name", "representation", "charge", "multiplicity"),
+    (
+        "molecule",
+        "direction",
+        "basis_name",
+        "representation",
+        "charge",
+        "multiplicity",
+        "functional",
+    ),
     (
         pytest.param(
-            WATER, WATER_DIRECTION, "sto-3g", "spherical", 0, 1, id="water-sto-3g"
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "spherical",
+            0,
+            1,
+            "PBE0",
+            id="water-sto-3g",
         ),
         pytest.param(
-            WATER, WATER_DIRECTION, "def2-svp", "spherical", 0, 1, id="water-def2-svp"
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            0,
+            1,
+            "PBE0",
+            id="water-def2-svp",
         ),
         pytest.param(
-            AMMONIA, AMMONIA_DIRECTION, "sto-3g", "cartesian", 0, 1, id="nh3-sto-3g"
+            AMMONIA,
+            AMMONIA_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            0,
+            1,
+            "PBE0",
+            id="nh3-sto-3g",
         ),
         pytest.param(
             WATER,
@@ -298,6 +329,7 @@ def test_linked_pbe0_bj_curvature_matches_reconverged_forces(case: str) -> None:
             "cartesian",
             1,
             2,
+            "PBE0",
             id="water-cation-sto-3g",
         ),
         pytest.param(
@@ -307,17 +339,59 @@ def test_linked_pbe0_bj_curvature_matches_reconverged_forces(case: str) -> None:
             "spherical",
             1,
             2,
+            "PBE0",
             id="water-cation-def2-svp",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            1,
+            2,
+            "PBE",
+            id="pbe-water-cation-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            1,
+            2,
+            "PBE",
+            id="pbe-water-cation-def2-svp",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            1,
+            2,
+            "LDA",
+            id="lda-water-cation-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            1,
+            2,
+            "LDA",
+            id="lda-water-cation-def2-svp",
         ),
     ),
 )
-def test_linked_pbe0_full_matrix_against_independent_gradient(
+def test_linked_full_matrix_against_independent_gradient(
     molecule: list[tuple[str, tuple[float, float, float]]],
     direction: np.ndarray,
     basis_name: str,
     representation: str,
     charge: int,
     multiplicity: int,
+    functional: str,
     monkeypatch: pytest.MonkeyPatch,
     record_property: Callable[[str, object], None],
 ) -> None:
@@ -330,7 +404,9 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
     The doublet has different alpha and beta orbitals with both blocks occupied.
     """
     unrestricted = multiplicity != 1
-    method = "pbe0-uks" if unrestricted else "pbe0-rks"
+    method = f"{functional.lower()}-{'uks' if unrestricted else 'rks'}"
+    exact_fraction = 0.25 if functional == "PBE0" else 0.0
+    oracle_functional = "LDA_X,LDA_C_PW" if functional == "LDA" else functional
     calculator = Calculator(
         method=method,
         device="cpu",
@@ -343,13 +419,29 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
     )
     if not linked_method(calculator._library, calculator.ks_options.method_ir.identity):
         pytest.skip("requires the extended CPU Hessian inventory")
-    pytest.importorskip("pyscf", reason="independent polyatomic PBE0 reference")
+    pytest.importorskip("pyscf", reason="independent polyatomic stationary reference")
+
+    if method == "pbe0-rks" and basis_name == "def2-svp":
+        from functools import partial
+        from types import SimpleNamespace
+
+        from pyscf.lib import diis
+        from scipy.linalg import eigh
+
+        # EVR can fail on this tight-SCF DIIS history in CI. Select EVD only
+        # for DIIS; do not change the physical eigensolver or convergence gates.
+        monkeypatch.setattr(
+            diis,
+            "scipy",
+            SimpleNamespace(linalg=SimpleNamespace(eigh=partial(eigh, driver="evd"))),
+        )
 
     def forbidden(*_args: object, **_kwargs: object) -> None:
-        pytest.fail("linked PBE0 invoked the Python derivative owner")
+        pytest.fail("linked CPU endpoint invoked the Python derivative owner")
 
     monkeypatch.setattr(compatibility, "composite_rks_hessian", forbidden)
     monkeypatch.setattr(compatibility, "composite_rks_hvp", forbidden)
+    monkeypatch.setattr(Calculator, "_run_public_rks_second_order", forbidden)
     action = calculator.hessian_vector_product(
         molecule,
         direction,
@@ -397,7 +489,7 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
             state = StationaryKsState.from_native(batch, basis)
             try:
                 energy, gradient, mean_field = independent_global_hybrid_gradient(
-                    basis, state, method, return_mean_field=True
+                    basis, state, method, xc=oracle_functional, return_mean_field=True
                 )
                 assert point.energy == pytest.approx(energy, abs=2e-9, rel=0)
                 np.testing.assert_allclose(point.forces, -gradient, atol=2e-8, rtol=0)
@@ -415,13 +507,17 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
                         hartree = 0.5 * np.vdot(
                             density.sum(axis=0), coulomb.sum(axis=0)
                         )
-                        exact_exchange = -np.vdot(density, exchange) / 8
+                        exact_exchange = (
+                            -0.5 * exact_fraction * np.vdot(density, exchange)
+                        )
                     else:
                         _, semilocal_xc, _ = mean_field._numint.nr_rks(
                             mean_field.mol, mean_field.grids, mean_field.xc, density
                         )
                         hartree = 0.5 * np.vdot(density, coulomb)
-                        exact_exchange = -np.vdot(density, exchange) / 16
+                        exact_exchange = (
+                            -0.25 * exact_fraction * np.vdot(density, exchange)
+                        )
                     assert point.ks_diagnostic is not None
                     components = point.ks_diagnostic.components
                     assert components.hartree == pytest.approx(hartree, abs=2e-8, rel=0)
@@ -468,7 +564,10 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
         return gradient.ravel()
 
     reference(np.zeros_like(direction), center=True)
-    for step in (1e-3, 3e-4):
+    refine = functional in ("LDA", "PBE")
+    steps = (1e-3, 3e-4, 1e-4) if refine else (1e-3, 3e-4)
+    errors = []
+    for step in steps:
         columns = []
         for unit in np.eye(direction.size):
             displacement = step * unit.reshape(direction.shape)
@@ -477,8 +576,15 @@ def test_linked_pbe0_full_matrix_against_independent_gradient(
             )
         oracle = np.column_stack(columns)
         error = np.max(np.abs(dense.matrix - oracle))
+        errors.append(error)
         record_scalar_property(record_property, f"matrix_max_error_at_{step}", error)
-        np.testing.assert_allclose(dense.matrix, oracle, atol=2e-6, rtol=0)
+        # The coarsest semilocal stencil measures truncation; both finer stencils
+        # must meet the same raw-column gate as the hybrid controls.
+        if not refine or step < steps[0]:
+            np.testing.assert_allclose(dense.matrix, oracle, atol=2e-6, rtol=0)
+    if refine:
+        assert errors[1] <= 0.25 * errors[0]
+        assert errors[2] <= errors[1]
 
 
 @pytest.mark.parametrize(

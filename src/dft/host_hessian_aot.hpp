@@ -30,16 +30,29 @@ const Program* find(std::string_view name, std::string_view identity) noexcept;
 
 /** The physical point provider is part of an exact method binding, not a fallback
  * when a linked scalar leaf happens to report a numerical error. */
-enum class PointDomain { linked_ad, scaled_pbe0_rks, lda_rks, pbe_rks, scaled_pbe0_uks };
+enum class PointDomain {
+  linked_ad,
+  scaled_pbe0_rks,
+  lda_rks,
+  pbe_rks,
+  scaled_pbe0_uks,
+  pbe_uks,
+  lda_uks,
+};
 
 /** Physical fields have four Cartesian components per density block. */
 constexpr std::size_t physical_spins(PointDomain domain) noexcept {
-  return domain == PointDomain::linked_ad ? 0 : domain == PointDomain::scaled_pbe0_uks ? 2 : 1;
+  if (domain == PointDomain::linked_ad) return 0;
+  return domain == PointDomain::scaled_pbe0_uks || domain == PointDomain::pbe_uks ||
+                 domain == PointDomain::lda_uks
+             ? 2
+             : 1;
 }
 
-/** These bindings have no Fock exchange or admitted post-SCF correction. */
+/** The canonical semilocal bindings use unit XC scales and no Fock exchange. */
 constexpr bool semilocal_only(PointDomain domain) noexcept {
-  return domain == PointDomain::lda_rks || domain == PointDomain::pbe_rks;
+  return domain == PointDomain::lda_rks || domain == PointDomain::pbe_rks ||
+         domain == PointDomain::pbe_uks || domain == PointDomain::lda_uks;
 }
 
 /** One complete fixed-grid scalar closure bound to native KS model metadata.

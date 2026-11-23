@@ -89,7 +89,7 @@ class HessianCli(unittest.TestCase):
 
     def test_unlinked_cpu_method_does_not_fall_back(self) -> None:
         self.rejected(
-            self.call("--method", "pbe-uks"),
+            self.call("--method", "pbe-d3(0)-rks"),
             "native CPU Hessian has no exact linked total MethodIR",
         )
 
@@ -338,6 +338,98 @@ class HessianCli(unittest.TestCase):
                                 ),
                                 "allocation inventory exceeds host budget",
                             )
+
+    def test_cpu_resource_aliases_use_the_same_prepared_identity(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        controls = (
+            "--backend",
+            "cpu",
+            "--basis",
+            "sto-3g",
+            "--grid-radial-points",
+            "8",
+            "--grid-polar-points",
+            "4",
+            "--grid-azimuth-points",
+            "8",
+        )
+        for canonical, alias in (
+            ("lda-rks", "lda_xc_pw-rks"),
+            ("pbe0-rks", "pbeh-rks"),
+            ("pbe0-rks", "pbe1pbe-rks"),
+            ("b3lyp-rks", "b3lypg-rks"),
+        ):
+            with self.subTest(canonical=canonical, alias=alias):
+                query = (*controls, "--property", "hessian")
+                control = self.call(
+                    *query, "--method", canonical, operation="resources"
+                )
+                self.assertEqual(
+                    control.returncode, 0, control.stderr or control.stdout
+                )
+                reference = json.loads(control.stdout)
+                alias_plan = self.call(*query, "--method", alias, operation="resources")
+                self.assertEqual(
+                    alias_plan.returncode, 0, alias_plan.stderr or alias_plan.stdout
+                )
+                plan = json.loads(alias_plan.stdout)
+                self.assertEqual(plan.pop("method"), alias)
+                self.assertEqual(reference.pop("method"), canonical)
+                self.assertNotEqual(plan.pop("identity"), reference.pop("identity"))
+                self.assertEqual(plan, reference)
+
+                host_peak = plan["peak_bytes"]["host"]
+                calculation = (*controls, "--method", alias, "--host-bytes")
+                exact = self.call(*calculation, str(host_peak), operation="hessian")
+                self.assertEqual(exact.returncode, 0, exact.stderr or exact.stdout)
+                result = json.loads(exact.stdout)
+                self.assertEqual(
+                    result["method_ir_identity"], plan["method_ir_identity"]
+                )
+                self.assertEqual(
+                    result["diagnostics"]["resource_admission"][
+                        "minimum_host_peak_bytes"
+                    ],
+                    host_peak,
+                )
+                baseline = self.call(
+                    *controls,
+                    "--method",
+                    canonical,
+                    "--host-bytes",
+                    str(host_peak),
+                    operation="hessian",
+                )
+                self.assertEqual(
+                    baseline.returncode, 0, baseline.stderr or baseline.stdout
+                )
+                self.assertEqual(
+                    result["matrix"], json.loads(baseline.stdout)["matrix"]
+                )
+                trace = self.root / f"short-{alias}.jsonl"
+                self.rejected(
+                    self.call(
+                        *calculation,
+                        str(host_peak - 1),
+                        operation="hessian",
+                        trace=trace,
+                    ),
+                    "allocation inventory exceeds host budget",
+                )
+                self.assertFalse(trace.exists())
+        unlinked_correction = self.call(
+            *controls,
+            "--method",
+            "pbe-d3(0)-rks",
+            "--property",
+            "hessian",
+            operation="resources",
+        )
+        self.assertEqual(unlinked_correction.returncode, 2, unlinked_correction.stderr)
+        refusal = json.loads(unlinked_correction.stdout)
+        self.assertEqual(refusal["status"], "unsupported")
+        self.assertIn("no exact linked total MethodIR", refusal["diagnostic"])
 
     def test_cpu_resource_floor_matches_execution_before_scf(self) -> None:
         if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":

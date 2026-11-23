@@ -157,6 +157,8 @@ void run_linked_cpu(const char* selector) {
   if (unrestricted) atoms[0].atomic_number = 2;
   const bool semilocal =
       method_name == "lda-rks" || method_name == "pbe-rks" || method_name == "pbe-d3(bj)-rks";
+  const bool semilocal_uks =
+      method_name == "lda-uks" || method_name == "pbe-uks" || method_name == "pbe-d3(bj)-uks";
   generativeqc::System system(context, atoms, "sto-3g", 0, multiplicity,
                               GENERATIVEQC_BASIS_SPHERICAL);
   const std::array<const generativeqc::System*, 1> systems{&system};
@@ -181,7 +183,9 @@ void run_linked_cpu(const char* selector) {
   method.screening_tolerance = 1e-14;
   method.precision_mode = GENERATIVEQC_PRECISION_FP64;
   method.ks_options = &grid;
-  const auto* named_selector = std::string_view(selector) == "lda-rks" ? "lda_xc_pw-rks" : selector;
+  const auto* named_selector = method_name.starts_with("lda-")
+                                   ? (unrestricted ? "lda_xc_pw-uks" : "lda_xc_pw-rks")
+                                   : selector;
   const generativeqc_named_ks_descriptor named{
       sizeof(named), GENERATIVEQC_ABI_VERSION, named_selector, nullptr, 16U << 20, 0};
   generativeqc_ks_host_hessian_options_v1 options{};
@@ -240,6 +244,14 @@ void run_linked_cpu(const char* selector) {
                     GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
                 recycled == sentinel_matrix,
             "recycled Hessian did not refuse below group capacity without publication");
+  } else if (semilocal_uks) {
+    std::array<double, 36> refused{};
+    refused.fill(37);
+    const auto sentinel_matrix = refused;
+    require(rejection([&] { batch.ks_cpu_hessian_recycled(0, refused, options, 4); }) ==
+                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                refused == sentinel_matrix,
+            "semilocal UKS must refuse the unqualified recycled schedule before publication");
   }
   const bool corrected = std::string_view(selector).find("d3(bj)") != std::string_view::npos;
   require(hvp.completed_directions == 1 && dense.completed_directions == direction.size() &&
@@ -269,7 +281,7 @@ void run_linked_cpu(const char* selector) {
               bounded_matrix == matrix_sentinel,
           "CPU dense Hessian did not refuse one byte below the floor transactionally");
   const auto initial_action = action;
-  if (semilocal || std::string_view(selector).starts_with("pbe0")) {
+  if (semilocal || semilocal_uks || method_name.starts_with("pbe0")) {
     // The single-direction plan has no optional matrix panels to release.
     auto exact = options;
     exact.numeric_bytes = hvp_floor;

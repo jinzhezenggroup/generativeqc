@@ -1744,6 +1744,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_builtin_basis_resolve_name_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "b58bf74cec0e6897ce380fa701ca130a11c6a95047e6e3ff1d9d738be13bffa0",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_bundled_basis_catalog_sha256": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

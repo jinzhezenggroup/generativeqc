@@ -352,7 +352,7 @@ void HostGgaXcResponse::apply_batch(std::span<const double> directions, std::spa
           batched ? field_bank.subspan((direction + 1) * 4 * spins * count, 4 * spins * count)
                   : single_tangent;
       if (physical_point) {
-        // The scaled point JVP is direction-specific; the legacy cache holds
+        // The physical point JVP is direction-specific; the legacy cache holds
         // rho/sigma partials and cannot be replayed in this physical domain.
         work_.xc_evaluated_points = add(work_.xc_evaluated_points, count);
         const auto evaluate_physical = [&]<std::size_t Width>(auto point_response) {
@@ -367,7 +367,13 @@ void HostGgaXcResponse::apply_batch(std::span<const double> directions, std::spa
               coefficient_output[component * count + point] = coefficients[component];
           }
         };
-        if (spins == 2)
+        if (domain_ == host_hessian_aot::PointDomain::lda_uks)
+          evaluate_physical.template operator()<8>(
+              host_hessian_point::response<host_hessian_aot::PointDomain::lda_uks>);
+        else if (domain_ == host_hessian_aot::PointDomain::pbe_uks)
+          evaluate_physical.template operator()<8>(
+              host_hessian_point::response<host_hessian_aot::PointDomain::pbe_uks>);
+        else if (domain_ == host_hessian_aot::PointDomain::scaled_pbe0_uks)
           evaluate_physical.template operator()<8>(
               host_hessian_point::response<host_hessian_aot::PointDomain::scaled_pbe0_uks>);
         else

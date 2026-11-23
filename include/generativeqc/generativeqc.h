@@ -2749,6 +2749,20 @@ GENERATIVEQC_API uint32_t generativeqc_builtin_basis_count_v1(void);
  */
 GENERATIVEQC_API const char* generativeqc_builtin_basis_name_v1(uint64_t index);
 
+/** @native-contract generativeqc_builtin_basis_resolve_name_v1
+ * @behavior Resolve an ASCII built-in name using the same catalog and aliases as native CLI.
+ * @inputs selector points to selector_count readable bytes, without a required NUL terminator.
+ * The supported selector length is 1 to 256 bytes; a name is not a path or system descriptor.
+ * @outputs Returns the NUL-terminated canonical name, or NULL for an invalid or unknown selector.
+ * @lifetime The returned immutable string belongs to the loaded library; no input is retained.
+ * @errors No provider initialization or allocation occurs; a missing name does not admit a
+ * fallback.
+ * @execution Synchronous metadata lookup without a context, device, compiler or runtime file reads.
+ * @units selector_count is in bytes; the return value is not a basis or execution-capability claim.
+ */
+GENERATIVEQC_API const char* generativeqc_builtin_basis_resolve_name_v1(const char* selector,
+                                                                        uint64_t selector_count);
+
 /** @native-contract generativeqc_builtin_basis_query_v1
  * @behavior Query shared AOT basis expansion counts and canonical pack provenance.
  * @inputs Versioned records, a byte-counted name, bounded nonempty atom array and valid

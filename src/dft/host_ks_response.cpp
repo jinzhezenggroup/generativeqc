@@ -83,11 +83,12 @@ HostKsResponse::HostKsResponse(const VerifiedKsFinalState& state, const core::Sy
   const auto* binding = host_hessian_aot::find_method(method_identity);
   const auto& model = identity_.model;
   const auto& strategy = identity_.determinant.model;
-  // The semilocal binding is for canonical unscaled J-only RKS, not a
+  // The semilocal binding is for canonical unscaled J-only KS, not a
   // PBE carrier with custom coefficients or a missing hybrid exchange term.
   const bool electronic_match =
       binding && host_hessian_aot::semilocal_only(binding->point_domain)
-          ? strategy.spec.spin == scf::FockSpin::Restricted &&
+          ? strategy.spec.spin == (binding->spins == 1 ? scf::FockSpin::Restricted
+                                                       : scf::FockSpin::Unrestricted) &&
                 strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
                 strategy.spec.coulomb.coefficient == 1.0 &&
                 strategy.spec.coulomb.op == scf::FockOperator::FullRange &&

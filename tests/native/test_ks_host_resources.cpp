@@ -11,6 +11,8 @@ extern "C" int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t*, std::s
                                                     std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t*, std::size_t,
                                                      std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t*, std::size_t,
+                                                        std::uint64_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_cpu_packed_fleet_v1(const std::uint64_t*, std::size_t,
                                                             std::uint64_t, std::uint64_t*,
                                                             std::size_t);
@@ -254,11 +256,43 @@ void test_packed_force_fleet_bridge() {
   require(force[13] == expected_xc + 96 * 3 + 8 * 2 * (4 * 9 + 3),
           "force fleet did not price the overlapping AO and Becke buffers");
 }
+void test_df_fleet_bridge() {
+  const std::array<std::uint64_t, 22> shape{2, 7, 8,  4, 12, 1, 2,  0,  64, 4,  4,
+                                            8, 6, 40, 1, 0,  0, 12, 14, 7,  20, 2};
+  std::array<std::uint64_t, 44> shapes{};
+  std::copy(shape.begin(), shape.end(), shapes.begin());
+  std::copy(shape.begin(), shape.end(), shapes.begin() + shape.size());
+  shapes[22 + 17] = 14;
+  std::array<std::uint64_t, 47> values{};
+  const auto query = [&] {
+    return generativeqc_resource_ks_cpu_df_fleet_v1(shapes.data(), shapes.size(), 0, values.data(),
+                                                    values.size());
+  };
+  require(query() == 0, "valid heterogeneous CPU DF fleet refused");
+  const auto one_electron = 16 * 7 * 7 * 7 + 8 * 6;
+  const auto provider = [&](std::uint64_t auxiliary) {
+    return one_electron + 8 * auxiliary * auxiliary + 3 * 8 * 7 * 7 * auxiliary;
+  };
+  require(values[15 + 5] == provider(12) && values[31 + 5] == provider(14),
+          "DF provider did not price raw and whitened factors independently");
+  require(values[12] == values[15 + 13] + values[31 + 13] &&
+              values[13] == std::max({values[29], values[30], values[45], values[46]}) &&
+              values[14] == values[12] + values[13],
+          "DF fleet did not preserve retained versus serialized lifetimes");
+  values.fill(7);
+  shapes[22 + 18] = 13;
+  require(query() != 0 &&
+              std::all_of(values.begin(), values.end(), [](auto value) { return value == 7; }),
+          "invalid late auxiliary topology published partial capacity");
+  shapes[22 + 18] = shapes[22 + 17] = std::numeric_limits<std::uint64_t>::max();
+  require(query() != 0 && values[0] == 7, "DF capacity overflow was not rejected");
+}
 }  // namespace
 
 int main() {
   test_fleet_owner();
   test_fleet_bridge();
+  test_df_fleet_bridge();
   test_packed_fleet_bridge();
   test_packed_force_fleet_bridge();
   const std::array<std::uint64_t, 17> shape{2,  2, 2,   2, 6,   1, 0, 0, 6144,

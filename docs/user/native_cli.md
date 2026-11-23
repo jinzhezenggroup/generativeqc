@@ -64,12 +64,13 @@ With the default stationary CPU primitive inventory enabled,
 `GENERATIVEQC_ENABLE_HOST_KS_HESSIAN=ON` links canonical
 Gaussian/VWN-RPA B3LYP RKS/UKS and its canonical uncut two-body D3(BJ), ATM-off
 composition into the native CPU executable. The default Hessian inventory also
-admits all-electron `lda-rks`, `pbe-rks`, `pbe-d3(bj)-rks`, `pbe0-rks`, and
-`pbe0-d3(bj)-rks` with Cartesian or real-spherical AOs. Both commands use
+admits all-electron LDA, PBE, and PBE0 for both RKS and UKS, with Cartesian or
+real-spherical AOs. PBE and PBE0 also admit their named uncut two-body D3(BJ),
+ATM-off methods for both spin states. Both commands use
 the same Direct FP64 batch/response owner as the Python API, with no
 interpreter or runtime compiler. Explicit range-PBE `--method-ir` requests are
 CUDA-only and are never substituted with bare PBE on CPU.
-For dense CPU LDA/PBE, `--response-recycle-block-size N` requests a native
+For dense CPU LDA/PBE RKS, `--response-recycle-block-size N` requests a native
 recycled GMRES group of two to four directions. An infeasible group fails
 instead of selecting a different solver; this flag is not available for HVP
 or CUDA.
@@ -717,11 +718,13 @@ reserve/headroom use exact integer rounding. Zero caps permit no allocation.
 both execution and planning; it does not disable DIIS or erase its capacities.
 
 Inventories cover CPU RHF/UHF including DF, CPU LDA/PBE/PBE0/B3LYP RKS/UKS energy plans,
-small conventional CUDA HF, small CUDA DF resident/source/packed alternatives,
+linked all-electron LDA/PBE RKS/UKS energy with `--density-fitting cpu` on s/p/d/f
+orbital and auxiliary bases, small conventional CUDA HF, small CUDA DF
+resident/source/packed alternatives,
 and conventional CUDA KS energy arenas. ECP workspace uses the same generated
 two-grid/radial-batching policy as native execution. Existing ECP-DF, orbital/
 auxiliary-size and other provider admission limits remain fail-closed.
-Unqualified correlated, tau-dependent, force, density-fitted KS and other
+Unqualified correlated, tau-dependent, force, other density-fitted KS and other
 inventories return JSON `status: unsupported` and exit 2; budget failures return
 `infeasible` and exit 2; feasible plans exit 0. Output includes phase capacities, fleet
 peaks, resident storage, effective limits, controls, topology/source identities
@@ -734,19 +737,24 @@ listed LDA/PBE/PBE0/B3LYP energy programs and supported named corrections. A
 force plan covers s/p/d/f bases. With
 `--cpu-packed-eri-budget-bytes`, planning charges the exact retained spherical
 ERI bytes across all `--batch` copies, separately from the modeled host peak.
-For a single supported Direct CPU RHF/KS calculation, pass the same method, basis,
-initial-guess and force/packed flags
+For a single supported CPU calculation (Direct RHF/KS or the semilocal DF-KS
+energy cases above), pass the same method, basis, fitting, initial-guess and force/packed flags
 to `run --host-bytes N` to check the modeled host peak before SCF preparation.
 `--host-reserve-bytes` and `--headroom-fraction` reduce the available limit.
 `run --json` reports the modeled peak and effective limit in
 `resource_admission`; the prepared owner still decides force capability.
-These limits do not bound integral recurrence temporaries or process RSS.
+These limits do not bound opaque library allocations or process RSS. CPU DF-KS
+energy plans exclude the materialized DF derivative diagnostic, DF forces,
+second-order products and preliminary guesses.
 
-For a single linked Direct FP64 CPU LDA/PBE RKS, PBE-D3(BJ) RKS, PBE0 or
-PBE0-D3(BJ) RKS/UKS, or
-canonical B3LYP RKS/UKS system (bare or D3(BJ)), add `--property hessian` or
-`--property hvp` to include the native mandatory derivative reservation. B3LYP
-also uses the native scalar ECP inventories when admitted by the endpoint.
+For a single linked Direct FP64 CPU LDA, PBE, PBE0 or canonical B3LYP RKS/UKS
+system (including the named two-body D3(BJ) variants other than LDA), add
+`--property hessian` or `--property hvp` to include the native mandatory
+derivative reservation. Aliases with the same compiled MethodIR and execution
+controls receive the same inventory as the canonical selector. The JSON
+`method_ir_identity` records the scientific program; the full receipt
+`identity` still includes the submitted selector. B3LYP also uses the native
+scalar ECP inventories when admitted by the endpoint.
 No direction file is needed to size an HVP.
 The host peak conservatively overlaps the derivative with the complete energy
 and correction inventories. The dry-run accepts the same derivative byte flags

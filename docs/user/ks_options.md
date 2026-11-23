@@ -32,6 +32,14 @@ calculator = Calculator(
 print(calculator.ks_options.to_payload())
 ```
 
+For linked, all-electron FP64 CPU LDA/PBE RKS/UKS, `density_fitting="cpu"`
+supports an energy-only `ResourceBudget(host_bytes=...)`. Request
+`properties=("energy",)` explicitly. A batch can reuse an energy plan from
+`estimate_resources`; it cannot use that plan to replay forces. The native
+inventory includes the actual auxiliary basis, including the same-as-orbital
+default. One explicit auxiliary basis currently requires one system per plan.
+This inventory does not admit guesses, corrections, forces or second derivatives.
+
 An omitted functional resolves to `LDA_X+LDA_C_PW` or
 `GGA_X_PBE+GGA_C_PBE`, with unit coefficients. RKS resolves an unpolarized
 composition; UKS resolves a polarized one. An explicit `FunctionalSpec` must

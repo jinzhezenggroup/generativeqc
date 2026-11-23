@@ -55,8 +55,8 @@ SPINS = ("unpolarized", "polarized")
 METHOD_LEAVES = frozenset(("xc", "gga_field_response", "gga_energy_mixed"))
 NATIVE_POINTS = {
     "PBE0": {"unpolarized": "scaled_pbe0_rks", "polarized": "scaled_pbe0_uks"},
-    "PBE": {"unpolarized": "pbe_rks"},
-    "LDA_XC_PW": {"unpolarized": "lda_rks"},
+    "PBE": {"unpolarized": "pbe_rks", "polarized": "pbe_uks"},
+    "LDA_XC_PW": {"unpolarized": "lda_rks", "polarized": "lda_uks"},
 }
 ENDPOINT_LEAVES = METHOD_LEAVES | frozenset(
     (

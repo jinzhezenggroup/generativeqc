@@ -55,10 +55,11 @@ void work_budget(std::size_t needed, std::size_t limit, const char* detail) {
 
 bool supported_dispersion(const dft::host_hessian_aot::MethodBinding& binding,
                           const methods::named_ks::Dispersion& correction) {
-  return !correction.kind || (binding.point_domain != dft::host_hessian_aot::PointDomain::lda_rks &&
-                              correction.kind == 1 && !correction.s9 && !correction.cn_cutoff &&
-                              !correction.pair_cutoff && !correction.pair_switch_width &&
-                              !correction.composite_profile);
+  const bool bare_only = binding.point_domain == dft::host_hessian_aot::PointDomain::lda_rks ||
+                         binding.point_domain == dft::host_hessian_aot::PointDomain::lda_uks;
+  return !correction.kind || (!bare_only && correction.kind == 1 && !correction.s9 &&
+                              !correction.cn_cutoff && !correction.pair_cutoff &&
+                              !correction.pair_switch_width && !correction.composite_profile);
 }
 
 /** Resolve the exact total program to its linked electronic closure and correction. */
@@ -264,7 +265,7 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
     throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                "CPU Hessian has no exact linked electronic MethodIR");
   const bool semilocal_only = dft::host_hessian_aot::semilocal_only(binding->point_domain);
-  if (recycle_width && !semilocal_only)
+  if (recycle_width && (!semilocal_only || binding->spins != 1))
     throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                "recycled CPU Hessian requires linked LDA/PBE RKS response");
   const auto& correction = *source.dispersion;
@@ -273,7 +274,7 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
                          token.identity.model.semilocal_correlation_scale != 1.0))
     throw methods::MethodError(
         GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-        "native CPU semilocal Hessian requires canonical unscaled RKS electronics");
+        "native CPU semilocal Hessian requires canonical unscaled electronics");
   const auto atoms = source.system->atoms.size(), basis = source.basis->nao;
   const auto spins = token.identity.model.spins;
   runtime::df_progress::number("atoms", atoms);

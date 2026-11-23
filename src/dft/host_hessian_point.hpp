@@ -35,15 +35,19 @@ inline std::array<double, Width> lane(const double* panel, std::size_t count, st
 template <PointDomain Domain>
 inline constexpr std::size_t width = 4 * host_hessian_aot::physical_spins(Domain);
 
+template <PointDomain Domain>
+inline constexpr bool pbe = Domain != PointDomain::lda_rks && Domain != PointDomain::lda_uks;
+
 /** RKS maps carry total fields, whereas UKS maps carry separate physical
  * alpha and beta blocks without scaling. The shared point code owns the
  * tail domain and never materializes uncontracted rho/sigma Hessians. */
 template <PointDomain Domain>
 inline point::Value value(const std::array<double, width<Domain>>& field) {
-  if constexpr (Domain == PointDomain::scaled_pbe0_uks) {
+  if constexpr (width<Domain> == 8) {
     const double density[]{field[0], field[4]};
     const double gradients[2][3]{{field[1], field[2], field[3]}, {field[5], field[6], field[7]}};
-    return point::evaluate(true, density, gradients, 0.75, 1.0);
+    return point::evaluate(pbe<Domain>, density, gradients,
+                           Domain == PointDomain::scaled_pbe0_uks ? 0.75 : 1.0, 1.0);
   }
   const double gradient[]{field[1] / 2, field[2] / 2, field[3] / 2};
   if constexpr (Domain == PointDomain::scaled_pbe0_rks) {
@@ -52,24 +56,24 @@ inline point::Value value(const std::array<double, width<Domain>>& field) {
     const double density[]{field[0] / 2, field[0] / 2};
     const double spin_gradient[2][3]{{gradient[0], gradient[1], gradient[2]},
                                      {gradient[0], gradient[1], gradient[2]}};
-    return point::evaluate_with_channels<4, true>(Domain == PointDomain::pbe_rks, density,
-                                                  spin_gradient, 1.0, 1.0);
+    return point::evaluate_with_channels<4, true>(pbe<Domain>, density, spin_gradient, 1.0, 1.0);
   }
 }
 
 template <PointDomain Domain>
 inline point::Value response(const std::array<double, width<Domain>>& field,
                              const std::array<double, width<Domain>>& direction) {
-  if constexpr (Domain == PointDomain::scaled_pbe0_uks) {
+  if constexpr (width<Domain> == 8) {
     const double density[]{field[0], field[4]}, delta_density[]{direction[0], direction[4]};
     const double gradients[2][3]{{field[1], field[2], field[3]}, {field[5], field[6], field[7]}};
     const double delta_gradients[2][3]{{direction[1], direction[2], direction[3]},
                                        {direction[5], direction[6], direction[7]}};
-    return point::unrestricted_response(true, density, gradients, delta_density, delta_gradients,
-                                        0.75, 1.0);
+    return point::unrestricted_response(pbe<Domain>, density, gradients, delta_density,
+                                        delta_gradients,
+                                        Domain == PointDomain::scaled_pbe0_uks ? 0.75 : 1.0, 1.0);
   }
-  return point::restricted_response(Domain != PointDomain::lda_rks, field[0], field.data() + 1,
-                                    direction[0], direction.data() + 1,
+  return point::restricted_response(pbe<Domain>, field[0], field.data() + 1, direction[0],
+                                    direction.data() + 1,
                                     Domain == PointDomain::scaled_pbe0_rks ? 0.75 : 1.0, 1.0);
 }
 
@@ -84,6 +88,8 @@ inline point::Value response(PointDomain domain, const std::array<double, 4>& fi
       return response<PointDomain::scaled_pbe0_rks>(field, direction);
     case PointDomain::linked_ad:
     case PointDomain::scaled_pbe0_uks:
+    case PointDomain::pbe_uks:
+    case PointDomain::lda_uks:
       break;
   }
   point::Value invalid{};
@@ -210,6 +216,10 @@ inline const host_hessian_aot::Program* field_program(
         return physical_field_program<PointDomain::scaled_pbe0_rks>();
       case PointDomain::scaled_pbe0_uks:
         return physical_field_program<PointDomain::scaled_pbe0_uks>();
+      case PointDomain::pbe_uks:
+        return physical_field_program<PointDomain::pbe_uks>();
+      case PointDomain::lda_uks:
+        return physical_field_program<PointDomain::lda_uks>();
       case PointDomain::linked_ad:
         break;
     }
@@ -251,6 +261,10 @@ inline const host_hessian_aot::Program* mixed_program(
         return physical_mixed_program<PointDomain::scaled_pbe0_rks>();
       case PointDomain::scaled_pbe0_uks:
         return physical_mixed_program<PointDomain::scaled_pbe0_uks>();
+      case PointDomain::pbe_uks:
+        return physical_mixed_program<PointDomain::pbe_uks>();
+      case PointDomain::lda_uks:
+        return physical_mixed_program<PointDomain::lda_uks>();
       case PointDomain::linked_ad:
         break;
     }

@@ -61,6 +61,38 @@ generativeqc_ks_options controls() {
   return result;
 }
 
+void test_cpu_df_inventory_identity() {
+  using generativeqc::methods::named_ks::find_method;
+  for (const auto selector : {"lda_xc_pw-rks", "lda_xc_pw-uks", "pbe-rks", "pbe-uks"}) {
+    const auto* method = find_method(selector);
+    require(method && method->cpu, "expected a linked CPU semilocal program");
+    const char* selected = nullptr;
+    require(generativeqc_ks_cpu_df_energy_program_v1(method->identity.data(), &selected) == 0 &&
+                selected && method->name == selected,
+            "exact semilocal graph lost its CPU DF inventory");
+  }
+  if (const auto* alias = find_method("libxc:pbe")) {
+    const auto* pbe = find_method("pbe-rks");
+    if (alias->identity == pbe->identity) {
+      const char* selected = nullptr;
+      require(generativeqc_ks_cpu_df_energy_program_v1(alias->identity.data(), &selected) == 0 &&
+                  selected && pbe->name == selected,
+              "alias order changed CPU DF inventory selection");
+    }
+  }
+  const auto* hybrid = find_method("pbe0-rks");
+  require(hybrid, "expected a neighboring hybrid program");
+  const char* selected = "unchanged";
+  require(generativeqc_ks_cpu_df_energy_program_v1(hybrid->identity.data(), &selected) == 0 &&
+              !selected,
+          "hybrid unexpectedly selected the semilocal CPU DF inventory");
+  selected = "unchanged";
+  require(generativeqc_ks_cpu_df_energy_program_v1("pbe-rks", &selected) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              selected && std::string_view(selected) == "unchanged",
+          "selector spelling bypassed MethodIR validation");
+}
+
 void test_complete_catalog() {
   using namespace generativeqc::methods::named_ks;
   require(methods().size() > 10, "catalog was lost in a library-only build");
@@ -73,6 +105,19 @@ void test_complete_catalog() {
                                               backend, &output, &selected) == 0,
               "metadata query loaded a backend or rejected a valid row");
       const bool complete = backend == GENERATIVEQC_BACKEND_CUDA ? entry.cuda : entry.cpu;
+      generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
+                                                 nullptr, 0};
+      require(generativeqc_ks_catalog_lookup_v1(entry.name.data(), entry.name.size(), backend,
+                                                &binding) == GENERATIVEQC_STATUS_SUCCESS,
+              "native selector lookup rejected a catalog spelling");
+      if (complete) {
+        require(binding.identifier && binding.identity && binding.identifier == entry.source &&
+                    binding.identity == entry.identity && binding.spin == entry.spin,
+                "selector metadata differs from the prepared program");
+      } else {
+        require(!binding.identifier && !binding.identity && !binding.spin,
+                "unavailable selector published metadata for the wrong backend");
+      }
       const bool admitted = complete && !entry.dispersion.kind;
       require(selected == static_cast<unsigned>(admitted), "catalog admission flags diverged");
       if (complete) {
@@ -491,6 +536,7 @@ int main(int argc, char**) {
     }
     test_bound_basis_and_system_factory();
     test_complete_catalog();
+    test_cpu_df_inventory_identity();
     test_identity_and_transaction_boundaries();
     test_borrowed_controls_and_extension_aliases();
     test_named_preparation_failures_and_lifetime();

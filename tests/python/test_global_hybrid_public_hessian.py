@@ -268,6 +268,19 @@ def test_pbe0_uks_without_linked_native_owner_stays_closed(
         calculator.hessian(ATOMS)
 
 
+def test_unqualified_df_pbe0_uks_stays_closed() -> None:
+    """DF must not inherit admission from the linked direct UKS owner."""
+    calculator = Calculator(
+        method="pbe0-uks",
+        device="cpu",
+        density_fitting="cpu",
+        ks_options=KsOptions(grid=GRID),
+    )
+    assert not calculator.second_order_capabilities
+    with pytest.raises(NotImplementedError, match="does not expose public hessian"):
+        calculator.hessian(ATOMS)
+
+
 @pytest.mark.parametrize("method", ("b3lyp-rks", "pbe0-rks"))
 def test_fitting_does_not_inherit_direct_admission(method: str) -> None:
     """DF has separate response and approximation gates, even on the CPU."""

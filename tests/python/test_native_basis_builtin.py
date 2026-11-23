@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Atom, Calculator, _basis_builtin, _native
+from generativeqc import Atom, Calculator, _basis_builtin, _model_resolution, _native
 from generativeqc._model_resolution import _named_basis_record
 from generativeqc.basis import BasisSet
 
@@ -31,6 +31,46 @@ def native_context() -> typing.Iterator[tuple[typing.Any, ctypes.c_void_p]]:
         yield library, context
     finally:
         library.generativeqc_context_destroy(context)
+
+
+def test_calculator_resolves_orbital_and_auxiliary_aliases(
+    native_context: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Use native names before looking up the package's metadata records."""
+    library, _ = native_context
+    if not hasattr(library, "generativeqc_builtin_basis_resolve_name_v1"):
+        pytest.skip("requires the installed native basis name resolver")
+    expected = Calculator(
+        basis="sto-3g", auxiliary_basis="def2-svp", density_fitting="cpu"
+    )
+
+    def canonical_only(name: str, representation: str) -> BasisSet:
+        assert name in ("sto-3g", "def2-svp")
+        return _named_basis_record(name, representation)
+
+    monkeypatch.setattr(_model_resolution, "_named_basis_record", canonical_only)
+    calculator = Calculator(
+        basis="STO_3G", auxiliary_basis="DEF2_SVP", density_fitting="cpu"
+    )
+    atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
+    assert calculator.basis_metadata(atoms) == expected.basis_metadata(atoms)
+    assert calculator.singlepoint(atoms).energy == expected.singlepoint(atoms).energy
+    with pytest.raises(NotImplementedError, match="bundled basis.*unavailable"):
+        Calculator(basis="not-a-bundled-basis")
+
+
+def test_builtin_selector_distinguishes_legacy_library_from_pack_mismatch() -> None:
+    """Only a missing resolver permits portable name resolution."""
+    old_library = SimpleNamespace()
+    assert _basis_builtin.resolve_record(old_library, "STO_3G", "cartesian") is (
+        _named_basis_record("STO_3G", "cartesian")
+    )
+    mismatched_library = SimpleNamespace(
+        generativeqc_builtin_basis_resolve_name_v1=lambda *_args: b"sto-3g",
+        generativeqc_bundled_basis_catalog_sha256=lambda: b"0" * 64,
+    )
+    with pytest.raises(RuntimeError, match="does not match package metadata"):
+        _basis_builtin.resolve_record(mismatched_library, "sto-3g", "cartesian")
 
 
 def overlap(

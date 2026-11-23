@@ -58,6 +58,17 @@ bare Cartesian contexts. Spherical or corrected contexts require a linked
 schedule.
 Native admission or execution errors do not retry that path.
 
+**CPU LDA/PBE UKS.** The default package also links canonical LDA
+(Dirac exchange and PW92 correlation), PBE, and PBE with uncut two-body
+D3(BJ), ATM off, for all-electron Direct strict-FP64 UKS in Cartesian or
+real-spherical AOs.
+The prepared native owner applies Coulomb response to the summed spin density
+and XC response to separate alpha and beta fields. D3 curvature is added once
+to the electronic result and does not require a second electronic response
+solve. HVP and scalar-column dense Hessian require the exact linked total
+method, with no Python numerical fallback. Recycled groups, density fitting,
+ECPs and other semilocal corrections do not inherit this admission.
+
 **CPU full-range PBE0 RKS and B3LYP RKS/UKS compositions.** Direct all-electron
 strict-FP64 calculations admit Cartesian or real-spherical AOs through f.
 B3LYP UKS preserves the supplied charge/multiplicity and both physical spin

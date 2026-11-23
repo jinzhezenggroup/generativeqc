@@ -352,7 +352,9 @@ class KsOptions:
                     self.nonlocal_memory_budget_bytes
                 )
         if self.scf_domain == WB97MV_SCF_DOMAIN or (
-            self._method_ir is not None and is_canonical_r2scan_rvv10(self._method_ir)
+            self._method_ir is not None
+            and self.has_nonlocal_correlation
+            and is_canonical_r2scan_rvv10(self._method_ir)
         ):
             payload["nonlocal_density_policy"] = {
                 "version": MOLECULAR_VV10_DENSITY_POLICY,
@@ -1143,6 +1145,11 @@ def native_dft_carrier_for_ir(method_ir: MethodIR) -> str:
 def native_dft_carrier(method: typing.Any) -> str:
     """Return the stable native provider carrier for one compiler-resolved DFT selector."""
     method_ir, _ = resolve_ks_method(method)
+    return _named_dft_carrier_for_ir(method_ir)
+
+
+def _named_dft_carrier_for_ir(method_ir: MethodIR) -> str:
+    """Retain the named selector's carrier after the total graph is resolved."""
     if _is_pbe_d4_composition(method_ir):
         return "pbe-d4-rks"
     electronic_projection = _dispersion_electronic_projection(method_ir)
@@ -1183,9 +1190,18 @@ def native_xc_functional_code(method: typing.Any) -> int:
     return _native_semilocal_code(method_ir)
 
 
-def resolve_ks_options(method: typing.Any, options: typing.Any = None) -> typing.Any:
+def resolve_ks_options(
+    method: typing.Any,
+    options: typing.Any = None,
+    *,
+    _named_graph: MethodIR | None = None,
+) -> typing.Any:
     """Validate a MethodIR-resolved model before resource/native allocation."""
-    named_ir, expected = resolve_ks_method(method)
+    if _named_graph is None:
+        named_ir, expected = resolve_ks_method(method)
+    else:
+        named_ir = _named_graph
+        expected = _native_semilocal(electronic_method_ir(named_ir))
     options = KsOptions() if options is None else options
     if not isinstance(options, KsOptions):
         raise TypeError("ks_options must be KsOptions")

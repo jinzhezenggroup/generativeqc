@@ -340,6 +340,8 @@ class Calculator:
         automatic_libxc_resolution = None
         automatic_libxc_public_name = None
         automatic_libxc_transport = None
+        discovered_native_graph = None
+        selected_library = None
 
         from generativeqc_compiler.method import (
             D3Spec,
@@ -377,13 +379,31 @@ class Calculator:
                     identifier, spin = composite
                     method = resolve_method(identifier, spin=spin)
                 elif canonical_method not in _METHODS:
-                    from .ks import KsOptions, native_dft_carrier, resolve_ks_method
+                    from .ks import (
+                        KsOptions,
+                        _named_dft_carrier_for_ir,
+                        resolve_ks_method,
+                    )
 
-                    try:
-                        discovered_ir, _ = resolve_ks_method(canonical_method)
-                    except ValueError as error:
-                        raise ValueError(f"unknown method {method!r}") from error
-                    carrier = native_dft_carrier(canonical_method)
+                    if device == "cpu":
+                        from ._named_ks import resolve_named_graph
+
+                        selected_library = _native.load_library(
+                            device=device, device_id=int(device_id)
+                        )
+                        discovered_native_graph = resolve_named_graph(
+                            selected_library,
+                            canonical_method,
+                            _native.BACKEND_CPU_REFERENCE,
+                        )
+                    if discovered_native_graph is not None:
+                        discovered_ir = discovered_native_graph
+                    else:
+                        try:
+                            discovered_ir, _ = resolve_ks_method(canonical_method)
+                        except ValueError as error:
+                            raise ValueError(f"unknown method {method!r}") from error
+                    carrier = _named_dft_carrier_for_ir(discovered_ir)
                     execution_ir = discovered_ir
                     corrections = tuple(
                         node
@@ -548,6 +568,7 @@ class Calculator:
         }
         method_id = _METHODS[method.lower()]
         intrinsic_xtb_basis = method_id == _native.METHOD_GFN2_XTB
+        resolve_orbital_name = resolve_auxiliary_name = False
         if intrinsic_xtb_basis:
             if basis is not None:
                 raise ValueError(
@@ -575,8 +596,17 @@ class Calculator:
                     basis = load_r2scan3c_basis()
                 else:
                     basis = "sto-3g"
-            basis = _snapshot_basis(basis, basis_representation)
-            if supplied_method_ir is not None and supplied_method_ir.basis is not None:
+            fixed_method_basis = (
+                supplied_method_ir is not None and supplied_method_ir.basis is not None
+            )
+            resolve_orbital_name = (
+                isinstance(basis, str)
+                and not basis.endswith(".json")
+                and not fixed_method_basis
+            )
+            if not resolve_orbital_name:
+                basis = _snapshot_basis(basis, basis_representation)
+            if fixed_method_basis:
                 validate_basis_snapshot(supplied_method_ir.basis, basis)
             if basis_representation is None:
                 basis_representation = (
@@ -586,7 +616,10 @@ class Calculator:
                 raise ValueError(
                     "basis_representation must be 'cartesian' or 'spherical'"
                 )
-            if auxiliary_basis is not None:
+            resolve_auxiliary_name = isinstance(
+                auxiliary_basis, str
+            ) and not auxiliary_basis.endswith(".json")
+            if auxiliary_basis is not None and not resolve_auxiliary_name:
                 auxiliary_basis = _snapshot_basis(
                     auxiliary_basis,
                     None
@@ -767,7 +800,9 @@ class Calculator:
                 if self._automatic_libxc_name is not None
                 else self._method_name
             )
-            self._ks_options = resolve_ks_options(ks_resolution_name, ks_options)
+            self._ks_options = resolve_ks_options(
+                ks_resolution_name, ks_options, _named_graph=discovered_native_graph
+            )
             from .ks import _automatic_semilocal_name
 
             # Explicit MethodIR/composition inputs use the same capability
@@ -902,8 +937,6 @@ class Calculator:
         self._ccsd_damping = float(ccsd_damping)
         self._ccsd_level_shift = float(ccsd_level_shift)
         self._ccsd_frozen_core = int(ccsd_frozen_core)
-        self._basis = basis
-        self._auxiliary_basis = auxiliary_basis
         self._density_fitting_mode = density_fitting_mode
         if cpu_packed_eri_maximum_bytes and (
             device != "cpu"
@@ -952,7 +985,22 @@ class Calculator:
             and self._precision_mode != _native.PRECISION_FP64
         ):
             raise ValueError("canonical correlated methods require precision='fp64'")
-        self._library = _native.load_library(device=device, device_id=self._device_id)
+        self._library = (
+            selected_library
+            if selected_library is not None
+            else _native.load_library(device=device, device_id=self._device_id)
+        )
+        if resolve_orbital_name or resolve_auxiliary_name:
+            from ._basis_builtin import resolve_record
+
+            if resolve_orbital_name:
+                basis = resolve_record(self._library, basis, basis_representation)
+            if resolve_auxiliary_name:
+                auxiliary_basis = resolve_record(
+                    self._library, auxiliary_basis, basis_representation
+                )
+        self._basis = basis
+        self._auxiliary_basis = auxiliary_basis
         if self._method in _COUPLED_CLUSTER_METHODS:
             from ._correlation_convergence import convergence_limits
 
@@ -1627,13 +1675,15 @@ class Calculator:
         stationary_semilocal = self._ks_options is not None and (
             stationary_second_order_eligible(self._ks_options.method_ir)
         )
-        native_cpu_pbe0_uks = (
+        # Without a separately qualified composite route, UKS depends on the
+        # native library's exact total-method binding, not a Python name list.
+        native_cpu_exact_uks = (
             self._device_name == "cpu"
             and not basis_has_ecp
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
             and self._ks_options is not None
-            and self._ks_options.method_ir.identity
-            == resolve_method("PBE0", spin="polarized").identity
+            and self._ks_options.method_ir.spin == "polarized"
+            and not self._composite_rks_second_order
         )
         second_order_context = (
             (self._device_name == "cpu" or self._cuda_rks_second_order)
@@ -1662,7 +1712,7 @@ class Calculator:
                 stationary_semilocal
                 or self._composite_rks_second_order
                 or self._cuda_rks_second_order
-                or native_cpu_pbe0_uks
+                or native_cpu_exact_uks
             )
         )
         # Canonical B3LYP uses the exact linked CPU closure, never a silent JIT
@@ -1675,7 +1725,7 @@ class Calculator:
             and self._device_name == "cpu"
             and (
                 stationary_semilocal
-                or native_cpu_pbe0_uks
+                or native_cpu_exact_uks
                 or (
                     self._composite_rks_second_order
                     and self._ks_options.method_ir.identity
@@ -1690,9 +1740,8 @@ class Calculator:
             self._native_cpu_second_order = linked_method(
                 self._library, self.method_ir.identity
             )
-        self._native_cpu_scalar_hybrid_second_order = (
-            self._native_cpu_second_order
-            and (self._composite_rks_second_order or native_cpu_pbe0_uks)
+        self._native_cpu_scalar_only_second_order = self._native_cpu_second_order and (
+            self._composite_rks_second_order or native_cpu_exact_uks
         )
         self._d3_second_order_spec = None
         if (
@@ -1711,7 +1760,7 @@ class Calculator:
         # native total method, not the older Cartesian electronic fallback.
         public_rks_second_order = (
             second_order_context
-            and (not native_cpu_pbe0_uks or self._native_cpu_second_order)
+            and (not native_cpu_exact_uks or self._native_cpu_second_order)
             and (
                 self._dispersion_method_ir is None
                 or self._d3_second_order_spec is not None
@@ -2534,9 +2583,9 @@ class Calculator:
     ) -> typing.Any:
         """Resolve item metadata against one synchronous prepared model snapshot.
 
-        A CUDA D4 constructor already computes the complete model signature
-        immediately before resolving its items. Carry that value through this
-        local operation; public calls and later executions still recompute it.
+        A prepared constructor can carry the complete model signature it just
+        computed through this local operation. Public calls and later
+        executions still recompute it.
         This does not retain a signature across caller-visible mutation points.
         """
         atoms = tuple(Atom.from_value(a) for a in atoms)
@@ -3083,13 +3132,22 @@ class Calculator:
         """Resolve this calculator's active scientific controls without executing."""
         if self._capabilities.family == "density_functional":
             fitted = self._density_fitting_mode == _native.DENSITY_FITTING_CUDA
-            if (
-                self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                and not fitted
+            cpu_fitted = self._device_name == "cpu" and self._density_fitting_mode in (
+                _native.DENSITY_FITTING_CPU_REFERENCE,
+                _native.DENSITY_FITTING_AUTO,
+            )
+            if self._density_fitting_mode != _native.DENSITY_FITTING_NONE and not (
+                fitted or cpu_fitted
             ):
                 raise NotImplementedError(
-                    "DFT density-fitting resource plans are not qualified; "
-                    "use density_fitting_memory_budget_bytes for the native DF provider"
+                    "unqualified KS density-fitting resource plans"
+                )
+            if cpu_fitted and (
+                self._initial_guess is not None
+                or self._resource_dispersion_graph() is not None
+            ):
+                raise NotImplementedError(
+                    "CPU DF KS host resource plans exclude preliminary guesses and corrections"
                 )
             from ._cpu_force_resources import qualified_direct_semilocal_context
             from ._named_ks import has_d4_correction, select_named_program
@@ -3130,6 +3188,7 @@ class Calculator:
             output_aware = (
                 self._cpu_packed_eri_maximum_bytes
                 or qualified_direct_semilocal_context(self)
+                or cpu_fitted
                 or (
                     self._device_name == "cuda"
                     and (
@@ -3192,7 +3251,7 @@ class Calculator:
                         self._density_fitting_memory_budget_bytes,
                         self._density_fitting_relative_threshold,
                     )
-                    if fitted
+                    if fitted or cpu_fitted
                     else None
                 ),
                 _application_precision_budget=getattr(
@@ -3474,6 +3533,7 @@ class Calculator:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         _hessian_request: typing.Any = None,
+        _resource_properties: frozenset[str] | None = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
         """Prepare a persistent native ragged batch for repeated execution.
 
@@ -3513,6 +3573,7 @@ class Calculator:
             ks_export=ks_export,
             resource_plan=resource_plan,
             _hessian_request=_hessian_request,
+            _resource_properties=_resource_properties,
         )
 
     def batch_singlepoint(
@@ -3562,8 +3623,9 @@ class Calculator:
             method = self._method_name if graph is None else graph.identifier
             raise NotImplementedError(
                 f"method {method!r} does not expose public {endpoint}; "
-                "qualified domains are CPU direct all-electron FP64 closed-shell "
-                "LDA/PBE (spherical requires a linked owner); CPU direct all-electron FP64 "
+                "qualified domains are CPU Direct all-electron FP64 LDA/PBE RKS "
+                "and linked UKS, including exact linked PBE-D3(BJ), ATM off "
+                "(spherical requires a linked owner); CPU Direct all-electron FP64 "
                 "Cartesian/spherical PBE0 RKS or B3LYP RKS/UKS compositions with "
                 "full-range exchange in (0, 1], optionally with uncut two-body "
                 "D3(BJ); exact linked CPU PBE0 UKS with the same bounds; "
@@ -3755,10 +3817,10 @@ class Calculator:
     ) -> typing.Any:
         """Compute a bounded analytic Cartesian semilocal or hybrid HVP.
 
-        CPU LDA/PBE require direct all-electron closed-shell FP64. Spherical AOs
-        require the linked native owner.
-        With the exact linked binding, canonical bare LDA/PBE use the native
-        CPU owner; older inventories use the bounded compatibility path.
+        CPU LDA/PBE require Direct all-electron FP64. UKS, spherical AOs and
+        named uncut two-body PBE-D3(BJ) require the exact linked native CPU
+        owner. Only bare Cartesian RKS may use the bounded compatibility path
+        in older inventories.
         CUDA admits canonical FP64 LDA/PBE/PBE0/B3LYP RKS/UKS with direct
         integrals or cutoff-separated CUDA DF, with or without scalar ECP.
         Cartesian or spherical AOs require a matching linked AOT inventory.
@@ -3974,7 +4036,7 @@ class Calculator:
         recycle_width = None
         if (
             self._native_cpu_second_order
-            and not self._native_cpu_scalar_hybrid_second_order
+            and not self._native_cpu_scalar_only_second_order
             and (
                 strategy == "recycled" or (strategy is None and block_size is not None)
             )
@@ -3984,7 +4046,7 @@ class Calculator:
             if type(width) is int and 2 <= width <= min(4, coordinates):
                 recycle_width = width
         use_native_cpu = self._native_cpu_second_order and (
-            self._native_cpu_scalar_hybrid_second_order
+            self._native_cpu_scalar_only_second_order
             or (block_size in (None, 1) and strategy in (None, "scalar"))
             or recycle_width is not None
         )
@@ -4356,9 +4418,27 @@ class Calculator:
         )
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
         resource_plan = None
-        if self._resource_budget is not None and (
-            self._dispersion_method_ir is None
-            or (self._device_name == "cpu" and compute_forces)
+        # CPU DF energy uses the batch owner's pre-allocation admission once,
+        # rather than constructing an internal plan only to revalidate it as
+        # an external one. Bind the exact property set to that preparation.
+        batch_admits_cpu_df = (
+            self._resource_budget is not None
+            and self._device_name == "cpu"
+            and self._capabilities.family == "density_functional"
+            and self._density_fitting_mode
+            in (
+                _native.DENSITY_FITTING_CPU_REFERENCE,
+                _native.DENSITY_FITTING_AUTO,
+            )
+            and requested_properties == {"energy"}
+        )
+        if (
+            not batch_admits_cpu_df
+            and self._resource_budget is not None
+            and (
+                self._dispersion_method_ir is None
+                or (self._device_name == "cpu" and compute_forces)
+            )
         ):
             resource_plan = self.estimate_resources(
                 [native_atoms],
@@ -4389,6 +4469,9 @@ class Calculator:
                     and self._capabilities.family == "density_functional"
                 ),
                 resource_plan=resource_plan,
+                _resource_properties=requested_properties
+                if batch_admits_cpu_df
+                else None,
             ) as batch:
                 execution_properties = requested_properties - PROPERTY_NAMES
                 if (

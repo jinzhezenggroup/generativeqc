@@ -233,6 +233,7 @@ class PreparedBatch:
         resource_plan: typing.Any = None,
         _cold_rks_fock: _native.RksColdFockOptions | None = None,
         _hessian_request: typing.Any = None,
+        _resource_properties: frozenset[str] | None = None,
     ) -> None:
         """Prepare native systems and method resources for repeated batch evaluation.
 
@@ -298,9 +299,10 @@ class PreparedBatch:
         )
         self._effective_ks_options = self._ks_profile_selection.options
         self.resource_plan = resource_plan
-        self._planned_properties = None
+        self._planned_properties = _resource_properties
         self._packed_force_plan = False
         self._dense_force_plan = False
+        self._cpu_df_energy_plan = False
         from ._cpu_force_resources import qualified_direct_semilocal_context
 
         self._output_aware_cpu_forces = qualified_direct_semilocal_context(calculator)
@@ -340,7 +342,7 @@ class PreparedBatch:
         native_graph = calculator._dispersion_method_ir
         if resource_plan is not None or calculator._resource_budget is not None:
             from ._named_ks import select_resource_program
-            from .resources_ks import native_dense_force_request
+            from .resources_ks import native_cpu_df_program, native_dense_force_request
 
             native_graph = calculator._resource_dispersion_graph()
             share_native_program = (
@@ -357,7 +359,10 @@ class PreparedBatch:
             if share_native_program:
                 request, resource_native_name = request
             else:
-                resource_native_name = select_resource_program(calculator, request)
+                resource_native_name = native_cpu_df_program(request)
+                self._cpu_df_energy_plan = resource_native_name is not None
+                if not self._cpu_df_energy_plan:
+                    resource_native_name = select_resource_program(calculator, request)
             # Implicit calculator budgets also create a plan here; its force
             # authority has the same preparation and replay requirements.
             self._dense_force_plan = native_dense_force_request(request)
@@ -443,7 +448,12 @@ class PreparedBatch:
             and dispersion_request.name == "d4"
             and calculator._initial_guess is None
         )
-        if fixed_cuda_d4 or self._packed_force_plan or self._dense_force_plan:
+        if (
+            fixed_cuda_d4
+            or self._packed_force_plan
+            or self._dense_force_plan
+            or self._cpu_df_energy_plan
+        ):
             # These plans cover the full output set across replay. No shape
             # query is needed until the planning or scientific inputs change.
             self._fixed_ks_resource_replay = (
@@ -452,7 +462,7 @@ class PreparedBatch:
             )
         self._basis_metadata = tuple(
             calculator.basis_metadata(atoms, charge=charge, multiplicity=multiplicity)
-            if not fixed_cuda_d4
+            if not (fixed_cuda_d4 or self._cpu_df_energy_plan)
             else calculator._basis_metadata_from_snapshot(
                 atoms,
                 charge=charge,
@@ -516,7 +526,11 @@ class PreparedBatch:
                 flags |= _native.BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING
 
             native_name = resource_native_name
-            if calculator._cpu_packed_eri_maximum_bytes or self._dense_force_plan:
+            if (
+                calculator._cpu_packed_eri_maximum_bytes
+                or self._dense_force_plan
+                or self._cpu_df_energy_plan
+            ):
                 native_graph = calculator.method_ir
             if native_name is not None and calculator._cuda_intrinsic_pbe_d4:
                 # Native catalog admission checks the electronic carrier and
@@ -544,6 +558,10 @@ class PreparedBatch:
             if self._dense_force_plan and native_name is None:
                 raise NotImplementedError(
                     "native dense force plans require linked named KS"
+                )
+            if self._cpu_df_energy_plan and native_name is None:
+                raise NotImplementedError(
+                    "CPU DF energy plans require linked named KS preparation"
                 )
 
             def prepare() -> typing.Any:
@@ -1319,7 +1337,7 @@ class PreparedBatch:
         """Validate replay capacity; rebudget optional CPU force scratch.
 
         ``execute`` has already checked the scientific model and initial-guess
-        identity. Native CUDA D4 and native CPU force plans may reuse their
+        identity. Native CUDA D4 and selected native CPU plans may reuse their
         immutable prepared request; other paths keep full reconstruction.
         External plans still undergo full validation before native preparation.
         """
@@ -1354,6 +1372,7 @@ class PreparedBatch:
         if (
             self._packed_force_plan
             or self._dense_force_plan
+            or self._cpu_df_energy_plan
             or not self._output_aware_cpu_forces
         ) and properties <= frozenset(expected.identity.observables):
             return expected, self.resource_plan
@@ -1468,6 +1487,8 @@ class PreparedBatch:
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
         compute_forces = "forces" in requested
+        if compute_forces and self._cpu_df_energy_plan:
+            raise NotImplementedError("CPU DF KS host resource plans cover energy only")
         if (
             compute_forces
             and self.resource_plan is not None

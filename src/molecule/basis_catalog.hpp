@@ -39,6 +39,8 @@ const char* bundled_basis_catalog_sha256() noexcept;
 std::size_t bundled_basis_count() noexcept;
 std::string_view bundled_basis_name(std::size_t index) noexcept;
 std::string_view bundled_basis_pack_checksum() noexcept;
+/** Return the immutable canonical name, or an empty view for an unknown selector. */
+std::string_view resolve_builtin_basis_name(std::string_view name) noexcept;
 std::string_view canonical_basis_name(std::string_view name);
 std::vector<std::string_view> bundled_basis_names();
 bool bundled_basis_supports(std::string_view name, int atomic_number);

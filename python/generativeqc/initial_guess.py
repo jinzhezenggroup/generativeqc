@@ -919,7 +919,9 @@ def with_initial_guess_resources(
         "initial_guess": policy.to_payload(),
     }
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
-    if not request.candidates:
+    # A missing target inventory stays unsupported; do not query its
+    # preliminary owner's policy or replace the target's diagnostic.
+    if not request.candidates or request.unsupported_reason is not None:
         return replace(request, identity=identity)
     native = _with_native_cpu_preliminary_resources(
         request, calculator, systems, policy, schedule

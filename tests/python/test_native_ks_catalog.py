@@ -150,6 +150,71 @@ def library() -> Any:
     return selected
 
 
+@pytest.mark.parametrize(
+    ("selector", "identifier", "spin"),
+    (
+        ("pbeh-rks", "PBEH", "unpolarized"),
+        ("b3lypg-uks", "B3LYPG", "polarized"),
+        ("pbe-d3(bj)-uks", "PBE-D3(BJ)", "polarized"),
+    ),
+)
+def test_cpu_constructor_binds_the_native_named_selector(
+    library: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    selector: str,
+    identifier: str,
+    spin: str,
+) -> None:
+    from generativeqc import ks
+
+    original = ks._public_dft_binding
+
+    def forbidden(requested: str) -> tuple[str, str]:
+        assert requested != selector, "native selector retried Python alias discovery"
+        return original(requested)
+
+    monkeypatch.setattr(ks, "_public_dft_binding", forbidden)
+    calculator = Calculator(
+        method=selector.upper(), ks_options=KsOptions(grid=GridSpec(8, 4, 8))
+    )
+    assert (
+        calculator.method_ir.identity == resolve_method(identifier, spin=spin).identity
+    )
+    assert calculator.method_ir.spin == spin
+
+
+def test_cpu_constructor_cannot_retry_a_native_identity_mismatch(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc import _named_ks
+
+    def mismatched(*args: Any) -> int:
+        binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBinding))
+        binding.contents.identifier = b"PBE0"
+        binding.contents.identity = b"0" * 64
+        binding.contents.spin = 1
+        return 0
+
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v1", mismatched)
+    with pytest.raises(RuntimeError, match="native KS catalog identity disagrees"):
+        Calculator(method="pbeh-rks")
+
+
+def test_cpu_constructor_preserves_older_catalog_compatibility(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class PreviousLibrary:
+        def __getattr__(self, name: str) -> Any:
+            if name == "generativeqc_ks_catalog_lookup_v1":
+                raise AttributeError(name)
+            return getattr(library, name)
+
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: PreviousLibrary())
+    calculator = Calculator(method="pbeh-rks")
+    assert calculator.method_ir.identity == resolve_method("PBEH").identity
+
+
 def program(descriptor: Any) -> tuple:
     """Detach the scientific wire while deliberately ignoring pointer identity."""
     return (

@@ -56,9 +56,11 @@ def test_public_second_order_capability_is_context_qualified(method: str) -> Non
 @pytest.mark.parametrize(
     ("method", "kwargs"),
     (
-        ("lda-uks", {}),
+        ("lda-uks", {"density_fitting": "cpu"}),
+        ("pbe0-uks", {"density_fitting": "cpu"}),
         ("b3lyp-uks", {"density_fitting": "cpu"}),
         ("r2scan-rks", {}),
+        ("pbe-rks", {"basis_representation": "spherical", "density_fitting": "cpu"}),
     ),
 )
 def test_public_rks_second_order_capability_fails_closed(

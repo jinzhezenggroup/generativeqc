@@ -30,14 +30,19 @@ MOTION = np.array(((0.12, -0.07, 0.04), (-0.08, 0.06, 0.15), (-0.04, 0.01, -0.19
     ("representation", "basis_name"),
     (("cartesian", "sto-3g"), ("spherical", "def2-svp")),
 )
+@pytest.mark.parametrize(("charge", "multiplicity"), ((0, 1), (1, 2)))
 def test_linked_pbe_bj_matches_independent_total_curvature(
     representation: str,
     basis_name: str,
+    charge: int,
+    multiplicity: int,
     monkeypatch: pytest.MonkeyPatch,
     record_property: Callable[[str, object], None],
 ) -> None:
     """Differentiate independent PySCF and s-dftd3 moving gradients."""
     grid = GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12)
+    spin = "rks" if multiplicity == 1 else "uks"
+    molecular_state = {"charge": charge, "multiplicity": multiplicity}
     bare, corrected = (
         Calculator(
             method=method,
@@ -49,7 +54,7 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
             energy_tolerance=1e-13,
             density_tolerance=1e-11,
         )
-        for method in ("pbe-rks", "pbe-d3(bj)-rks")
+        for method in (f"pbe-{spin}", f"pbe-d3(bj)-{spin}")
     )
     if not linked_method(corrected._library, corrected.method_ir.identity):
         pytest.skip("requires linked native PBE-D3(BJ) Hessian support")
@@ -73,7 +78,7 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
         )
         # Share only the discrete quadrature; neither oracle reads native SCF state.
         state = SimpleNamespace(
-            grid=MolecularGrid(displaced, grid, 0, 1).explicit(),
+            grid=MolecularGrid(displaced, grid, charge, multiplicity).explicit(),
             _source=SimpleNamespace(
                 grid_spec=grid,
                 atomic_weights=np.concatenate(
@@ -85,10 +90,13 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
             ),
         )
         with NativeAO(
-            displaced, basis=basis_name, representation=representation
+            displaced,
+            basis=basis_name,
+            representation=representation,
+            **molecular_state,
         ) as basis:
             energy, gradient = independent_global_hybrid_gradient(
-                basis, state, "pbe-rks", xc="PBE"
+                basis, state, f"pbe-{spin}", xc="PBE"
             )
         dispersion_energy, dispersion_gradient = reference_d3(displacement)
         return energy + dispersion_energy, gradient + dispersion_gradient
@@ -97,12 +105,18 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
         pytest.fail("linked corrected Hessian entered the Python scientific owner")
 
     monkeypatch.setattr(Calculator, "_run_public_rks_second_order", forbidden)
-    with pytest.raises(NotImplementedError, match="requires native scalar or recycled"):
-        corrected.hessian(atoms, strategy="block", block_size=2)
+    with pytest.raises(
+        NotImplementedError, match="native scalar|only strategy='scalar'"
+    ):
+        corrected.hessian(atoms, strategy="block", **molecular_state)
     solver = GMRESOptions(atol=1e-12, rtol=1e-11)
-    dense = corrected.hessian(atoms, solver_options=solver)
-    action = corrected.hessian_vector_product(atoms, MOTION, solver_options=solver)
-    bare_action = bare.hessian_vector_product(atoms, MOTION, solver_options=solver)
+    dense = corrected.hessian(atoms, solver_options=solver, **molecular_state)
+    action = corrected.hessian_vector_product(
+        atoms, MOTION, solver_options=solver, **molecular_state
+    )
+    bare_action = bare.hessian_vector_product(
+        atoms, MOTION, solver_options=solver, **molecular_state
+    )
     for result in (dense, action):
         assert result.diagnostics["numerical_runtime"] == "native-cpp-cpu"
         assert result.diagnostics["d3_pair_visits"] > 0
@@ -111,7 +125,9 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
     for field in ("response_iterations", "induced_fock_actions"):
         assert action.diagnostics[field] == bare_action.diagnostics[field]
     energy, gradient = reference(np.zeros_like(MOTION))
-    point = corrected.singlepoint(atoms, properties=("energy", "forces"))
+    point = corrected.singlepoint(
+        atoms, properties=("energy", "forces"), **molecular_state
+    )
     assert point.converged
     assert point.energy == pytest.approx(energy, abs=2e-9, rel=0)
     np.testing.assert_allclose(point.forces, -gradient, atol=2e-8, rtol=0)
@@ -119,7 +135,9 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
     np.testing.assert_allclose(
         dense.matrix @ MOTION.ravel(), action.value.ravel(), atol=2e-8, rtol=0
     )
-    step = 3e-4
+    # Use the same fine step as the bare UKS oracle; a coarser step leaves
+    # visible central-difference truncation error on the spherical cation.
+    step = 1e-4
     axes = np.eye(MOTION.size).reshape((-1, *MOTION.shape))
     reference_matrix = np.column_stack(
         [
@@ -142,14 +160,19 @@ def test_linked_pbe_bj_matches_independent_total_curvature(
     )
 
 
-@pytest.mark.parametrize("method", ("pbe-d3(0)-rks", "pbe-d4(bj-eeq-atm)-rks"))
+@pytest.mark.parametrize("correction", ("d3(0)", "d3(bj)-atm", "d4(bj-eeq-atm)"))
+@pytest.mark.parametrize("spin", ("rks", "uks"))
 def test_unlinked_semilocal_correction_does_not_publish_electronic_hessian(
-    method: str,
+    correction: str,
+    spin: str,
 ) -> None:
-    calculator = Calculator(method=method, device="cpu")
+    calculator = Calculator(method=f"pbe-{correction}-{spin}", device="cpu")
     assert not calculator.capabilities.supported_second_order
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):
-        calculator.hessian(ATOMS)
+        open_shell = spin == "uks"
+        calculator.hessian(
+            ATOMS, charge=int(open_shell), multiplicity=1 + int(open_shell)
+        )
 
 
 @pytest.mark.parametrize(

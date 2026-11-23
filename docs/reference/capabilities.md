@@ -30,6 +30,12 @@ that every execution context for that name is qualified.
 See the [native CLI guide](../user/native_cli.md) for the scope of each view;
 the public catalog also includes Python API composite selectors.
 
+For named CPU KS compositions resolved through the compiled catalog, Python
+uses the same selector binding as the SDK and CLI, then checks its exposed
+`MethodIR` against the native digest. Older libraries and selectors not
+represented in the selected catalog retain Python resolution; a mismatch
+after a native match is an error, not a fallback.
+
 ## Execution-context capabilities
 
 After the method, backend, basis, spin, precision, density-fitting mode, ECP,

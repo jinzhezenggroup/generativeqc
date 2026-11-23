@@ -64,6 +64,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_basis_template_v1](#native-c-generativeqc-system-create-basis-template-v1)
 - [generativeqc_builtin_basis_count_v1](#native-c-generativeqc-builtin-basis-count-v1)
 - [generativeqc_builtin_basis_name_v1](#native-c-generativeqc-builtin-basis-name-v1)
+- [generativeqc_builtin_basis_resolve_name_v1](#native-c-generativeqc-builtin-basis-resolve-name-v1)
 - [generativeqc_builtin_basis_query_v1](#native-c-generativeqc-builtin-basis-query-v1)
 - [generativeqc_system_create_builtin_basis_v1](#native-c-generativeqc-system-create-builtin-basis-v1)
 - [generativeqc_system_destroy](#native-c-generativeqc-system-destroy)
@@ -1644,6 +1645,31 @@ GENERATIVEQC_API const char * generativeqc_builtin_basis_name_v1 ( uint64_t inde
 **Execution.** Synchronous immutable lookup; it does not admit any scientific consumer.
 
 **Units.** index is dimensionless; names use the established case/underscore aliases on input.
+
+(native-c-generativeqc-builtin-basis-resolve-name-v1)=
+## generativeqc_builtin_basis_resolve_name_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API const char * generativeqc_builtin_basis_resolve_name_v1 ( const char * selector , uint64_t selector_count ) ;
+```
+
+**Behavior.** Resolve an ASCII built-in name using the same catalog and aliases as native CLI.
+
+**Inputs.** selector points to selector_count readable bytes, without a required NUL terminator.
+The supported selector length is 1 to 256 bytes; a name is not a path or system descriptor.
+
+**Outputs.** Returns the NUL-terminated canonical name, or NULL for an invalid or unknown selector.
+
+**Lifetime.** The returned immutable string belongs to the loaded library; no input is retained.
+
+**Errors.** No provider initialization or allocation occurs; a missing name does not admit a
+fallback.
+
+**Execution.** Synchronous metadata lookup without a context, device, compiler or runtime file reads.
+
+**Units.** selector_count is in bytes; the return value is not a basis or execution-capability claim.
 
 (native-c-generativeqc-builtin-basis-query-v1)=
 ## generativeqc_builtin_basis_query_v1

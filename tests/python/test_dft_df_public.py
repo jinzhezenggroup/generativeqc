@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -40,6 +42,87 @@ WATER = [
     ("H", (0.0, -1.43233673, 1.10715266)),
     ("H", (0.0, 1.43233673, 1.10715266)),
 ]
+
+
+@pytest.mark.parametrize("explicit_auxiliary", [True, False])
+def test_cpu_df_energy_host_budget(
+    explicit_auxiliary: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bind a single fitted owner or a heterogeneous fleet to its exact cap."""
+    from generativeqc_compiler.common.resources import ResourceBudget
+
+    calc = Calculator(
+        method="pbe-rks",
+        device="cpu",
+        basis="def2-svp" if explicit_auxiliary else "sto-3g",
+        basis_representation="spherical" if explicit_auxiliary else "cartesian",
+        density_fitting="cpu",
+        auxiliary_basis="def2-tzvp" if explicit_auxiliary else None,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        initial_guess=None,
+    )
+    systems = (
+        [WATER]
+        if explicit_auxiliary
+        else [WATER, [("H", (0, 0, 0)), ("H", (0, 0, 1.4))]]
+    )
+    properties = ("energy",)
+    quote = calc.estimate_resources(systems, properties=properties).require_feasible()
+    peak = quote.peak_bytes["host"]
+    plans = [
+        calc.estimate_resources(
+            systems,
+            properties=properties,
+            budget=ResourceBudget(host_bytes=peak + delta),
+        )
+        for delta in (0, -1)
+    ]
+    exact, short = plans
+    assert exact.status == "feasible" and short.status == "infeasible"
+    with calc.prepare_batch(systems, ks_export=False) as baseline:
+        expected = baseline.execute(properties=properties, strict=True).items
+    with calc.prepare_batch(systems, ks_export=False, resource_plan=exact) as batch:
+        assert batch.basis_metadata == tuple(
+            calc.basis_metadata(atoms) for atoms in systems
+        )
+        actual = batch.execute(properties=properties, strict=True).items
+        with pytest.raises(NotImplementedError, match="energy only"):
+            batch.execute(properties=("energy", "forces"))
+        with monkeypatch.context() as environment:
+            environment.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "1")
+            with pytest.raises(
+                NotImplementedError, match="materialized DF derivatives"
+            ):
+                batch.execute(properties=properties)
+    for atoms, before, after in zip(systems, expected, actual, strict=True):
+        assert after.fock_builds == before.fock_builds and after.fock_builds > 0
+        assert after.energy == pytest.approx(before.energy, abs=1e-12)
+        assert after.energy == pytest.approx(
+            pyscf_energy(calc, atoms, 1, "PBE"), abs=1e-8
+        )
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        pytest.fail("an infeasible DF plan reached native system creation")
+
+    monkeypatch.setattr(calc, "_create_native_system", forbidden)
+    with pytest.raises(MemoryError):
+        calc.prepare_batch(systems, ks_export=False, resource_plan=short)
+    (request,) = exact.requests
+    controls = json.loads(request.identity.schedule)
+    controls["cpu_df_named_program"] = "pbe0-rks"
+    substituted = replace(
+        request,
+        identity=replace(
+            request.identity, schedule=json.dumps(controls, sort_keys=True)
+        ),
+    )
+    with pytest.raises(ValueError, match="inputs differ from the global resource plan"):
+        calc.prepare_batch(
+            systems,
+            ks_export=False,
+            resource_plan=replace(exact, requests=(substituted,)),
+        )
 
 
 def pyscf_energy(
@@ -355,12 +438,27 @@ def test_df_rejects_unqualified_precision_and_resource_consumers(
     calc = calculator(device)
     assert "forces" in calc.capabilities.supported_properties
     with pytest.raises(NotImplementedError, match="resource plans"):
-        calc.estimate_resources([WATER])
+        if device == "cpu":
+            calc.estimate_resources(
+                [WATER], properties=("energy", "forces")
+            ).require_feasible()
+        else:
+            calc.estimate_resources([WATER])
     if device == "cuda":
         with pytest.raises(NotImplementedError, match="fp64"):
             calculator(device, method="pbe0-rks", precision="auto")
         with pytest.raises(ValueError, match="backend must match"):
             Calculator(method="pbe-rks", device=device, density_fitting="cpu")
+
+
+def test_cpu_df_energy_inventory_refuses_materialized_derivatives(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "1")
+    with pytest.raises(NotImplementedError, match="materialized DF derivatives"):
+        calculator("cpu", initial_guess=None).estimate_resources(
+            [WATER], properties=("energy",)
+        ).require_feasible()
 
 
 def test_df_cuda_provider_budget_is_not_silently_enlarged(device: str) -> None:

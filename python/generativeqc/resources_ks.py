@@ -95,6 +95,17 @@ _CPU_HOST_PERSISTENT_KEYS = _CPU_HOST_INVENTORY_KEYS[:12]
 _CPU_PACKED_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_fleet_v1"
 _CPU_PACKED_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_packed_force_fleet_v1"
 _CPU_FORCE_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_force_fleet_v1"
+_CPU_DF_FLEET_SYMBOL = "generativeqc_resource_ks_cpu_df_fleet_v1"
+
+
+def native_cpu_df_program(request: ResourceRequest) -> bytes | None:
+    """Recover the prepared selector from a freshly resolved CPU DF request."""
+    if request.name != "ks" or request.identity.backend != "cpu":
+        return None
+    controls = json.loads(request.identity.schedule)
+    if controls.get("fleet_inventory") != "native-cpu-df-v1":
+        return None
+    return controls["cpu_df_named_program"].encode("ascii")
 
 
 def native_dense_force_request(request: ResourceRequest) -> bool:
@@ -222,6 +233,7 @@ def _native_host_fleet_inventory(
     packed_cap: int = 0,
     packed_forces: bool = False,
     dense_forces: bool = False,
+    cpu_fitted: bool = False,
     **options: typing.Any,
 ) -> tuple[list[dict[str, int]], dict[str, int], int] | None:
     """Query all retained owners and serialized workspace before publication.
@@ -234,7 +246,9 @@ def _native_host_fleet_inventory(
     if backend not in ("cpu", "cuda"):
         raise ValueError("KS host inventory requires cpu or cuda backend")
     cuda = backend == "cuda"
-    if dense_forces:
+    if cpu_fitted:
+        symbol = _CPU_DF_FLEET_SYMBOL
+    elif dense_forces:
         symbol = _CPU_FORCE_FLEET_SYMBOL
     elif packed_forces:
         symbol = _CPU_PACKED_FORCE_FLEET_SYMBOL
@@ -246,6 +260,8 @@ def _native_host_fleet_inventory(
         symbol = "generativeqc_resource_ks_cpu_fleet_v1"
     query = getattr(library, symbol, None)
     if query is None:
+        if cpu_fitted:
+            raise NotImplementedError("native library lacks CPU DF KS host inventory")
         if packed_cap:
             raise NotImplementedError(
                 "packed ERI plans require a native host inventory"
@@ -258,6 +274,20 @@ def _native_host_fleet_inventory(
         for item in items
         for value in (
             *_cpu_host_shape(item, library=library, **options),
+            *(
+                (
+                    item["auxiliary"][key]
+                    for key in (
+                        "nbf",
+                        "cartesian_nbf",
+                        "shells",
+                        "primitives",
+                        "maximum_angular",
+                    )
+                )
+                if cpu_fitted
+                else ()
+            ),
             *((int(options["model"].xc_schedule == "host_unfused"),) if cuda else ()),
         )
     )
@@ -291,6 +321,10 @@ def _native_host_fleet_inventory(
         raise NotImplementedError("this build omits native CPU stationary forces")
     if dense_forces and status == 2:
         return None
+    if cpu_fitted and status == 2:
+        raise NotImplementedError(
+            "CPU DF energy inventory excludes materialized DF derivatives"
+        )
     if status:
         raise ValueError(
             f"native {backend.upper()} KS fleet inventory rejected shape or capacity"
@@ -1234,12 +1268,12 @@ def ks_resource_request(
             )
     try:
         # Calculator has already validated this frozen snapshot against the
-        # exact selector. Reuse it for CUDA metadata; changed options, aliases
+        # exact selector. Reuse it for native metadata; changed options, aliases
         # and separately selected profiles take ordinary resolution. All shape,
         # precision, native-provider and capacity admission below still runs.
         model = (
             ks_options
-            if backend == "cuda"
+            if (backend == "cuda" or _fitted is not None)
             and type(ks_options) is KsOptions
             and ks_options._resolved_selector is not None
             and ks_options._resolved_selector == method
@@ -1256,7 +1290,8 @@ def ks_resource_request(
         )
     from .ks import _automatic_semilocal_name
 
-    automatic_name = _automatic_semilocal_name(model.method_ir)
+    cpu_fitted = backend == "cpu" and _fitted is not None
+    automatic_name = None if cpu_fitted else _automatic_semilocal_name(model.method_ir)
     automatic = automatic_name is not None
     automatic_cuda = automatic and backend == "cuda"
     rvv10 = (
@@ -1350,7 +1385,17 @@ def ks_resource_request(
             "CUDA KS resource planning does not yet cover self-consistent nonlocal correlation"
         )
     fitted_exchange = None
-    if _fitted is not None:
+    cpu_df_name = None
+    if cpu_fitted:
+        from ._named_ks import select_cpu_df_energy_program
+
+        if not include_forces and precision == "fp64":
+            cpu_df_name = select_cpu_df_energy_program(library, model.method_ir)
+        if cpu_df_name is None:
+            raise NotImplementedError(
+                "CPU DF KS host resource plans require linked FP64 LDA/PBE energy"
+            )
+    elif _fitted is not None:
         # Named corrections lower to an ingredient carrier (e.g. pbe-rks
         # for B3LYP-D4). Match the resolved electronic graph for energy.
         canonical_fitted = (
@@ -1524,7 +1569,11 @@ def ks_resource_request(
                     derivative_order=0,
                     library=library,
                     operator="df_three_center",
-                    consumer="wb97mv_df_values" if wb97mv else "scf_df",
+                    consumer=None
+                    if cpu_fitted
+                    else "wb97mv_df_values"
+                    if wb97mv
+                    else "scf_df",
                 )
             )
             # SCF's orbital ECP value export retires before the fitted source
@@ -1534,13 +1583,17 @@ def ks_resource_request(
                 raise NotImplementedError(
                     "a fitted KS auxiliary basis must not carry ECPs"
                 )
+            if cpu_fitted and orbital.get("ecp_terms"):
+                raise NotImplementedError("CPU DF KS host resource plans exclude ECPs")
             if include_forces and orbital.get("ecp_terms"):
                 raise NotImplementedError(
                     "fitted KS ECP resource planning does not cover forces"
                 )
             # Hessians prepare only fitted values; the stationary package
             # checks second-order closure independently of this SCF envelope.
-            orbital_limit, auxiliary_limit = (1, 1) if include_forces else (3, 4)
+            orbital_limit, auxiliary_limit = (
+                (3, 3) if cpu_fitted else (1, 1) if include_forces else (3, 4)
+            )
             if (
                 orbital["maximum_angular"] > orbital_limit
                 or auxiliary["maximum_angular"] > auxiliary_limit
@@ -1604,13 +1657,17 @@ def ks_resource_request(
     # fragments of an ECP catalog. Only active shells determine this capacity:
     # an unused higher-angular element must not erase the force reservation.
     # This is not the narrower compatibility consumer's admission predicate.
-    cpu_forces = backend == "cpu" and (
-        include_forces
-        or (
-            not packed_cap
-            and isinstance(selected, BasisSet)
-            and any(element.ecp_core_electrons for element in selected.elements)
-            and all(item["orbital"]["maximum_angular"] <= 2 for item in items)
+    cpu_forces = (
+        backend == "cpu"
+        and not cpu_fitted
+        and (
+            include_forces
+            or (
+                not packed_cap
+                and isinstance(selected, BasisSet)
+                and any(element.ecp_core_electrons for element in selected.elements)
+                and all(item["orbital"]["maximum_angular"] <= 2 for item in items)
+            )
         )
     )
     cuda_force_inventory = (
@@ -1673,6 +1730,12 @@ def ks_resource_request(
         controls["fleet_inventory"] = (
             "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
         )
+        if cpu_df_name is not None:
+            controls.update(
+                host_inventory="native-cpu-df-v1",
+                fleet_inventory="native-cpu-df-v1",
+                cpu_df_named_program=cpu_df_name.decode("ascii"),
+            )
         if packed_cap:
             inventory_name = (
                 "native-cpu-packed-force-v1"
@@ -1811,6 +1874,7 @@ def ks_resource_request(
                 else 0,
                 packed_cap=packed_cap,
                 packed_forces=packed_forces,
+                cpu_fitted=cpu_fitted,
                 diis_history=diis_history,
                 max_iterations=history_iterations,
                 requires_first_ao_derivatives=requires_first_ao_derivatives,

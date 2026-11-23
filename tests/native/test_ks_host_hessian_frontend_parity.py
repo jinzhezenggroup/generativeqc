@@ -84,11 +84,7 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             "1e-14",
         )
         hvp_command = (cli, "hvp", *command[1:], "--direction", str(vector))
-        refused_method = method
-        if expected_linked:
-            refused_method = (
-                "pbe-d3(0)-rks" if method == "pbe-d3(bj)-rks" else "pbe-uks"
-            )
+        refused_method = "pbe-d3(0)-rks" if expected_linked else method
         unsupported = subprocess.run(
             tuple(
                 refused_method if argument == method else argument
@@ -112,11 +108,11 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
         cpp = run(sdk, "--cpu", method)
         cli_action = run(*hvp_command)
         cli_matrix = run(cli, "hessian", *command[1:])
-        if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks"):
+        if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks", "pbe-d3(bj)-uks"):
             packed = ("--cpu-packed-eri-budget-bytes", "48")
             resource = run(cli, "resources", *command[1:], "--property", "hvp", *packed)
             assert resource["packed_eri_inventory"]["retained_bytes"] == 48
-            if method == "pbe-d3(bj)-rks":
+            if "d3(bj)" in method:
                 assert resource["correction_inventory"]["plan_host_bytes"] > 0
                 trace = Path(directory) / "dispersion-short.jsonl"
                 refused = subprocess.run(
@@ -151,6 +147,7 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             assert shortage.returncode != 0 and not shortage.stdout
             assert "allocation inventory exceeds host budget" in shortage.stderr
             assert not short_trace.exists()
+        if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks"):
             cli_recycled = run(
                 cli, "hessian", *command[1:], "--response-recycle-block-size", "4"
             )
@@ -215,11 +212,18 @@ if __name__ == "__main__":
             expected_linked="PBE0" in inventory.additional_methods
             and (not selector.endswith("-uks") or "polarized" in inventory.spins),
         )
-    for selector, identity in (
+    for selector, functional in (
         ("lda-rks", "LDA_XC_PW"),
+        ("lda-uks", "LDA_XC_PW"),
         ("pbe-rks", "PBE"),
+        ("pbe-uks", "PBE"),
         ("pbe-d3(bj)-rks", "PBE"),
+        ("pbe-d3(bj)-uks", "PBE"),
     ):
         compare(
-            sdk, cli, selector, expected_linked=identity in inventory.additional_methods
+            sdk,
+            cli,
+            selector,
+            expected_linked=functional in inventory.additional_methods
+            and (not selector.endswith("-uks") or "polarized" in inventory.spins),
         )

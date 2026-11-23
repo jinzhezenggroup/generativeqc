@@ -179,11 +179,16 @@ def test_catalog_binds_scaled_pbe0_and_preserves_b3lyp_leaf_contracts() -> None:
     assert resolve_method("PBE0", spin="polarized").identity in registry
     assert registry.count("PointDomain::scaled_pbe0_rks") == 1
     assert registry.count("PointDomain::scaled_pbe0_uks") == 1
+    assert resolve_method("PBE", spin="polarized").identity in registry
+    assert registry.count("PointDomain::pbe_uks") == 1
+    assert registry.count("PointDomain::lda_uks") == 1
     restricted = emit_registry(parse_inventory({**payload, "spins": ["unpolarized"]}))
     assert "PointDomain::scaled_pbe0_uks" not in restricted
+    assert "PointDomain::pbe_uks" not in restricted
+    assert "PointDomain::lda_uks" not in restricted
     for method in ("LDA_XC_PW", "PBE"):
         assert resolve_method(method).identity in registry
-        assert resolve_method(method, spin="polarized").identity not in registry
+        assert resolve_method(method, spin="polarized").identity in registry
     with pytest.raises(
         ValueError, match="unsupported host Hessian AOT catalog methods"
     ):

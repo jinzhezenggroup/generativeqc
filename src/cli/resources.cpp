@@ -4,8 +4,10 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 #include "cli/hessian.hpp"
@@ -15,6 +17,7 @@
 #include "dft/grid.hpp"
 #include "integrals/s_integrals.hpp"
 #include "runtime/resource_planning.hpp"
+#include "scf/density_fitting.hpp"
 #include "scf/hf_cuda_resources.hpp"
 #include "scf/hf_df_resources.hpp"
 #include "scf/hf_host_resources.hpp"
@@ -228,15 +231,22 @@ bool pbe_dispersion_inventory(const RunOptions& options) {
                     });
 }
 
-/** These exact named B3LYP programs share the CPU GGA jet and full-range J/K
- * allocation layout. The same carrier alone would also match unqualified graphs. */
-bool cpu_b3lyp_inventory(const RunOptions& options) {
-  const auto* program = options.composition;
-  if (options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || !program || !program->cpu)
-    return false;
-  for (const auto selector : {"b3lyp-rks", "b3lyp-uks", "b3lyp-d3(bj)-rks", "b3lyp-d3(bj)-uks"})
-    if (program == method_generated::find_method(selector)) return true;
-  return false;
+const method_generated::Method* resource_ks_program(const RunOptions& options) {
+  if (options.composition) return options.composition;
+  if (options.method_name == "lda-rks") return method_generated::find_method("lda_xc_pw-rks");
+  if (options.method_name == "lda-uks") return method_generated::find_method("lda_xc_pw-uks");
+  return method_generated::find_method(options.method_name);
+}
+
+/** The allocation layout belongs to the exact compiled science. A carrier
+ * enum does not distinguish hybrids, and alias rows have different addresses. */
+bool matches_ks_inventory(const method_generated::Method* program,
+                          std::initializer_list<std::string_view> qualified) {
+  if (!program || program->identity.empty()) return false;
+  return std::any_of(qualified.begin(), qualified.end(), [&](std::string_view selector) {
+    const auto* reference = method_generated::find_method(selector);
+    return reference && reference->identity == program->identity;
+  });
 }
 
 // The CLI repeats topology metadata; the native owner performs the same full
@@ -434,22 +444,26 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   const bool hf =
       options.method == GENERATIVEQC_METHOD_RHF || options.method == GENERATIVEQC_METHOD_UHF;
   const bool cpu_backend = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
-  const bool cpu_pbe0_bj =
-      cpu_backend && options.composition && options.composition->cpu &&
-      (options.composition == method_generated::find_method("pbe0-d3(bj)-rks") ||
-       options.composition == method_generated::find_method("pbe0-d3(bj)-uks"));
+  const auto* ks_program = resource_ks_program(options);
+  const bool cpu_program = cpu_backend && ks_program && ks_program->cpu;
+  const bool cpu_pbe0_bj = cpu_program && options.composition &&
+                           matches_ks_inventory(ks_program, {"pbe0-d3(bj)-rks", "pbe0-d3(bj)-uks"});
   // The CPU host inventory already covers the full ERI provider and matrix
   // workspace for ordinary J/K. Do not extend that proof to CUDA hybrid arenas.
-  const bool cpu_pbe0 =
-      cpu_backend && (options.method_name == "pbe0-rks" || options.method_name == "pbe0-uks");
-  const bool cpu_b3lyp = cpu_b3lyp_inventory(options);
+  const bool cpu_pbe0 = cpu_program && matches_ks_inventory(ks_program, {"pbe0-rks", "pbe0-uks"});
+  const bool cpu_b3lyp = cpu_program && options.composition &&
+                         matches_ks_inventory(ks_program, {"b3lyp-rks", "b3lyp-uks",
+                                                           "b3lyp-d3(bj)-rks", "b3lyp-d3(bj)-uks"});
+  const bool lda =
+      options.method_name == "lda-rks" || options.method_name == "lda-uks" ||
+      (cpu_program && matches_ks_inventory(ks_program, {"lda_xc_pw-rks", "lda_xc_pw-uks"}));
+  const bool pbe = options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
+                   (cpu_program && matches_ks_inventory(ks_program, {"pbe-rks", "pbe-uks"}));
   const bool correction_program = pbe_dispersion_inventory(options) || cpu_pbe0_bj ||
                                   (cpu_b3lyp && options.composition->dispersion.kind);
   const bool d4 = correction_program && options.composition->dispersion.kind == 3;
-  const bool gga = options.method_name.starts_with("pbe") || correction_program || cpu_b3lyp;
-  const bool ks = options.method_name == "lda-rks" || options.method_name == "lda-uks" ||
-                  options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
-                  cpu_pbe0 || cpu_b3lyp || correction_program;
+  const bool gga = pbe || cpu_pbe0 || cpu_b3lyp || correction_program;
+  const bool ks = lda || pbe || cpu_pbe0 || cpu_b3lyp || correction_program;
   Json budget = {
       {"schema_version", 1},
       {"host_bytes", options.host_bytes ? Json(*options.host_bytes) : Json()},
@@ -488,6 +502,11 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   const Bytes packed_cap =
       derivative ? derivative->cpu_packed_eri_bytes : options.cpu_packed_eri_bytes;
   const bool ks_forces = ks && options.forces;
+  const bool cpu_ks_df = cpu_program && !ks_forces && !derivative && !packed_cap &&
+                         !options.nonlocal_grid && !options.basis_program &&
+                         !options.initial_guess.kind &&
+                         options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+                         method_generated::cpu_df_energy_program(ks_program->identity);
   if (derivative) {
     plan["property"] = derivative->operation;
     if (!cpu_backend || options.batch != 1 || options.forces || !ks ||
@@ -516,6 +535,7 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
         "PBE D3/D4 program, or qualified CPU PBE0/B3LYP energy";
     return finish();
   }
+  if (ks_program && ks) plan["method_ir_identity"] = ks_program->identity;
   if (!derivative && packed_cap &&
       (!cpu_backend || !ks || !options.composition || options.composition->range_omega != 0 ||
        options.composition->nonlocal.variant)) {
@@ -548,8 +568,12 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     plan["diagnostic"] = "this inventory covers FP64 allocation policies";
     return finish();
   }
-  if (ks && options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    plan["diagnostic"] = "KS dry-run inventory currently requires Direct J/K";
+  if (ks && options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE && !cpu_ks_df) {
+    plan["diagnostic"] = "KS inventory requires Direct J/K or linked semilocal CPU DF energy";
+    return finish();
+  }
+  if (cpu_ks_df && scf::cpu_materialized_df_derivatives_requested()) {
+    plan["diagnostic"] = "CPU DF energy inventory excludes materialized DF derivatives";
     return finish();
   }
   if (ks_forces) {
@@ -575,8 +599,8 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   const auto& basis = *expanded_basis;
   const auto orbital = topology(basis);
   const Bytes spins =
-      correction_program || cpu_b3lyp
-          ? options.composition->spin
+      ks && ks_program
+          ? ks_program->spin
           : (options.method_name.ends_with("uhf") || options.method_name.ends_with("uks") ? 2 : 1);
   const auto electrons = electron_count(options, atoms, basis);
   const auto unpaired = static_cast<std::int64_t>(options.multiplicity) - 1;
@@ -595,7 +619,7 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
       options.backend != GENERATIVEQC_BACKEND_CUDA)
     throw UsageError("CUDA density fitting requires --backend cuda");
   plan["backend"] = cpu ? "cpu" : "cuda";
-  if (orbital.angular > (cpu ? 4u : 3u)) {
+  if (orbital.angular > (cpu && !cpu_ks_df ? 4u : 3u)) {
     plan["diagnostic"] = "orbital angular momentum exceeds the native inventory domain";
     return finish();
   }
@@ -685,7 +709,7 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
               : expanded.identity;
     } else
       auxiliary = orbital;
-    if (auxiliary->angular > (cpu ? 4u : 3u)) {
+    if (auxiliary->angular > (cpu && !cpu_ks_df ? 4u : 3u)) {
       plan["diagnostic"] = "auxiliary angular momentum exceeds the native inventory domain";
       return finish();
     }
@@ -710,9 +734,16 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     workspace = aggregate[1];
   } else if (cpu && ks) {
     scf::CpuKsHostFleetResources fleet;
-    plan["item_inventory"] = ks_inventory(fleet.append(
-        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, gga),
-        options.batch, scf::cpu_ks_host_execution(packed_cap != 0, ks_forces)));
+    auto shape =
+        ks_host_shape(orbital, atoms, spins, options, basis.ecp_terms.size(), ecp_workspace, gga);
+    if (cpu_ks_df) {
+      shape.cpu_df =
+          scf::CpuKsDfHostShape{auxiliary->nbf, auxiliary->cartesian_nbf, auxiliary->shells,
+                                auxiliary->primitives, auxiliary->angular};
+      plan["host_fleet_composition"] = "native-declared-capacity";
+    }
+    plan["item_inventory"] = ks_inventory(
+        fleet.append(shape, options.batch, scf::cpu_ks_host_execution(packed_cap != 0, ks_forces)));
     const auto aggregate = fleet.inventory();
     retained = aggregate[12];
     workspace = aggregate[13];
@@ -1013,9 +1044,10 @@ CpuHostAdmission admit_cpu_host_budget(const RunOptions& options,
                                        const System* system) {
   if (!options.host_bytes || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
       options.method == GENERATIVEQC_METHOD_UHF ||
-      options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE || options.basis_program ||
-      options.owned_device_bytes)
-    throw UsageError("run --host-bytes requires a supported Direct FP64 CPU RHF or KS inventory");
+      (options.method == GENERATIVEQC_METHOD_RHF &&
+       options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE) ||
+      options.basis_program || options.owned_device_bytes)
+    throw UsageError("run --host-bytes requires a supported FP64 CPU RHF or KS inventory");
   const auto plan =
       resource_inventory(options, atoms, nullptr, &expanded_basis, std::nullopt, context, system);
   if (plan.at("status") != "feasible")

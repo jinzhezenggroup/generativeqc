@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 
 #include "dft/host_force_resources.hpp"
@@ -14,6 +15,13 @@
 #include "tensor/cuda_binding_resources.hpp"
 
 namespace generativeqc::scf {
+
+/** Auxiliary topology for the single full-range, value-only CPU DF J owner.
+ * Public dimensions describe retained factors; Cartesian dimensions describe
+ * the generated integral build before any spherical projection. */
+struct CpuKsDfHostShape {
+  std::uint64_t aos, cartesian_aos, shells, primitives, maximum_angular;
+};
 
 /** Shape-only KS inventory shared by the native CLI and Python adapter.
  * This bounds named numeric/value-metadata owners, not allocator overhead,
@@ -26,6 +34,7 @@ struct KsHostResourceShape {
   std::uint64_t tile_points, diis_history, max_iterations;
   bool first_ao_derivatives, nonlocal_correlation;
   std::uint64_t ecp_workspace;
+  std::optional<CpuKsDfHostShape> cpu_df = std::nullopt;
 };
 
 using CpuKsHostResourceShape = KsHostResourceShape;
@@ -130,16 +139,25 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     throw std::invalid_argument("packed KS inventory requires a real spherical s/p/d/f topology");
   if (forces && (shape.nonlocal_correlation || shape.maximum_angular > 3))
     throw std::invalid_argument("CPU KS force inventory requires local XC and s/p/d/f topology");
+  const auto& df = shape.cpu_df;
+  if (df && (execution != KsHostExecution::cpu || shape.nonlocal_correlation || shape.ecp_terms ||
+             shape.ecp_workspace || shape.maximum_angular > 3 || !df->aos ||
+             df->cartesian_aos < df->aos || !df->shells || df->shells > df->aos ||
+             df->primitives < df->shells || df->maximum_angular > 3))
+    throw std::invalid_argument("CPU DF KS inventory requires all-electron s/p/d/f topology");
   const auto orbital_square = product({shape.orbital_aos, shape.orbital_aos});
   const auto cartesian_square = product({shape.cartesian_aos, shape.cartesian_aos});
-  const auto orbital_fourth = cpu ? product({orbital_square, orbital_square}) : 0;
+  const auto orbital_fourth = cpu && !df ? product({orbital_square, orbital_square}) : 0;
   const auto packed = sum({product({3, shape.atoms}), product({2, shape.primitives}),
                            product({16, shape.orbital_aos})});
   const auto metadata =
       sum({8192,
            product({512, sum({shape.atoms, shape.shells, shape.primitives, shape.orbital_aos,
                               shape.cartesian_aos, shape.ecp_terms})}),
-           !cpu && !host_xc ? tensor::kCudaSymmetricProductBindingHostBytes : 0});
+           !cpu && !host_xc ? tensor::kCudaSymmetricProductBindingHostBytes : 0,
+           df ? product({1024, sum({shape.atoms, shape.shells, shape.primitives, df->shells,
+                                    df->primitives, df->aos, df->cartesian_aos})})
+              : 0});
   const auto grid = product({36, shape.grid_points});
   const auto basis = product({8, packed});
   const auto warm = sum({product({8, orbital_square, sum({4, product({4, shape.spins})})}),
@@ -149,7 +167,33 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
   // array. The packed and dense arrays never coexist for a packed request.
   const auto eri_values =
       packed_eri ? cpu_ks_packed_value_bytes(shape.orbital_aos) : product({8, orbital_fourth});
-  const auto provider = sum({product({16, orbital_square}), eri_values});
+  Bytes provider = sum({product({16, orbital_square}), eri_values});
+  Bytes df_setup = 0, df_apply = 0;
+  if (df) {
+    const auto coordinates = product({3, shape.atoms});
+    const auto metric = product({8, df->aos, df->aos});
+    const auto tensor = product({8, orbital_square, df->aos});
+    const auto one_electron =
+        sum({product({16, orbital_square, sum({1, coordinates})}), product({8, coordinates})});
+    // Raw metric/tensor and the whitened factor survive as distinct owners.
+    // Charge the auxiliary-major factor once, either retained or held as
+    // fallback scratch; metric rank truncation does not reduce these extents.
+    provider = sum({one_electron, metric, product({3, tensor})});
+    const auto cartesian_raw = sum({product({8, df->cartesian_aos, df->cartesian_aos}),
+                                    product({8, cartesian_square, df->cartesian_aos})});
+    const auto projection =
+        product({128, sum({shape.cartesian_aos, shape.orbital_aos, df->aos, df->cartesian_aos,
+                           product({shape.orbital_aos, shape.cartesian_aos}),
+                           product({df->aos, df->cartesian_aos})})});
+    // Cartesian Jet matrices, unpacked coordinate panels and the nuclear
+    // gradient coexist during one-electron setup. The public panels of a
+    // spherical projection are included in the provider allowance above.
+    const auto one_electron_setup =
+        product({64, sum({cartesian_square, shape.atoms, 256}), sum({1, coordinates})});
+    const auto whitening = sum({product({4, metric}), product({64, df->aos})});
+    df_setup = sum({projection, std::max({one_electron_setup, cartesian_raw, whitening})});
+    df_apply = sum({product({8, df->aos}), product({16, orbital_square})});
+  }
   const auto nonlocal_provider = shape.nonlocal_correlation ? product({48, shape.grid_points}) : 0;
   Bytes solver = 0;
   if (!cpu && shape.orbital_aos > cuda_execution::kSmallEigensolverLimit) {
@@ -209,7 +253,9 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
     quadrature = sum({quadrature, product({80, shape.grid_points}),
                       product({8, shape.atoms, shape.atoms}), product({64, shape.atoms}), 8});
   Bytes setup = 0;
-  if (cpu) {
+  if (df) {
+    setup = sum({df_setup, quadrature, basis});
+  } else if (cpu) {
     // Both spherical value sources use the same shell-quartet visitor. Keep
     // the ordinary setup allowance; only the retained value extent changes.
     const auto cartesian_fourth = product({cartesian_square, cartesian_square});
@@ -236,14 +282,22 @@ inline std::array<std::uint64_t, 16> ks_host_resources(
                                product({shape.orbital_aos, shape.cartesian_aos})})}),
              quadrature, basis, shape.ecp_workspace});
   }
-  return {metadata,       grid,
-          basis,          warm,
-          history,        provider,
-          solver,         solver_binding,
-          matrix_binding, structured_binding,
-          xc_staging,     nonlocal_provider,
-          cache,          retained,
-          setup,          std::max(force_workspace, sum({matrix, xc_tile, nonlocal_work, cache}))};
+  return {metadata,
+          grid,
+          basis,
+          warm,
+          history,
+          provider,
+          solver,
+          solver_binding,
+          matrix_binding,
+          structured_binding,
+          xc_staging,
+          nonlocal_provider,
+          cache,
+          retained,
+          setup,
+          std::max(force_workspace, sum({matrix, xc_tile, nonlocal_work, cache, df_apply}))};
 }
 
 /** Compatibility entry point for the existing private CPU item ABI. */

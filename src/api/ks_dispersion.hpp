@@ -14,12 +14,30 @@ struct generativeqc_ks_composite_correction_result_v1 {
   uint64_t gcp_gradient_count;
 };
 
+/** Private name-to-MethodIR metadata for the Python constructor. Borrowed
+ * strings live as long as the selected native library. */
+struct generativeqc_ks_catalog_binding_v1 {
+  uint32_t struct_size, abi_version;
+  const char* identifier;
+  const char* identity;
+  uint32_t spin;
+};
+
 extern "C" {
+/** Query the same selector table used by SDK preparation and the CLI, without
+ * opening a context. A successful miss clears all fields after the ABI tags. */
+GENERATIVEQC_API generativeqc_status
+generativeqc_ks_catalog_lookup_v1(const char* name, size_t name_size, generativeqc_backend backend,
+                                  generativeqc_ks_catalog_binding_v1* output);
 /** Private exact-identity discovery. NULL name means the library has no complete
  * matching program, not permission to substitute a similar functional. */
 GENERATIVEQC_API generativeqc_status generativeqc_ks_catalog_name_v1(const char* identity,
                                                                      generativeqc_backend backend,
                                                                      const char** name);
+/** Return the shared CPU DF energy inventory selector for an exact MethodIR
+ * digest. A successful miss publishes NULL and never chooses Direct J/K. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_cpu_df_energy_program_v1(const char* identity,
+                                                                              const char** name);
 /** Read completed correction outputs from the last successful item transaction.
  * Optional buffers copy only existing work; a missing gradient is NOT_IMPLEMENTED.
  * D3 uses two_body_energy for its complete correction, including ATM if enabled. */

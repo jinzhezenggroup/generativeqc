@@ -1495,9 +1495,11 @@ int generativeqc_resource_ks_cpu_host_v1(const std::uint64_t* shape, std::size_t
  */
 static int ks_cpu_fleet(const std::uint64_t* shapes, std::size_t shape_count,
                         std::uint64_t workspace_floor, std::uint64_t packed_cap,
-                        std::uint64_t* values, std::size_t value_count, bool forces = false) {
-  if (!shapes || !shape_count || shape_count % 17 || !values) return -1;
-  const auto item_count = shape_count / 17;
+                        std::uint64_t* values, std::size_t value_count, bool forces = false,
+                        bool fitted = false) {
+  const std::size_t item_width = fitted ? 22 : 17;
+  if (!shapes || !shape_count || shape_count % item_width || !values) return -1;
+  const auto item_count = shape_count / item_width;
   if (item_count > (std::numeric_limits<std::size_t>::max() - 15) / 16 ||
       value_count != 15 + 16 * item_count)
     return -1;
@@ -1507,13 +1509,16 @@ static int ks_cpu_fleet(const std::uint64_t* shapes, std::size_t shape_count,
                                 runtime::size_mul(value_count, sizeof(*values))))
       return -1;
     const auto item_at = [&](std::size_t index) {
-      const auto* shape = shapes + 17 * index;
+      const auto* shape = shapes + item_width * index;
       if (shape[14] > 1 || shape[15] > 1)
         throw std::invalid_argument("CPU KS fleet requires canonical boolean slots");
-      return scf::CpuKsHostResourceShape{
+      scf::CpuKsHostResourceShape item{
           shape[0],  shape[1],  shape[2],       shape[3],       shape[4],  shape[5],
           shape[6],  shape[7],  shape[8],       shape[9],       shape[10], shape[11],
           shape[12], shape[13], shape[14] != 0, shape[15] != 0, shape[16]};
+      if (fitted)
+        item.cpu_df = scf::CpuKsDfHostShape{shape[17], shape[18], shape[19], shape[20], shape[21]};
+      return item;
     };
     const auto execution = scf::cpu_ks_host_execution(packed_cap != 0, forces);
     scf::CpuKsHostFleetResources fleet(workspace_floor);
@@ -1547,6 +1552,17 @@ int generativeqc_resource_ks_cpu_fleet_v1(const std::uint64_t* shapes, std::size
                                           std::uint64_t workspace_floor, std::uint64_t* values,
                                           std::size_t value_count) {
   return ks_cpu_fleet(shapes, shape_count, workspace_floor, 0, values, value_count);
+}
+
+/** CPU DF energy fleet capacity. Each 17-slot orbital/grid descriptor is
+ * followed by auxiliary public AOs, Cartesian AOs, shells, primitives and
+ * maximum angular momentum. Output retains the CPU fleet format. Return 2
+ * without publication when diagnostic preparation can materialize dA/dM. */
+int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t* shapes, std::size_t shape_count,
+                                             std::uint64_t workspace_floor, std::uint64_t* values,
+                                             std::size_t value_count) {
+  if (generativeqc::scf::cpu_materialized_df_derivatives_requested()) return 2;
+  return ks_cpu_fleet(shapes, shape_count, workspace_floor, 0, values, value_count, false, true);
 }
 
 /** Same host shape and transactional output layout, for caller-validated
