@@ -865,6 +865,129 @@ cudaError_t launch_point_linearization(const CudaWb97mvGridShape& shape, unsigne
   return cudaGetLastError();
 }
 
+/** Transform AO planes once per point tile, not for every trial rotation.
+ * The native final-state coefficients are column-major [AO,MO]. */
+__global__ void transition_mo_jets(std::size_t nao, std::size_t points, const double* ao,
+                                   const double* mo, std::size_t begin, std::size_t count,
+                                   double* jets) {
+  const auto panel = nao * count;
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < 4 * panel;
+       index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto orbital = index % nao;
+    const auto point = begin + index / nao % count;
+    const auto plane = index / panel;
+    const auto* row = ao + (plane * points + point) * nao;
+    double value{};
+    for (std::size_t basis = 0; basis < nao; ++basis)
+      value += row[basis] * mo[orbital * nao + basis];
+    jets[index] = value;
+  }
+}
+
+__global__ void pack_transition_tile(std::size_t nao, std::size_t points, unsigned axes,
+                                     std::size_t occupied, std::size_t begin, std::size_t count,
+                                     const double* jets, const double* coefficients,
+                                     const double* weights, double* fields, double* tangents,
+                                     int* refused) {
+  const auto virtuals = nao - occupied;
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+       index < count * occupied * virtuals; index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto local_point = index % count, rotation = index / count;
+    const auto point = begin + local_point;
+    const auto left = rotation / virtuals, right = occupied + rotation % virtuals;
+    double row[4], column[4], features[5], dual[5]{};
+    for (unsigned plane = 0; plane < 4; ++plane) {
+      const auto offset = (plane * count + local_point) * nao;
+      row[plane] = jets[offset + left];
+      column[plane] = jets[offset + right];
+    }
+    ad::FixedPotential::transition(row, column, features);
+    const auto weight = weights[point];
+    bool valid = isfinite(weight);
+    for (unsigned field = 0; field < axes; ++field)
+      valid = valid && fabs(features[field]) <= 0x1p30;
+    if (valid && weight != 0 && isfinite(coefficients[point])) {
+      for (unsigned field = 0; field < axes; ++field) {
+        double value{};
+        for (unsigned axis = 0; axis < axes; ++axis)
+          value += coefficients[((axis + 1) * 5 + field) * points + point] * features[axis];
+        dual[field] = weight * value;
+        valid = valid && fabs(dual[field]) <= std::numeric_limits<double>::max() / 4;
+      }
+    }
+    if (!valid) atomicExch(refused, 1);
+    for (unsigned field = 0; field < axes; ++field) {
+      fields[index * axes + field] = valid ? features[field] : 0;
+      tangents[index * axes + field] = valid ? dual[field] : 0;
+    }
+  }
+}
+
+__global__ void count_transition_corrections(std::size_t points, const double* coefficients,
+                                             const double* weights, int* count) {
+  for (auto point = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; point < points;
+       point += std::size_t(gridDim.x) * blockDim.x)
+    if (weights[point] != 0 && !isfinite(coefficients[point])) atomicAdd(count, 1);
+}
+
+/** Replay only uncached, nonzero-weight points with the original directional
+ * XC evaluator. Fields carry the single-leg feature; replay sees the actual
+ * RKS perturbation. GEMM owns the common factor of four, so remove it here. */
+template <SemilocalFamily family>
+__global__ void correct_transition_tile(std::size_t points, unsigned axes, std::size_t rotations,
+                                        std::size_t begin, std::size_t count, const double* base,
+                                        const double* coefficients, const double* weights,
+                                        const double* fields, double exchange, double correlation,
+                                        double* tangents, int* refused) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count * rotations;
+       index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto point = begin + index % count;
+    const auto weight = weights[point];
+    if (weight == 0 || isfinite(coefficients[point])) continue;
+    double action[5]{};
+    bool valid = isfinite(weight);
+    if constexpr (family == SemilocalFamily::R2scan) {
+      constexpr unsigned alpha[]{0, 2, 3, 4, 8}, beta[]{1, 5, 6, 7, 9};
+      double input[10], direction[10];
+      for (unsigned field = 0; field < 5; ++field) {
+        const auto half = 0.5 * base[field * points + point];
+        input[alpha[field]] = input[beta[field]] = half;
+        direction[alpha[field]] = direction[beta[field]] = 2 * fields[index * axes + field];
+        valid = valid && isfinite(half) && ((field != 0 && field != 4) || half >= 0);
+      }
+      if (valid) {
+        const auto value = generated::r2scan_stationary_action(input, direction);
+        for (unsigned field = 0; field < 5; ++field) {
+          action[field] = 0.5 * (value.action[alpha[field]] + value.action[beta[field]]);
+          valid = valid && isfinite(value.potential[alpha[field]] + value.potential[beta[field]]);
+        }
+      }
+    } else {
+      double rho[2]{base[point]}, gradient[2][3]{}, delta_rho[2]{4 * fields[index * axes]},
+          delta_gradient[2][3]{};
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        gradient[0][axis] = base[(axis + 1) * points + point];
+        delta_gradient[0][axis] = 4 * fields[index * axes + axis + 1];
+      }
+      point::Value primal, tangent;
+      if constexpr (family == SemilocalFamily::B3lyp)
+        b3lyp_point(1, rho, gradient, delta_rho, delta_gradient, primal, tangent);
+      else
+        tangent = point::restricted_response(true, rho[0], gradient[0], delta_rho[0],
+                                             delta_gradient[0], exchange, correlation);
+      valid = valid && primal.valid && tangent.valid;
+      action[0] = tangent.rho[0];
+      for (unsigned axis = 0; axis < 3; ++axis) action[axis + 1] = tangent.gradient[0][axis];
+    }
+    for (unsigned field = 0; field < axes; ++field) {
+      const auto result = weight * action[field];
+      valid = valid && isfinite(result);
+      tangents[index * axes + field] = valid ? 0.25 * result : 0;
+    }
+    if (!valid) atomicExch(refused, 1);
+  }
+}
+
 __global__ void pair_reduce(const double* values, const std::size_t* active, std::size_t row_begin,
                             std::size_t rows, std::size_t columns, std::size_t points,
                             unsigned spins, double* coefficients, int* status) {
@@ -1675,6 +1798,71 @@ cudaError_t CudaWb97mvGridResponse::retain_fixed_point_linearization(
   fixed_point_bytes_ = bytes;
   work_.workspace_bytes += bytes;
   return cudaSuccess;
+}
+
+unsigned CudaWb97mvGridResponse::transition_axes() const noexcept {
+  const auto code = options_.functional_code;
+  if (code == semilocal_family_code(SemilocalFamily::R2scan)) return fixed_point_axes_ == 5 ? 5 : 0;
+  const auto family = semilocal_family_from_code(code);
+  return !uses_stationary_point(code) && fixed_point_axes_ == 4 &&
+                 (family == SemilocalFamily::Pbe || family == SemilocalFamily::B3lyp)
+             ? 4
+             : 0;
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_transition_census(int* count,
+                                                              cudaStream_t stream) noexcept {
+  if (auto error = authenticate(stream); error != cudaSuccess) return error;
+  if (!count || !transition_axes() || shape_.points > std::numeric_limits<int>::max())
+    return cudaErrorNotSupported;
+  count_transition_corrections<<<maps::blocks(shape_.points), 128, 0, stream>>>(
+      shape_.points, static_cast<const double*>(fixed_point_workspace_), reference_.weights, count);
+  return cudaGetLastError();
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_transition_tile(
+    const double* mo, std::size_t occupied, std::size_t begin, std::size_t count, double* mo_jets,
+    double* fields, double* tangents, bool correct, int* refused, cudaStream_t stream) noexcept {
+  if (auto error = authenticate(stream); error != cudaSuccess) return error;
+  Layout plan;
+  if (!transition_axes() || shape_.spins != 1 || work_.active_nonlocal_points ||
+      options_.nuclear_response || !mo || !mo_jets || !fields || !tangents || !refused ||
+      !occupied || occupied >= shape_.nao || !count || count > shape_.points ||
+      begin > shape_.points - count || !layout(shape_, options_, plan))
+    return cudaErrorInvalidValue;
+  const auto* arena = static_cast<const double*>(workspace_);
+  transition_mo_jets<<<maps::blocks(4 * count * shape_.nao), 128, 0, stream>>>(
+      shape_.nao, shape_.points, arena + plan.ao, mo, begin, count, mo_jets);
+  auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+  const auto rotations = occupied * (shape_.nao - occupied);
+  const auto blocks = maps::blocks(count * rotations);
+  const auto* coefficients = static_cast<const double*>(fixed_point_workspace_);
+  pack_transition_tile<<<blocks, 128, 0, stream>>>(shape_.nao, shape_.points, fixed_point_axes_,
+                                                   occupied, begin, count, mo_jets, coefficients,
+                                                   reference_.weights, fields, tangents, refused);
+  error = cudaGetLastError();
+  if (error != cudaSuccess || !correct) return error;
+  const auto launch = [&]<SemilocalFamily family>() {
+    correct_transition_tile<family><<<blocks, 128, 0, stream>>>(
+        shape_.points, fixed_point_axes_, rotations, begin, count, arena + plan.base, coefficients,
+        reference_.weights, fields, options_.exchange_scale, options_.correlation_scale, tangents,
+        refused);
+  };
+  switch (semilocal_family_from_code(options_.functional_code)) {
+    case SemilocalFamily::Pbe:
+      launch.template operator()<SemilocalFamily::Pbe>();
+      break;
+    case SemilocalFamily::B3lyp:
+      launch.template operator()<SemilocalFamily::B3lyp>();
+      break;
+    case SemilocalFamily::R2scan:
+      launch.template operator()<SemilocalFamily::R2scan>();
+      break;
+    default:
+      return cudaErrorNotSupported;
+  }
+  return cudaGetLastError();
 }
 
 cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) noexcept {

@@ -50,7 +50,7 @@ std::vector<double> read(std::size_t count) {
 // A deliberately independent, immutable linear test model, not a molecular
 // induced-Fock implementation or a replacement for native integral/grid work.
 __global__ void linear_fock(const double* operation, const double* density, double* fock,
-                            std::size_t dimension, int failure) {
+                            std::size_t dimension, int failure, double shift) {
   for (std::size_t row = blockIdx.x * blockDim.x + threadIdx.x; row < dimension;
        row += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     double value{};
@@ -60,15 +60,48 @@ __global__ void linear_fock(const double* operation, const double* density, doub
     if (failure == 2 && row == 1) value += 0.3;
     if (failure == 3 && row == 0) continue;
     if (failure == 4) value += 0.01 * density[row] * density[row];
-    fock[row] = value;
+    fock[row] = shift ? value - shift * density[row] : value;
   }
 }
 
 struct Owner {
   const double* operation{};
   std::string mode;
-  unsigned authentications{}, actions{};
+  unsigned authentications{}, actions{}, seeds{}, complements{};
 };
+constexpr double overlap_shift = 0.03125;
+
+__global__ void seed_diagonal(double* output, std::size_t dimension, double diagonal) {
+  const auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index < dimension * dimension)
+    output[index] = index % dimension == index / dimension ? diagonal : 0;
+}
+
+cudaError_t seed(void* context, const response::CudaCpksShape& shape,
+                 const response::CudaCpksReference&, double* output, cudaStream_t stream) noexcept {
+  auto& owner = *static_cast<Owner*>(context);
+  ++owner.seeds;
+  const auto rotations = shape.occupied[0] * (shape.nao - shape.occupied[0]);
+  const bool bad = owner.mode != "cached-seed";
+  seed_diagonal<<<static_cast<unsigned>((rotations * rotations + 127) / 128), 128, 0, stream>>>(
+      output, rotations, (bad ? 16.0 : 2.0) * overlap_shift);
+  auto error = cudaGetLastError();
+  if (error == cudaSuccess && owner.mode == "cached-seed-refused") {
+    error = cudaStreamSynchronize(stream);
+    return error == cudaSuccess ? cudaErrorNotSupported : error;
+  }
+  return error;
+}
+
+cudaError_t complement(void* context, const double* density, double* fock,
+                       const response::CudaCpksShape& shape, cudaStream_t stream) noexcept {
+  auto& owner = *static_cast<Owner*>(context);
+  ++owner.complements;
+  const auto dimension = shape.nao * shape.nao;
+  linear_fock<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
+      owner.operation, density, fock, dimension, 0, overlap_shift);
+  return cudaGetLastError();
+}
 
 cudaError_t authenticate(void* context) noexcept {
   auto& owner = *static_cast<Owner*>(context);
@@ -91,7 +124,7 @@ cudaError_t induced(void* context, const double* density, double* fock,
                       : owner.mode.starts_with("cached-nonlinear") ? 4
                                                                    : 0;
   linear_fock<<<static_cast<unsigned>((dimension + 127) / 128), 128, 0, stream>>>(
-      owner.operation, density, fock, dimension, failure);
+      owner.operation, density, fock, dimension, failure, 0.0);
   return cudaGetLastError();
 }
 
@@ -186,6 +219,11 @@ void solve(int argc, char** argv) {
     cache.reset(owner.mode == "cached-alias" ? workspace
                                              : storage.allocate(cache_bytes / sizeof(double) + 1),
                 owner.mode == "cached-short" && cache_bytes ? cache_bytes - 1 : cache_bytes);
+    if (owner.mode.starts_with("cached-seed")) {
+      if (shape.spins != 1 || !shape.occupied[0] || shape.occupied[0] >= shape.nao)
+        throw std::runtime_error("seed probes require an occupied and virtual RKS space");
+      cache.set_build_decomposition(seed, complement);
+    }
   }
   auto* selected_workspace = owner.mode == "alias-workspace" ? density : workspace;
   auto* selected_weights = owner.mode == "alias-output" ? density : weights;
@@ -272,7 +310,8 @@ void solve(int argc, char** argv) {
             << ",\"workspace_bytes\":" << result.workspace_bytes
             << ",\"cached_columns\":" << cache.columns()
             << ",\"cached_actions\":" << cache.actions()
-            << ",\"physical_checks\":" << cache.physical_checks()
+            << ",\"physical_checks\":" << cache.physical_checks() << ",\"seeds\":" << owner.seeds
+            << ",\"complements\":" << owner.complements
             << ",\"authentications\":" << owner.authentications << ",\"actions\":" << owner.actions
             << ",\"density\":";
   array(output_density);

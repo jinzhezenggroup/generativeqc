@@ -451,6 +451,13 @@ inline cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&,
 }
 struct CudaWb97mvGridResponse {
   cudaError_t retain_fixed_point_linearization(std::size_t) { return cudaSuccess; }
+  unsigned transition_axes() const { return 0; }
+  void record_transition_projection(std::uint64_t, std::uint64_t) {}
+  cudaError_t enqueue_transition_census(int*, cudaStream_t) { return cudaErrorNotSupported; }
+  cudaError_t enqueue_transition_tile(const double*, std::size_t, std::size_t, std::size_t, double*,
+                                      double*, double*, bool, int*, cudaStream_t) {
+    return cudaErrorNotSupported;
+  }
   cudaError_t prepare(const CudaWb97mvGridShape&, const CudaWb97mvGridOptions&,
                       const CudaWb97mvGridReference&, void*, std::size_t) {
     return cudaSuccess;
@@ -507,9 +514,30 @@ struct CudaKsGridReference {
 };
 }  // namespace dft
 namespace response {
+enum class CudaCpksLayout { column_major };
 struct CudaCpksShape {
   std::size_t nao{};
   unsigned spins{};
+  std::size_t occupied[2]{};
+};
+struct CudaCpksReference {
+  const double* coefficients{};
+  cudaStream_t stream{};
+  CudaCpksLayout coefficient_layout{CudaCpksLayout::column_major};
 };
 }  // namespace response
+namespace tensor {
+constexpr int CUBLAS_STATUS_SUCCESS = 0;
+struct CudaDenseOperations {
+  int create() { return 1; }
+  int bind(cudaStream_t) { return 1; }
+  int close() { return CUBLAS_STATUS_SUCCESS; }
+  int product(bool, bool, int, int, int, const double*, const double*, int, const double*, int,
+              const double*, double*, int) const {
+    return 1;
+  }
+};
+}  // namespace tensor
 }  // namespace generativeqc
+
+using generativeqc::tensor::CUBLAS_STATUS_SUCCESS;

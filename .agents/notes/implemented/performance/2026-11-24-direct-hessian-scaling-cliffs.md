@@ -2293,6 +2293,204 @@ r²SCAN. All 29 focused GPU cases passed. Work and device bytes were
 unchanged across all five A/B cases; raw drift was at most
 `3.11e-14 Ha/Bohr²`.
 
+## Rejected: statically split the wide feature input strips
+
+Emitting each input strip separately avoids dynamic AO register selection
+without changing column order. It did not improve the endpoint. In Slurm
+2641, five same-device native A/Bs show unchanged work and device bytes,
+raw drift at most `2.54e-14 Ha/Bohr²`, and no warm complete-endpoint gain.
+The PBE0 trace shows 0.641 s fixed and 0.343 s moving feature kernels
+versus 0.639 and 0.340 s in the replay-sizing profile. Ten GPU grid tests
+passed, but the code was reverted. This disfavors another local unroll or
+strip-selection change as the remedy for the fixed-grid bottleneck.
+
+The unchanged replay-sizing binary and GPU4PySCF on the same allocation
+give 24-water Hessian timings of 7.72/6.18 s (PBE0), 7.64/6.24 s (B3LYP),
+and 7.55/6.06 s (r²SCAN). Complete times are 7.90/9.18 s, 7.80/13.35 s,
+and 7.80/9.62 s, respectively. All raw matrices pass the `5e-8 Ha/Bohr²`
+gate; the r²SCAN reference has only one warm result because another
+fresh SCF failed to converge at the unchanged tolerance. The 36-H and
+96-H r²SCAN probes both reached the Hessian ABI and refused during
+moving-grid admission at 1 GiB grid and 64 MiB integral leases, before
+either could produce a Hessian. See `static-feature-strips-compare.log`,
+`static-feature-strips-reference.log`, and `n5-static-feature-strips.log`.
+
+## Rejected: bypass the AO product loops for single-term frozen projections
+
+The one-term branch preserves the canonical component, angular coefficients,
+finite checks, and rounded FP64 order; multi-term polynomials keep the
+original traversal. Slurm 2642 passes all 29 focused GPU cases and retains
+work and bytes in five A/Bs (max raw difference `4.00e-14 Ha/Bohr²`). None
+of the five warm complete endpoints improved (changes from +0.01 to +0.03 s).
+The branch was removed. See `single-ao-gather-compare.log` and the matching
+source patch and binary receipts.
+
+The trace of the unchanged binary (`n5-replay-sizing-full-profile.log`,
+Slurm 2640) assigns 1.59 s to indexed four-center radial evaluation and
+1.33 s to fixed-grid feature evaluation, staging and pair reduction. The
+radial census identifies degrees one and two as the largest instances
+(0.41 and 0.49 s). To reduce the fixed-grid work, one candidate is to form
+the semilocal XC part of the resident CPKS operator in transition space:
+for unit rotation `ia`, generate the five fixed-grid features of
+`C_i C_a^T + C_a C_i^T` directly from MO jets. For an RKS unit rotation,
+the occupation of two and the mirrored density legs multiply the single-leg
+feature by four on input; the OV projection uses one leg. The quadrature
+weights belong in the action exactly once. Build in bounded point tiles, not an all-point
+transition-field array. This does not replace any physical residual check.
+
+The host prototype agrees with explicit signed AO-density response and
+Fock projection within `2.85e-13` on two small independent algebra cases.
+With 640 rotations and 20,736 points, two 128-point tiles use 6,553,600
+bytes, and the full five-axis projection is 84,934,656,000 FP64 FLOPs.
+Slurm 2643 executes just these tile GEMMs in about 64 ms warm, using fixed
+resident synthetic operands. This excludes MO/feature generation, point
+linearization, J/K and the CPKS solver, so it is feasibility evidence only.
+An implementation needs to authenticate the same final-state/grid lease,
+handle point-rule refusal (including masked points) without dropping
+contributions, account both semantic work and scratch, and retain the
+unchanged physical-callback build when the optimized route is not admitted.
+See `cpks-transition-field-prototype.*` and `n5-cpks-transition-gemm-probe.log`.
+
+The first integrated prototype, with whole-table refusal, is not shipped.
+In Slurm 2646 (RTX 5090, Direct FP64, 24-atom STO-3G water cluster), two
+warm fresh-SCF repetitions per arm give baseline → prototype Hessian
+times of 7.74 → 7.78 s (PBE0), 7.62 → 7.69 s (B3LYP), and 7.56 → 7.63 s
+(r²SCAN). Complete endpoints increase from 7.92 → 7.96 s, 7.78 → 7.85 s,
+and 7.80 → 7.88 s respectively. The raw matrices differ by at most
+`3.09e-14 Ha/Bohr²` against the native baseline. Each run still performs
+784 induced Fock actions, 72 physical CPKS checks, 5,184 mixed-grid
+contractions and 490,356,747 exact primitive derivative components;
+retained device allocations grow by 5,472,264 bytes for the hybrids
+and 6,782,984 bytes for r²SCAN. Slurm 2648 traces 162 PBE0 transition
+tiles but no seeded-column accumulation, and the number of point
+linearization launches is unchanged at 928. The work was discarded and
+the unchanged physical provider built all columns. The raw parity is
+therefore not validation of the transition-space operator. Do not remove
+the point-rule guard to pass admission. Revisit with a bounded exact
+correction for nonzero-weight unresolved rows, or target the independent
+radial bottleneck. See `transition-cpks-v2-compare.log`,
+`n5-transition-cpks-v2-profile-rerun.log`, and the source and binary receipts.
+
+## Follow-up: fold one-electron radial rows in output lanes
+
+Each output lane sums its own primitive sequence. Batching uses one warp
+with radial-major shared rows; it does not use a tree reduction, reassociate
+FP64 sums, or change normalization. The order across internal 32-record
+tiles is still the original primitive order. A 49-product signed
+contraction crosses the device tile and is checked against a separate
+radial partition and a displaced libcint reference.
+
+Slurm 2649 passes 23 focused real-device tests (four skips) before running
+the five-case Direct FP64 A/B on the same RTX 5090. Means of two warm
+independent SCFs, baseline to output-lane variant:
+
+| System and XC | Hessian (s) | SCF + Hessian (s) |
+| --- | ---: | ---: |
+| 24 water atoms, PBE0 | 7.72 → 7.64 | 7.90 → 7.82 |
+| 24 water atoms, B3LYP | 7.62 → 7.55 | 7.79 → 7.72 |
+| 24 water atoms, r²SCAN | 7.55 → 7.46 | 7.79 → 7.71 |
+| 21 water atoms, PBE | 4.87 → 4.81 | 5.02 → 4.96 |
+| 34 H, r²SCAN | 5.58 → 5.51 | 5.74 → 5.68 |
+
+Work and allocated bytes match within each A/B. Maximum raw matrix drift
+is `2.58e-14 Ha/Bohr²`; both 24-atom hybrid matrices match bitwise. The
+Hessian gap remains. See `one-electron-output-lanes-compare.log`,
+`n5-one-electron-output-lanes-2649-recovered.log` (retained Slurm 2649
+stdout), and the build, compiler-cache and binary receipts. The follow-up
+proposal in `../../proposed/2026-11-24-frozen-one-electron-direction-support.md`
+addresses the actual number of evaluated primitives rather than only their
+output fold.
+
+## Follow-up: skip invariant source tasks in private frozen columns
+
+The frozen preassembly retains only the two directional matrices and the
+weighted integral HVP. Audit that the supplied motion is the named unit
+column and that both weight-motion panels are zero. Then the one-electron
+batch may omit a local integral when none or all of its mathematical centers
+move. Clear those contributions in the private ordered collection slots.
+Primal values, gradients, general HVPs, SCF and normal forces do not use this
+support rule. If the batch is not admitted, use the complete original leaf
+and projection action. Tests compare the selected outputs against that
+complete action and reject a mismatched direction or nonzero weight motion
+without publishing any panel.
+
+Slurm 2651 passes 25 focused CUDA tests (four skips), including the frozen
+batch and scalar budget fallback. The five-case same-card A/B uses two
+warm fresh-SCF repetitions per arm. From replay-sizing baseline to the
+combined support and output-lane schedule:
+
+| System and XC | Hessian (s) | SCF + Hessian (s) |
+| --- | ---: | ---: |
+| 24 water atoms, PBE0 | 7.73 → 6.89 | 7.92 → 7.07 |
+| 24 water atoms, B3LYP | 7.63 → 6.83 | 7.79 → 6.99 |
+| 24 water atoms, r²SCAN | 7.57 → 6.75 | 7.82 → 7.00 |
+| 21 water atoms, PBE | 4.87 → 4.39 | 5.02 → 4.54 |
+| 34 H, r²SCAN | 5.59 → 4.90 | 5.75 → 5.07 |
+
+The one-electron primitive census matches an independent center-incidence
+enumeration: 52,835,328 → 6,102,432 for each 24-atom case, 31,311,441 →
+4,086,180 for 21 atoms, and 38,203,488 → 3,211,164 for 34 H. Other semantic
+work and allocated bytes match. Raw native drift is at most
+`2.40e-14 Ha/Bohr²`; all three 24-atom independent GPU4PySCF matrix gates
+remain below `5e-8 Ha/Bohr²`. The 21-atom PBE cross-engine matrix discrepancy
+is unchanged, and the 24-atom Hessian is still about 0.59–0.71 s behind the
+stored GPU4PySCF timings. Slurm 2652 traces 0.111 s of nuclear-attraction
+leaves and 0.022 s of one-electron projection, versus 0.790 and 0.165 s in
+the unmodified trace. Fixed-grid features and pair reduction are unchanged
+at about 0.64 and 0.50 s respectively. See `one-electron-frozen-support-compare.log`
+and `n5-one-electron-frozen-support-profile.log` with the matching receipts.
+
+## Retained: seed the FP64 CPKS operator with transition-space XC
+
+For eligible restricted semilocal Direct Hessians with a resident FP64
+operator, project local XC in bounded point tiles straight into the
+occupied–virtual table. FP64 GEMMs contract transition features with the
+same point linearization used by the directional AO action. Correct
+nonzero-weight points that missed the point cache before the contractions;
+padding and zero-weight points contribute zero. Once the local XC seed is
+accepted, add the Direct J/K projection and orbital gap per column rather
+than replaying the point linearization for every rotation.
+
+Workspace admission is optional and subject to the existing device lease
+and a 12 MiB subcap. The product and point-correction ceilings also bound
+work. Unavailable storage, unsupported cases, or seed rejection use full
+column construction, overwriting the whole attempted seed. The seed is not
+the physical operator: the residual check and uncached GMRES fallback use
+the full directional action, even after successful seeding. No change to
+ordinary SCF, force, or Hessian precision/acceptance policy is needed.
+
+On the water24 PBE0 trace (2653), 640 columns actually use the seed. With
+162 correction tiles, point-linearization launches fall from 928 to 288.
+Across the three 24-atom A/Bs, the retained memory costs 5.22–6.47 MiB and
+all 72 per-column physical checks still run. The 784 induced Fock actions,
+5,184 mixed-grid contractions, 490,356,747 exact primitive components and
+6,102,432 one-electron primitive components are unchanged. Slurm 2653 passes
+36 CPKS cases and all five native A/B matrices agree within
+`3.56e-14 Ha/Bohr²`. After the frozen-column change, the seed further reduces
+Hessian time from 4.40 to 3.75 s (21-water PBE) and from 4.90 to 4.56 s
+(34 H r²SCAN), with complete times of 4.55→3.89 s and 5.07→4.72 s.
+Slurm 2656 passes the native CPKS probe and 22 Python cases, including
+seed use, replacement after rejection, and failed physical acceptance
+without publication.
+
+Slurm 2654 measures both engines on the same RTX 5090 with matched
+STO-3G moving grids, Direct FP64, and no DF. Timings are means of two warm
+fresh-SCF runs per engine; errors are maxima over all nine cross-engine
+pairs of raw (unsymmetrized) matrices, including the first run.
+
+| 24 water atoms | Hessian GQC / GPU4PySCF (s) | Complete GQC / GPU4PySCF (s) | Max raw difference (Ha/Bohr²) |
+| --- | ---: | ---: | ---: |
+| PBE0 | 5.81 / 6.19 | 5.99 / 10.13 | 2.73e-8 |
+| B3LYP | 5.76 / 6.20 | 5.92 / 10.88 | 2.81e-8 |
+| r²SCAN | 5.73 / 6.04 | 5.97 / 9.58 | 3.79e-8 |
+
+All three pass the unchanged `5e-8 Ha/Bohr²` gate. This closes the measured
+24-atom Hessian-only gap, not the known 21-water PBE cross-engine discrepancy
+or the 36-H/96-H default moving-grid admission refusals. See
+`transition-cpks-v3-compare.log`, `transition-cpks-v3-reference-compare.log`,
+`n5-transition-cpks-v3*.log`, and the matching source/build/binary receipts in
+the local scaling evidence directory.
+
 ## References
 
 - #3134 and [the prior launch-cliff note](2026-11-22-cuda-direct-hessian-launch-cliffs.md).

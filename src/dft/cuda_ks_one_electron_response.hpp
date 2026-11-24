@@ -62,7 +62,8 @@ class CudaKsOneElectronResponse {
   cudaError_t enqueue_private(const double* direction,
                               const integrals::CudaOneElectronWeights& weights,
                               const integrals::CudaOneElectronOutput& output,
-                              int* transaction_status, cudaStream_t stream) noexcept;
+                              int* transaction_status, cudaStream_t stream,
+                              std::size_t frozen_column = SIZE_MAX) noexcept;
   CudaKsOneElectronWork work() const noexcept;
 
  private:

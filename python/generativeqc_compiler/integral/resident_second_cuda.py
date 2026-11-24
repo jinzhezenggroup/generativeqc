@@ -75,11 +75,15 @@ def _runtime(
 ) -> str:
     outputs = 1 + 6 * centers
     stride = exponents + 3 * centers + 1
+    tile = 32 if batched else 64
     if batched:
         descriptor = "generativeqc::dft::hessian_aot::FactorizedIntegralBatch"
-        include = '#include "dft/factorized_hessian_integral.hpp"\n'
-        parameter = f", const {descriptor}* batches"
-        scalar_argument = ", nullptr"
+        include = (
+            '#include "dft/factorized_hessian_integral.hpp"\n'
+            '#include "integrals/frozen_one_electron_centers.hpp"\n'
+        )
+        parameter = f", const {descriptor}* batches, long long frozen_atom"
+        scalar_argument = ", nullptr, -1"
         batch_binding = """  const double* coordinates = nullptr;
   if (batches) {
     const auto& batch = batches[blockIdx.y];
@@ -105,18 +109,48 @@ def _runtime(
 extern "C" int generativeqc_resident_integral_batch(double omega,
     const {descriptor}* batches, size_t count, const double* direction,
     long long frozen_atom, int* status, cudaStream_t stream) {{
-  if (omega != 0 || frozen_atom >= 0 || !batches || !count || count > 65535 ||
+  if (omega != 0 || !batches || !count || count > 65535 ||
       !direction || !status) return static_cast<int>(cudaErrorInvalidValue);
-  resident_integral_kernel<<<dim3({components}, count),64,0,stream>>>(
-      nullptr,0,nullptr,direction,nullptr,status,batches);
+  resident_integral_kernel<<<dim3({components}, count),{tile},0,stream>>>(
+      nullptr,0,nullptr,direction,nullptr,status,batches,frozen_atom);
   return static_cast<int>(cudaGetLastError());
 }}
 """
+        inactive = f"""  if (!generativeqc::integrals::frozen_one_electron_active(atoms, {centers}, frozen_atom)) {{
+    if (threadIdx.x < {outputs}) output[component*{outputs}+threadIdx.x] = 0;
+    return;
+  }}
+"""
+        # The per-output lane accumulates the same ordered radial sequence across
+        # all tiles. Radial-major shared rows keep those output lanes adjacent.
+        shared = f"__shared__ double terms[{tile}][{outputs}];"
+        result = "double result{};"
+        store = "terms[threadIdx.x][index]"
+        fold = f"""    if (threadIdx.x < {outputs})
+      for (size_t radial=0; radial<active; ++radial)
+        result+=terms[radial][threadIdx.x];"""
+        publish = f"""  if (threadIdx.x >= {outputs}) return;
+  if (!isfinite(result)) atomicExch(status, 2);
+  output[component*{outputs}+threadIdx.x]=result;"""
     else:
-        include = parameter = scalar_argument = batch_binding = batch_launch = ""
+        include = parameter = scalar_argument = batch_binding = batch_launch = (
+            inactive
+        ) = ""
         bind_record = (
             f"      const double* record=records+(begin+threadIdx.x)*{stride};\n"
         )
+        shared = f"__shared__ double terms[{outputs}][{tile}];"
+        result = f"double result[{outputs}]{{}};"
+        store = "terms[index][threadIdx.x]"
+        fold = f"""    if (threadIdx.x == 0)
+      for (int index=0; index<{outputs}; ++index)
+        for (size_t radial=0; radial<active; ++radial)
+          result[index]+=terms[index][radial];"""
+        publish = f"""  if (threadIdx.x != 0) return;
+  for (int index=0; index<{outputs}; ++index) {{
+    if (!isfinite(result[index])) atomicExch(status, 2);
+    output[component*{outputs}+index]=result[index];
+  }}"""
     return (
         source
         + f"""
@@ -127,20 +161,20 @@ __global__ void resident_integral_kernel(const double* records, size_t count,
     const long long* atoms, const double* molecular_direction, double* output, int* status{parameter}) {{
 {batch_binding}  const int component = blockIdx.x;
   if (component >= {components}) return;
-  __shared__ double terms[{outputs}][64];
+{inactive}  {shared}
   double direction[{3 * centers}];
   for (int center=0; center<{centers}; ++center)
     for (int axis=0; axis<3; ++axis)
       direction[3*center+axis] = molecular_direction[3*atoms[center]+axis];
-  double result[{outputs}]{{}};
+  {result}
   for (size_t begin=0; begin<count;) {{
-    const size_t active = count-begin < 64 ? count-begin : 64;
+    const size_t active = count-begin < {tile} ? count-begin : {tile};
     bool valid = true;
     if (threadIdx.x < active) {{
 {bind_record}      double values[{outputs}]{{}};
       valid = resident_evaluate(component, record, direction, values);
       for (int index=0; index<{outputs}; ++index)
-        terms[index][threadIdx.x]=record[{stride - 1}]*values[index];
+        {store}=record[{stride - 1}]*values[index];
     }}
     if (__syncthreads_or(!valid)) {{
       if (threadIdx.x == 0) atomicExch(status, 1);
@@ -148,22 +182,15 @@ __global__ void resident_integral_kernel(const double* records, size_t count,
     }}
     // Parallelize expensive primitive AD, not the contraction: preserve radial
     // addition order, including cancellation, without floating-point atomics.
-    if (threadIdx.x == 0)
-      for (int index=0; index<{outputs}; ++index)
-        for (size_t radial=0; radial<active; ++radial)
-          result[index]+=terms[index][radial];
+{fold}
     __syncthreads();
     begin+=active;
   }}
-  if (threadIdx.x != 0) return;
-  for (int index=0; index<{outputs}; ++index) {{
-    if (!isfinite(result[index])) atomicExch(status, 2);
-    output[component*{outputs}+index]=result[index];
-  }}
+{publish}
 }}
 extern "C" int generativeqc_resident_integral(const double* records, size_t count,
     const long long* atoms, const double* direction, double* output, int* status, cudaStream_t stream) {{
-  resident_integral_kernel<<<{components},64,0,stream>>>(records,count,atoms,direction,output,status{scalar_argument});
+  resident_integral_kernel<<<{components},{tile},0,stream>>>(records,count,atoms,direction,output,status{scalar_argument});
   return static_cast<int>(cudaGetLastError());
 }}
 {batch_launch}"""

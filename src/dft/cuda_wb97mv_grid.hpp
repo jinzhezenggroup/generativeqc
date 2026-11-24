@@ -84,6 +84,7 @@ struct CudaWb97mvGridWork {
   std::uint64_t nuclear_directions{}, nuclear_contractions{};
   std::uint64_t nuclear_graph_replays{};
   std::uint64_t nuclear_adjoint_builds{}, nuclear_adjoint_contractions{};
+  std::uint64_t transition_projection_products{}, transition_point_corrections{};
   bool pair_budget_exceeded{};
 };
 
@@ -127,6 +128,21 @@ class CudaWb97mvGridResponse {
   /** Attempt optional fixed-grid residency after the enclosing owner has
    * admitted all mandatory resources. Capacity refusal keeps the scalar JVP. */
   cudaError_t retain_fixed_point_linearization(std::size_t max_bytes) noexcept;
+  /** RKS semilocal tiles for the cached occupied/virtual XC operator. Fields
+   * and their weighted tangents are [rotation][point][axis]; the row
+   * dimension of both column-major matrices is axes * count. A sticky
+   * refused flag requests the original full-operator build. The caller owns
+   * all disjoint scratch and the stream fence before checking that flag. */
+  unsigned transition_axes() const noexcept;
+  cudaError_t enqueue_transition_census(int* count, cudaStream_t stream) noexcept;
+  cudaError_t enqueue_transition_tile(const double* mo, std::size_t occupied, std::size_t begin,
+                                      std::size_t count, double* mo_jets, double* fields,
+                                      double* tangents, bool correct, int* refused,
+                                      cudaStream_t stream) noexcept;
+  void record_transition_projection(std::uint64_t products, std::uint64_t corrections) noexcept {
+    work_.transition_projection_products = products;
+    work_.transition_point_corrections = corrections;
+  }
   /** Apply to a finite symmetric SIGNED/indefinite D direction, with both UKS
    * blocks together. Output is [spin,AO,AO], disjoint from all retained inputs.
    */

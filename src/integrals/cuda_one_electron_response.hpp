@@ -108,16 +108,18 @@ class CudaOneElectronResponse {
                     const CudaOneElectronOutput& output, cudaStream_t stream) noexcept;
   /** Enqueue into private device panels and accumulate failures into a
    * disjoint, initialized device status. The enclosing transaction owns
-   * stream completion and must reject publication on failure. */
+   * stream completion and must reject publication on failure. A specified
+   * frozen column requires its exact unit direction and zero weight motion;
+   * in that mode only the two matrix directions and the HVP are written. */
   cudaError_t enqueue_private(const double* direction, const CudaOneElectronWeights& weights,
                               const CudaOneElectronOutput& output, int* transaction_status,
-                              cudaStream_t stream) noexcept;
+                              cudaStream_t stream, std::size_t frozen_column = SIZE_MAX) noexcept;
   const CudaOneElectronWork& work() const noexcept;
 
  private:
   cudaError_t apply_impl(const double* direction, const CudaOneElectronWeights& weights,
                          const CudaOneElectronOutput& output, int* transaction_status,
-                         cudaStream_t stream) noexcept;
+                         cudaStream_t stream, std::size_t frozen_column = SIZE_MAX) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

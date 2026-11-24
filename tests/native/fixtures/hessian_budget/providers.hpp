@@ -200,6 +200,20 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, bool, st
 cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t) noexcept {
   return cudaSuccess;  // Decline optional residency without charging the mandatory budget.
 }
+cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::CudaCpksShape&,
+                                                            std::size_t) noexcept {
+  return cudaSuccess;
+}
+cudaError_t CudaKsWb97mvResponse::seed_local_xc(void*, const response::CudaCpksShape&,
+                                                const response::CudaCpksReference&, double*,
+                                                cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+cudaError_t CudaKsWb97mvResponse::induced_nonlocal_fock(void*, const double*, double*,
+                                                        const response::CudaCpksShape&,
+                                                        cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
 struct CudaKsWb97mvNuclearJk::Impl : stub::Storage {
   CudaWb97mvJkWork work;
 };

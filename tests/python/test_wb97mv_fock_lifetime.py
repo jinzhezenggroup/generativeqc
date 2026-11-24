@@ -73,6 +73,7 @@ def test_physical_fock_drains_failed_borrowed_work(
         "scf/cuda_density_fitting_device.hpp",
         "scf/cuda_direct_jk_device.hpp",
         "scf/cuda_fock_execution.hpp",
+        "tensor/cuda_dense_operations.hpp",
     )
     for name in shims:
         path = tmp_path / name

@@ -7,6 +7,7 @@
 #include "dft/factorized_hessian_integral.hpp"
 #include "dft/hessian_aot.hpp"
 #include "integrals/cuda_one_electron_response.hpp"
+#include "integrals/frozen_one_electron_centers.hpp"
 #include "response/nuclear_integral_response.cuh"
 
 namespace generativeqc::integrals {
@@ -490,13 +491,39 @@ __global__ void project(CudaOneElectronShape shape, const DeviceJob* job, const 
 __global__ void project_batch(CudaOneElectronShape shape, const DeviceJob* jobs,
                               const ParallelTask* tasks, std::size_t count, const double* basis,
                               const double* direction, CudaOneElectronWeights weights, char* base,
-                              int* status) {
+                              long long frozen_atom, int* status) {
   for (std::size_t index = blockIdx.x; index < count; index += gridDim.x) {
     const auto& task = tasks[index];
-    project_task(shape, jobs + task.job, basis, direction, weights,
+    const auto* job = jobs + task.job;
+    if (!frozen_one_electron_active(job->atoms, job->centers, frozen_atom)) {
+      const auto pairs = job->first.ao_count * job->second.ao_count;
+      auto* candidate = reinterpret_cast<double*>(base + task.candidate);
+      auto* projected = reinterpret_cast<double*>(base + task.projected);
+      for (auto offset = std::size_t(threadIdx.x); offset < 2 * pairs; offset += blockDim.x)
+        candidate[offset] = 0;
+      for (auto offset = std::size_t(threadIdx.x); offset < 6 * pairs * job->centers;
+           offset += blockDim.x)
+        projected[offset] = 0;
+      continue;
+    }
+    project_task(shape, job, basis, direction, weights,
                  reinterpret_cast<const double*>(base + task.raw),
                  reinterpret_cast<double*>(base + task.candidate),
                  reinterpret_cast<double*>(base + task.projected), status, true);
+  }
+}
+
+/** The selected-column hint is valid only for the exact unit motion and
+ * stationary weights. Reject mismatches before publishing any private panel. */
+__global__ void validate_frozen_column(const double* direction, std::size_t coordinates,
+                                       std::size_t column, CudaOneElectronWeights weights,
+                                       std::size_t matrix, int* status) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+       index < max(coordinates, matrix); index += std::size_t(gridDim.x) * blockDim.x) {
+    if ((index < coordinates && direction[index] != static_cast<double>(index == column)) ||
+        (index < matrix &&
+         (weights.core_direction[index] != 0 || weights.overlap_direction[index] != 0)))
+      atomicExch(status, 1);
   }
 }
 __global__ void scatter(const DeviceJob* job, std::size_t atoms, const double* projected,
@@ -937,17 +964,17 @@ cudaError_t CudaOneElectronResponse::apply(const double* direction,
 cudaError_t CudaOneElectronResponse::enqueue_private(const double* direction,
                                                      const CudaOneElectronWeights& weights,
                                                      const CudaOneElectronOutput& output,
-                                                     int* transaction_status,
-                                                     cudaStream_t stream) noexcept {
+                                                     int* transaction_status, cudaStream_t stream,
+                                                     std::size_t frozen_column) noexcept {
   if (!transaction_status) return cudaErrorInvalidValue;
-  return apply_impl(direction, weights, output, transaction_status, stream);
+  return apply_impl(direction, weights, output, transaction_status, stream, frozen_column);
 }
 
 cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
                                                 const CudaOneElectronWeights& weights,
                                                 const CudaOneElectronOutput& output,
-                                                int* transaction_status,
-                                                cudaStream_t stream) noexcept {
+                                                int* transaction_status, cudaStream_t stream,
+                                                std::size_t frozen_column) noexcept {
   auto& state = *impl_;
   if (state.work.attempted_actions == UINT64_MAX) return cudaErrorInvalidValue;
   ++state.work.attempted_actions;
@@ -956,6 +983,10 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
   const auto& plan = state.plan;
   const auto& shape = state.shape;
   const auto& reference = state.reference;
+  const bool frozen = frozen_column != SIZE_MAX;
+  const bool batched = !state.batch_runs.empty();
+  if (frozen && frozen_column >= 3 * shape.atoms) return cudaErrorInvalidValue;
+  const long long frozen_atom = frozen && batched ? static_cast<long long>(frozen_column / 3) : -1;
   const double* inputs[] = {
       reference.basis, reference.charges,        direction, weights.core, weights.core_direction,
       weights.overlap, weights.overlap_direction};
@@ -998,8 +1029,18 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
         return cudaErrorInvalidValue;
     if ((error = device_buffer(outputs[index], reference.device_id)) != cudaSuccess) return error;
   }
-  if (state.work.component_evaluations > UINT64_MAX - plan.components ||
-      state.work.projection_terms > UINT64_MAX - plan.projections)
+  auto components = plan.components, projections = plan.projections;
+  if (frozen_atom >= 0) {
+    components = projections = 0;
+    for (const auto& job : state.jobs) {
+      if (!frozen_one_electron_active(job.device.atoms, job.device.centers, frozen_atom)) continue;
+      components += job.radials * job.device.components;
+      projections += 9 * job.device.first.ao_count * job.device.second.ao_count *
+                     job.device.components * ((job.radials - 1) / state.options.radial_tile + 1);
+    }
+  }
+  if (state.work.component_evaluations > UINT64_MAX - components ||
+      state.work.projection_terms > UINT64_MAX - projections)
     return cudaErrorInvalidValue;
   auto* base = static_cast<char*>(state.workspace);
   auto* status = reinterpret_cast<int*>(base + plan.status);
@@ -1010,7 +1051,13 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
   const auto* jobs = reinterpret_cast<DeviceJob*>(base + plan.descriptors);
   error = cudaMemsetAsync(status, 0, sizeof(int), stream);
   if (error == cudaSuccess) {
-    finite_values<<<blocks(3 * shape.atoms), 128, 0, stream>>>(direction, 3 * shape.atoms, status);
+    if (frozen) {
+      validate_frozen_column<<<blocks(std::max(3 * shape.atoms, plan.matrix)), 128, 0, stream>>>(
+          direction, 3 * shape.atoms, frozen_column, weights, plan.matrix, status);
+    } else {
+      finite_values<<<blocks(3 * shape.atoms), 128, 0, stream>>>(direction, 3 * shape.atoms,
+                                                                 status);
+    }
     error = cudaGetLastError();
   }
   for (unsigned index = 3; index < 7 && error == cudaSuccess; ++index) {
@@ -1023,7 +1070,6 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
   if (error != cudaSuccess) return transaction_status ? error : drain(error, stream);
   error =
       cudaMemsetAsync(candidate, 0, (4 * plan.matrix + 6 * shape.atoms) * sizeof(double), stream);
-  const bool batched = !state.batch_runs.empty();
   if ((state.replay || batched) && error == cudaSuccess) {
     if (!batched) {
       error = cudaMemcpyAsync(base + plan.parallel_direction, direction,
@@ -1043,12 +1089,12 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
       for (const auto& run : state.batch_runs) {
         if (error != cudaSuccess) break;
         error = static_cast<cudaError_t>(run.program->integral_batch(
-            0, inputs + run.first, run.count, direction, -1, status, stream));
+            0, inputs + run.first, run.count, direction, frozen_atom, status, stream));
       }
       if (error == cudaSuccess) {
         project_batch<<<std::min<std::size_t>(plan.tasks.size(), 65535), 128, 0, stream>>>(
             shape, jobs, reinterpret_cast<const ParallelTask*>(base + plan.parallel_descriptors),
-            plan.tasks.size(), reference.basis, direction, weights, base, status);
+            plan.tasks.size(), reference.basis, direction, weights, base, frozen_atom, status);
         error = cudaGetLastError();
       }
     } else if (error == cudaSuccess) {
@@ -1056,8 +1102,8 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
     }
     if (error == cudaSuccess) {
       ++state.work.parallel_actions;
-      state.work.component_evaluations += plan.components;
-      state.work.projection_terms += plan.projections;
+      state.work.component_evaluations += components;
+      state.work.projection_terms += projections;
       const auto* tasks = reinterpret_cast<const ParallelTask*>(base + plan.parallel_descriptors);
       if (plan.collect_offsets) {
         const auto* offsets = reinterpret_cast<const std::size_t*>(base + plan.collect_offsets);
@@ -1125,6 +1171,10 @@ cudaError_t CudaOneElectronResponse::apply_impl(const double* direction,
   }
   std::size_t offset{};
   for (unsigned index = 0; index < 6 && error == cudaSuccess; ++index) {
+    if (frozen && (index == 0 || index == 1 || index == 4)) {
+      offset += output_counts[index];
+      continue;
+    }
     if (transaction_status) {
       copy_private_panel<<<blocks(output_counts[index]), 128, 0, stream>>>(
           candidate + offset, outputs[index], output_counts[index], status);

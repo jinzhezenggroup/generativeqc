@@ -300,6 +300,16 @@ __global__ void compress_column(const double* input, float* output, std::size_t 
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     output[index] = static_cast<float>(input[index]);
 }
+
+__global__ void accumulate_seeded_column(const double* complement, double* column,
+                                         std::size_t dimension, int* status) {
+  for (std::size_t row = blockIdx.x * blockDim.x + threadIdx.x; row < dimension;
+       row += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto value = column[row] + complement[row];
+    if (!isfinite(value)) atomicExch(status, 1);
+    column[row] = value;
+  }
+}
 struct ResidentExecution {
   const void* matrix;
   CudaCpksResidentPrecision precision;
@@ -629,14 +639,24 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
   }
   if (cached && !operator_cache->ready_) {
     auto& cache = *operator_cache;
+    bool seeded = false;
+    if (!mixed && cache.seed_ && cache.complement_) {
+      error = cache.seed_(context, shape, reference, static_cast<double*>(cache.values_), stream);
+      if (error != cudaSuccess && error != cudaErrorNotSupported) return error;
+      seeded = error == cudaSuccess;
+    }
+    // The complement provider never escapes the one-time build. Both
+    // physical residuals and retry GMRES use the complete induced Fock.
+    if (seeded) execution.provider = cache.complement_;
     for (std::size_t column = 0; column < plan.dimension; ++column) {
       unit_rotation<<<maps::blocks(plan.dimension), 128, 0, stream>>>(base + plan.solution,
                                                                       plan.dimension, column);
       if ((error = cudaGetLastError()) != cudaSuccess) return error;
       // The weighted-density output panel is dead until final assembly and
       // can hold an FP64 column while we encode it into the FP32 lease.
-      auto* column64 = mixed ? base + plan.weights
-                             : static_cast<double*>(cache.values_) + column * plan.dimension;
+      auto* column64 = mixed || seeded
+                           ? base + plan.weights
+                           : static_cast<double*>(cache.values_) + column * plan.dimension;
       error = apply(&execution, base + plan.solution, column64, plan.dimension, stream);
       if (error != cudaSuccess) return error;
       ++result.induced_fock_actions;
@@ -644,9 +664,15 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
         compress_column<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
             column64, static_cast<float*>(cache.values_) + column * plan.dimension, plan.dimension);
         if ((error = cudaGetLastError()) != cudaSuccess) return error;
+      } else if (seeded) {
+        accumulate_seeded_column<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
+            column64, static_cast<double*>(cache.values_) + column * plan.dimension, plan.dimension,
+            execution.status());
+        if ((error = cudaGetLastError()) != cudaSuccess) return error;
       }
       ++cache.columns_;
     }
+    execution.provider = induced_fock;
     error = checkpoint(execution, stream, failed);
     if (error != cudaSuccess) return error;
     if (failed) {

@@ -237,6 +237,39 @@ def test_native_radial_tiles_and_rigid_translation(
     np.testing.assert_allclose(response[1], 0, atol=3e-12, rtol=0)
 
 
+def test_parallel_radial_fold_preserves_tail_and_signed_contractions(
+    tmp_path: Path,
+) -> None:
+    """Forty-nine signed products cross the device tile before shell projection."""
+    fixture = _fixture(removal=True)
+    fixture["shells"][0] = (
+        0,
+        0,
+        [
+            [1.6, 0.12],
+            [1.05, -0.05],
+            [0.8, 0.7],
+            [0.41, -0.17],
+            [0.23, -0.15],
+            [0.14, 0.11],
+            [0.09, 0.3],
+        ],
+    )
+    (matrices, vectors), batched = _native(fixture, tmp_path, tile=64)
+    (split_matrices, split_vectors), split = _native(fixture, tmp_path, tile=19)
+    assert batched["parallel_actions"] > 0 and split["parallel_actions"] > 0
+    assert batched["components"] == split["components"]
+    np.testing.assert_allclose(matrices, split_matrices, atol=3e-12, rtol=3e-12)
+    np.testing.assert_allclose(vectors, split_vectors, atol=3e-12, rtol=3e-12)
+    primal, energy = _oracle(fixture)
+    np.testing.assert_allclose(
+        matrices[:2], primal(fixture["centers"]), atol=2e-11, rtol=2e-11
+    )
+    np.testing.assert_allclose(
+        vectors, _derivatives(fixture, energy, 0.002), atol=3e-7, rtol=2e-7
+    )
+
+
 @pytest.mark.parametrize("schedule", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("spherical", [False, True])
 def test_parallel_ordered_one_electron_and_bounded_fallback(
@@ -260,6 +293,14 @@ def test_native_rejects_malformed_normalized_source(
     reject: int, tmp_path: Path
 ) -> None:
     _native(_fixture(True, True), tmp_path, reject=reject)
+
+
+@pytest.mark.parametrize("schedule", [6, 7])
+def test_private_frozen_column_matches_full_action_and_checks_hints(
+    schedule: int, tmp_path: Path
+) -> None:
+    """The private probe verifies partial, absent and all-moving incidences."""
+    _native(_fixture(removal=True), tmp_path, schedule=schedule)
 
 
 @pytest.mark.parametrize("spins", [1, 2])

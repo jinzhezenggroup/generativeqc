@@ -161,10 +161,10 @@ cudaError_t CudaKsOneElectronResponse::apply(const double* direction,
 }
 cudaError_t CudaKsOneElectronResponse::enqueue_private(
     const double* direction, const integrals::CudaOneElectronWeights& weights,
-    const integrals::CudaOneElectronOutput& output, int* transaction_status,
-    cudaStream_t stream) noexcept {
+    const integrals::CudaOneElectronOutput& output, int* transaction_status, cudaStream_t stream,
+    std::size_t frozen_column) noexcept {
   return impl_ ? impl_->response.enqueue_private(direction, weights, output, transaction_status,
-                                                 stream)
+                                                 stream, frozen_column)
                : cudaErrorInvalidResourceHandle;
 }
 CudaKsOneElectronWork CudaKsOneElectronResponse::work() const noexcept {

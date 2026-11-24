@@ -557,7 +557,8 @@ struct CudaKsWb97mvHessian::Impl {
         output.core_direction = frozen_core + column * (2 * matrix);
         output.overlap_direction = output.core_direction + matrix;
         output.hvp = frozen_core + coordinates * (2 * matrix) + column * coordinates;
-        error = one_electron.enqueue_private(at(direction), weights, output, status, stream);
+        error =
+            one_electron.enqueue_private(at(direction), weights, output, status, stream, column);
         if (error == cudaSuccess) ++receipt.frozen_core_columns;
       }
       if (!frozen_exact || streamed_exact) continue;
@@ -1433,6 +1434,15 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
       check(owner->induced.retain_fixed_grid_points(std::min<std::size_t>(16ULL << 20, spare)),
             "stationary Hessian optional fixed XC residency");
+    }
+    if (owner->operator_matrix &&
+        owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64) {
+      const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
+      check(owner->induced.retain_transition_builder(owner->cpks_reference.shape(),
+                                                     std::min<std::size_t>(12ULL << 20, spare)),
+            "stationary Hessian optional CPKS XC projection");
+      owner->cpks_operator.set_build_decomposition(CudaKsWb97mvResponse::seed_local_xc,
+                                                   CudaKsWb97mvResponse::induced_nonlocal_fock);
     }
     owner->charge(owner->induced.work().device_bytes - induced_bytes);
     check(response::cuda_cpks_reference_weights(

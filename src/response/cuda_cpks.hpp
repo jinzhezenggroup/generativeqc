@@ -53,6 +53,13 @@ struct CudaCpksReference {
 using CudaCpksInducedFock = cudaError_t (*)(void*, const double*, double*, const CudaCpksShape&,
                                             cudaStream_t) noexcept;
 
+/** Optional FP64 cached-operator seed (e.g. a batched local XC projection).
+ * Column-major [rotation,rotation]. The matching build provider supplies
+ * exactly the missing terms. NotSupported is a settled refusal: no work may
+ * still borrow the target and the ordinary build overwrites every entry. */
+using CudaCpksOperatorSeed = cudaError_t (*)(void*, const CudaCpksShape&, const CudaCpksReference&,
+                                             double*, cudaStream_t) noexcept;
+
 struct CudaCpksResult {
   CudaCpksStatus status{CudaCpksStatus::running};
   CudaGmresResult gmres{};
@@ -102,6 +109,16 @@ class CudaCpksOperatorCache {
     precision_ = precision;
     ready_ = false;
     columns_ = actions_ = checks_ = 0;
+    seed_ = nullptr;
+    complement_ = nullptr;
+  }
+  /** Install an optional decomposition before this lease builds any columns.
+   * The original physical provider still owns the checked solve and fallback. */
+  void set_build_decomposition(CudaCpksOperatorSeed seed, CudaCpksInducedFock complement) noexcept {
+    if (!ready_) {
+      seed_ = seed;
+      complement_ = complement;
+    }
   }
   std::size_t columns() const noexcept { return columns_; }
   std::size_t actions() const noexcept { return actions_; }
@@ -119,6 +136,8 @@ class CudaCpksOperatorCache {
   CudaCpksShape shape_{};
   CudaCpksReference reference_{};
   CudaCpksInducedFock provider_{};
+  CudaCpksOperatorSeed seed_{};
+  CudaCpksInducedFock complement_{};
   void* context_{};
   bool ready_{};
   friend cudaError_t solve_cuda_cpks(const CudaCpksShape&, const CudaCpksOptions&,

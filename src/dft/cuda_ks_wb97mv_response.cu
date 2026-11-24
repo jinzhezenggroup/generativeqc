@@ -2,6 +2,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "dft/cuda_hessian_semilocal_model.hpp"
 #include "dft/cuda_ks_grid_reference.hpp"
@@ -19,6 +20,7 @@
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
+#include "tensor/cuda_dense_operations.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -242,18 +244,21 @@ struct ActionCounts {
 // These slots have independent owners: each Direct enqueue resets its own
 // flag. The generated maps must never clear a previous Direct failure.
 constexpr unsigned status_count = 3;
+constexpr std::size_t transition_tile_points = 128;
+constexpr std::uint64_t transition_product_limit = 64ULL << 30;
+constexpr std::uint64_t transition_correction_limit = 2ULL << 20;
 
 __device__ bool failed_action(const int* status) { return status[0] || status[1] || status[2]; }
 
 __global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
                              std::uint64_t grid_bound, std::uint64_t pair_products,
-                             ActionCounts* total, int* status) {
-  if (total->grid_actions == grid_bound) {
+                             ActionCounts* total, int* status, bool grid) {
+  if (grid && total->grid_actions == grid_bound) {
     status[0] |= 8;
     return;
   }
   // Grid quadrature was submitted even if the Fock candidate fails its audit.
-  ++total->grid_actions;
+  total->grid_actions += grid;
   if (failed_action(status)) return;
   if (counts[0] > bound || counts[2] > bound - counts[0] || counts[1] > bound ||
       counts[3] > bound - counts[1]) {
@@ -302,6 +307,10 @@ struct CudaKsWb97mvResponse::Impl {
   std::size_t arena_bytes{}, matrix{}, elements{}, map_bytes{}, compensation_elements{};
   void *map_workspace{}, *grid_workspace{};
   std::size_t grid_bytes{};
+  tensor::CudaDenseOperations transition_blas;
+  void* transition_workspace{};
+  std::size_t transition_occupied{};
+  std::uint64_t transition_products{};
   double *coulomb{}, *exchange{}, *long_range{}, *primary{}, *potential{}, *candidate{}, *zero{},
       *fitted_panel{}, *range_whitened{}, *seed{}, *exchange_coefficient{}, *range_coefficient{},
       *compensation{};
@@ -325,6 +334,8 @@ struct CudaKsWb97mvResponse::Impl {
     if (stream) (void)cudaStreamSynchronize(stream);
     scf::destroy_cuda_direct_jk_plan(range_direct);
     scf::destroy_cuda_direct_jk_plan(direct);
+    (void)transition_blas.close();
+    if (transition_workspace) (void)runtime::resource_cuda_free(transition_workspace);
     if (arena) (void)runtime::resource_cuda_free(arena);
   }
 
@@ -457,7 +468,7 @@ struct CudaKsWb97mvResponse::Impl {
   }
 
   cudaError_t evaluate(const double* density, const double* grid_potential, const double* hcore,
-                       bool response) {
+                       bool response, bool grid_action = true) {
     check(cudaMemsetAsync(status, 0, status_count * sizeof(int), stream));
     const auto* beta = source.spins == 2 ? density + matrix : nullptr;
     const auto& spec = source.primary->strategy().spec;
@@ -528,7 +539,7 @@ struct CudaKsWb97mvResponse::Impl {
       const auto pairs = static_cast<std::uint64_t>(max_points) * max_points;
       const auto grid_bound = pairs ? UINT64_MAX / pairs : UINT64_MAX;
       count_action<<<1, 1, 0, stream>>>(census, options.max_direct_eri_evaluations, grid_bound,
-                                        pair_product_bound, action_counts, status);
+                                        pair_product_bound, action_counts, status, grid_action);
       return cudaGetLastError();
     }
     int failure_flags{};
@@ -847,7 +858,8 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
 }
 
 cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* output,
-                                             cudaStream_t stream, bool private_panel) noexcept {
+                                             cudaStream_t stream, bool private_panel,
+                                             bool local_xc) noexcept {
   if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
   try {
     auto& owner = *impl_;
@@ -908,7 +920,7 @@ cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* ou
     } drain{stream, !private_panel};
     owner.used = true;
     owner.failure_check = "induced Fock XC response";
-    check(owner.grid.enqueue_private_response(direction, owner.potential, stream));
+    if (local_xc) check(owner.grid.enqueue_private_response(direction, owner.potential, stream));
     if (owner.expected.identity.model.nonlocal_grid) {
       check(owner.vv10_grid.enqueue_private_response(direction, owner.candidate, stream));
       sum_grid_potentials<<<maps::blocks(owner.elements), 128, 0, stream>>>(
@@ -916,7 +928,8 @@ cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* ou
       check(cudaGetLastError());
     }
     owner.failure_check = "induced Fock assembly and finite symmetric audit";
-    check(owner.evaluate(direction, owner.potential, owner.zero, true));
+    check(owner.evaluate(direction, local_xc ? owner.potential : owner.zero, owner.zero, true,
+                         local_xc));
     if (!private_panel) check(owner.gate());
     error = owner.authenticate(stream, private_panel);
     if (error != cudaSuccess) {
@@ -983,6 +996,118 @@ cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t max_bytes
   return cudaSuccess;
 }
 
+cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::CudaCpksShape& shape,
+                                                            std::size_t max_bytes) noexcept {
+  if (!impl_ || !impl_->ready || impl_->used) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  const auto axes = owner.grid.transition_axes();
+  const auto points = owner.reference.shape().points;
+  const auto occupied = shape.occupied[0];
+  if (owner.transition_workspace || shape.spins != 1 || owner.source.spins != 1 ||
+      shape.nao != owner.source.nao || shape.nao < 32 || shape.nao > 96 || !occupied ||
+      occupied >= shape.nao || points < 4096 || (axes != 4 && axes != 5) || owner.fitted ||
+      owner.source.correction || owner.expected.identity.model.nonlocal_grid)
+    return cudaSuccess;
+  const auto rotations = occupied * (shape.nao - occupied);
+  const auto products_per_point = axes * rotations * rotations;
+  if (points > transition_product_limit / products_per_point) return cudaSuccess;
+  const auto bytes =
+      (2 * axes * rotations + 4 * shape.nao) * transition_tile_points * sizeof(double) +
+      sizeof(double);
+  if (bytes > std::min(max_bytes, owner.options.max_device_bytes - owner.receipt.device_bytes))
+    return cudaSuccess;
+  auto error = owner.authenticate(owner.stream);
+  if (error != cudaSuccess) return error;
+  error = runtime::resource_cuda_malloc(&owner.transition_workspace, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  auto library = owner.transition_blas.create();
+  if (library == CUBLAS_STATUS_SUCCESS) library = owner.transition_blas.bind(owner.stream);
+  if (library != CUBLAS_STATUS_SUCCESS) {
+    (void)owner.transition_blas.close();
+    return runtime::resource_cuda_free(std::exchange(owner.transition_workspace, nullptr));
+  }
+  owner.transition_occupied = occupied;
+  owner.transition_products = products_per_point * points;
+  owner.receipt.device_bytes += bytes;
+  return cudaSuccess;
+}
+
+cudaError_t CudaKsWb97mvResponse::seed_local_xc(void* context, const response::CudaCpksShape& shape,
+                                                const response::CudaCpksReference& reference,
+                                                double* matrix, cudaStream_t stream) noexcept {
+  if (!context || !matrix) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.impl_ || !self.impl_->ready) return cudaErrorInvalidResourceHandle;
+  auto& owner = *self.impl_;
+  if (!owner.transition_workspace || shape.nao != owner.source.nao || shape.spins != 1 ||
+      shape.occupied[0] != owner.transition_occupied ||
+      reference.coefficient_layout != response::CudaCpksLayout::column_major ||
+      reference.coefficients != owner.frame.coefficients || reference.stream != owner.stream)
+    return cudaErrorNotSupported;
+  auto error = owner.authenticate(stream);
+  if (error != cudaSuccess) return error;
+  const auto axes = owner.grid.transition_axes();
+  const auto points = owner.reference.shape().points;
+  const auto rotations = owner.transition_occupied * (shape.nao - owner.transition_occupied);
+  const auto panel = axes * rotations * transition_tile_points;
+  auto* fields = static_cast<double*>(owner.transition_workspace);
+  auto* tangents = fields + panel;
+  auto* jets = tangents + panel;
+  auto* refused = reinterpret_cast<int*>(jets + 4 * shape.nao * transition_tile_points);
+  static_assert(2 * sizeof(int) <= sizeof(double));
+  auto* correction_count = refused + 1;
+  error = cudaMemsetAsync(refused, 0, 2 * sizeof(int), stream);
+  if (error != cudaSuccess) return error;
+  error = owner.grid.enqueue_transition_census(correction_count, stream);
+  int correction_points{};
+  if (error == cudaSuccess)
+    error = cudaMemcpyAsync(&correction_points, correction_count, sizeof(int),
+                            cudaMemcpyDeviceToHost, stream);
+  const auto counted = cudaStreamSynchronize(stream);
+  if (counted != cudaSuccess) return counted;
+  if (error != cudaSuccess) return error;
+  if (correction_points < 0 ||
+      static_cast<std::uint64_t>(correction_points) > transition_correction_limit / rotations)
+    return cudaErrorNotSupported;
+  std::uint64_t products{};
+  // A unit RKS rotation yields 4 times the bilinear feature (occupation
+  // two and two mirrored density legs). The OV projection reads one leg.
+  constexpr double occupation_and_lift = 4.0, zero = 0.0, one = 1.0;
+  for (std::size_t begin = 0; begin < points && error == cudaSuccess;) {
+    const auto count = std::min(points - begin, transition_tile_points);
+    error = owner.grid.enqueue_transition_tile(reference.coefficients, owner.transition_occupied,
+                                               begin, count, jets, fields, tangents,
+                                               correction_points != 0, refused, stream);
+    if (error != cudaSuccess) break;
+    const auto rows = static_cast<int>(axes * count);
+    const auto columns = static_cast<int>(rotations);
+    const auto result = owner.transition_blas.product(true, false, columns, columns, rows,
+                                                      &occupation_and_lift, fields, rows, tangents,
+                                                      rows, begin ? &one : &zero, matrix, columns);
+    if (result != CUBLAS_STATUS_SUCCESS) {
+      error = cudaErrorNotSupported;
+      break;
+    }
+    products += rotations * rotations * rows;
+    begin += count;
+  }
+  int refused_host{};
+  if (error == cudaSuccess)
+    error = cudaMemcpyAsync(&refused_host, refused, sizeof(int), cudaMemcpyDeviceToHost, stream);
+  const auto settled = cudaStreamSynchronize(stream);
+  owner.grid.record_transition_projection(products, correction_points * rotations);
+  if (settled != cudaSuccess) return settled;
+  if (error != cudaSuccess) return error;
+  error = owner.authenticate(stream);
+  if (error != cudaSuccess) return error;
+  if (refused_host || products != owner.transition_products) return cudaErrorNotSupported;
+  return cudaSuccess;
+}
+
 cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
   if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
   auto& owner = *impl_;
@@ -1024,6 +1149,18 @@ cudaError_t CudaKsWb97mvResponse::induced_fock(void* context, const double* dire
   if (!self.impl_ || shape.nao != self.impl_->source.nao || shape.spins != self.impl_->source.spins)
     return cudaErrorInvalidValue;
   return self.apply_impl(direction, output, stream, true);
+}
+
+cudaError_t CudaKsWb97mvResponse::induced_nonlocal_fock(void* context, const double* direction,
+                                                        double* output,
+                                                        const response::CudaCpksShape& shape,
+                                                        cudaStream_t stream) noexcept {
+  if (!context) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.impl_ || !self.impl_->transition_workspace || shape.nao != self.impl_->source.nao ||
+      shape.spins != 1 || shape.occupied[0] != self.impl_->transition_occupied)
+    return cudaErrorInvalidValue;
+  return self.apply_impl(direction, output, stream, true, false);
 }
 
 }  // namespace generativeqc::dft

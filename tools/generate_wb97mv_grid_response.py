@@ -91,6 +91,20 @@ def _potential_point_product(name: str, root: Node, *, moving: bool) -> str:
         f"    result[{slot}] = {' + '.join(terms) or '0.0'};"
         for slot, terms in enumerate(by_row)
     )
+    transition = ""
+    if not moving:
+        # Lower the same density adjoint on an occupied/virtual pair of MO jets.
+        fields = [[] for _ in coefficients]
+        for (index, scale), products in grouped.items():
+            fields[index].append(f"({float(scale):.17g}) * ({' + '.join(products)})")
+        assignments = "\n".join(
+            f"    result[{index}] = {' + '.join(terms) or '0.0'};"
+            for index, terms in enumerate(fields)
+        )
+        transition = (
+            " __device__ static void transition(const double* row, const double* column, double* result) {\n"
+            f"{assignments}\n }}\n"
+        )
     return (
         f"struct {name} {{\n"
         f" static constexpr unsigned ao_count = {len(ao)}, weight_count = {len(coefficients)};\n"
@@ -100,7 +114,9 @@ def _potential_point_product(name: str, root: Node, *, moving: bool) -> str:
         " }\n"
         " __device__ static void right_transform(const double* column, const double* weights, double* result) {\n"
         f"{transformed}\n"
-        " }\n};"
+        " }\n"
+        f"{transition}"
+        "};"
     )
 
 

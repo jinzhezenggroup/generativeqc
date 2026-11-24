@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -165,7 +166,7 @@ void run(const char* input_path, const char* output_path) {
   const auto weights = read<double>(input, 4 * matrix);
   CudaOneElectronOptions options;
   options.radial_tile = header[3];
-  if (header[5] == 1) options.parallel_streams = 0;
+  if (header[5] == 1 || header[5] == 7) options.parallel_streams = 0;
   if (header[5] == 2) options.max_parallel_workspace_bytes = 1;
   if (header[5] == 3) options.max_parallel_tasks = 1;
   if (header[5] == 4) options.parallel_streams = 2;
@@ -253,14 +254,55 @@ void run(const char* input_path, const char* output_path) {
               "failed source action published partial output");
   };
   auto* transaction = reinterpret_cast<int*>(storage.allocate(1));
-  const auto private_status = [&] {
+  const auto private_status = [&](std::size_t column = SIZE_MAX) {
     check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
-    check(response.enqueue_private(motion, source, output, transaction, storage.stream));
+    check(response.enqueue_private(motion, source, output, transaction, storage.stream, column));
     check(cudaStreamSynchronize(storage.stream));
     int status{};
     check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
     return status;
   };
+  if (header[5] == 6 || header[5] == 7) {
+    auto frozen_direction = std::vector<double>(direction.size(), 0);
+    frozen_direction.front() = 1;
+    check(cudaMemcpy(motion, frozen_direction.data(), direction.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    for (unsigned panel : {1U, 3U})
+      check(cudaMemset(panels + panel * matrix, 0, matrix * sizeof(double)));
+    check(response.apply(motion, source, output, storage.stream));
+    std::array<std::vector<double>, 6> full;
+    for (unsigned index : {2U, 3U, 5U}) full[index] = download(pointers[index], counts[index]);
+    sentinel();
+    require(private_status(1), "wrong frozen-column hint was accepted");
+    unchanged();
+    const double moving_weight = 1;
+    check(cudaMemcpy(panels + matrix, &moving_weight, sizeof(double), cudaMemcpyHostToDevice));
+    require(private_status(0), "nonzero weight motion was accepted for a frozen column");
+    unchanged();
+    check(cudaMemset(panels + matrix, 0, sizeof(double)));
+    const auto prior = response.work().component_evaluations;
+    require(!private_status(0), "valid frozen column refused");
+    const auto evaluated = response.work().component_evaluations - prior;
+    require(
+        evaluated > 0 && (header[5] == 6 ? evaluated < receipt.component_evaluations_per_action
+                                         : evaluated == receipt.component_evaluations_per_action),
+        "frozen column selected the wrong work bound");
+    for (unsigned index = 0; index < 6; ++index) {
+      const auto actual = download(pointers[index], counts[index]);
+      if (full[index].empty()) {
+        require(actual == std::vector<double>(counts[index], 27),
+                "frozen action wrote a value or gradient panel");
+      } else {
+        for (std::size_t element = 0; element < actual.size(); ++element)
+          require(std::abs(actual[element] - full[index][element]) < 3e-12,
+                  "frozen direction disagrees with the complete action");
+      }
+    }
+    check(cudaMemcpy(motion, direction.data(), direction.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(cudaMemcpy(panels, weights.data(), weights.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+  }
   sentinel();
   require(response.apply(motion, source, output, nullptr) == cudaErrorInvalidResourceHandle,
           "foreign stream admitted");

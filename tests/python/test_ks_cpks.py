@@ -32,12 +32,18 @@ def _inverse_root(matrix: np.ndarray) -> np.ndarray:
     return (vectors / np.sqrt(energies)) @ vectors.T
 
 
-def _model(nao: int, counts: tuple[int, ...], *, degenerate: bool = False) -> dict:
+def _model(
+    nao: int,
+    counts: tuple[int, ...],
+    *,
+    degenerate: bool = False,
+    orthogonal: bool = False,
+) -> dict:
     random = np.random.default_rng(1924 + sum(counts))
     spins = len(counts)
     occupation = 2 if spins == 1 else 1
     raw = random.normal(scale=0.08, size=(nao, nao))
-    overlap = np.eye(nao) + raw @ raw.T
+    overlap = np.eye(nao) if orthogonal else np.eye(nao) + raw @ raw.T
     inverse_root = _inverse_root(overlap)
     coefficients, energies = [], []
     for count in counts:
@@ -578,6 +584,33 @@ def test_cached_operator_checks_physical_not_just_materialized_residual(
     assert result["physical_checks"] == 1
     assert np.all(np.array(result["density"]) == 9817)
     assert np.all(np.array(result["weights"]) == -3277)
+
+
+@pytest.mark.parametrize(
+    "mode", ["cached-seed", "cached-seed-refused", "cached-seed-bad"]
+)
+def test_cached_operator_seed_and_refusal_use_full_physical_gate(
+    cpks_probe: Path, mode: str
+) -> None:
+    """Split off 2λ in an independent RKS rotation model; audit before publication."""
+    model = _model(5, (2,), orthogonal=True)
+    result = _native(cpks_probe, model, layout="column", mode=mode)
+    assert result["cuda_error"] == 0 and result["seeds"] == 1
+    assert result["physical_checks"] == 1
+    assert result["complements"] == (0 if mode == "cached-seed-refused" else 6)
+    if mode == "cached-seed-bad":
+        assert not result["converged"]
+        assert np.all(np.array(result["density"]) == 9817)
+        assert np.all(np.array(result["weights"]) == -3277)
+        return
+    assert result["converged"] and result["residual"] <= result["tolerance"]
+    for key, expected in zip(("density", "weights"), _oracle(model, 1e-4), strict=True):
+        np.testing.assert_allclose(
+            np.array(result[key]).reshape(expected.shape),
+            expected,
+            atol=3e-8,
+            rtol=3e-7,
+        )
 
 
 def test_cached_operator_rebuilds_after_physical_residual_rejection(

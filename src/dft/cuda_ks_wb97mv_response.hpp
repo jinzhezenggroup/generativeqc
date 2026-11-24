@@ -86,6 +86,15 @@ class CudaKsWb97mvResponse {
                                        std::string& detail);
   /** Spend only the remaining enclosing budget on fixed semilocal XC work. */
   cudaError_t retain_fixed_grid_points(std::size_t maximum_additional_bytes) noexcept;
+  /** Bound the optional one-time RKS transition projection scratch and work. */
+  cudaError_t retain_transition_builder(const response::CudaCpksShape& shape,
+                                        std::size_t maximum_additional_bytes) noexcept;
+  static cudaError_t seed_local_xc(void* context, const response::CudaCpksShape& shape,
+                                   const response::CudaCpksReference& reference, double* matrix,
+                                   cudaStream_t stream) noexcept;
+  static cudaError_t induced_nonlocal_fock(void* context, const double* direction, double* output,
+                                           const response::CudaCpksShape& shape,
+                                           cudaStream_t stream) noexcept;
   /** Enqueue into CPKS's private output; audit failure poisons the panel.
    * CPKS owns stream completion and failure draining. Do not expose this panel
    * without checking it. Call collect_work at the outer endpoint boundary. */
@@ -95,7 +104,7 @@ class CudaKsWb97mvResponse {
 
  private:
   cudaError_t apply_impl(const double* direction, double* output, cudaStream_t stream,
-                         bool private_panel) noexcept;
+                         bool private_panel, bool local_xc = true) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

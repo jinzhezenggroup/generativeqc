@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/frozen_one_electron_centers.hpp",
+  "role": "runtime",
+  "subsystem": "one_electron_derivatives",
+  "reason": "Shared host/device center-incidence predicate for the authenticated frozen Cartesian column schedule. It identifies geometrically inactive integral records without supplying derivative arithmetic or changing generic directional actions.",
+  "regions": []
+}
