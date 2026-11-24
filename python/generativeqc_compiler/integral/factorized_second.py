@@ -344,11 +344,10 @@ def _cuda_prepared_low_degree_source() -> str:
                 left
                 * right
                 * states[
-                    tuple(
-                        bra_degree + ket_degree
-                        for bra_degree, ket_degree in zip(
-                            left_orders, right_orders, strict=True
-                        )
+                    (
+                        left_orders[0] + right_orders[0],
+                        left_orders[1] + right_orders[1],
+                        left_orders[2] + right_orders[2],
                     )
                 ]
                 for left_orders, left in _pair_expansion(graph, first, first_inverse)

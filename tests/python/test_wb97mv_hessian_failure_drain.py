@@ -233,7 +233,11 @@ def _translation_unit(source: str) -> str:
         + uploads
         + "return 0;}catch(...){return 17;}}\n"
     )
-    return _RUNTIME + guard + methods + prepare + _MAIN
+    geometry = (
+        '#include "dft/cuda_grid_geometry.hpp"\n'
+        "using generativeqc::dft::cuda_grid_cartesian_repair_exhausted;\n"
+    )
+    return _RUNTIME + geometry + guard + methods + prepare + _MAIN
 
 
 def test_stationary_failure_paths_drain_borrows(
@@ -242,8 +246,13 @@ def test_stationary_failure_paths_drain_borrows(
     source = (_ROOT / "src/dft/cuda_ks_wb97mv_hessian.cu").read_text()
     fixture = tmp_path / "stationary_lifetime.cpp"
     fixture.write_text(_translation_unit(source))
+    # The queued CUDA double already supplies the runtime types used by the
+    # real geometry header. Resolve its CUDA include without needing a toolkit.
+    (tmp_path / "cuda_runtime_api.h").touch()
     executable = native_cxx.build_executable(
-        [fixture], tmp_path / "stationary_lifetime", compile_args=("-std=c++20", "-O0")
+        [fixture],
+        tmp_path / "stationary_lifetime",
+        compile_args=("-std=c++20", "-O0", f"-I{tmp_path}", f"-I{_ROOT / 'src'}"),
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, check=False, timeout=30
