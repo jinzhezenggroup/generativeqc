@@ -978,8 +978,8 @@ extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(
                     buffers[second].bytes))
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 #if GENERATIVEQC_HAS_HOST_HESSIAN
-    auto host_workspace = batch->host_lease ? batch->host_lease->use_workspace()
-                                             : std::unique_lock<std::mutex>{};
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     dft::CudaKsFinalStateToken token;
     std::string detail;
     require(methods::detail::dft_final_state_token(*batch->plan, index, token, detail), detail);

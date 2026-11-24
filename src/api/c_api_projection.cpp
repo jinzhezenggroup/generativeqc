@@ -186,7 +186,8 @@ extern "C" generativeqc_status generativeqc_system_cross_overlap_host_v1(
     const generativeqc_system* source, std::size_t maximum_bytes, double* output,
     std::size_t output_count, std::size_t* required_bytes, const double* subtract_from_target) {
   if (!context || !target || !source ||
-      (output ? required_bytes != nullptr : !required_bytes || output_count || subtract_from_target))
+      (output ? required_bytes != nullptr
+              : !required_bytes || output_count || subtract_from_target))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard lock(context->mutex);
   try {

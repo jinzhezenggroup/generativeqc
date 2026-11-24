@@ -203,8 +203,7 @@ std::vector<double> contract_weighted_one_electron_derivative(
 /** Modeled cross-overlap provider payload from validated basis layouts only.
  * Includes AO maps, centres and the largest serial build/recurrence workspace;
  * excludes the input systems, caller's metric and allocator overhead. */
-std::size_t cross_overlap_workspace_bytes(const core::System& target,
-                                          const core::System& source);
+std::size_t cross_overlap_workspace_bytes(const core::System& target, const core::System& source);
 
 /**
  * Write a row-major rectangular <target AO | source AO> overlap on the CPU.

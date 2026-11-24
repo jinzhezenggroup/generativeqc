@@ -1792,8 +1792,7 @@ void position_integrals(const core::System& system, std::span<double> output) {
   }
 }
 
-std::size_t cross_overlap_workspace_bytes(const core::System& target,
-                                          const core::System& source) {
+std::size_t cross_overlap_workspace_bytes(const core::System& target, const core::System& source) {
   struct Side {
     std::size_t payload, build_workspace, maximum_angular;
   };
@@ -1814,8 +1813,8 @@ std::size_t cross_overlap_workspace_bytes(const core::System& target,
       // Spherical construction temporarily owns both component lists and the
       // shell-local expansions before packing into the retained global map.
       if (spherical) {
-        const auto shell_terms = angular > 3 ?
-            std::max(terms, molecule::kMaximumAuxiliaryAoExpansionTerms) : terms;
+        const auto shell_terms =
+            angular > 3 ? std::max(terms, molecule::kMaximumAuxiliaryAoExpansionTerms) : terms;
         const auto local_expansion_bytes =
             sizeof(molecule::AoExpansion) + shell_terms * sizeof(molecule::CartesianExpansionTerm);
         build = checked_sum(checked_product(2, components),
