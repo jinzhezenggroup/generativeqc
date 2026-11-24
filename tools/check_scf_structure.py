@@ -483,7 +483,9 @@ CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
-CUDA_MODULES["cuda_direct_response_pair_consumer"] = ("direct_response_pair_kernels.cu",)
+CUDA_MODULES["cuda_direct_response_pair_consumer"] = (
+    "direct_response_pair_kernels.cu",
+)
 CUDA_ALLOWED["cuda_direct_response_pair_consumer"] = (
     "scf/cuda/direct_queue_index.cuh",
     "scf/cuda/direct_response_pair_kernels.hpp",
