@@ -269,9 +269,27 @@ def prepare_named_batch(
     cold_rks_fock: _native.RksColdFockOptions | None = None,
     cpu_df_host_budget: tuple[int, int] | None = None,
     host_resources: Any = None,
+    host_hessian_budget: tuple[int, int] | None = None,
 ) -> int:
     """Pass controls plus a pinned full identity to the selected library."""
-    if cold_rks_fock is not None:
+    if host_hessian_budget is not None:
+        if (
+            host_resources is None
+            or resources is not None
+            or cold_rks_fock is not None
+            or cpu_df_host_budget is not None
+        ):
+            raise ValueError("incompatible named CPU Hessian host admission controls")
+        prepare = getattr(
+            library,
+            "generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1",
+            None,
+        )
+        if prepare is None:
+            raise NotImplementedError(
+                "native shared host Hessian preparation is unavailable"
+            )
+    elif cold_rks_fock is not None:
         if resources is not None:
             raise NotImplementedError(
                 "cold RKS Fock damping does not support device resources"
@@ -297,6 +315,8 @@ def prepare_named_batch(
     prepare.argtypes += [ct.c_uint32]
     if resources is not None:
         prepare.argtypes += [ct.c_void_p]
+    if host_hessian_budget is not None:
+        prepare.argtypes += [ct.c_void_p, ct.c_uint64, ct.c_uint64]
     prepare.argtypes += [ct.POINTER(ct.c_void_p)]
     prepare.restype = ct.c_int
     named = _native.NamedKsDescriptor(
@@ -328,6 +348,8 @@ def prepare_named_batch(
     arguments.append(flags)
     if resources is not None:
         arguments.append(resources)
+    if host_hessian_budget is not None:
+        arguments.extend((host_resources, *host_hessian_budget))
     return prepare(*arguments, output)
 
 
