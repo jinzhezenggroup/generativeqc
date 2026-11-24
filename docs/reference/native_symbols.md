@@ -34,6 +34,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
 - [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
 - [generativeqc_cbs_extrapolation_query_v1](#native-c-generativeqc-cbs-extrapolation-query-v1)
+- [generativeqc_cbs_compose_v1](#native-c-generativeqc-cbs-compose-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -873,6 +874,38 @@ solve, basis lookup, Python/compiler, device work, callback or implicit retry.
 
 **Units.** Exponents, cardinal numbers, weights and coefficients are dimensionless.
 Complete component energies/forces retain Hartree and Hartree/Bohr units.
+
+(native-c-generativeqc-cbs-compose-v1)=
+## generativeqc_cbs_compose_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_compose_v1 ( const generativeqc_cbs_extrapolation_plan_v1 * plan , const generativeqc_cbs_observables_v1 * components , generativeqc_cbs_composition_v1 * output ) ;
+```
+
+**Behavior.** Assemble completed focal-point energy and analytic force components
+with the selected extrapolation plan. Form correlation differences before
+weighting. No component execution or convergence certification is implied.
+
+**Inputs.** Current-ABI plan, six finite completed components, and output header.
+Forces are all omitted (count and capacity zero) or match one nonzero xyz
+extent. Caller authenticates model, geometry, backend and convergence.
+
+**Outputs.** Four energies and, if requested, four equal contiguous force blocks.
+On failure all output bytes remain unchanged.
+
+**Errors.** INVALID_ARGUMENT for missing data or invalid dimensions;
+ABI_MISMATCH for incompatible headers; NUMERICAL_FAILURE for nonfinite
+values or intermediates; OUT_OF_MEMORY if force staging cannot be allocated.
+
+**Lifetime.** No storage retained. The force output and output descriptor must
+be disjoint. Input component arrays may share storage with one another.
+
+**Execution.** Synchronous host composition with at most four force blocks of
+staging. No electronic solve, device, compiler or implicit retry.
+
+**Units.** Hartree and Hartree/Bohr; weights are dimensionless.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1
