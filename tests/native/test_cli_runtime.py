@@ -1014,6 +1014,65 @@ class RuntimeTests(unittest.TestCase):
                         ),
                     )
 
+    def test_direct_cpu_uhf_run_enforces_quoted_host_peak(self) -> None:
+        molecule = self.root / "heh.xyz"
+        molecule.write_text("2\nBohr\nHe .03 -.02 .01\nH .15 .13 1.5\n")
+        trace = self.root / "uhf-host.jsonl"
+        self.env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(trace)
+        common = (
+            str(molecule),
+            "--units",
+            "bohr",
+            "--method",
+            "uhf",
+            "--multiplicity",
+            "2",
+        )
+        for representation, product in (
+            ("cartesian", ()),
+            ("spherical", ("--forces",)),
+        ):
+            with self.subTest(representation=representation, product=product):
+                flags = (*common, "--representation", representation, *product)
+                plan = self.cli("resources", *flags)
+                self.assertEqual(plan.returncode, 0, plan.stderr)
+                peak = json.loads(plan.stdout)["peak_bytes"]["host"]
+                short = self.cli("run", *flags, "--host-bytes", str(peak - 1), "--json")
+                self.assertNotEqual(short.returncode, 0)
+                self.assertEqual(short.stdout, "")
+                self.assertIn("allocation inventory exceeds host budget", short.stderr)
+                self.assertFalse(trace.exists())
+
+                exact = self.cli("run", *flags, "--host-bytes", str(peak), "--json")
+                self.assertEqual(exact.returncode, 0, exact.stderr)
+                self.assertTrue(trace.exists())
+                unbounded = self.cli("run", *flags, "--json")
+                self.assertEqual(unbounded.returncode, 0, unbounded.stderr)
+                result = json.loads(exact.stdout)
+                self.assertEqual(
+                    result.pop("resource_admission"),
+                    {
+                        "modeled_host_peak_bytes": peak,
+                        "effective_host_limit_bytes": peak,
+                    },
+                )
+                self.assertEqual(result, json.loads(unbounded.stdout))
+                trace.unlink()
+
+        fitted = self.cli(
+            "run",
+            *common,
+            "--density-fitting",
+            "cpu",
+            "--host-bytes",
+            "1048576",
+            "--json",
+        )
+        self.assertNotEqual(fitted.returncode, 0)
+        self.assertEqual(fitted.stdout, "")
+        self.assertIn("requires a supported FP64 CPU HF or KS inventory", fitted.stderr)
+        self.assertFalse(trace.exists())
+
     def test_cpu_hf_cli_fleet_uses_shared_native_aggregation(self) -> None:
         """Homogeneous CLI batches and native ragged descriptors have equal bounds."""
         library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
@@ -2492,7 +2551,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(payload["forces_hartree_per_bohr"], [[0.0, 0.0, 0.0]])
         planned = self.cli("resources", *flags)
         self.assertEqual(planned.returncode, 0, planned.stderr)
-        self.assertGreater(json.loads(planned.stdout)["ecp_workspace"], 0)
+        ecp_plan = json.loads(planned.stdout)
+        self.assertGreater(ecp_plan["ecp_workspace"], 0)
+        capped = self.cli(
+            "run", *flags, "--host-bytes", str(ecp_plan["peak_bytes"]["host"]), "--json"
+        )
+        self.assertNotEqual(capped.returncode, 0)
+        self.assertEqual(capped.stdout, "")
+        self.assertIn("CPU UHF requires an all-electron basis", capped.stderr)
 
         # The same basis has an analytically solvable two-electron singlet at
         # charge -1. Its ECP disables the automatic seed, not the target RHF.
