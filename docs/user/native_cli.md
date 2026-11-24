@@ -799,9 +799,12 @@ carrier enum does not admit hybrid or range-separated graphs. On CPU, canonical
 PBE0-D3(BJ) RKS combines the ordinary CPU PBE0 inventory with the same native D3
 capacity query. The bare and D3(BJ)-corrected canonical CPU B3LYP variants
 use the same full-range hybrid allocation layout, with the D3 owner charged
-only for the corrected variants. This does not admit B3LYP-D4, other B3LYP
-variants, CUDA hybrids or density fitting. Correction plan and
-execution storage remains resident per item, including replicated CUDA tables.
+only for the corrected variants. The canonical B3LYP and PBE0 D4(BJ-EEQ-ATM)
+RKS/UKS programs and their exact aliases use this full-range layout plus the
+native D4 fleet query for Direct FP64 all-electron energy and forces. Their
+inventory does not admit packed ERIs, ECPs, derivatives beyond forces, CUDA
+hybrids, or density fitting. Correction plan and execution storage remains
+resident per item, including replicated CUDA tables.
 `correction_inventory` reports those capacities and the equal-share minimum
 for `--dispersion-memory-bytes`. Both this local limit and the complete host/
 device budgets must fit. The legacy `pbe-d4-rks` selector, gCP composites, CUDA

@@ -459,7 +459,12 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
       (cpu_program && matches_ks_inventory(ks_program, {"lda_xc_pw-rks", "lda_xc_pw-uks"}));
   const bool pbe = options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
                    (cpu_program && matches_ks_inventory(ks_program, {"pbe-rks", "pbe-uks"}));
+  const bool cpu_hybrid_d4 =
+      cpu_program && options.composition &&
+      matches_ks_inventory(ks_program, {"b3lyp-d4(bj-eeq-atm)-rks", "b3lyp-d4(bj-eeq-atm)-uks",
+                                        "pbe0-d4(bj-eeq-atm)-rks", "pbe0-d4(bj-eeq-atm)-uks"});
   const bool correction_program = pbe_dispersion_inventory(options) || cpu_pbe0_bj ||
+                                  cpu_hybrid_d4 ||
                                   (cpu_b3lyp && options.composition->dispersion.kind);
   const bool d4 = correction_program && options.composition->dispersion.kind == 3;
   const bool gga = pbe || cpu_pbe0 || cpu_b3lyp || correction_program;
@@ -531,10 +536,16 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   if (!hf && !ks) {
     plan["diagnostic"] =
         "native resource inventory requires RHF/UHF, LDA/PBE RKS/UKS, a named "
-        "PBE D3/D4 program, or qualified CPU PBE0/B3LYP energy";
+        "PBE D3/D4 program, or a qualified CPU PBE0/B3LYP program";
     return finish();
   }
   if (ks_program && ks) plan["method_ir_identity"] = ks_program->identity;
+  // Keep the new D4 slice on the ordinary Direct layout; packed resource
+  // admission has separate retained-ERI and derivative-provider contracts.
+  if (cpu_hybrid_d4 && packed_cap) {
+    plan["diagnostic"] = "CPU hybrid D4 inventory excludes packed Coulomb ERIs";
+    return finish();
+  }
   if (!derivative && packed_cap &&
       (!cpu_backend || !ks || !options.composition || options.composition->range_omega != 0 ||
        options.composition->nonlocal.variant)) {
@@ -596,6 +607,12 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     expanded_basis = &local_basis;
   }
   const auto& basis = *expanded_basis;
+  if (cpu_hybrid_d4 && (!basis.ecp_terms.empty() ||
+                        std::any_of(basis.core_electrons.begin(), basis.core_electrons.end(),
+                                    [](auto core) { return core != 0; }))) {
+    plan["diagnostic"] = "CPU hybrid D4 inventory requires an all-electron basis";
+    return finish();
+  }
   const auto orbital = topology(basis);
   const Bytes spins =
       ks && ks_program
