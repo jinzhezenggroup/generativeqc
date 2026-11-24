@@ -32,7 +32,12 @@ from generativeqc_compiler.method.dispersion import (
     DispersionCorrectionPrimitive,
 )
 from generativeqc_compiler.method.ks_execution import (
+    KsExecutionPlan,
     compile_ks_execution_plan,
+)
+from generativeqc_compiler.method.native_carriers import (
+    electronic_carrier,
+    is_pbe_d4_composition,
 )
 from generativeqc_compiler.method.spec import (
     METHOD_CATALOG,
@@ -66,6 +71,7 @@ class Row:
     nonlocal_correlation: tuple[int, float, float, float] = (0, 0.0, 0.0, 0.0)
     dispersion: tuple[float | int, ...] = (0,) + (0.0,) * 16
     bound_basis: bool = False
+    registry_carrier: str | None = None
 
 
 def _match_curated(plan: Any) -> Any:
@@ -205,6 +211,26 @@ def _admit(plan: Any) -> tuple[bool, bool, str, str]:
     return False, False, "", "no qualified native semilocal lowerer for this graph"
 
 
+def _registry_carrier(plan: KsExecutionPlan, bound_basis: bool) -> str | None:
+    """Project a represented named graph, separately from its preparation carrier."""
+    spin = plan.method.spin
+    suffix = "rks" if spin == "unpolarized" else "uks"
+    if bound_basis:
+        return f"r2scan-{suffix}"
+    if not plan.post_scf:
+        return f"pbe-{suffix}"
+    if len(plan.post_scf) != 1 or not isinstance(
+        plan.post_scf[0], DispersionCorrectionPrimitive
+    ):
+        return None
+    if is_pbe_d4_composition(plan.method):
+        return "pbe-d4-rks"
+    try:
+        return electronic_carrier(plan.semilocal.functional.ingredients, spin)
+    except NotImplementedError:
+        return None
+
+
 def _row(identifier: str, spin: str) -> Row:
     suffix = "rks" if spin == "unpolarized" else "uks"
     source = identifier
@@ -217,6 +243,7 @@ def _row(identifier: str, spin: str) -> Row:
     nonlocal_correlation = (0, 0.0, 0.0, 0.0)
     dispersion = (0,) + (0.0,) * 16
     bound_basis = False
+    registry_carrier = None
     try:
         method = resolve_method(identifier, spin=spin)
         source = method.identifier
@@ -288,6 +315,7 @@ def _row(identifier: str, spin: str) -> Row:
             fock_coefficients = tuple(
                 float(term.fock_coefficient) for term in plan.exchange
             )
+            registry_carrier = _registry_carrier(plan, bound_basis)
     except (TypeError, ValueError, NotImplementedError) as error:
         reason = f"MethodIR is not natively representable: {error}"
         cpu = cuda = False
@@ -310,6 +338,7 @@ def _row(identifier: str, spin: str) -> Row:
         nonlocal_correlation=nonlocal_correlation,
         dispersion=dispersion,
         bound_basis=bound_basis,
+        registry_carrier=registry_carrier,
     )
 
 
@@ -328,7 +357,11 @@ def rows() -> tuple[Row, ...]:
             result[item.name] = item
             prefix = "libxc:" if spin == "unpolarized" else "libxc-uks:"
             result[prefix + identifier.lower()] = replace(
-                item, name=prefix + identifier.lower()
+                item,
+                name=prefix + identifier.lower(),
+                # The basis-bound composite is public under its manifest
+                # names only, not as a Libxc electronic selector.
+                registry_carrier=None if item.bound_basis else item.registry_carrier,
             )
     # Atomic selectors share the same semantic specialization policy as recipes.
     for functional_name in sorted(POINTWISE_BULK_COMPONENTS):
@@ -473,6 +506,8 @@ def _bound_basis_cpp() -> list[str]:
 
 
 def render(items: tuple[Row, ...]) -> str:
+    manifest = json.loads((ROOT / "manifests/public_methods.json").read_text())
+    method_symbols = {entry["name"]: entry["symbol"] for entry in manifest["methods"]}
     components: list[tuple[str, float]] = []
     exchanges: list[tuple[int, float, float, float]] = []
     rows_cpp = []
@@ -511,6 +546,9 @@ def render(items: tuple[Row, ...]) -> str:
             "&kBoundBasis" if row.bound_basis else "nullptr",
             "kBoundBasisName" if row.bound_basis else '""',
             "kBoundBasisIdentity" if row.bound_basis else '""',
+            f"GENERATIVEQC_METHOD_{method_symbols[row.registry_carrier]}"
+            if row.registry_carrier is not None
+            else "0",
         )
         rows_cpp.append("    {" + ", ".join(fields) + "},")
     output = [
