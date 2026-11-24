@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from generativeqc import _native, ks, method_capabilities
-from generativeqc._generated_methods import METHOD_NAME_TO_ID
+from generativeqc._generated_methods import COMPOSITE_METHOD_ALIASES, METHOD_NAME_TO_ID
 from generativeqc._named_ks import registry_carrier
 
 from tools.generate_cli_method_catalog import rows, selector_aliases
@@ -39,17 +39,21 @@ def test_native_catalog_preserves_compiler_carrier_projection(
         *by_name.items(),
         *((alias, by_name[target]) for alias, target in selector_aliases(catalog)),
     ):
-        if (not row.cpu and not row.cuda) or row.dispersion[0]:
+        if (
+            (not row.cpu and not row.cuda)
+            or (row.bound_basis and name.startswith("libxc"))
+            or ks.parse_automatic_libxc_selector(name)
+        ):
             assert registry_carrier(library, name) is None, name
             continue
-        # Automatic Libxc resolution and the stable ABI registry are different
-        # entry points; compare only names eligible for the new consumer.
-        if name in METHOD_NAME_TO_ID or ks.parse_automatic_libxc_selector(name):
+        if name in METHOD_NAME_TO_ID:
             continue
-        assert (
-            registry_carrier(library, name)
-            == METHOD_NAME_TO_ID[ks.native_dft_carrier(name)]
-        ), name
+        if name in COMPOSITE_METHOD_ALIASES:
+            _, spin = COMPOSITE_METHOD_ALIASES[name]
+            carrier = "r2scan-uks" if spin == "polarized" else "r2scan-rks"
+        else:
+            carrier = ks.native_dft_carrier(name)
+        assert registry_carrier(library, name) == METHOD_NAME_TO_ID[carrier], name
 
 
 @pytest.mark.parametrize(
@@ -58,6 +62,11 @@ def test_native_catalog_preserves_compiler_carrier_projection(
         ("PBEH-RKS", "pbe-rks"),
         ("B3LYP-UKS", "pbe-uks"),
         ("Libxc-RKS: PBE0 ", "pbe-rks"),
+        ("b3lyp-d3(bj)-rks", "pbe-rks"),
+        ("pbe-d4(bj-eeq-atm)-rks", "pbe-d4-rks"),
+        ("r2scan-d4(bj-eeq-atm)-uks", "r2scan-uks"),
+        ("r2scan-3c", "r2scan-rks"),
+        ("r2scan-3c-uks", "r2scan-uks"),
     ],
 )
 def test_public_query_does_not_resolve_a_compiler_graph(
@@ -73,14 +82,13 @@ def test_public_query_does_not_resolve_a_compiler_graph(
     assert method_capabilities(selector) == replace(expected, method=selector.lower())
 
 
-def test_catalog_miss_keeps_the_correction_and_unknown_name_contract(
+def test_catalog_miss_keeps_unsupported_composite_and_unknown_name_contract(
     library: ctypes.CDLL,
 ) -> None:
-    name = "r2scan-d4(bj-eeq-atm)-uks"
+    name = "libxc:r2scan-3c"
     assert registry_carrier(library, name) is None
-    assert method_capabilities(name) == replace(
-        method_capabilities("r2scan-uks"), method=name
-    )
+    with pytest.raises(NotImplementedError, match="electronic projection"):
+        method_capabilities(name)
     with pytest.raises(ValueError, match="unknown method"):
         method_capabilities("no-such-functional-rks")
 

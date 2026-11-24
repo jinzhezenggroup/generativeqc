@@ -40,7 +40,7 @@ class _CatalogBinding(ct.Structure):
 
 
 def registry_carrier(library: Any, selector: str) -> int | None:
-    """Query a correction-free named KS carrier without constructing a MethodIR."""
+    """Query a named KS carrier without constructing a MethodIR."""
     name = selector.encode("utf-8")
     if not name or len(name) > 256 or b"\0" in name:
         return None

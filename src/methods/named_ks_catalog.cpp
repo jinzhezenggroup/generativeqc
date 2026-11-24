@@ -169,9 +169,7 @@ extern "C" generativeqc_status generativeqc_ks_catalog_registry_carrier_v1(const
   if (selector.find('\0') != std::string_view::npos) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 
   const auto* entry = generativeqc::methods::named_ks::find_method(selector);
-  // A correction-bearing program can have a different public registry carrier
-  // than the one used to prepare the electronic program. Do not project it here.
-  *carrier = entry && (entry->cpu || entry->cuda) && !entry->dispersion.kind ? entry->carrier : 0;
+  *carrier = entry ? entry->registry_carrier : 0;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

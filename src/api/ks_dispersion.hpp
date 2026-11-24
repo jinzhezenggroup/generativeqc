@@ -29,8 +29,8 @@ extern "C" {
 GENERATIVEQC_API generativeqc_status
 generativeqc_ks_catalog_lookup_v1(const char* name, size_t name_size, generativeqc_backend backend,
                                   generativeqc_ks_catalog_binding_v1* output);
-/** Backend-neutral method registry transport for canonical correction-free
- * named programs. A successful miss writes zero; invalid inputs leave output
+/** Backend-neutral method registry transport for compiled public named programs.
+ * A successful miss writes zero; invalid inputs leave output
  * unchanged. A carrier identifies a registry row, not contextual admission. */
 GENERATIVEQC_API generativeqc_status generativeqc_ks_catalog_registry_carrier_v1(const char* name,
                                                                                  size_t name_size,
