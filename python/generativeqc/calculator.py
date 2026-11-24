@@ -2925,8 +2925,8 @@ class Calculator:
         correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
             "df_metric"
         )
-        if not correlation_auxiliary and _basis_builtin.eligible(
-            self._library, selected_basis
+        if not correlation_auxiliary and _basis_builtin.is_catalog_record(
+            selected_basis
         ):
             return _basis_builtin.create_system(
                 self._library, context, selected_basis, atoms, charge, multiplicity
@@ -2937,14 +2937,6 @@ class Calculator:
                 for atom in atoms
             )
         )
-        bundled_create = getattr(
-            self._library, "generativeqc_system_create_bundled", None
-        )
-        bundled_name = (
-            _model_resolution._bundled_basis_name(selected_basis)
-            if bundled_create is not None and not correlation_auxiliary
-            else None
-        )
         template_create = getattr(
             self._library, "generativeqc_system_create_basis_template_v1", None
         )
@@ -2953,11 +2945,7 @@ class Calculator:
             and isinstance(selected_basis, BasisSet)
             and not correlation_auxiliary
         )
-        if use_template or (
-            bundled_create is not None
-            and bundled_name is not None
-            and not correlation_auxiliary
-        ):
+        if use_template:
             descriptor = _native.SystemDescriptor(
                 struct_size=ctypes.sizeof(_native.SystemDescriptor),
                 abi_version=_native.ABI_VERSION,
@@ -2972,33 +2960,24 @@ class Calculator:
                 ),
             )
             system = ctypes.c_void_p()
-            if bundled_create is not None and bundled_name is not None:
-                status = bundled_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    bundled_name.encode("ascii"),
-                    selected_basis.provenance.checksum.encode("ascii"),
-                    ctypes.byref(system),
-                )
-            else:
-                from ._basis_native import NativeBasisTemplate
+            from ._basis_native import NativeBasisTemplate
 
-                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
-                if (
-                    source.has_ecp
-                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                    and not self._supports_fitted_ecp_basis()
-                    and self._method not in _CORRELATED_METHODS
-                ):
-                    raise NotImplementedError(
-                        "ECP density-fitting execution is not yet validated"
-                    )
-                status = template_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    ctypes.byref(source.descriptor),
-                    ctypes.byref(system),
+            source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+            if (
+                source.has_ecp
+                and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not self._supports_fitted_ecp_basis()
+                and self._method not in _CORRELATED_METHODS
+            ):
+                raise NotImplementedError(
+                    "ECP density-fitting execution is not yet validated"
                 )
+            status = template_create(
+                context,
+                ctypes.byref(descriptor),
+                ctypes.byref(source.descriptor),
+                ctypes.byref(system),
+            )
             _native.check(self._library, status, context=context)
             return system
         shells = self._shells_for_atoms(atoms, basis)

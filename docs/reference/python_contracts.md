@@ -132,8 +132,9 @@ systems. File writing is explicit through the relevant save operation; readers
 must not race a write to the same file. No basis-loading operation owns a GPU
 context or starts an electronic solve.
 
-With a supporting native library, exact bundled snapshots use the
-checksum-bound catalog constructor; other admitted `BasisSet` inputs marshal
+Exact bundled snapshots require the checksum-bound catalog constructor;
+a missing or inconsistent native catalog is not a portable execution path.
+Other admitted `BasisSet` inputs marshal
 only selected unique element templates. Native code owns atom/general-row
 expansion and scalar ECP local-channel mapping. Both constructors use the same
 shell/primitive/AO-width preflight before allocating numeric expansion buffers;
@@ -141,8 +142,8 @@ detached-buffer counts are not complete normalized-system or provider admission.
 Rejection by either constructor
 is not retried through a different basis path. Python retains schema/provenance
 validation and native-free resource/model metadata. Explicit `Shell` inputs,
-old libraries without the additive symbol and correlation-only auxiliary
-adapters retain the atom-expanded descriptor route; these compatibility paths
+custom templates on libraries lacking the template symbol, and correlation-only
+auxiliary adapters retain the atom-expanded descriptor route; these paths
 do not broaden ECP, representation or method/backend eligibility. See the
 [native API](native_api.md) for template lifetime and identity limits.
 
