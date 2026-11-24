@@ -819,9 +819,19 @@ class KsPreparedState final : public KsSingleOwnerPort {
                       !range_strategy_ || !nonlocal_ ||
                       execution_plan_.range_omega != scf::native_range_force_omega))
       return false;
+    // For qualified all-electron wB97M-V, Auto and explicit CPU resolve to
+    // the same fitted provider. Authenticate that provider below rather than
+    // using the request spelling to exclude its native derivative consumer.
+    const auto& strategy = fock_.strategy();
+    const bool automatic_cpu_fit =
+        composite && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO &&
+        strategy.backend == scf::FockBackend::Cpu && system_.ecp_terms.empty() &&
+        std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
-         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
+         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+         !automatic_cpu_fit) ||
         execution_plan_.generated_split_hybrid)
       return false;
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
@@ -829,7 +839,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
          std::any_of(system_.shells.begin(), system_.shells.end(),
                      [](const auto& shell) { return shell.angular_momentum > 3; })))
       return false;
-    const auto& spec = fock_.strategy().spec;
+    const auto& spec = strategy.spec;
     if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
       return false;
     const auto approximation = options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
