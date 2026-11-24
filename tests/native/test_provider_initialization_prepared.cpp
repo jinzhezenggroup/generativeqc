@@ -16,6 +16,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/preliminary_guess.hpp"
 
 namespace {
 std::weak_ptr<generativeqc::runtime::DeviceResourceLedger> ledger_witness;
@@ -106,6 +107,12 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor&, scf::ScfOpt
 
 namespace generativeqc::scf {
 bool cpu_materialized_df_derivatives_requested() noexcept { std::abort(); }
+namespace initial_guess {
+// The fake CUDA context must not enter CPU Direct HF resource admission.
+std::optional<PreliminaryOptions> preliminary_options(const generativeqc_initial_guess_options*) {
+  std::abort();
+}
+}  // namespace initial_guess
 }  // namespace generativeqc::scf
 
 namespace generativeqc::dft {
