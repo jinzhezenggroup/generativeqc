@@ -333,9 +333,22 @@ def _native_cpu_fleet_inventory(
     diagnostics. A rejected discovered query is never retried with older phase
     queries or portable arithmetic. No provider is loaded by this adapter.
     """
+    if library is None:
+        return None
     query = getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
     if query is None:
-        return None
+        raise NotImplementedError(
+            "selected library lacks the CPU HF fleet inventory "
+            "generativeqc_resource_hf_cpu_fleet_v1"
+        )
+    if (
+        any(item["orbital"].get("ecp_terms") for item in items)
+        and getattr(library, "generativeqc_resource_ecp_workspace_v1", None) is None
+    ):
+        raise NotImplementedError(
+            "selected library lacks the CPU HF ECP workspace inventory "
+            "generativeqc_resource_ecp_workspace_v1"
+        )
     dimensions = []
     for item in items:
         orbital, auxiliary = item["orbital"], item.get("auxiliary")
@@ -386,9 +399,7 @@ def _native_cpu_fleet_inventory(
     return inventories, retained, workspace
 
 
-def _cpu_item_inventory(
-    item: typing.Any, diis_history: typing.Any, *, library: typing.Any = None
-) -> dict[str, int]:
+def _cpu_item_inventory(item: typing.Any, diis_history: int) -> dict[str, int]:
     """Bound the existing resident CPU route by its preparation/iteration phases.
 
     The CPU DF implementation currently retains the ordinary four-center
@@ -401,43 +412,9 @@ def _cpu_item_inventory(
     metadata. Malloc bookkeeping, allocator arenas and language/runtime objects
     remain explicit exclusions, covered by user reserve/headroom when needed.
 
-    A discovered native query owns phase sizing, shared with the native CLI.
-    Rejections propagate; only no-library dry runs and older binaries use the
-    portable bound below. Metadata planning never loads a library implicitly.
+    This independent bound is only for library-free planning. Live fleet
+    sizing requires the composed native inventory instead.
     """
-    query = getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
-    if query is not None:
-        orbital, auxiliary = item["orbital"], item.get("auxiliary")
-        dimensions = (
-            item["atoms"],
-            orbital["nbf"],
-            orbital["cartesian_nbf"],
-            item["spins"],
-            orbital["maximum_angular"],
-            diis_history,
-            auxiliary["nbf"] if auxiliary else 0,
-            auxiliary["cartesian_nbf"] if auxiliary else 0,
-            auxiliary["maximum_angular"] if auxiliary else 0,
-            _ecp_workspace(item, library=library),
-        )
-        shape = (ctypes.c_uint64 * len(dimensions))(
-            *(checked_bytes(value, "CPU HF host shape") for value in dimensions)
-        )
-        keys = ("preparation", "iteration", "finalization", "integral_state")
-        values = (ctypes.c_uint64 * len(keys))()
-        query.argtypes = [
-            ctypes.POINTER(ctypes.c_uint64),
-            ctypes.c_size_t,
-            ctypes.POINTER(ctypes.c_uint64),
-            ctypes.c_size_t,
-        ]
-        query.restype = ctypes.c_int
-        if query(shape, len(shape), values, len(values)):
-            raise ValueError("native CPU HF host inventory rejected shape or capacity")
-        return {
-            key: checked_bytes(value, f"CPU {key} capacity")
-            for key, value in zip(keys, values, strict=True)
-        }
     orbital, auxiliary = item["orbital"], item.get("auxiliary")
     n, c, d = orbital["nbf"], orbital["cartesian_nbf"], 3 * item["atoms"]
     spin = item["spins"]
@@ -459,7 +436,7 @@ def _cpu_item_inventory(
     preparation = jet_arrays + max(
         recurrence, cartesian + conventional + 8 * (2 * n2 + n2 * n2)
     )
-    preparation += _ecp_workspace(item, library=library)
+    preparation += _ecp_workspace(item)
     resident = conventional
     matrix_work = byte_product(8, spin, n2, 64 + 2 * (diis_history + 1))
     matrix_work += byte_product(16, diis_history + 1, diis_history + 1)
@@ -832,17 +809,15 @@ def hf_resource_request(
     if has_ecp:
         controls["ecp_inventory"] = _ecp_inventory_owner(library)
     if executed_backend == "cpu":
-        native_fleet = getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
-        controls["host_inventory"] = (
-            "native-cpu-v1"
-            if native_fleet is not None
-            or getattr(library, "generativeqc_resource_hf_cpu_host_v1", None)
+        cpu_inventory = (
+            "portable-metadata-v1"
+            if library is None
+            else "native-cpu-v1"
+            if getattr(library, "generativeqc_resource_hf_cpu_fleet_v1", None)
             is not None
-            else "portable-metadata-v1"
+            else "unavailable"
         )
-        controls["fleet_inventory"] = (
-            "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
-        )
+        controls.update(host_inventory=cpu_inventory, fleet_inventory=cpu_inventory)
     if executed_backend == "cuda":
         controls.update(
             device_id=device_id,
@@ -1008,13 +983,16 @@ def hf_resource_request(
             ),
         )
         return ResourceRequest(name, identity, (candidate,), cuda_exclusions)
-    native_inventory = _native_cpu_fleet_inventory(library, items, diis_history)
+    try:
+        native_inventory = _native_cpu_fleet_inventory(library, items, diis_history)
+    except NotImplementedError as error:
+        return ResourceRequest(
+            name, identity, (), exclusions, unsupported_reason=str(error)
+        )
     if native_inventory is not None:
         inventories, retained, peak_work = native_inventory
     else:
-        inventories = tuple(
-            _cpu_item_inventory(item, diis_history, library=library) for item in items
-        )
+        inventories = tuple(_cpu_item_inventory(item, diis_history) for item in items)
         retained = sum(
             8
             * (4 * item["spins"] * item["orbital"]["nbf"] ** 2 + 8 * 3 * item["atoms"])

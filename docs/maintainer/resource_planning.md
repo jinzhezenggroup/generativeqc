@@ -366,7 +366,7 @@ library-free planning retain explicit portable shape arithmetic.
 Python still owns basis expansion and mathematical provenance in this planner;
 these counts are not complete allocation, provider, lease or RSS authority.
 
-CPU RHF/UHF calculator plans with a discovered
+CPU RHF/UHF calculator plans require the selected library's
 `generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
 summed fleet retained capacity and maximum serialized workspace from the same
 allocation-free C++ owners as the native CLI. Direct and density-fitted
@@ -376,10 +376,11 @@ query validates every item before publishing any capacities; invalid later
 items, overlapping buffers and aggregate signed-int64 overflow leave output
 unchanged. Native rejection propagates without a Python retry.
 
-Schedule identity records phase and fleet sizing owners separately. Libraries
-with only `generativeqc_resource_hf_cpu_host_v1` retain native phase sizing and
-portable fleet composition; library-free dry runs and older libraries retain
-portable metadata sizing without implicitly loading a provider. Declared-capacity
+Schedule identity records phase and fleet sizing owners separately. The standalone
+phase query is not a fleet contract. A selected runtime without fleet sizing,
+or without native ECP workspace sizing for an ECP fleet, cannot admit the plan.
+Explicit library-free dry runs retain portable metadata sizing without loading
+a provider. Declared-capacity
 selection and admission use the separately discovered native composition owner
 described above; prepared leases remain frontend-owned. Native fleet sizing is
 not complete endpoint/RSS allocation accounting.
