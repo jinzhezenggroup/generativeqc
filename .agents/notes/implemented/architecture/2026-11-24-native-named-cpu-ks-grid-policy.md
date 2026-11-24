@@ -12,7 +12,10 @@ the graph to decide whether the VV10 grid should share the primary grid.
 ## Decision
 
 Project the omitted XC and VV10 grid levels from the same native selector
-and exact identity, without constructing a context. The facade still owns
+and exact identity, without constructing a context. Read the SCF tail/spin
+domain and nonlocal-presence flag from that same electronic program instead
+of lowering the graph again just to validate the option wire and memory cap.
+The facade still owns
 representation of a grid as `GridSpec`, honors explicit grids, and uses the
 compiler resolver for explicit graphs and older libraries without the query.
 A refused query never retries another policy. An omitted VV10 grid keeps its

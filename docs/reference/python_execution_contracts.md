@@ -119,6 +119,9 @@ For a default CPU named graph, the installed catalog also resolves implicit
 standard/tight XC quadrature and the default independent VV10 level when the
 primary Treutler level changes. Explicit primary and nonlocal prescriptions
 take precedence; explicit legacy tensor grids retain their shared default.
+The same exact binding provides the SCF tail/spin domain and reports whether
+the nonlocal memory allowance applies. A conflicting explicit domain is still
+rejected. This metadata is not a new method or resource-capability grant.
 This is Python facade policy, not a change to the SDK's shared-by-omission
 grid or to derivative admission. Older native libraries without the optional
 projection retain the compiler grid policy.

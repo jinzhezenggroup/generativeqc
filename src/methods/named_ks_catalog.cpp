@@ -160,10 +160,10 @@ extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-extern "C" generativeqc_status generativeqc_ks_catalog_grid_policy_v1(
+extern "C" generativeqc_status generativeqc_ks_catalog_execution_policy_v1(
     const char* name, std::size_t name_size, const char* identity, std::size_t identity_size,
     std::uint32_t tight, std::uint32_t explicit_version, std::uint32_t explicit_level,
-    generativeqc_ks_catalog_grid_policy_result_v1* output) {
+    generativeqc_ks_catalog_execution_policy_result_v1* output) {
   if (!output || output->struct_size != sizeof(*output) ||
       output->abi_version != GENERATIVEQC_ABI_VERSION || !name || !name_size || name_size > 256 ||
       !identity || identity_size != 64 || tight > 1 || explicit_version > 4 ||
@@ -183,10 +183,14 @@ extern "C" generativeqc_status generativeqc_ks_catalog_grid_policy_v1(
   const auto default_level = tight ? kTightTreutlerLevel : kDefaultTreutlerLevel;
   const auto level = explicit_version ? explicit_level : default_level;
   const bool treutler = !explicit_version || explicit_version == 4;
-  const bool split = entry->nonlocal.variant && treutler && level != kDefaultTreutlerLevel;
-  *output = {sizeof(*output), GENERATIVEQC_ABI_VERSION,
+  const std::uint32_t nonlocal = entry->nonlocal.variant != 0;
+  const bool split = nonlocal && treutler && level != kDefaultTreutlerLevel;
+  *output = {sizeof(*output),
+             GENERATIVEQC_ABI_VERSION,
              explicit_version ? -1 : static_cast<std::int32_t>(level),
-             split ? static_cast<std::int32_t>(kDefaultTreutlerLevel) : -1};
+             split ? static_cast<std::int32_t>(kDefaultTreutlerLevel) : -1,
+             entry->domain.data(),
+             nonlocal};
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

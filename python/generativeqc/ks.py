@@ -11,6 +11,9 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, replace
 from fractions import Fraction
 
+if typing.TYPE_CHECKING:
+    from ._named_ks import NamedExecutionPolicy
+
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft._generated_native_semilocal import (
     SCF_DOMAIN_BY_VERSION,
@@ -207,6 +210,11 @@ class KsOptions:
         default=None, repr=False
     )
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
+    # The exact default binding may supply this without lowering a graph.
+    # Replacing options drops the receipt along with the authenticated graph.
+    _named_has_nonlocal: bool | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
     # Only resolution may bind this immutable option snapshot to a selector.
     # dataclasses.replace resets it, so changed/profile-selected options require
     # fresh validation. It is execution provenance, not scientific identity.
@@ -302,6 +310,8 @@ class KsOptions:
     @property
     def has_nonlocal_correlation(self) -> bool:
         """Report whether the resolved execution plan includes nonlocal correlation."""
+        if self._named_has_nonlocal is not None:
+            return self._named_has_nonlocal
         return self.execution_plan.nonlocal_correlation is not None
 
     @property
@@ -1192,7 +1202,7 @@ def resolve_ks_options(
     options: typing.Any = None,
     *,
     _named_graph: MethodIR | None = None,
-    _named_grid_levels: tuple[int, int] | None = None,
+    _named_policy: "NamedExecutionPolicy | None" = None,
 ) -> typing.Any:
     """Validate a MethodIR-resolved model before resource/native allocation."""
     if _named_graph is None:
@@ -1259,12 +1269,12 @@ def resolve_ks_options(
 
     grid = options.grid
     nonlocal_grid = options.nonlocal_grid
-    if _named_grid_levels is not None:
-        xc_level, vv10_level = _named_grid_levels
+    if _named_policy is not None:
         if grid is None:
-            grid = GridSpec.treutler(xc_level)
-        if nonlocal_grid is None and vv10_level >= 0:
-            nonlocal_grid = GridSpec.treutler(vv10_level)
+            grid = GridSpec.treutler(_named_policy.xc_level)
+        if nonlocal_grid is None and _named_policy.vv10_level >= 0:
+            nonlocal_grid = GridSpec.treutler(_named_policy.vv10_level)
+        domain = _named_policy.scf_domain
     else:
         if grid is None:
             grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
@@ -1278,7 +1288,7 @@ def resolve_ks_options(
             # the level-3 VV10 default for a different Treutler XC level.
             # Explicit tensor grids preserve their established shared path.
             nonlocal_grid = GridSpec.treutler(3)
-    domain = _scf_domain_for_ir(method_ir)
+        domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(
             "KS tail/spin domain does not match the selected method"
@@ -1292,6 +1302,10 @@ def resolve_ks_options(
         scf_domain=domain,
     )
     object.__setattr__(result, "_method_ir", method_ir)
+    if _named_policy is not None:
+        object.__setattr__(
+            result, "_named_has_nonlocal", _named_policy.has_nonlocal_correlation
+        )
     if isinstance(method, str):
         object.__setattr__(result, "_resolved_selector", method)
     return result
@@ -1418,10 +1432,8 @@ def native_ks_options(
             radii[z] = radius
 
     domain = options.scf_domain.encode("ascii")
-    if (
-        options.nonlocal_grid is not None
-        and options.execution_plan.nonlocal_correlation is None
-    ):
+    has_nonlocal = options.has_nonlocal_correlation
+    if options.nonlocal_grid is not None and not has_nonlocal:
         raise ValueError("nonlocal_grid requires a nonlocal correlation term")
     split_grid = options.has_separate_nonlocal_grid
     nonlocal_descriptor = None
@@ -1497,9 +1509,7 @@ def native_ks_options(
         if options.xc_schedule == "device_fused"
         else _native.XC_EXECUTION_HOST_UNFUSED,
         nonlocal_maximum_bytes=(
-            options.nonlocal_memory_budget_bytes
-            if options.execution_plan.nonlocal_correlation is not None
-            else 0
+            options.nonlocal_memory_budget_bytes if has_nonlocal else 0
         ),
     )
     descriptor._domain_owner = domain

@@ -7,6 +7,7 @@ owner executes and combines all terms before publishing its result.
 from __future__ import annotations
 
 import ctypes as ct
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -39,30 +40,42 @@ class _CatalogBinding(ct.Structure):
     ]
 
 
-class _GridPolicyResult(ct.Structure):
+class _ExecutionPolicyResult(ct.Structure):
     _fields_ = [
         ("struct_size", ct.c_uint32),
         ("abi_version", ct.c_uint32),
         ("xc_level", ct.c_int32),
         ("vv10_level", ct.c_int32),
+        ("scf_domain", ct.c_char_p),
+        ("has_nonlocal_correlation", ct.c_uint32),
     ]
 
 
-def select_grid_policy(
+@dataclass(frozen=True)
+class NamedExecutionPolicy:
+    """Detached controls and metadata of an authenticated named CPU program."""
+
+    xc_level: int
+    vv10_level: int
+    scf_domain: str
+    has_nonlocal_correlation: bool
+
+
+def select_execution_policy(
     library: Any, selector: str, identity: str, options: Any
-) -> tuple[int, int] | None:
+) -> NamedExecutionPolicy | None:
     """Read the native defaults for a previously authenticated named CPU model.
 
     An older library with no query retains the existing resolver. A present
     query cannot silently refuse a confirmed binding or change explicit grids.
     """
-    query = getattr(library, "generativeqc_ks_catalog_grid_policy_v1", None)
+    query = getattr(library, "generativeqc_ks_catalog_execution_policy_v1", None)
     if query is None:
         return None
     name, digest = selector.encode("utf-8"), identity.encode("ascii")
     grid = None if options is None else options.grid
-    output = _GridPolicyResult(
-        ct.sizeof(_GridPolicyResult), _native.ABI_VERSION, -2, -2
+    output = _ExecutionPolicyResult(
+        ct.sizeof(_ExecutionPolicyResult), _native.ABI_VERSION, -2, -2
     )
     query.argtypes = [
         ct.c_char_p,
@@ -72,7 +85,7 @@ def select_grid_policy(
         ct.c_uint32,
         ct.c_uint32,
         ct.c_uint32,
-        ct.POINTER(_GridPolicyResult),
+        ct.POINTER(_ExecutionPolicyResult),
     ]
     query.restype = ct.c_int
     _native.check(
@@ -89,16 +102,25 @@ def select_grid_policy(
         ),
     )
     if (
-        output.struct_size != ct.sizeof(_GridPolicyResult)
+        output.struct_size != ct.sizeof(_ExecutionPolicyResult)
         or output.abi_version != _native.ABI_VERSION
         or (
             output.xc_level != -1 if grid is not None else not 0 <= output.xc_level <= 9
         )
         or not -1 <= output.vv10_level <= 9
         or (grid is not None and grid.version != 4 and output.vv10_level != -1)
+        or output.has_nonlocal_correlation not in (0, 1)
+        or (output.vv10_level >= 0 and not output.has_nonlocal_correlation)
+        or not output.scf_domain
+        or not output.scf_domain.isascii()
     ):
-        raise RuntimeError("invalid native KS grid policy receipt")
-    return output.xc_level, output.vv10_level
+        raise RuntimeError("invalid native KS execution policy receipt")
+    return NamedExecutionPolicy(
+        output.xc_level,
+        output.vv10_level,
+        output.scf_domain.decode("ascii"),
+        bool(output.has_nonlocal_correlation),
+    )
 
 
 def registry_carrier(library: Any, selector: str) -> int | None:
