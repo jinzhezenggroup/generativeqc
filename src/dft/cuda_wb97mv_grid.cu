@@ -242,8 +242,8 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
     if (fused) {
       // The fused build keeps its products in registers. Reserve only the
       // later column reduction scratch for the geometry producer's full warp.
-      scratch_bytes =
-          3 * std::min(shape.atoms, cuda_grid_tiled_cartesian_atoms) * adjoint_blocks * sizeof(double);
+      scratch_bytes = 3 * std::min(shape.atoms, cuda_grid_tiled_cartesian_atoms) * adjoint_blocks *
+                      sizeof(double);
       planned = adjoints::work_fused_ao({shape.nao, shape.points}, plan.adjoint_build_work);
     } else {
       planned = adjoints::workspace_feature_direction(extents, first) == cudaSuccess &&
@@ -267,9 +267,9 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
             !reserve(adjoint_blocks, plan.adjoint_partials) ||
             !reserve(scratch_bytes / sizeof(double), plan.adjoint_scratch) || !fits())
           return false;
-        const auto available = std::min(options.max_workspace_bytes / sizeof(double) - elements,
-                                        options.max_nuclear_adjoint_bytes / sizeof(double) -
-                                            (elements - mandatory_elements));
+        const auto available = std::min(
+            options.max_workspace_bytes / sizeof(double) - elements,
+            options.max_nuclear_adjoint_bytes / sizeof(double) - (elements - mandatory_elements));
         const auto tensor_values = plan.tensor_bytes / sizeof(double);
         const auto stride = 4 * shape.nao;
         admitted_tile = std::min(tile, std::max(available, tensor_values) / stride);
@@ -289,7 +289,8 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
       if (reserve_adjoint(false)) return true;
       // The factored plan has checked callers as well: their right AO panel
       // must stay read-only for the lifetime of the prepared direction.
-      if (!fused || factored || !adjoints::add_work(plan.adjoint_build_work, {plan.ao_elements, 2}) ||
+      if (!fused || factored ||
+          !adjoints::add_work(plan.adjoint_build_work, {plan.ao_elements, 2}) ||
           plan.adjoint_build_work > options.max_nuclear_affine_terms)
         return false;
       plan.reuse_right_adjoint = reserve_adjoint(true);
@@ -300,8 +301,8 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
         adjoints::add_work(plan.adjoint_dot_work, {shape.points, 5}) &&
         plan.adjoint_build_work <= options.max_nuclear_affine_terms &&
         plan.adjoint_dot_work <= options.max_nuclear_affine_terms &&
-        (!factored || plan.adjoint_dot_work <=
-                          options.max_nuclear_affine_terms - plan.adjoint_build_work) &&
+        (!factored ||
+         plan.adjoint_dot_work <= options.max_nuclear_affine_terms - plan.adjoint_build_work) &&
         admit_adjoint_storage()) {
       plan.adjoint_bytes = scratch_bytes;
       plan.adjoint_tile = admitted_tile;
@@ -564,13 +565,13 @@ __global__ void semilocal_points(const double* fields, const double* direction,
     for (unsigned spin = 0; spin < spins; ++spin) {
       rho[spin] = fields[5 * spin * points + lane];
       if (response)
-        delta_rho[spin] = seed >= 0 ? static_cast<double>(seed == 0)
-                                   : direction[5 * spin * points + lane];
+        delta_rho[spin] =
+            seed >= 0 ? static_cast<double>(seed == 0) : direction[5 * spin * points + lane];
       for (unsigned axis = 0; axis < 3; ++axis) {
         gradient[spin][axis] = fields[(5 * spin + 1 + axis) * points + lane];
         if (response)
           delta_gradient[spin][axis] = seed >= 0 ? static_cast<double>(seed == int(1 + axis))
-                                                : direction[(5 * spin + 1 + axis) * points + lane];
+                                                 : direction[(5 * spin + 1 + axis) * points + lane];
       }
     }
     point::Value base, tangent;
@@ -632,11 +633,11 @@ __global__ void semilocal_points(const double* fields, const double* direction,
 // density and out-of-cache directions. Specialize only its dispatch so those
 // frequent replays don't carry the unrelated UKS and B3LYP device states.
 void launch_semilocal_points(const double* fields, const double* direction, const double* weights,
-                            const double* delta_weights, std::size_t points, unsigned spins,
-                            SemilocalFamily functional, double exchange_scale,
-                            double correlation_scale, bool response, double* partials,
-                            double* energy, int* status, cudaStream_t stream,
-                            const double* replay_mask = nullptr, int seed = -1) {
+                             const double* delta_weights, std::size_t points, unsigned spins,
+                             SemilocalFamily functional, double exchange_scale,
+                             double correlation_scale, bool response, double* partials,
+                             double* energy, int* status, cudaStream_t stream,
+                             const double* replay_mask = nullptr, int seed = -1) {
   const auto blocks = maps::blocks(points);
   const auto launch = [&]<bool restricted_pbe>() {
     semilocal_points<restricted_pbe><<<blocks, 128, 0, stream>>>(
@@ -671,8 +672,8 @@ __global__ void stationary_points(const double* fields, const double* direction,
         const auto index = indices[feature];
         point[index] = spin_factor * fields[offset];
         if constexpr (response)
-          delta[index] = spin_factor *
-                         (seed >= 0 ? static_cast<double>(seed == int(feature)) : direction[offset]);
+          delta[index] = spin_factor * (seed >= 0 ? static_cast<double>(seed == int(feature))
+                                                  : direction[offset]);
         valid = valid && isfinite(point[index]) && isfinite(delta[index]) &&
                 ((feature != 0 && feature != 4) || point[index] >= 0);
       }
@@ -744,8 +745,8 @@ __global__ void stationary_points(const double* fields, const double* direction,
 void launch_stationary_points(const double* fields, const double* direction, const double* weights,
                               const double* delta_weights, CudaWb97mvGridShape shape,
                               std::uint32_t code, bool response, double* partials, double* energy,
-                              int* status, cudaStream_t stream,
-                              const double* replay_mask = nullptr, int seed = -1) {
+                              int* status, cudaStream_t stream, const double* replay_mask = nullptr,
+                              int seed = -1) {
   const auto blocks = maps::blocks(shape.points);
   const auto launch = [&]<std::uint32_t domain>() {
     if (response)
@@ -753,9 +754,9 @@ void launch_stationary_points(const double* fields, const double* direction, con
           <<<blocks, 128, 0, stream>>>(fields, direction, weights, delta_weights, shape.points,
                                        shape.spins, partials, energy, status, replay_mask, seed);
     else
-      stationary_points<false, domain><<<blocks, 128, 0, stream>>>(
-          fields, nullptr, weights, nullptr, shape.points, shape.spins, partials, energy, status,
-          replay_mask, seed);
+      stationary_points<false, domain>
+          <<<blocks, 128, 0, stream>>>(fields, nullptr, weights, nullptr, shape.points, shape.spins,
+                                       partials, energy, status, replay_mask, seed);
   };
 #if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
   if (code == generated::kM062XFunctionalCode)
@@ -777,8 +778,8 @@ bool uses_stationary_point(std::uint32_t code) noexcept {
 /** Cache only regular rows. The original directional evaluator still owns
  * vacuum, extreme scaling and out-of-domain directions. A failed unit probe
  * is not a failed physical action; an unwritten probe stays NaN. */
-__global__ void finish_point_linearization(const double* fields, std::size_t points,
-                                           unsigned axes, double* coefficients) {
+__global__ void finish_point_linearization(const double* fields, std::size_t points, unsigned axes,
+                                           double* coefficients) {
   for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
        lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
     bool regular = fields[lane] >= 0x1p-60;
@@ -804,17 +805,17 @@ cudaError_t prepare_point_linearization(const CudaWb97mvGridShape& shape,
   for (int seed = -1; seed < int(axes); ++seed) {
     auto* output = coefficients + (seed + 1) * fields;
     if (uses_stationary_point(code))
-      launch_stationary_points(base, nullptr, nullptr, nullptr, shape, code,
-                               seed >= 0, output, nullptr, probe_status, stream, nullptr, seed);
+      launch_stationary_points(base, nullptr, nullptr, nullptr, shape, code, seed >= 0, output,
+                               nullptr, probe_status, stream, nullptr, seed);
     else
-      launch_semilocal_points(
-          base, nullptr, nullptr, nullptr, shape.points, 1,
-          semilocal_family_from_code(code), options.exchange_scale, options.correlation_scale,
-          seed >= 0, output, nullptr, probe_status, stream, nullptr, seed);
+      launch_semilocal_points(base, nullptr, nullptr, nullptr, shape.points, 1,
+                              semilocal_family_from_code(code), options.exchange_scale,
+                              options.correlation_scale, seed >= 0, output, nullptr, probe_status,
+                              stream, nullptr, seed);
     if ((error = cudaGetLastError()) != cudaSuccess) return error;
   }
-  finish_point_linearization<<<maps::blocks(shape.points), 128, 0, stream>>>(
-      base, shape.points, axes, coefficients);
+  finish_point_linearization<<<maps::blocks(shape.points), 128, 0, stream>>>(base, shape.points,
+                                                                             axes, coefficients);
   return cudaGetLastError();
 }
 
@@ -1033,9 +1034,8 @@ __global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
       for (unsigned axis = 0; axis < 3; ++axis)
         distance[axis] = motion.radial_points[3 * point + axis] - motion.basis[3 * center + axis];
     const auto spatial = [&](unsigned jet) {
-      return radial
-          ? geometry_ad::s_radial_spatial(jet, distance, motion.spatial + index, panel)
-          : motion.spatial[jet * panel + index];
+      return radial ? geometry_ad::s_radial_spatial(jet, distance, motion.spatial + index, panel)
+                    : motion.spatial[jet * panel + index];
     };
     for (unsigned jet = 0; jet < 4; ++jet) {
       const auto entry = jet * panel + index;
@@ -1053,11 +1053,10 @@ __global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
     // A fixed AO center and its own moving points cancel exactly. Traverse
     // only the other-center AOs on this atom's points and this atom's AOs on
     // the other points. No distance or numerical screening is involved.
-    for (std::size_t local = start; local < (left_end - left_begin) * shape.nao;
-         local += stride) {
+    for (std::size_t local = start; local < (left_end - left_begin) * shape.nao; local += stride) {
       const auto center = static_cast<std::size_t>(aos[16 * (local % shape.nao)]);
-      if (center != left) accumulate(left_begin * shape.nao + local,
-                                     left_begin + local / shape.nao, center, 1);
+      if (center != left)
+        accumulate(left_begin * shape.nao + local, left_begin + local / shape.nao, center, 1);
     }
     const auto* row = owners + left * (shape.nao + 1);
     const auto count = row[0];
@@ -1135,9 +1134,9 @@ cudaError_t build_ao_adjoint(CudaWb97mvGridShape shape, const Layout& plan, doub
       // Each output AO can read any right AO of its point. Commit only after
       // the whole point tile is done; the next tile reads disjoint points.
       const auto width = count * shape.nao * sizeof(double);
-      error = cudaMemcpy2DAsync(arena + plan.right_ao + begin * shape.nao,
-                                panel * sizeof(double), arena + plan.adjoint_output_tile, width,
-                                width, 4, cudaMemcpyDeviceToDevice, stream);
+      error = cudaMemcpy2DAsync(arena + plan.right_ao + begin * shape.nao, panel * sizeof(double),
+                                arena + plan.adjoint_output_tile, width, width, 4,
+                                cudaMemcpyDeviceToDevice, stream);
       if (error != cudaSuccess) return error;
       begin += count;
     }
@@ -1195,7 +1194,7 @@ bool use_wide_features(const CudaWb97mvGridShape& shape, const Layout& plan) {
 // Wide variants keep two or three AO rows per lane. Transpose once per
 // spin instead of duplicating large shared-memory density tiles per CTA.
 __global__ void transpose_feature_densities(unsigned nao, const double* density,
-                                             const double* direction, double* scratch) {
+                                            const double* direction, double* scratch) {
   const unsigned count = nao * nao;
   for (unsigned pair = blockIdx.x * blockDim.x + threadIdx.x; pair < count;
        pair += blockDim.x * gridDim.x) {
@@ -1297,8 +1296,8 @@ bool use_fused_grid_potential(const CudaWb97mvGridShape& shape) {
 // FP64 reduction. The compiler owns the fused point product, not this schedule.
 template <class Product>
 __global__ void assemble_fused_grid_potential(CudaWb97mvGridShape shape, const double* ao,
-                                             const double* motion, const double* cotangent,
-                                             const double* tangent, double* output, int* status) {
+                                              const double* motion, const double* cotangent,
+                                              const double* tangent, double* output, int* status) {
   __shared__ int failed;
   if (!threadIdx.x) failed = atomicAdd(status, 0);
   __syncthreads();
@@ -1337,10 +1336,10 @@ __global__ void assemble_fused_grid_potential(CudaWb97mvGridShape shape, const d
 
 template <class Product>
 cudaError_t launch_fused_grid_potential(CudaWb97mvGridShape shape, const double* ao,
-                                      const double* motion, const double* cotangent,
-                                      const double* tangent, double* output, int* status,
-                                      cudaStream_t stream) {
-  assemble_fused_grid_potential<Product><<<shape.nao * (shape.nao + 1) / 2, 128, 0, stream>>>(
+                                        const double* motion, const double* cotangent,
+                                        const double* tangent, double* output, int* status,
+                                        cudaStream_t stream) {
+  assemble_fused_grid_potential<Product><<<shape.nao*(shape.nao + 1) / 2, 128, 0, stream>>>(
       shape, ao, motion, cotangent, tangent, output, status);
   return cudaGetLastError();
 }
@@ -1379,9 +1378,8 @@ __global__ void stage_grid_potential_tile(CudaWb97mvGridShape shape, const doubl
 }
 
 template <class Product>
-__global__ void reduce_grid_potential_tile(std::size_t nao, const double* tile,
-                                           std::size_t points, bool first, double* output,
-                                           int* status) {
+__global__ void reduce_grid_potential_tile(std::size_t nao, const double* tile, std::size_t points,
+                                           bool first, double* output, int* status) {
   __shared__ int failed;
   if (!threadIdx.x) failed = atomicAdd(status, 0);
   __syncthreads();
@@ -1415,8 +1413,8 @@ std::size_t potential_tile_points(CudaWb97mvGridShape shape, const Layout& plan,
   // Only private, fixed-grid CPKS consumes this wider tile. It needs half the
   // planes of a moving transform, so can cover twice the points in the same
   // lease. Keep public and nuclear-geometry action sum orders unchanged.
-  const auto planes = private_fixed_response ? ad::FixedPotential::ao_count
-                                            : ad::MovingPotential::ao_count;
+  const auto planes =
+      private_fixed_response ? ad::FixedPotential::ao_count : ad::MovingPotential::ao_count;
   const auto span = 2 * planes * shape.nao * sizeof(double);
   const auto limit = potential_tile_limit * ad::MovingPotential::ao_count / planes;
   const auto points = std::min(limit, plan.tensor_bytes / span);
@@ -1425,17 +1423,17 @@ std::size_t potential_tile_points(CudaWb97mvGridShape shape, const Layout& plan,
 
 template <class Product>
 cudaError_t launch_tiled_grid_potential(CudaWb97mvGridShape shape, std::size_t tile_points,
-                                       const double* ao, const double* motion,
-                                       const double* cotangent, const double* tangent,
-                                       double* output, double* tile, int* status,
-                                       cudaStream_t stream) {
+                                        const double* ao, const double* motion,
+                                        const double* cotangent, const double* tangent,
+                                        double* output, double* tile, int* status,
+                                        cudaStream_t stream) {
   for (std::size_t begin = 0; begin < shape.points;) {
     const auto points = std::min(tile_points, shape.points - begin);
     stage_grid_potential_tile<Product><<<maps::blocks(points * shape.nao), 128, 0, stream>>>(
         shape, ao, motion, cotangent, tangent, begin, points, tile, status);
     auto error = cudaGetLastError();
     if (error != cudaSuccess) return error;
-    reduce_grid_potential_tile<Product><<<shape.nao * (shape.nao + 1) / 2, 128, 0, stream>>>(
+    reduce_grid_potential_tile<Product><<<shape.nao*(shape.nao + 1) / 2, 128, 0, stream>>>(
         shape.nao, tile, points, begin == 0, output, status);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
@@ -1575,11 +1573,10 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   if (options.nuclear_response) work_.nuclear_affine_terms = plan.reference_work;
   error = options.nuclear_response ? evaluate_nuclear(false) : evaluate(false);
   if (error == cudaSuccess && plan.point_linearization_axes) {
-    error = prepare_point_linearization(shape, options, arena + plan.base,
-                                        plan.point_linearization_axes,
-                                        arena + plan.point_linearization,
-                                        reinterpret_cast<int*>(arena + plan.point_probe_status),
-                                        reference.stream);
+    error = prepare_point_linearization(
+        shape, options, arena + plan.base, plan.point_linearization_axes,
+        arena + plan.point_linearization, reinterpret_cast<int*>(arena + plan.point_probe_status),
+        reference.stream);
     // Probes have their own status: a singular unit direction disables the
     // row rather than rejecting a physical action that could still be valid.
     error = drain(error, reference.stream);
@@ -1590,7 +1587,8 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   return error;
 }
 
-cudaError_t CudaWb97mvGridResponse::retain_fixed_point_linearization(std::size_t max_bytes) noexcept {
+cudaError_t CudaWb97mvGridResponse::retain_fixed_point_linearization(
+    std::size_t max_bytes) noexcept {
   auto error = authenticate(reference_.stream);
   if (error != cudaSuccess) return error;
   if (options_.nuclear_response || fixed_point_workspace_ || options_.max_point_linearization_bytes)
@@ -1612,11 +1610,10 @@ cudaError_t CudaWb97mvGridResponse::retain_fixed_point_linearization(std::size_t
   fixed_point_workspace_ = cache;
   const auto offset = baseline.bytes / sizeof(double);
   auto* coefficients = static_cast<double*>(cache);
-  error = prepare_point_linearization(shape_, options_, arena + baseline.base,
-                                      candidate.point_linearization_axes, coefficients,
-                                      reinterpret_cast<int*>(coefficients +
-                                                             (candidate.point_probe_status - offset)),
-                                      reference_.stream);
+  error = prepare_point_linearization(
+      shape_, options_, arena + baseline.base, candidate.point_linearization_axes, coefficients,
+      reinterpret_cast<int*>(coefficients + (candidate.point_probe_status - offset)),
+      reference_.stream);
   error = drain(error, reference_.stream);
   if (error == cudaSuccess) error = authenticate(reference_.stream);
   if (error != cudaSuccess) {
@@ -1650,10 +1647,9 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
       coefficients = cache;
       replay_mask = cache + fixed_point_mask_offset_;
     }
-    const auto error = launch_point_linearization(shape_, axes, coefficients,
-                                                  arena + plan.direction, reference_.weights,
-                                                  nullptr, arena + plan.coefficients, replay_mask,
-                                                  stream);
+    const auto error = launch_point_linearization(
+        shape_, axes, coefficients, arena + plan.direction, reference_.weights, nullptr,
+        arena + plan.coefficients, replay_mask, stream);
     if (error != cudaSuccess) return failure(error);
   }
   if (options_.component == CudaWb97mvGridComponent::vv10_only) {
@@ -1666,11 +1662,11 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
                              shape_, options_.functional_code, response, arena + plan.coefficients,
                              nullptr, status, stream, replay_mask);
   else if (options_.functional_code != semilocal_family_code(SemilocalFamily::Wb97mv))
-    launch_semilocal_points(
-        arena + plan.base, arena + plan.direction, reference_.weights, nullptr, shape_.points,
-        shape_.spins, semilocal_family_from_code(options_.functional_code), options_.exchange_scale,
-        options_.correlation_scale, response, arena + plan.coefficients, nullptr, status,
-        stream, replay_mask);
+    launch_semilocal_points(arena + plan.base, arena + plan.direction, reference_.weights, nullptr,
+                            shape_.points, shape_.spins,
+                            semilocal_family_from_code(options_.functional_code),
+                            options_.exchange_scale, options_.correlation_scale, response,
+                            arena + plan.coefficients, nullptr, status, stream, replay_mask);
   else if (shape_.spins == 1)
     ad::point_1<<<maps::blocks(shape_.points), 128, 0, stream>>>(
         arena + plan.base, arena + plan.direction, reference_.weights, shape_.points, response,
@@ -1727,12 +1723,12 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
       error = launch_fused_grid_potential<ad::FixedPotential>(
           shape_, arena + plan.ao, nullptr, coefficients, nullptr, output, status, stream);
     else
-      error = maps::launch_potential(
-          plan.extents, arena + plan.ao, arena + plan.ao + panel, arena + plan.ao + 2 * panel,
-          arena + plan.ao + 3 * panel, coefficients + shape_.points,
-          coefficients + 2 * shape_.points, coefficients + 3 * shape_.points, coefficients,
-          coefficients + 4 * shape_.points, output, arena + plan.tensor, plan.tensor_bytes, status,
-          stream);
+      error = maps::launch_potential(plan.extents, arena + plan.ao, arena + plan.ao + panel,
+                                     arena + plan.ao + 2 * panel, arena + plan.ao + 3 * panel,
+                                     coefficients + shape_.points, coefficients + 2 * shape_.points,
+                                     coefficients + 3 * shape_.points, coefficients,
+                                     coefficients + 4 * shape_.points, output, arena + plan.tensor,
+                                     plan.tensor_bytes, status, stream);
     if (error != cudaSuccess) return failure(error);
   }
   check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
@@ -1743,7 +1739,7 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
 }
 
 cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_status,
-                                                       bool assemble_potential) noexcept {
+                                                     bool assemble_potential) noexcept {
   Layout plan;
   if (!options_.nuclear_response || !layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   const auto stream = reference_.stream;
@@ -1762,8 +1758,8 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_s
     replay_mask = arena + plan.point_replay_mask;
     const auto error = launch_point_linearization(
         shape_, plan.point_linearization_axes, arena + plan.point_linearization,
-        arena + plan.direction, reference_.weights, arena + plan.right_weights, partials, replay_mask,
-        stream);
+        arena + plan.direction, reference_.weights, arena + plan.right_weights, partials,
+        replay_mask, stream);
     if (error != cudaSuccess) return defer_status ? error : drain(error, stream);
   }
   if (options_.component == CudaWb97mvGridComponent::vv10_only) {
@@ -1777,11 +1773,11 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_s
                              arena + plan.right_weights, shape_, options_.functional_code, response,
                              partials, arena + plan.energy, status, stream, replay_mask);
   else if (options_.functional_code != semilocal_family_code(SemilocalFamily::Wb97mv))
-    launch_semilocal_points(
-        arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
-        shape_.points, shape_.spins, semilocal_family_from_code(options_.functional_code),
-        options_.exchange_scale, options_.correlation_scale, response, partials,
-        arena + plan.energy, status, stream, replay_mask);
+    launch_semilocal_points(arena + plan.base, arena + plan.direction, reference_.weights,
+                            arena + plan.right_weights, shape_.points, shape_.spins,
+                            semilocal_family_from_code(options_.functional_code),
+                            options_.exchange_scale, options_.correlation_scale, response, partials,
+                            arena + plan.energy, status, stream, replay_mask);
   else if (shape_.spins == 1)
     nuclear_ad::point_1<<<maps::blocks(shape_.points), 128, 0, stream>>>(
         arena + plan.base, arena + plan.direction, reference_.weights, arena + plan.right_weights,
@@ -2111,9 +2107,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
   const auto build_work = use_adjoint && !nuclear_adjoint_ready_ ? plan.adjoint_build_work : 0;
   std::size_t contract_work{};
   if (!product(rows, use_adjoint ? plan.adjoint_dot_work : plan.mixed_work, contract_work) ||
-      (plan.factored_only &&
-       (build_work > options_.max_nuclear_affine_terms ||
-        contract_work > options_.max_nuclear_affine_terms - build_work)) ||
+      (plan.factored_only && (build_work > options_.max_nuclear_affine_terms ||
+                              contract_work > options_.max_nuclear_affine_terms - build_work)) ||
       build_work > UINT64_MAX - work_.nuclear_affine_terms ||
       contract_work > UINT64_MAX - work_.nuclear_affine_terms - build_work)
     return cudaErrorInvalidValue;
@@ -2187,13 +2182,15 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
                   extra_left, arena + plan.base_partial, arena + plan.right_partial, partials,
                   nullptr, status, rows > 1 ? transaction_status : nullptr);
       };
-      if (cartesian->radial_points) launch(std::true_type{});
-      else launch(std::false_type{});
+      if (cartesian->radial_points)
+        launch(std::true_type{});
+      else
+        launch(std::false_type{});
       if (rows > 1) {
         if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
         if ((error = authenticate(stream)) != cudaSuccess) return error;
         finish_cartesian_column<<<rows, 128, 0, stream>>>(partials, output, status,
-                                                            transaction_status);
+                                                          transaction_status);
         if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
         work_.nuclear_contractions += rows;
         work_.nuclear_adjoint_contractions += rows;
@@ -2202,9 +2199,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
     } else
       contract_ao_adjoint<<<adjoint_blocks, 128, 0, stream>>>(
           plan.ao_elements, shape_.points, arena + plan.adjoint_first, arena + plan.adjoint_second,
-          extra_left, arena + plan.base_partial, arena + plan.right_partial, left_ao,
-          mixed_ao, left_weights, mixed_weights, left_points, arena + plan.adjoint_partials,
-          status);
+          extra_left, arena + plan.base_partial, arena + plan.right_partial, left_ao, mixed_ao,
+          left_weights, mixed_weights, left_points, arena + plan.adjoint_partials, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
     finish_ao_adjoint<<<1, 128, 0, stream>>>(arena + plan.adjoint_partials, arena + plan.scalar,
                                              status);

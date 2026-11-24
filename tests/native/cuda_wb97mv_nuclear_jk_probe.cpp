@@ -89,7 +89,8 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   refused.max_source_groups = 1;
   Failure reason{};
   require(cuda_wb97mv_jk_workspace(shape, shells, refused, bytes, nullptr, nullptr, &reason) ==
-                  cudaErrorInvalidValue && !bytes && reason == Failure::canonical_source_limit,
+                  cudaErrorInvalidValue &&
+              !bytes && reason == Failure::canonical_source_limit,
           "canonical source census did not report its structured refusal");
   options.source_tile = 2;
   options.prefer_fresh_direction_batches = true;
@@ -100,14 +101,15 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   replay_options.max_source_groups = 1;
   replay_options.max_frozen_replay_candidates = retained_sources - 1;
   require(cuda_wb97mv_jk_workspace(shape, shells, replay_options, bytes, nullptr, &certificate,
-                                  &reason) == cudaErrorInvalidValue &&
+                                   &reason) == cudaErrorInvalidValue &&
               !bytes && reason == Failure::canonical_source_limit,
           "replay admitted more individually visited groups than budgeted");
   replay_options.max_frozen_replay_candidates = retained_sources;
   auto short_work = replay_options;
   short_work.max_primitive_component_evaluations = 1;
   require(cuda_wb97mv_jk_workspace(shape, shells, short_work, bytes, nullptr, &certificate) ==
-              cudaErrorInvalidValue && !bytes,
+                  cudaErrorInvalidValue &&
+              !bytes,
           "replay bypassed the primitive work budget");
   CudaWb97mvNuclearJk::Plan plan;
   check(plan.build(shape, shells, options, nullptr, &certificate));
@@ -121,11 +123,11 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   check(plan.build(shape, shells, replay_options, nullptr, &certificate));
   CudaWb97mvNuclearJk replayed;
   const auto replay_bytes = plan.bytes();
-  require(replay_bytes == bytes,
-          "replay did not preserve the bounded scratch contract");
+  require(replay_bytes == bytes, "replay did not preserve the bounded scratch contract");
   auto* replay_arena = storage.allocate(replay_bytes / sizeof(double));
-  require(replayed.prepare(plan, reference, replay_arena, replay_bytes - 1) == cudaErrorInvalidValue,
-          "replay admitted a short arena");
+  require(
+      replayed.prepare(plan, reference, replay_arena, replay_bytes - 1) == cudaErrorInvalidValue,
+      "replay admitted a short arena");
   check(replayed.prepare(plan, reference, replay_arena, replay_bytes));
   require(replayed.apply(motion, density, delta, output, storage.stream) == cudaErrorNotSupported,
           "dense replay published ordinary J/K values or HVP");
@@ -139,7 +141,7 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   const auto sweep = [&](CudaWb97mvNuclearJk& source) {
     check(cudaMemsetAsync(transaction, 0, sizeof(int), storage.stream));
     check(source.enqueue_private_frozen_dense(motion, density, delta, table, transaction,
-                                             storage.stream));
+                                              storage.stream));
     int status{};
     check(cudaMemcpyAsync(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost,
                           storage.stream));
@@ -175,16 +177,17 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   for (std::size_t column = 0; column < coordinates; ++column) {
     std::vector<double> unit(coordinates);
     unit[column] = 1;
-    check(cudaMemcpyAsync(motion, unit.data(), coordinates * sizeof(double),
-                          cudaMemcpyHostToDevice, storage.stream));
+    check(cudaMemcpyAsync(motion, unit.data(), coordinates * sizeof(double), cudaMemcpyHostToDevice,
+                          storage.stream));
     check(exact.apply(motion, density, delta, output, storage.stream));
     for (std::size_t entry = 0; const auto value : download(output.fock_direction, panels))
       require(std::abs(value - screened_values[column * panels + entry++]) < 1e-13,
               "screened frozen Fock table differs from exact");
     for (std::size_t entry = 0; const auto value : download(output.hvp, coordinates))
-      require(std::abs(value - screened_values[coordinates * panels + column * coordinates +
-                                               entry++]) < 1e-13,
-              "screened frozen HVP table differs from exact");
+      require(
+          std::abs(value - screened_values[coordinates * panels + column * coordinates + entry++]) <
+              1e-13,
+          "screened frozen HVP table differs from exact");
   }
   const double outside = 4.25;
   check(cudaMemcpyAsync(density, &outside, sizeof(double), cudaMemcpyHostToDevice, storage.stream));
@@ -547,18 +550,19 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
       for (std::size_t column = 0; column < coordinates; ++column) {
         for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
           unit[coordinate] = static_cast<double>(column == coordinate);
-        check(cudaMemcpy(motion, unit.data(), coordinates * sizeof(double), cudaMemcpyHostToDevice));
+        check(
+            cudaMemcpy(motion, unit.data(), coordinates * sizeof(double), cudaMemcpyHostToDevice));
         require(private_action(column) == 0, "frozen replay rejected valid weights");
         const auto fock = download(pointers[2], panels);
         const auto hvp = download(pointers[4], coordinates);
         const auto compares = [](double expected, double actual) {
           return std::abs(expected - actual) <= 3e-12 * (1 + std::abs(expected));
         };
-        require(std::equal(fock.begin(), fock.end(), values.begin() + column * panels, compares) &&
-                    std::equal(hvp.begin(), hvp.end(),
-                               values.begin() + coordinates * panels + column * coordinates,
-                               compares),
-                "relative source sweep changed a raw column");
+        require(
+            std::equal(fock.begin(), fock.end(), values.begin() + column * panels, compares) &&
+                std::equal(hvp.begin(), hvp.end(),
+                           values.begin() + coordinates * panels + column * coordinates, compares),
+            "relative source sweep changed a raw column");
       }
       require(dense_work < response.work().component_evaluations - replay_start,
               "relative source sweep did not elide primitive components");

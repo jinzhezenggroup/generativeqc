@@ -43,8 +43,8 @@ class CudaKsWb97mvNuclearJk {
                                             int* transaction_status, cudaStream_t stream) noexcept;
   /** Populate the complete private frozen table when sources need streaming. */
   cudaError_t enqueue_private_frozen_dense(double* direction, const double* zero_delta_density,
-                                          double* table, int* transaction_status,
-                                          cudaStream_t stream) noexcept;
+                                           double* table, int* transaction_status,
+                                           cudaStream_t stream) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:

@@ -205,9 +205,9 @@ void evaluate(std::string mode) {
     auto no_adjoint = options;
     no_adjoint.max_nuclear_adjoint_bytes = 0;
     std::size_t unusable{};
-    require(response::cuda_wb97mv_grid_workspace(shape, no_adjoint, unusable) ==
-                cudaErrorInvalidValue,
-            "over-budget affine grid was admitted without its factored replacement");
+    require(
+        response::cuda_wb97mv_grid_workspace(shape, no_adjoint, unusable) == cudaErrorInvalidValue,
+        "over-budget affine grid was admitted without its factored replacement");
   }
   std::size_t bytes{};
   check(response::cuda_wb97mv_grid_workspace(shape, options, bytes));

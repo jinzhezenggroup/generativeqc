@@ -142,8 +142,8 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     }
     const auto* certificate = screened_frozen ? &omissions : nullptr;
     CudaWb97mvNuclearJk::Plan plan;
-    const auto admission = plan.build(integral_shape, shells, bound_options, &detail, certificate,
-                                      failure);
+    const auto admission =
+        plan.build(integral_shape, shells, bound_options, &detail, certificate, failure);
     if (admission == cudaErrorInvalidValue)
       throw std::runtime_error("J/K workspace admission: " + detail);
     check(admission);
@@ -180,14 +180,16 @@ cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_frozen_column(
   return impl_->response.enqueue_private_fresh(direction, lease.density, delta_density, output,
                                                transaction_status, stream, column);
 }
-cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_frozen_dense(
-    double* direction, const double* zero_delta_density, double* table, int* transaction_status,
-    cudaStream_t stream) noexcept {
+cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_frozen_dense(double* direction,
+                                                                const double* zero_delta_density,
+                                                                double* table,
+                                                                int* transaction_status,
+                                                                cudaStream_t stream) noexcept {
   if (!impl_) return cudaErrorInvalidResourceHandle;
   const auto lease = impl_->grid.reference();
   if (!lease.density) return cudaErrorInvalidResourceHandle;
-  return impl_->response.enqueue_private_frozen_dense(
-      direction, lease.density, zero_delta_density, table, transaction_status, stream);
+  return impl_->response.enqueue_private_frozen_dense(direction, lease.density, zero_delta_density,
+                                                      table, transaction_status, stream);
 }
 const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept {
   static const CudaWb97mvJkWork empty;

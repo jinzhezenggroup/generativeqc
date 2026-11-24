@@ -195,7 +195,7 @@ class CudaWb97mvGridResponse {
                          bool private_panel) noexcept;
   cudaError_t evaluate(bool response, bool defer_status = false) noexcept;
   cudaError_t evaluate_nuclear(bool response, bool defer_status = false,
-                                bool assemble_potential = true) noexcept;
+                               bool assemble_potential = true) noexcept;
   cudaError_t prepare_nuclear_direction_impl(const double* ao, const double* weights,
                                              const double* points, const double* density,
                                              double* potential, int* transaction_status,

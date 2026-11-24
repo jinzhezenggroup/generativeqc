@@ -212,12 +212,12 @@ cudaError_t schedule(const CudaOneElectronShape& shape,
         // The leaf ABI reads and writes scalar doubles. Cache-line-align the
         // whole payload, not every small field of every independent task.
         const auto stride = compact_records ? 3 : job.program->record_stride;
-        if (!append<alignof(double)>(parallel, task.count * stride,
-                                     sizeof(double), task.records) ||
-            !append<alignof(double)>(parallel, job.program->components.size() * job.program->outputs,
+        if (!append<alignof(double)>(parallel, task.count * stride, sizeof(double), task.records) ||
+            !append<alignof(double)>(parallel,
+                                     job.program->components.size() * job.program->outputs,
                                      sizeof(double), task.raw) ||
-            !append<alignof(double)>(parallel, 6 * pairs * job.device.centers,
-                                     sizeof(double), task.projected) ||
+            !append<alignof(double)>(parallel, 6 * pairs * job.device.centers, sizeof(double),
+                                     task.projected) ||
             !append<alignof(double)>(parallel, 2 * pairs, sizeof(double), task.candidate))
           return false;
         parallel.tasks.push_back(task);
@@ -678,8 +678,8 @@ struct CudaOneElectronResponse::Impl {
                         inputs.size() * sizeof(inputs.front()), cudaMemcpyHostToDevice, stream);
     if (error == cudaSuccess) {
       build_batch_records<<<std::min<std::size_t>(order.size(), 65535), 128, 0, stream>>>(
-          shape, device_jobs, tasks, order.size(), reference.basis, reference.charges, base,
-          status, plan.compact_records);
+          shape, device_jobs, tasks, order.size(), reference.basis, reference.charges, base, status,
+          plan.compact_records);
       error = cudaGetLastError();
     }
     return error == cudaSuccess ? gate(status, stream) : drain(error, stream);

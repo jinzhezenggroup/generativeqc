@@ -39,8 +39,7 @@ struct CartesianPair {
 static_assert(sizeof(CartesianPair) == 13 * sizeof(double));
 bool batched_cartesian(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& options) {
   return options.cache_cartesian_weights && shape.atoms > 1 &&
-         shape.atoms <= cuda_grid_cartesian_atoms &&
-         shape.points <= 65535 &&
+         shape.atoms <= cuda_grid_cartesian_atoms && shape.points <= 65535 &&
          9 * shape.atoms + 1 <= 12 * shape.nao &&
          13 * (shape.atoms - 1) <= 8 * std::min(shape.points, options.point_tile);
 }
@@ -132,7 +131,8 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
     plan.replay_terms = terms_per_point * (shape.points - plan.resident_points);
     spatial = planes * (plan.resident_points + plan.replay_points) * shape.nao;
   }
-  if (!append(plan, spatial, plan.spatial) || plan.bytes > options.max_workspace_bytes) return false;
+  if (!append(plan, spatial, plan.spatial) || plan.bytes > options.max_workspace_bytes)
+    return false;
   if (!plan.replay_points && tiled_cartesian(shape, options)) {
     // Keep prefix and switch duals in block-local storage when they fit;
     // larger shapes use a bounded point tile, never the full grid.
@@ -147,8 +147,8 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
     // The ordinary partition tile can house the center coefficients only
     // when it is wide enough; short tiles reserve the coefficients separately.
     if ((pair_words <= 4 * tile || append(candidate, pair_words, candidate.wide_pairs)) &&
-        append(candidate, 1 + (candidate.wide_repair_points + 1) / 2,
-               candidate.wide_failures) && candidate.bytes <= options.max_workspace_bytes) {
+        append(candidate, 1 + (candidate.wide_repair_points + 1) / 2, candidate.wide_failures) &&
+        candidate.bytes <= options.max_workspace_bytes) {
       if (shape.atoms <= shared_wide_cartesian_atoms) {
         candidate.wide_shared = true;
         candidate.wide_tile = std::min(shape.points, std::size_t{65535});
@@ -157,9 +157,9 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
       }
       const auto available = options.max_workspace_bytes - candidate.bytes;
       const auto bytes_per_point = words_per_point * sizeof(double);
-      candidate.wide_tile = std::min({std::size_t{256}, options.point_tile, shape.points,
-                                      tile_byte_limit / bytes_per_point,
-                                      available / bytes_per_point});
+      candidate.wide_tile =
+          std::min({std::size_t{256}, options.point_tile, shape.points,
+                    tile_byte_limit / bytes_per_point, available / bytes_per_point});
       if (candidate.wide_tile &&
           append(candidate, candidate.wide_tile * words_per_point, candidate.wide_scratch) &&
           candidate.bytes <= options.max_workspace_bytes)
@@ -286,14 +286,14 @@ __device__ ad::Jet partition_switch(ad::Jet coordinate, bool adjusted, double ad
   return becke(coordinate, iterations);
 }
 __device__ bool matches_partition(ad::Jet partition, double weight, double atomic,
-                                   CudaGridGeometryOptions options) {
+                                  CudaGridGeometryOptions options) {
   // Compare in the dimensionless unit; a far-radial measure can be large.
   const auto expected = atomic != 0 ? weight / atomic : 0;
   return (atomic != 0 || weight == 0) && isfinite(expected) &&
-         (atomic == 0 || fabs(partition.value - expected) <=
-                             options.reference_absolute_tolerance +
-                                 options.reference_relative_tolerance *
-                                     fmax(fabs(partition.value), fabs(expected)));
+         (atomic == 0 ||
+          fabs(partition.value - expected) <= options.reference_absolute_tolerance +
+                                                  options.reference_relative_tolerance *
+                                                      fmax(fabs(partition.value), fabs(expected)));
 }
 __global__ void finite_directions(const double* left, const double* right, std::size_t count,
                                   int* status) {
@@ -360,7 +360,8 @@ __global__ void pair_geometry(const double* centers, const double* left, const d
     double left_delta[3], right_delta[3];
     for (unsigned axis = 0; axis < 3; ++axis) {
       if constexpr (cartesian_rows)
-        left_delta[axis] = int(3 * first + axis == blockIdx.y) - int(3 * second + axis == blockIdx.y);
+        left_delta[axis] =
+            int(3 * first + axis == blockIdx.y) - int(3 * second + axis == blockIdx.y);
       else
         left_delta[axis] = left[3 * first + axis] - left[3 * second + axis];
       right_delta[axis] = right[3 * first + axis] - right[3 * second + axis];
@@ -396,8 +397,8 @@ __global__ void pair_geometry(const double* centers, const double* left, const d
       const double ratio = sqrt(radii[second] / radii[first]);
       adjustment = fmax(-0.5, fmin(0.5, 0.25 * (ratio - 1 / ratio)));
     }
-    pairs[generativeqc_grid_pair_geometry::center_pair_index(first, second)] =
-        {distance, reciprocal, adjustment};
+    pairs[generativeqc_grid_pair_geometry::center_pair_index(first, second)] = {
+        distance, reciprocal, adjustment};
   }
 }
 /** Prefix metadata is fixed under nuclear motion; no density pruning or
@@ -420,11 +421,11 @@ __device__ std::size_t grid_owner(CudaGridGeometryShape shape, const std::uint64
  * jets. Pair lanes share complementary switches; each atom then consumes its
  * own factors in the same order and scale as the general partition kernel. */
 __global__ void partition_reference_weights(CudaGridGeometryShape shape,
-                                             CudaGridGeometryOptions options,
-                                             const double* centers, const double* points,
-                                             const double* weights, const double* atomic_weights,
-                                             const std::uint64_t* offsets, bool adjusted,
-                                             const PartitionPair* pairs, int* status) {
+                                            CudaGridGeometryOptions options, const double* centers,
+                                            const double* points, const double* weights,
+                                            const double* atomic_weights,
+                                            const std::uint64_t* offsets, bool adjusted,
+                                            const PartitionPair* pairs, int* status) {
   if (__syncthreads_or(!threadIdx.x && atomicAdd(status, 0))) return;
   const auto point = static_cast<std::size_t>(blockIdx.x);
   const auto atoms = shape.atoms;
@@ -466,7 +467,7 @@ __global__ void partition_reference_weights(CudaGridGeometryShape shape,
       const auto pair = pairs[index];
       const auto difference = distances[first] - distances[second];
       const auto coordinate = pair.reciprocal.value ? difference * pair.reciprocal.value
-                                                   : difference / pair.distance.value;
+                                                    : difference / pair.distance.value;
       const auto factor = partition_switch({coordinate, 0, 0, 0}, adjusted, pair.adjustment,
                                            options.partition_iterations);
       valid = valid && isfinite(coordinate) && finite(factor);
@@ -482,8 +483,8 @@ __global__ void partition_reference_weights(CudaGridGeometryShape shape,
     long long exponent{};
     for (std::size_t other = 0; other < atoms; ++other) {
       if (other == atom) continue;
-      const auto index = generativeqc_grid_pair_geometry::center_pair_index(max(atom, other),
-                                                                            min(atom, other));
+      const auto index =
+          generativeqc_grid_pair_geometry::center_pair_index(max(atom, other), min(atom, other));
       const auto factor = atom > other ? switches[index] : 1 - switches[index];
       if (factor == 0) {
         product = {};
@@ -533,8 +534,8 @@ __global__ void validate_grid_topology(CudaGridGeometryShape shape, const std::u
 }
 
 __global__ void cartesian_pair_geometry(const double* centers, const double* radii,
-                                         std::size_t atoms, std::size_t column,
-                                         double tolerance, CartesianPair* pairs) {
+                                        std::size_t atoms, std::size_t column, double tolerance,
+                                        CartesianPair* pairs) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < atoms * atoms;
        index += blockDim.x * gridDim.x) {
     const auto first = index / atoms, second = index % atoms;
@@ -555,9 +556,9 @@ __global__ void cartesian_pair_geometry(const double* centers, const double* rad
                             0};
       const auto distance = ad::norm(separation[0], separation[1], separation[2]);
       pair.inverse[left] = finite(distance) && distance.value > tolerance &&
-                                  distance.value >= 0x1p-32 && distance.value <= 0x1p32
-                              ? ad::ratio({1, 0, 0, 0}, distance)
-                              : ad::Jet{};
+                                   distance.value >= 0x1p-32 && distance.value <= 0x1p32
+                               ? ad::ratio({1, 0, 0, 0}, distance)
+                               : ad::Jet{};
     }
   }
 }
@@ -587,22 +588,19 @@ __device__ RightDual dual_subtract(RightDual first, RightDual second) {
  * center derivatives to that owner (translation of the entire system).
  */
 template <bool compact, bool packed_pairs = false, bool wide = false, bool block_local = false>
-__global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
-                                         CudaGridGeometryOptions options, const double* centers,
-                                         const double* points, const double* weights,
-                                         const double* atomic_weights, const std::uint64_t* offsets,
-                                         bool adjusted, const CartesianPair* pairs,
-                                         std::size_t column, double* rows, double* accepted,
-                                         double* right_weights, std::size_t begin = 0,
-                                         RightDual* scratch = nullptr,
-                                         unsigned* failure_count = nullptr,
-                                         unsigned repair_capacity = 0, int* status = nullptr) {
+__global__ void cartesian_partition_rows(
+    CudaGridGeometryShape shape, CudaGridGeometryOptions options, const double* centers,
+    const double* points, const double* weights, const double* atomic_weights,
+    const std::uint64_t* offsets, bool adjusted, const CartesianPair* pairs, std::size_t column,
+    double* rows, double* accepted, double* right_weights, std::size_t begin = 0,
+    RightDual* scratch = nullptr, unsigned* failure_count = nullptr, unsigned repair_capacity = 0,
+    int* status = nullptr) {
   const auto point = begin + static_cast<std::size_t>(blockIdx.x);
   const auto atom = static_cast<std::size_t>(threadIdx.x);
   const auto owner = grid_owner(shape, offsets, point);
   const auto atoms = shape.atoms;
-  constexpr auto shared_atoms = block_local ? shared_wide_cartesian_atoms
-                                : wide ? cuda_grid_tiled_cartesian_atoms
+  constexpr auto shared_atoms = block_local    ? shared_wide_cartesian_atoms
+                                : wide         ? cuda_grid_tiled_cartesian_atoms
                                 : packed_pairs ? cuda_grid_cartesian_atoms
                                                : unpacked_cartesian_atoms;
   constexpr auto shared_slots = wide && !block_local ? 1 : shared_atoms * shared_atoms;
@@ -611,7 +609,8 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
   static_assert(!wide || (compact && packed_pairs));
   static_assert(!block_local || wide);
   static_assert((2 * shared_slots + slope_slots + product_slots) * sizeof(RightDual) +
-                    3 * shared_atoms * sizeof(ad::Jet) <= 48 * 1024);
+                    3 * shared_atoms * sizeof(ad::Jet) <=
+                48 * 1024);
   const auto slots = wide ? atoms : shared_atoms;
   __shared__ ad::Jet norm[shared_atoms][3];
   __shared__ RightDual shared_prefix[shared_slots], shared_switches[shared_slots];
@@ -624,28 +623,34 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
     switches = prefix + slots * slots;
   }
   const auto join = [] {
-    if constexpr (wide) __syncthreads();
-    else __syncwarp();
+    if constexpr (wide)
+      __syncthreads();
+    else
+      __syncwarp();
   };
   const auto all = [](bool valid) {
-    if constexpr (wide) return __syncthreads_and(valid) != 0;
-    else return __all_sync(0xffffffffU, valid) != 0;
+    if constexpr (wide)
+      return __syncthreads_and(valid) != 0;
+    else
+      return __all_sync(0xffffffffU, valid) != 0;
   };
   const auto finish = [&](bool valid) {
     if (atom) return;
     if constexpr (wide) {
       if (!valid) {
         const auto slot = atomicAdd(failure_count, 1U);
-        if (slot < repair_capacity) failure_count[1 + slot] = static_cast<unsigned>(point);
-        else atomicExch(status, 1);
+        if (slot < repair_capacity)
+          failure_count[1 + slot] = static_cast<unsigned>(point);
+        else
+          atomicExch(status, 1);
       }
     } else {
       accepted[point] = static_cast<double>(valid);
     }
   };
   const auto load_switch = [&](std::size_t other) {
-    const auto index = generativeqc_grid_pair_geometry::center_pair_index(max(atom, other),
-                                                                          min(atom, other));
+    const auto index =
+        generativeqc_grid_pair_geometry::center_pair_index(max(atom, other), min(atom, other));
     const auto primal = switches[2 * index];
     const auto slope = switches[2 * index + 1];
     const ad::Jet jet{primal.value, slope.value, primal.right, slope.right};
@@ -725,8 +730,10 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
       // the number of factors varies with geometry size. Exact zero remains
       // valid because exclusive products do not divide by a factor.
       regular_factors = regular_factors && (switched.value == 0 || switched.value >= 0x1p-56);
-      if (switched.value != 0) nonzero_product *= switched.value;
-      else if constexpr (wide) zero_duals += switched.right == 0;
+      if (switched.value != 0)
+        nonzero_product *= switched.value;
+      else if constexpr (wide)
+        zero_duals += switched.right == 0;
       prefix[other * slots + atom] = product;
       product = dual_product(product, switched);
     }
@@ -766,7 +773,8 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
     if (atom < atoms) atom_products[atom] = product;
     join();
     if (!atom) {
-      for (std::size_t center = 0; center < atoms; ++center) sum = dual_add(sum, atom_products[center]);
+      for (std::size_t center = 0; center < atoms; ++center)
+        sum = dual_add(sum, atom_products[center]);
       numerator = atom_products[owner];
     }
     join();
@@ -819,9 +827,9 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
           const auto reciprocal = pair.inverse[axis];
           const auto difference =
               dual_subtract(primal_dual(norm[first][axis]), primal_dual(norm[second][axis]));
-          const auto motion = dual_add(
-              dual_product(difference, left_dual(reciprocal)),
-              dual_product(left_dual(norm[atom][axis]), primal_dual(reciprocal)));
+          const auto motion =
+              dual_add(dual_product(difference, left_dual(reciprocal)),
+                       dual_product(left_dual(norm[atom][axis]), primal_dual(reciprocal)));
           const auto signed_motion = atom == first ? motion : dual_subtract({}, motion);
           denominator_tangent[axis] =
               dual_add(denominator_tangent[axis], dual_product(total, signed_motion));
@@ -928,11 +936,13 @@ __global__ void cartesian_partition_rows(CudaGridGeometryShape shape,
 // A diagonal unit column has identical left and right motion. Carry its
 // second derivative through each product directly; no exclusive products or
 // all-center slope matrix are needed for the one output row.
-__global__ void cartesian_partition_diagonal(
-    CudaGridGeometryShape shape, CudaGridGeometryOptions options, const double* centers,
-    const double* points, const double* weights, const double* atomic_weights,
-    const std::uint64_t* offsets, bool adjusted, const CartesianPair* pairs, std::size_t column,
-    double* rows, double* accepted) {
+__global__ void cartesian_partition_diagonal(CudaGridGeometryShape shape,
+                                             CudaGridGeometryOptions options, const double* centers,
+                                             const double* points, const double* weights,
+                                             const double* atomic_weights,
+                                             const std::uint64_t* offsets, bool adjusted,
+                                             const CartesianPair* pairs, std::size_t column,
+                                             double* rows, double* accepted) {
   __shared__ ad::Jet distances[cuda_grid_cartesian_atoms], products[cuda_grid_cartesian_atoms];
   const auto point = static_cast<std::size_t>(blockIdx.x);
   const auto atom = static_cast<std::size_t>(threadIdx.x);
@@ -966,15 +976,15 @@ __global__ void cartesian_partition_diagonal(
       const auto first = max(atom, other), second = min(atom, other);
       const auto& pair = pairs[generativeqc_grid_pair_geometry::center_pair_index(first, second)];
       const auto inverse = pair.inverse[right_axis];
-      const auto motion = static_cast<double>(first == right_atom) -
-                          static_cast<double>(second == right_atom);
+      const auto motion =
+          static_cast<double>(first == right_atom) - static_cast<double>(second == right_atom);
       // The prepared inverse differentiates the first center on the left.
       // The actual column's signed displacement supplies that seed instead.
-      const auto coordinate = ad::multiply(ad::subtract(distances[first], distances[second]),
-                                           {inverse.value, inverse.right, inverse.right,
-                                            motion * inverse.mixed});
-      const auto factor = partition_switch(coordinate, adjusted, pair.adjustment,
-                                           options.partition_iterations);
+      const auto coordinate =
+          ad::multiply(ad::subtract(distances[first], distances[second]),
+                       {inverse.value, inverse.right, inverse.right, motion * inverse.mixed});
+      const auto factor =
+          partition_switch(coordinate, adjusted, pair.adjustment, options.partition_iterations);
       const auto switched = atom == first ? factor : ad::complement(factor);
       valid = valid && inverse.value > 0 && finite(switched) && maximum(switched) <= 0x1p64 &&
               (switched.value == 0 || switched.value >= 0x1p-56);
@@ -999,8 +1009,8 @@ __global__ void cartesian_partition_diagonal(
     }
     const auto partition = ad::ratio(products[owner], sum);
     const auto published = ad::multiply(partition, {measure, 0, 0, 0});
-    accepted[point] = finite(published) && matches_partition(partition, weights[point], measure,
-                                                            options);
+    accepted[point] =
+        finite(published) && matches_partition(partition, weights[point], measure, options);
     rows[point] = published.left;
     rows[shape.points + point] = published.right;
     rows[2 * shape.points + point] = published.mixed;
@@ -1032,17 +1042,14 @@ cudaError_t launch_cartesian_rows(CudaGridGeometryShape shape, CudaGridGeometryO
 }
 
 template <bool block_local, bool cartesian_rows = false, bool repair_queue = false>
-__global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometryOptions options,
-                                   const double* centers, const double* points,
-                                   const double* weights, const double* atomic_weights,
-                                   const std::uint64_t* offsets, const double* radii,
-                                   const double* left, const double* right,
-                                   const PartitionPair* pairs, std::size_t begin, std::size_t count,
-                                   ad::Jet* distances, ad::Jet* products, long long* exponents,
-                                   double* output, const double* accepted, int* status,
-                                   double* right_weights, std::size_t right_column,
-                                   const unsigned* failures = nullptr,
-                                   const CartesianPair* cartesian_pairs = nullptr) {
+__global__ void partition_geometry(
+    CudaGridGeometryShape shape, CudaGridGeometryOptions options, const double* centers,
+    const double* points, const double* weights, const double* atomic_weights,
+    const std::uint64_t* offsets, const double* radii, const double* left, const double* right,
+    const PartitionPair* pairs, std::size_t begin, std::size_t count, ad::Jet* distances,
+    ad::Jet* products, long long* exponents, double* output, const double* accepted, int* status,
+    double* right_weights, std::size_t right_column, const unsigned* failures = nullptr,
+    const CartesianPair* cartesian_pairs = nullptr) {
   if (atomicAdd(status, 0)) return;
   static_assert(!repair_queue || cartesian_rows);
   if constexpr (repair_queue) count = min(count, static_cast<std::size_t>(failures[0]));
@@ -1102,9 +1109,8 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
             const auto sign = int(first == left_atom) - int(second == left_atom);
             const auto inverse = prepared.inverse[left_axis];
             if (inverse.value != 0) {
-              coordinate = ad::multiply(numerator,
-                                        {inverse.value, sign * inverse.left, inverse.right,
-                                         sign * inverse.mixed});
+              coordinate = ad::multiply(numerator, {inverse.value, sign * inverse.left,
+                                                    inverse.right, sign * inverse.mixed});
             } else {
               ad::Jet delta[3];
               for (unsigned axis = 0; axis < 3; ++axis)
@@ -1124,7 +1130,7 @@ __global__ void partition_geometry(CudaGridGeometryShape shape, CudaGridGeometry
             adjustment = geometry.adjustment;
           }
           const auto pair = partition_switch(coordinate, radii != nullptr, adjustment,
-                                              options.partition_iterations);
+                                             options.partition_iterations);
           valid = valid && finite(coordinate) && finite(pair);
           valid = multiply(products[first_slot], exponents[first_slot], pair) && valid;
           valid = multiply(products[second_slot], exponents[second_slot], ad::complement(pair)) &&
@@ -1206,18 +1212,17 @@ cudaError_t launch_spatial(CudaGridGeometryShape shape, const double* basis, con
                            std::size_t count, double* output, int* status, cudaStream_t stream) {
   if (!shape.radial_s)
     return hessian_aot::launch_ao(basis, shape.atoms, shape.primitives, shape.nao, points, count,
-                                   20, output, status, stream);
+                                  20, output, status, stream);
   ao_radial_moments<<<blocks(count * shape.nao), 128, 0, stream>>>(shape, basis, points, count,
-                                                                 output, status);
+                                                                   output, status);
   return cudaGetLastError();
 }
 
 template <bool radial>
 __global__ void ao_cartesian_direction(CudaGridGeometryShape shape, const double* basis,
                                        const double* spatial, const double* reference_points,
-                                       const std::uint64_t* offsets,
-                                       std::size_t column, double* output, double* points,
-                                       int* status) {
+                                       const std::uint64_t* offsets, std::size_t column,
+                                       double* output, double* points, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto panel = shape.points * shape.nao;
   const auto moving_atom = column / 3, moving_axis = column % 3;
@@ -1237,9 +1242,9 @@ __global__ void ao_cartesian_direction(CudaGridGeometryShape shape, const double
         distance[axis] = reference_points[3 * point + axis] - basis[3 * atom + axis];
     for (unsigned jet = 0; jet < 4; ++jet) {
       const auto first = ad::cartesian_first_index(jet, moving_axis);
-      const double value = relative * (radial
-          ? ad::s_radial_spatial(first, distance, spatial + index, panel)
-          : spatial[first * panel + index]);
+      const double value =
+          relative * (radial ? ad::s_radial_spatial(first, distance, spatial + index, panel)
+                             : spatial[first * panel + index]);
       if (!isfinite(value)) atomicExch(status, 1);
       output[jet * panel + index] = value;
     }
@@ -1247,10 +1252,9 @@ __global__ void ao_cartesian_direction(CudaGridGeometryShape shape, const double
 }
 template <bool radial>
 __global__ void ao_geometry(CudaGridGeometryShape shape, const double* basis, const double* spatial,
-                            const double* reference_points,
-                            std::size_t begin, std::size_t count, const std::uint64_t* offsets,
-                            const double* left, const double* right, double* output,
-                            double* point_directions, int* status) {
+                            const double* reference_points, std::size_t begin, std::size_t count,
+                            const std::uint64_t* offsets, const double* left, const double* right,
+                            double* output, double* point_directions, int* status) {
   if (atomicAdd(status, 0)) return;
   const auto panel = shape.points * shape.nao;
   const auto tile_panel = count * shape.nao;
@@ -1318,8 +1322,8 @@ cudaError_t CudaGridGeometryResponse::authenticate(cudaStream_t stream) noexcept
 }
 
 cudaError_t CudaGridGeometryResponse::partition(const double* left, const double* right,
-                                               double* output, const double* accepted,
-                                               bool reference_only) noexcept {
+                                                double* output, const double* accepted,
+                                                bool reference_only) noexcept {
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   auto* base = static_cast<char*>(workspace_);
@@ -1331,7 +1335,8 @@ cudaError_t CudaGridGeometryResponse::partition(const double* left, const double
       options_.coincident_tolerance, pairs, status);
   auto error = cudaGetLastError();
   if (error != cudaSuccess) return drain(error, stream);
-  if (reference_only && shape_.atoms <= cuda_grid_tiled_cartesian_atoms && shape_.points <= INT_MAX) {
+  if (reference_only && shape_.atoms <= cuda_grid_tiled_cartesian_atoms &&
+      shape_.points <= INT_MAX) {
     constexpr auto max_atoms = cuda_grid_tiled_cartesian_atoms;
     static_assert(sizeof(long long) == sizeof(double) &&
                   (3 * max_atoms + max_atoms * (max_atoms - 1) / 2) * sizeof(double) < 40 * 1024);
@@ -1465,9 +1470,9 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
   if (error == cudaSuccess) error = gate(status, reference.stream);
   const auto resident_values = spatial_planes(shape) * plan.resident_points * shape.nao;
   if (error == cudaSuccess && resident_values)
-    error = launch_spatial(shape, reference.basis, reference.points, plan.resident_points,
-                           reinterpret_cast<double*>(base + plan.spatial), status,
-                           reference.stream);
+    error =
+        launch_spatial(shape, reference.basis, reference.points, plan.resident_points,
+                       reinterpret_cast<double*>(base + plan.spatial), status, reference.stream);
   if (error == cudaSuccess && resident_values) {
     finite_values<<<blocks(resident_values), 128, 0, reference.stream>>>(
         reinterpret_cast<double*>(base + plan.spatial), resident_values, status);
@@ -1556,15 +1561,16 @@ cudaError_t CudaGridGeometryResponse::admit_actions(std::size_t actions) noexcep
 
 namespace {
 __global__ void record_geometry_status(const int* status, int* transaction_status,
-                                        const unsigned* failures = nullptr,
-                                        std::size_t repair_capacity = 0) {
-  const auto flags = (*status ? 1 : 0) |
+                                       const unsigned* failures = nullptr,
+                                       std::size_t repair_capacity = 0) {
+  const auto flags =
+      (*status ? 1 : 0) |
       (failures && *failures > repair_capacity ? cuda_grid_cartesian_repair_exhausted : 0);
   if (flags) atomicOr(transaction_status, flags);
 }
 __global__ void validate_cartesian_directions(const double* left, const double* right,
-                                               std::size_t coordinates, std::size_t left_column,
-                                               std::size_t right_column, int* status) {
+                                              std::size_t coordinates, std::size_t left_column,
+                                              std::size_t right_column, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < coordinates;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     if ((left && left[index] != static_cast<double>(index == left_column)) ||
@@ -1610,8 +1616,7 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
     // acceptance mask borrows that scratch. A weight-row sweep keeps it live.
     auto* rows = diagonal ? reinterpret_cast<double*>(base + plan.candidate_weights) : ao_scratch;
     auto* accepted = diagonal ? ao_scratch : rows + 3 * coordinates * shape_.points;
-    auto& sweeps = diagonal ? work_.cartesian_diagonal_sweeps
-                            : work_.cartesian_partition_sweeps;
+    auto& sweeps = diagonal ? work_.cartesian_diagonal_sweeps : work_.cartesian_partition_sweeps;
     if (error == cudaSuccess && (diagonal || cartesian_right_ != right_column)) {
       cartesian_right_ = SIZE_MAX;
       if (sweeps == UINT64_MAX) return cudaErrorInvalidValue;
@@ -1623,19 +1628,18 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
           options_.coincident_tolerance, pairs);
       error = cudaGetLastError();
       if (error == cudaSuccess)
-        error = diagonal
-                    ? launch_cartesian_rows<true>(shape_, options_, reference_, pairs, right_column,
-                                                   rows, accepted, stream)
-                    : launch_cartesian_rows<false>(shape_, options_, reference_, pairs, right_column,
-                                                    rows, accepted, stream);
+        error = diagonal ? launch_cartesian_rows<true>(shape_, options_, reference_, pairs,
+                                                       right_column, rows, accepted, stream)
+                         : launch_cartesian_rows<false>(shape_, options_, reference_, pairs,
+                                                        right_column, rows, accepted, stream);
       if (error == cudaSuccess) {
         if (!diagonal) cartesian_right_ = right_column;
         ++sweeps;
       }
     }
     if (error == cudaSuccess)
-      error = partition(left, right,
-                        rows + (diagonal ? 0 : 3 * left_column * shape_.points), accepted);
+      error =
+          partition(left, right, rows + (diagonal ? 0 : 3 * left_column * shape_.points), accepted);
   } else {
     cartesian_right_ = SIZE_MAX;
     if (error == cudaSuccess) error = partition(left, right);
@@ -1655,12 +1659,14 @@ cudaError_t CudaGridGeometryResponse::evaluate_mixed(const double* left, const d
     }
     const auto launch = [&](auto radial) {
       ao_geometry<decltype(radial)::value><<<blocks(count * shape_.nao), 128, 0, stream>>>(
-          shape_, reference_.basis, spatial, reference_.points, begin, count, reference_.atom_offsets,
-          left, right, reinterpret_cast<double*>(base + plan.candidate_ao),
+          shape_, reference_.basis, spatial, reference_.points, begin, count,
+          reference_.atom_offsets, left, right, reinterpret_cast<double*>(base + plan.candidate_ao),
           reinterpret_cast<double*>(base + plan.point_directions), status);
     };
-    if (shape_.radial_s) launch(std::true_type{});
-    else launch(std::false_type{});
+    if (shape_.radial_s)
+      launch(std::true_type{});
+    else
+      launch(std::false_type{});
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
     begin += count;
   }
@@ -1685,8 +1691,8 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_view(
   Layout plan;
   if (!layout(shape_, options_, plan)) return cudaErrorInvalidValue;
   if (plan.resident_points != shape_.points) return cudaErrorNotSupported;
-  if ((error = evaluate_mixed(left, right, stream, transaction_status, left_column,
-                              right_column, true)) != cudaSuccess)
+  if ((error = evaluate_mixed(left, right, stream, transaction_status, left_column, right_column,
+                              true)) != cudaSuccess)
     return error;
   const auto* base = static_cast<const char*>(workspace_);
   const auto* weights = batched_cartesian(shape_, options_)
@@ -1700,7 +1706,9 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_view(
           shape_.atoms,
           shape_.points_per_atom,
           left_column,
-          right_column, 1, shape_.radial_s ? reference_.points : nullptr};
+          right_column,
+          1,
+          shape_.radial_s ? reference_.points : nullptr};
   ++work_.completed_actions;
   work_.action_partition_pairs += plan.point_pairs;
   return cudaSuccess;
@@ -1724,8 +1732,8 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
                  options_.point_tile != CudaGridGeometryOptions{}.point_tile)))
     return cudaErrorNotSupported;
 
-  const auto pair_words = shape_.atoms * (shape_.atoms - 1) / 2 * sizeof(PartitionPair) /
-                          sizeof(double);
+  const auto pair_words =
+      shape_.atoms * (shape_.atoms - 1) / 2 * sizeof(PartitionPair) / sizeof(double);
   const auto row_words = 2 * coordinates * shape_.points;
   const auto scratch_words = 12 * plan.panel - row_words;
   // The full table and acceptance mask borrow idle AO panels. Use the tail
@@ -1733,8 +1741,8 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
   if ((!wide && coordinates * pair_words > scratch_words - shape_.points) ||
       (rhs && 4 * plan.panel > scratch_words))
     return cudaErrorNotSupported;
-  const auto repair_bound = plan.wide_repair_points * coordinates * shape_.atoms *
-                            (shape_.atoms - 1) / 2;
+  const auto repair_bound =
+      plan.wide_repair_points * coordinates * shape_.atoms * (shape_.atoms - 1) / 2;
   const auto pair_visits = wide ? plan.point_pairs + repair_bound : coordinates * plan.point_pairs;
   if (!disjoint(right, coordinates, workspace_, plan.bytes / sizeof(double)) ||
       coordinates > UINT64_MAX - work_.attempted_actions ||
@@ -1750,7 +1758,8 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
   auto* rows = reinterpret_cast<double*>(base + plan.candidate_ao);
   auto* accepted = rows + row_words;
   auto* right_weights = reinterpret_cast<double*>(base + plan.candidate_weights);
-  auto* fast_pairs = reinterpret_cast<CartesianPair*>(base + (wide ? plan.wide_pairs : plan.distances));
+  auto* fast_pairs =
+      reinterpret_cast<CartesianPair*>(base + (wide ? plan.wide_pairs : plan.distances));
   auto* fallback_pairs = reinterpret_cast<PartitionPair*>(accepted + shape_.points);
   const auto* spatial = reinterpret_cast<const double*>(base + plan.spatial);
   auto* point_directions = reinterpret_cast<double*>(base + plan.point_directions);
@@ -1778,12 +1787,15 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
         cartesian_partition_rows<true, true, true, decltype(block_local)::value>
             <<<count, threads, 0, stream>>>(
                 shape_, options_, reference_.basis, reference_.points, reference_.weights,
-                reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii != nullptr,
-                fast_pairs, right_column, rows, nullptr, right_weights, begin, scratch, failures,
+                reference_.atomic_weights, reference_.atom_offsets,
+                reference_.atomic_radii != nullptr, fast_pairs, right_column, rows, nullptr,
+                right_weights, begin, scratch, failures,
                 static_cast<unsigned>(plan.wide_repair_points), status);
       };
-      if (plan.wide_shared) launch(std::true_type{});
-      else launch(std::false_type{});
+      if (plan.wide_shared)
+        launch(std::true_type{});
+      else
+        launch(std::false_type{});
       if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
       begin += count;
     }
@@ -1796,14 +1808,14 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
       partition_geometry<true, true, true>
           <<<dim3(blocks, coordinates), repair_threads, shared, stream>>>(
               shape_, options_, reference_.basis, reference_.points, reference_.weights,
-              reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii,
-              nullptr, right, nullptr, 0, plan.wide_repair_points, nullptr, nullptr, nullptr,
-              rows, nullptr, status, right_weights, right_column, failures, fast_pairs);
+              reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii, nullptr,
+              right, nullptr, 0, plan.wide_repair_points, nullptr, nullptr, nullptr, rows, nullptr,
+              status, right_weights, right_column, failures, fast_pairs);
     }
   } else {
     if ((error = launch_cartesian_rows<false, true>(shape_, options_, reference_, fast_pairs,
-                                                   right_column, rows, accepted, stream,
-                                                   right_weights)) != cudaSuccess)
+                                                    right_column, rows, accepted, stream,
+                                                    right_weights)) != cudaSuccess)
       return drain(error, stream);
     pair_geometry<true><<<dim3(pair_blocks, coordinates), 128, 0, stream>>>(
         reference_.basis, nullptr, right, reference_.center_pairs, reference_.atomic_radii,
@@ -1814,9 +1826,9 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
     partition_geometry<true, true>
         <<<dim3((shape_.points + threads - 1) / threads, coordinates), threads, shared, stream>>>(
             shape_, options_, reference_.basis, reference_.points, reference_.weights,
-            reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii,
-            nullptr, right, fallback_pairs, 0, shape_.points, nullptr, nullptr, nullptr, rows,
-            accepted, status, right_weights, right_column);
+            reference_.atomic_weights, reference_.atom_offsets, reference_.atomic_radii, nullptr,
+            right, fallback_pairs, 0, shape_.points, nullptr, nullptr, nullptr, rows, accepted,
+            status, right_weights, right_column);
   }
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   if (rhs) {
@@ -1825,17 +1837,26 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
           shape_, reference_.basis, spatial, reference_.points, reference_.atom_offsets,
           right_column, accepted, point_directions, status);
     };
-    if (shape_.radial_s) launch(std::true_type{});
-    else launch(std::false_type{});
+    if (shape_.radial_s)
+      launch(std::true_type{});
+    else
+      launch(std::false_type{});
     if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   }
   record_geometry_status<<<1, 1, 0, stream>>>(status, transaction_status, failures,
-                                             plan.wide_repair_points);
+                                              plan.wide_repair_points);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   if ((error = authenticate(stream)) != cudaSuccess) return error;
-  view = {reference_.basis, spatial, rows,
-          reference_.atom_offsets, shape_.atoms, shape_.points_per_atom, 0, right_column,
-          coordinates, shape_.radial_s ? reference_.points : nullptr};
+  view = {reference_.basis,
+          spatial,
+          rows,
+          reference_.atom_offsets,
+          shape_.atoms,
+          shape_.points_per_atom,
+          0,
+          right_column,
+          coordinates,
+          shape_.radial_s ? reference_.points : nullptr};
   if (rhs) {
     *rhs = {accepted, right_weights, point_directions};
     work_.action_ao_jet_values += 4 * plan.panel;
@@ -1883,8 +1904,7 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_mixed_view(const double* l
 
 cudaError_t CudaGridGeometryResponse::mixed_view_impl(const double* left, const double* right,
                                                       CudaGridGeometryMixedView& view,
-                                                      int* transaction_status,
-                                                      cudaStream_t stream,
+                                                      int* transaction_status, cudaStream_t stream,
                                                       std::size_t diagonal_column) noexcept {
   view = {};
   motion_ready_ = false;

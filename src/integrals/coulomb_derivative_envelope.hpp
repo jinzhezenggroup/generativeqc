@@ -26,10 +26,10 @@ struct CoulombDerivativeEnvelope {
 
   /** The returned bound counts all ordered AO components in both shell pairs. */
   static std::optional<Orders> pair(const core::Shell& first, const core::Shell& second,
-                                   const std::array<double, 3>& center_a,
-                                   const std::array<double, 3>& center_b) noexcept {
-    if (first.angular_momentum > 1 || second.angular_momentum > 1 ||
-        first.primitives.empty() || second.primitives.empty())
+                                    const std::array<double, 3>& center_a,
+                                    const std::array<double, 3>& center_b) noexcept {
+    if (first.angular_momentum > 1 || second.angular_momentum > 1 || first.primitives.empty() ||
+        second.primitives.empty())
       return std::nullopt;
     double distance_squared_lower{}, distance_squared_upper{};
     for (unsigned axis = 0; axis < 3; ++axis) {
@@ -53,13 +53,13 @@ struct CoulombDerivativeEnvelope {
         const auto total_lower = lower(total);
         const auto shift_a = upper(upper(beta / total_lower) * distance);
         const auto shift_b = upper(upper(alpha / total_lower) * distance);
-        const auto decay = exp_negative_upper(lower(lower(lower(alpha * beta) / upper(total)) *
-                                                     distance_squared_lower));
+        const auto decay = exp_negative_upper(
+            lower(lower(lower(alpha * beta) / upper(total)) * distance_squared_lower));
         const auto scale = upper(upper(ca * cb) * decay);
         const auto left = orbital_polynomials(first.angular_momentum, alpha, shift_a);
         const auto right = orbital_polynomials(second.angular_momentum, beta, shift_b);
-        const auto denominator = lower(lower(total_lower * total_lower) *
-                                       lower(std::sqrt(lower(2 * total_lower))));
+        const auto denominator =
+            lower(lower(total_lower * total_lower) * lower(std::sqrt(lower(2 * total_lower))));
         constexpr double twice_pi_power_upper = 34.986836656;
         const auto norm = upper(std::sqrt(upper(twice_pi_power_upper / denominator)));
         // Max squared Coulomb norms of Cartesian monomials of each degree,
@@ -67,16 +67,16 @@ struct CoulombDerivativeEnvelope {
         // Coulomb Gaussian representation leaves a uniform u in [0,1], with
         // diagonal variance (2-u^2)/4 and covariance u^2/4. For degrees <=4,
         // the largest integrated Wick moment has all powers along one axis.
-        constexpr std::array squared_ratios{1.0, 1.0 / 12, 49.0 / 240,
-                                            243.0 / 2240, 11449.0 / 26880};
+        constexpr std::array squared_ratios{1.0, 1.0 / 12, 49.0 / 240, 243.0 / 2240,
+                                            11449.0 / 26880};
         std::array<double, 5> moments;
         double exponent_power = 1;
         for (unsigned degree = 0; degree < moments.size(); ++degree) {
           // Use the triangle inequality on signed monomials, not a radial
           // pointwise envelope. The coefficients above bound absolute sums
           // at each degree, and Gaussian scaling contributes p^(-degree/2).
-          moments[degree] = upper(norm * upper(std::sqrt(upper(
-              upper(squared_ratios[degree]) / exponent_power))));
+          moments[degree] =
+              upper(norm * upper(std::sqrt(upper(upper(squared_ratios[degree]) / exponent_power))));
           exponent_power = lower(exponent_power * total_lower);
         }
         for (unsigned order = 0; order < bounds.size(); ++order) {
@@ -86,8 +86,8 @@ struct CoulombDerivativeEnvelope {
             const auto right_degree = second.angular_momentum + order - leg;
             for (unsigned ali = 0; ali <= left_degree; ++ali)
               for (unsigned bli = 0; bli <= right_degree; ++bli) {
-                auto term = upper(upper(left[leg][ali] * right[order - leg][bli]) *
-                                  moments[ali + bli]);
+                auto term =
+                    upper(upper(left[leg][ali] * right[order - leg][bli]) * moments[ali + bli]);
                 if (order == 2 && leg == 1) term = upper(2 * term);
                 sum = upper(sum + term);
               }
@@ -95,7 +95,8 @@ struct CoulombDerivativeEnvelope {
           bounds[order] = upper(bounds[order] + upper(scale * sum));
         }
       }
-    const unsigned components = (2 * first.angular_momentum + 1) * (2 * second.angular_momentum + 1);
+    const unsigned components =
+        (2 * first.angular_momentum + 1) * (2 * second.angular_momentum + 1);
     for (double& bound : bounds) bound = upper(bound * components);
     return bounds;
   }
@@ -105,8 +106,9 @@ struct CoulombDerivativeEnvelope {
    * apply to the separate left/right pair tangents; use the larger order. */
   static double quartet(const Orders& left, const Orders& right) noexcept {
     const auto first = upper(upper(left[1] * right[0]) + upper(left[0] * right[1]));
-    const auto mixed = upper(upper(upper(left[2] * right[0]) + upper(2 * upper(left[1] * right[1]))) +
-                             upper(left[0] * right[2]));
+    const auto mixed =
+        upper(upper(upper(left[2] * right[0]) + upper(2 * upper(left[1] * right[1]))) +
+              upper(left[0] * right[2]));
     return upper(8 * std::max(first, mixed));
   }
 
@@ -124,7 +126,7 @@ struct CoulombDerivativeEnvelope {
   }
 
   static std::array<Polynomial, 3> orbital_polynomials(unsigned angular, double exponent,
-                                                        double shift) noexcept {
+                                                       double shift) noexcept {
     std::array<Polynomial, 4> powers{{{1}}};
     for (unsigned order = 1; order < powers.size(); ++order)
       for (unsigned degree = 0; degree <= order; ++degree) {
@@ -164,8 +166,8 @@ struct CoulombDerivativeOmissions {
  * density contraction. The candidate limit bounds pair storage and the
  * rank/individual-quartet checks independently of the theoretical census. */
 inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::System& system,
-                                                                double budget,
-                                                                std::size_t candidate_limit) {
+                                                               double budget,
+                                                               std::size_t candidate_limit) {
   using Envelope = CoulombDerivativeEnvelope;
   CoulombDerivativeOmissions result;
   const auto shell_count = system.shells.size();
@@ -191,9 +193,8 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
       const auto bound = Envelope::pair(left, right, system.atoms[left.atom_index].position,
                                         system.atoms[right.atom_index].position);
       if (!bound) return {};
-      if (!std::all_of(bound->begin(), bound->end(), [](double value) {
-            return std::isfinite(value);
-          }))
+      if (!std::all_of(bound->begin(), bound->end(),
+                       [](double value) { return std::isfinite(value); }))
         return {};
       const auto order = std::max_element(bound->begin(), bound->end()) - bound->begin();
       by_dominant_order[order].push_back({{first, second}, *bound});
@@ -224,27 +225,27 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
            ++right_order) {
         const auto& right_pairs = by_dominant_order[right_order];
         const auto begin = right_pairs.begin() + (left_order == right_order ? index : 0);
-        if (!charge(std::bit_width(static_cast<std::size_t>(right_pairs.end() - begin))))
-          return {};
+        if (!charge(std::bit_width(static_cast<std::size_t>(right_pairs.end() - begin)))) return {};
         // The dominant coordinate contributes at least one positive term to
         // the outward quartet envelope. Its monotone product rules out the
         // suffix without evaluating the other terms. The central 2* term is
         // intentionally not needed for this necessary condition.
-        const auto coefficient = right_order == 0 ? std::max(left.bounds[1], left.bounds[2])
-                               : right_order == 1 ? std::max(left.bounds[0], left.bounds[1])
-                                                  : left.bounds[0];
-        const auto eligible = std::partition_point(begin, right_pairs.end(), [&](const Pair& right) {
-          return Envelope::upper(8 * Envelope::upper(coefficient * right.bounds[right_order])) <=
-                 budget;
-        });
+        const auto coefficient = right_order == 0   ? std::max(left.bounds[1], left.bounds[2])
+                                 : right_order == 1 ? std::max(left.bounds[0], left.bounds[1])
+                                                    : left.bounds[0];
+        const auto eligible =
+            std::partition_point(begin, right_pairs.end(), [&](const Pair& right) {
+              return Envelope::upper(
+                         8 * Envelope::upper(coefficient * right.bounds[right_order])) <= budget;
+            });
         if (!charge(static_cast<std::size_t>(eligible - begin))) return {};
         for (auto iter = begin; iter != eligible; ++iter) {
           const auto& first = left.shells < iter->shells ? left : *iter;
           const auto& second = left.shells < iter->shells ? *iter : left;
           const auto bound = Envelope::quartet(first.bounds, second.bounds);
           if (bound <= budget)
-            candidates.push_back({bound, {first.shells[0], first.shells[1],
-                                         second.shells[0], second.shells[1]}});
+            candidates.push_back(
+                {bound, {first.shells[0], first.shells[1], second.shells[0], second.shells[1]}});
         }
       }
     }

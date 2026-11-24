@@ -114,7 +114,9 @@ extern "C" int generativeqc_resident_integral_batch(double omega,
 """
     else:
         include = parameter = scalar_argument = batch_binding = batch_launch = ""
-        bind_record = f"      const double* record=records+(begin+threadIdx.x)*{stride};\n"
+        bind_record = (
+            f"      const double* record=records+(begin+threadIdx.x)*{stride};\n"
+        )
     return (
         source
         + f"""

@@ -17,7 +17,8 @@ int main() {
     auto& position = system.atoms[index].position;
     std::size_t primitives{};
     if (!(std::cin >> shell.angular_momentum >> position[0] >> position[1] >> position[2] >>
-          primitives) || !primitives || primitives > 16)
+          primitives) ||
+        !primitives || primitives > 16)
       return 1;
     shell.primitives.resize(primitives);
     for (auto& primitive : shell.primitives)

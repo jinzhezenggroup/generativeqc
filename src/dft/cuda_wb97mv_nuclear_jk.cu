@@ -175,16 +175,16 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
   candidate.single_cartesian_component = true;
   // Fuse only a complete window for which every source can use the same
   // two-chunk publisher. Keep the general tiled scheduler for everything else.
-  candidate.paired_radial_cache = options.prefer_fresh_direction_batches &&
-      options.radial_tile == 64 &&
-      std::all_of(schedule.tiles.begin(), schedule.tiles.end(), [](const Tile& tile) {
-        return tile.program->signature.radial == "full_range" && tile.omega == 0 &&
-               std::ranges::all_of(tile.program->signature.angular, [](auto order) {
-                 return order <= 1;
-               });
-      }) && std::all_of(schedule.groups.begin(), schedule.groups.end(), [](const Group& group) {
-        return group.radials <= 128;
-      });
+  candidate.paired_radial_cache =
+      options.prefer_fresh_direction_batches && options.radial_tile == 64 &&
+      std::all_of(schedule.tiles.begin(), schedule.tiles.end(),
+                  [](const Tile& tile) {
+                    return tile.program->signature.radial == "full_range" && tile.omega == 0 &&
+                           std::ranges::all_of(tile.program->signature.angular,
+                                               [](auto order) { return order <= 1; });
+                  }) &&
+      std::all_of(schedule.groups.begin(), schedule.groups.end(),
+                  [](const Group& group) { return group.radials <= 128; });
   std::size_t records{}, raw{}, inputs{}, reductions{}, projected{}, entries{}, count{},
       maximum_projected{};
   constexpr unsigned pairs[4][2] = {{0, 1}, {2, 3}, {0, 2}, {1, 3}};
@@ -219,8 +219,7 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
     const auto chunks = (group.radials - 1) / options.radial_tile + 1;
     const auto tiles = schedule.closure[group.closure].size();
     if (!multiply(group.radials, 5, count) || !add(records, count) ||
-        !multiply(candidate.paired_radial_cache ? 1 : chunks, tiles, count) ||
-        !add(inputs, count))
+        !multiply(candidate.paired_radial_cache ? 1 : chunks, tiles, count) || !add(inputs, count))
       return;
     if (!candidate.paired_radial_cache &&
         (!multiply(group.device.components, 25, count) || !multiply(count, chunks, count) ||
@@ -322,10 +321,11 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
             const auto target = 1 + spin * plan.matrix +
                                 (group.shells[first].ao_begin + row) * shape.nao +
                                 group.shells[second].ao_begin + column;
-            const auto packed_offset = candidate.packed_frozen_projection
-                                           ? packed_base + (row * group.shells[second].ao_count +
-                                                            column) * shape.spins + spin
-                                           : 0;
+            const auto packed_offset =
+                candidate.packed_frozen_projection
+                    ? packed_base + (row * group.shells[second].ao_count + column) * shape.spins +
+                          spin
+                    : 0;
             owners[target].push_back(entry(index, incidence, row, column, packed_offset));
           }
       packed_base += shape.spins * group.shells[first].ao_count * group.shells[second].ao_count;
@@ -670,8 +670,8 @@ bool canonical_window_options(const CudaWb97mvJkShape& shape, const CudaWb97mvJk
 template <class Visit>
 cudaError_t visit_canonical_windows(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
                                     const CudaWb97mvJkOptions& tile_options,
-                                    std::span<const std::uint64_t> source_words, const char*& refusal,
-                                    Visit&& visit) {
+                                    std::span<const std::uint64_t> source_words,
+                                    const char*& refusal, Visit&& visit) {
   std::vector<Quartet> pending;
   const auto flush = [&](auto&& self, std::span<const Quartet> canonical) -> cudaError_t {
     if (canonical.empty()) return cudaSuccess;
@@ -791,7 +791,7 @@ bool admits_compact_frozen(const Schedule& window) {
          window.reduction_entries.size() <= UINT32_MAX;
 }
 
-template<class Emit>
+template <class Emit>
 bool visit_active_batches(const Schedule& window, Emit&& emit) {
   if (window.batches.size() > UINT32_MAX) return false;
   for (std::size_t index = 0; index < window.batches.size(); ++index) {
@@ -823,17 +823,18 @@ void build_active_components(Schedule& window, std::size_t capacity) {
   if (!capacity) return;
   std::vector<ActiveComponentAtom> atoms(window.frozen_atoms.size());
   std::size_t total{};
-  if (!visit_active_batches(window, [&](auto atom, auto, const auto& batch, const auto& tile,
-                                        auto mask) {
-        if (tile.count > capacity - total) return false;
-        auto& span = atoms[atom][std::popcount(mask)];
-        total += tile.count;
-        span.count += tile.count;
-        span.max_radials = std::max(span.max_radials, batch.count);
-        span.evaluations += batch.count * tile.count;
-        span.reduction_terms += (batch.count > 64 ? 50 : 25) * tile.count;
-        return true;
-      }) || !total)
+  if (!visit_active_batches(window,
+                            [&](auto atom, auto, const auto& batch, const auto& tile, auto mask) {
+                              if (tile.count > capacity - total) return false;
+                              auto& span = atoms[atom][std::popcount(mask)];
+                              total += tile.count;
+                              span.count += tile.count;
+                              span.max_radials = std::max(span.max_radials, batch.count);
+                              span.evaluations += batch.count * tile.count;
+                              span.reduction_terms += (batch.count > 64 ? 50 : 25) * tile.count;
+                              return true;
+                            }) ||
+      !total)
     return;
   std::size_t end{};
   for (auto& atom : atoms) {
@@ -843,14 +844,14 @@ void build_active_components(Schedule& window, std::size_t capacity) {
     }
   }
   window.active_tasks.resize(total);
-  visit_active_batches(window, [&](auto atom, auto index, const auto&, const auto& tile,
-                                   auto mask) {
-    auto& span = atoms[atom][std::popcount(mask)];
-    for (unsigned component = 0; component < tile.count; ++component)
-      window.active_tasks[span.offset++] = {static_cast<std::uint32_t>(index),
-                                           (mask << 7) | tile.components[component]};
-    return true;
-  });
+  visit_active_batches(
+      window, [&](auto atom, auto index, const auto&, const auto& tile, auto mask) {
+        auto& span = atoms[atom][std::popcount(mask)];
+        for (unsigned component = 0; component < tile.count; ++component)
+          window.active_tasks[span.offset++] = {static_cast<std::uint32_t>(index),
+                                                (mask << 7) | tile.components[component]};
+        return true;
+      });
   for (auto& atom : atoms)
     for (auto& span : atom) span.offset -= span.count;
   window.active_atoms = std::move(atoms);
@@ -901,8 +902,8 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
       return row * (2 * width - row + 1) / 2;
     };
     for (const auto& quartet : omitted) {
-      if (quartet[0] > quartet[1] || quartet[2] > quartet[3] ||
-          quartet[1] >= shells.size() || quartet[3] >= shells.size())
+      if (quartet[0] > quartet[1] || quartet[2] > quartet[3] || quartet[1] >= shells.size() ||
+          quartet[3] >= shells.size())
         return cudaErrorInvalidValue;
       const auto first = prefix(quartet[0], shells.size()) + quartet[1] - quartet[0];
       const auto second = prefix(quartet[2], shells.size()) + quartet[3] - quartet[2];
@@ -941,8 +942,8 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
           compact_entries = std::max(compact_entries, window.reduction_entries.size());
         if (window.plan.paired_radial_cache && window.frozen_atoms.size() >= 2) {
           std::size_t tasks{};
-          if (replay && !visit_active_batches(window, [&](auto, auto, const auto&, const auto& tile,
-                                                           auto) {
+          if (replay &&
+              !visit_active_batches(window, [&](auto, auto, const auto&, const auto& tile, auto) {
                 tasks += tile.count;
                 return tasks <= max_task_slot / sizeof(Task);
               }))
@@ -969,8 +970,9 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
     // retaining all sources or shrinking the storage cap must not force it.
     if (!plan.retained_window_source_bytes) {
       auto compact = plan;
-      if (compact_entries && append(compact, plan.panels + 3 * shape.atoms,
-                                    sizeof(std::uint32_t), compact.frozen_entry_counts) &&
+      if (compact_entries &&
+          append(compact, plan.panels + 3 * shape.atoms, sizeof(std::uint32_t),
+                 compact.frozen_entry_counts) &&
           append(compact, compact_entries, sizeof(std::uint32_t), compact.frozen_value_offsets) &&
           compact.bytes <= options.max_workspace_bytes &&
           compact.bytes - plan.bytes <= options.max_batch_workspace_bytes - plan.batch_bytes) {
@@ -1011,7 +1013,8 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
           if (window.frozen_atoms.size() > host_bytes / sizeof(ActiveComponentAtom)) continue;
           const auto spans = window.frozen_atoms.size() * sizeof(ActiveComponentAtom);
           try {
-            build_active_components(window, std::min((host_bytes - spans) / sizeof(Task), capacity));
+            build_active_components(window,
+                                    std::min((host_bytes - spans) / sizeof(Task), capacity));
           } catch (const std::bad_alloc&) {
             break;
           }
@@ -1043,8 +1046,8 @@ cudaError_t schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shel
         !options.max_batch_workspace_bytes || !options.max_batch_projection_bytes ||
         shape.spins != 1 || options.range_exchange ||
         (options.part != CudaWb97mvJkPart::coulomb &&
-         options.part != CudaWb97mvJkPart::full_hybrid) || omitted.empty() ||
-        !(omissions->bound > 0 && omissions->bound <= omissions->max_bound) ||
+         options.part != CudaWb97mvJkPart::full_hybrid) ||
+        omitted.empty() || !(omissions->bound > 0 && omissions->bound <= omissions->max_bound) ||
         !std::is_sorted(omitted.begin(), omitted.end()) ||
         std::adjacent_find(omitted.begin(), omitted.end()) != omitted.end() ||
         !multiply(shape.nao, shape.nao, panels))
@@ -1266,10 +1269,10 @@ __global__ void prepare_batch_geometry(const DeviceGroup* groups, std::size_t co
       constexpr auto range = integrals::CoulombRange::Full;
       bool valid = false;
       switch (degree) {
-#define GQC_PREPARE_DEGREE(value) \
-  case value: \
+#define GQC_PREPARE_DEGREE(value)                                                          \
+  case value:                                                                              \
     valid = integrals::make_eri_geometry<aot::FactorizedPairGeometry, value + 2, 0, true>( \
-        exponents, coordinates, value + 2, range, 0, target); \
+        exponents, coordinates, value + 2, range, 0, target);                              \
     break
         GQC_PREPARE_DEGREE(0);
         GQC_PREPARE_DEGREE(1);
@@ -1429,11 +1432,12 @@ __global__ void project_batches(CudaWb97mvJkShape shape, const DeviceGroup* grou
 // Fold each small shell quartet in its projection CTA. The global scratch now
 // holds one value per sparse owner entry, not a tensor with unconsumed primal
 // fields. Both the local traversal and the final FP64 warp sum keep their order.
-__global__ void project_frozen_batches(
-    CudaWb97mvJkShape shape, const DeviceGroup* groups, std::size_t first, std::size_t count,
-    std::size_t offset, const double* basis, const double* direction, const double* density,
-    const double* delta_density, const double* resident, double* projected, long long frozen_atom,
-    int* status) {
+__global__ void project_frozen_batches(CudaWb97mvJkShape shape, const DeviceGroup* groups,
+                                       std::size_t first, std::size_t count, std::size_t offset,
+                                       const double* basis, const double* direction,
+                                       const double* density, const double* delta_density,
+                                       const double* resident, double* projected,
+                                       long long frozen_atom, int* status) {
   __shared__ double fields[frozen_fields * max_sp_quartets];
   if (__syncthreads_or(threadIdx.x == 0 && atomicAdd(status, 0))) return;
   for (std::size_t index = first + blockIdx.x; index < first + count; index += gridDim.x) {
@@ -1487,11 +1491,13 @@ __global__ void project_frozen_batches(
 
 // All-s windows have one public component per group, so no CTA communication
 // is needed. Keep coincident-center folding identical to the s/p block path.
-__global__ void project_single_frozen_batches(
-    CudaWb97mvJkShape shape, const DeviceGroup* groups, std::size_t first, std::size_t count,
-    std::size_t offset, const double* basis, const double* direction, const double* density,
-    const double* delta_density, const double* resident, double* projected, long long frozen_atom,
-    int* status) {
+__global__ void project_single_frozen_batches(CudaWb97mvJkShape shape, const DeviceGroup* groups,
+                                              std::size_t first, std::size_t count,
+                                              std::size_t offset, const double* basis,
+                                              const double* direction, const double* density,
+                                              const double* delta_density, const double* resident,
+                                              double* projected, long long frozen_atom,
+                                              int* status) {
   if (atomicAdd(status, 0)) return;
   for (std::size_t item = blockIdx.x * blockDim.x + threadIdx.x; item < count;
        item += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
@@ -1499,7 +1505,7 @@ __global__ void project_single_frozen_batches(
     if (!aot::active_eri_centers(group->atoms, frozen_atom)) continue;
     double fields[frozen_fields];
     project_values<1>(shape, group, basis, direction, density, delta_density,
-                       resident + group->resident_offset, fields, status, 0, 1);
+                      resident + group->resident_offset, fields, status, 0, 1);
     auto* output = projected + (group->projected_offset - offset);
     for (unsigned center = 0; center < 4; ++center)
       for (unsigned axis = 0; axis < 3; ++axis) {
@@ -1531,9 +1537,9 @@ __device__ std::size_t lower_group(const ReductionEntry* entries, std::size_t be
  * uses its original range as a capacity, so warps need no global scan and
  * no atomic allocation. The energy owner is not part of a frozen column. */
 __global__ void compact_frozen_owners(const DeviceGroup* groups, const std::size_t* offsets,
-                                       const ReductionEntry* entries, std::size_t owners,
-                                       long long atom, std::uint32_t* counts,
-                                       std::uint32_t* values, const int* status) {
+                                      const ReductionEntry* entries, std::size_t owners,
+                                      long long atom, std::uint32_t* counts, std::uint32_t* values,
+                                      const int* status) {
   if (*status) return;
   const unsigned lane = threadIdx.x % 32;
   for (std::size_t owner = (blockIdx.x * blockDim.x + threadIdx.x) / 32; owner < owners;
@@ -1560,7 +1566,7 @@ __global__ void compact_frozen_owners(const DeviceGroup* groups, const std::size
 }
 
 __device__ std::size_t lower_projection_offset(const std::uint32_t* values, std::size_t begin,
-                                                std::size_t end, std::size_t offset) {
+                                               std::size_t end, std::size_t offset) {
   while (begin < end) {
     const auto middle = begin + (end - begin) / 2;
     if (values[middle] < offset)
@@ -1576,9 +1582,9 @@ __device__ std::size_t lower_projection_offset(const std::uint32_t* values, std:
 __global__ void reduce_compact_frozen(const std::size_t* offsets, const std::uint32_t* counts,
                                       const std::uint32_t* values, const double* projected,
                                       std::size_t projected_begin, std::size_t projected_end,
-                                      std::size_t panels, std::size_t owners,
-                                      double* fock, double* hvp, double* anchor_fock,
-                                      double* anchor_hvp, const int* status) {
+                                      std::size_t panels, std::size_t owners, double* fock,
+                                      double* hvp, double* anchor_fock, double* anchor_hvp,
+                                      const int* status) {
   if (*status) return;
   const unsigned lane = threadIdx.x % 32;
   for (std::size_t owner = (blockIdx.x * blockDim.x + threadIdx.x) / 32; owner < owners;
@@ -1586,10 +1592,11 @@ __global__ void reduce_compact_frozen(const std::size_t* offsets, const std::uin
     const auto first = offsets[owner + 1];
     const auto last = first + counts[owner];
     if (first == last) continue;
-    const auto begin = projected_begin ? lower_projection_offset(values, first, last,
-                                                                 projected_begin) : first;
-    const auto end = projected_end == SIZE_MAX ? last
-                     : lower_projection_offset(values, begin, last, projected_end);
+    const auto begin =
+        projected_begin ? lower_projection_offset(values, first, last, projected_begin) : first;
+    const auto end = projected_end == SIZE_MAX
+                         ? last
+                         : lower_projection_offset(values, begin, last, projected_end);
     if (begin == end) continue;
     double value{};
     for (auto index = begin + lane; index < end; index += 32)
@@ -1622,12 +1629,11 @@ __global__ void reduce_batches(CudaWb97mvJkShape shape, const DeviceGroup* group
   constexpr unsigned pairs[4][2] = {{0, 1}, {2, 3}, {0, 2}, {1, 3}};
   const auto lane = threadIdx.x % 32;
   const auto owners = Packed ? panels + 3 * shape.atoms : count;
-  for (std::size_t owner_index = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
-       owner_index < owners;
+  for (std::size_t owner_index = (blockIdx.x * blockDim.x + threadIdx.x) / 32; owner_index < owners;
        owner_index += static_cast<std::size_t>(gridDim.x) * blockDim.x / 32) {
-    const auto target = Packed ? owner_index + 1 + panels +
-                                                   (owner_index >= panels ? 3 * shape.atoms : 0)
-                               : owner_index;
+    const auto target =
+        Packed ? owner_index + 1 + panels + (owner_index >= panels ? 3 * shape.atoms : 0)
+               : owner_index;
     if (frozen_atom >= 0 &&
         (target <= panels || (target >= vector_begin && target < vector_begin + 3 * shape.atoms)))
       continue;
@@ -1830,15 +1836,15 @@ cudaError_t upload_schedule(const Schedule& schedule, CudaWb97mvJkShape shape, c
 }
 // Both dense traversal orders use the same primitive, projection and FP64 fold.
 cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char* base,
-                       const double* basis, const double* direction, const double* density,
-                       const double* delta_density, double* candidate, long long atom,
-                       bool reuse, int* status, cudaStream_t stream, CudaWb97mvJkWork& work,
-                       double* frozen_fock = nullptr, double* frozen_hvp = nullptr,
-                       double* anchor_fock = nullptr, double* anchor_hvp = nullptr,
-                       bool first_atom_axis = true,
-                       const aot::FactorizedPairGeometry* prepared = nullptr,
-                       const ActiveComponentAtom* active_atom = nullptr,
-                       const aot::FactorizedActiveComponent* active_tasks = nullptr) {
+                        const double* basis, const double* direction, const double* density,
+                        const double* delta_density, double* candidate, long long atom, bool reuse,
+                        int* status, cudaStream_t stream, CudaWb97mvJkWork& work,
+                        double* frozen_fock = nullptr, double* frozen_hvp = nullptr,
+                        double* anchor_fock = nullptr, double* anchor_hvp = nullptr,
+                        bool first_atom_axis = true,
+                        const aot::FactorizedPairGeometry* prepared = nullptr,
+                        const ActiveComponentAtom* active_atom = nullptr,
+                        const aot::FactorizedActiveComponent* active_tasks = nullptr) {
   auto error = cudaSuccess;
   const auto& plan = selected.plan;
   const auto* groups = reinterpret_cast<const DeviceGroup*>(base + plan.groups);
@@ -1854,8 +1860,8 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
   const auto owners = plan.panels + 3 * shape.atoms;
   const auto packed_blocks = std::min<std::size_t>((owners + 3) / 4, 65535);
   if (compact && first_atom_axis) {
-    compact_frozen_owners<<<packed_blocks, 128, 0, stream>>>(groups, offsets, entries, owners,
-                                                            atom, counts, values, status);
+    compact_frozen_owners<<<packed_blocks, 128, 0, stream>>>(groups, offsets, entries, owners, atom,
+                                                             counts, values, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return error;
   }
   if (active_atom && !reuse) {
@@ -1866,8 +1872,7 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
         const auto count = std::min<std::size_t>(span.count - offset, 65535);
         error = static_cast<cudaError_t>(aot::launch_factorized_active_components(
             degree, active_tasks + span.offset + offset, count, span.max_radials, batches,
-            direction, status,
-            stream, prepared, records));
+            direction, status, stream, prepared, records));
         if (error != cudaSuccess) return error;
         offset += count;
         ++work.integral_launches;
@@ -1900,8 +1905,8 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
         if (first >= last) continue;
         error = static_cast<cudaError_t>(aot::launch_factorized_radial_pair(
             tile.program->signature.angular.data(), tile.program->components.data(),
-            tile.program->components.size(), batches + first, last - first, direction, atom,
-            status, stream, prepared,
+            tile.program->components.size(), batches + first, last - first, direction, atom, status,
+            stream, prepared,
             prepared ? reinterpret_cast<const double*>(base + plan.batch_records) : nullptr));
       } else {
         error = static_cast<cudaError_t>(tile.program->integral_batch(
@@ -1914,8 +1919,8 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
       work.reduction_terms += radial_terms;
     }
     if (error == cudaSuccess && !plan.paired_radial_cache) {
-      accumulate_batches<<<std::min<std::size_t>(selected.batch_reductions.size(), 65535), 128,
-                           0, stream>>>(
+      accumulate_batches<<<std::min<std::size_t>(selected.batch_reductions.size(), 65535), 128, 0,
+                           stream>>>(
           groups, tiles, batches,
           reinterpret_cast<const BatchReduction*>(base + plan.batch_reductions),
           selected.batch_reductions.size(), resident, atom, status);
@@ -1931,23 +1936,23 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
     const auto projection_blocks = std::min<std::size_t>(run.count, 65535);
     if (packed && plan.single_cartesian_component)
       project_single_frozen_batches<<<blocks(run.count), 128, 0, stream>>>(
-          shape, groups, run.first, run.count, run.offset, basis, direction, density,
-          delta_density, resident, projected, atom, status);
+          shape, groups, run.first, run.count, run.offset, basis, direction, density, delta_density,
+          resident, projected, atom, status);
     else if (packed)
       project_frozen_batches<<<projection_blocks, 128, 0, stream>>>(
-          shape, groups, run.first, run.count, run.offset, basis, direction, density,
-          delta_density, resident, projected, atom, status);
+          shape, groups, run.first, run.count, run.offset, basis, direction, density, delta_density,
+          resident, projected, atom, status);
     else
       project_batches<<<projection_blocks, 128, 0, stream>>>(
-          shape, groups, run.first, run.count, run.offset, basis, direction, density,
-          delta_density, resident, projected, atom, status);
+          shape, groups, run.first, run.count, run.offset, basis, direction, density, delta_density,
+          resident, projected, atom, status);
     error = cudaGetLastError();
     ++work.projection_launches;
     if (error != cudaSuccess) break;
     if (compact) {
       const auto next = run.first + run.count;
-      const auto projected_end = next == selected.groups.size() ? SIZE_MAX
-                                  : selected.groups[next].device.projected_offset;
+      const auto projected_end =
+          next == selected.groups.size() ? SIZE_MAX : selected.groups[next].device.projected_offset;
       reduce_compact_frozen<<<packed_blocks, 128, 0, stream>>>(
           offsets, counts, values, projected, run.offset, projected_end, plan.panels, owners,
           frozen_fock, frozen_hvp, anchor_fock, anchor_hvp, status);
@@ -1957,11 +1962,11 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
           plan.candidate_count, candidate, atom, status, frozen_fock, frozen_hvp, anchor_fock,
           anchor_hvp);
     else
-      reduce_batches<><<<std::min<std::size_t>((plan.candidate_count + 3) / 4, 65535), 128, 0,
-                          stream>>>(
-          shape, groups, offsets, entries, projected, run.first, run.count, run.offset,
-          plan.candidate_count, candidate, atom, status, frozen_fock, frozen_hvp, anchor_fock,
-          anchor_hvp);
+      reduce_batches<>
+          <<<std::min<std::size_t>((plan.candidate_count + 3) / 4, 65535), 128, 0, stream>>>(
+              shape, groups, offsets, entries, projected, run.first, run.count, run.offset,
+              plan.candidate_count, candidate, atom, status, frozen_fock, frozen_hvp, anchor_fock,
+              anchor_hvp);
     error = cudaGetLastError();
     ++work.reduction_launches;
     for (std::size_t index = run.first; index < run.first + run.count; ++index) {
@@ -2015,11 +2020,12 @@ CudaWb97mvNuclearJk::Plan::~Plan() = default;
 std::size_t CudaWb97mvNuclearJk::Plan::bytes() const noexcept {
   return impl_ ? impl_->selected.plan.bytes : 0;
 }
-cudaError_t CudaWb97mvNuclearJk::Plan::build(
-    const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
-    const CudaWb97mvJkOptions& options, std::string* detail,
-    const integrals::CoulombDerivativeOmissions* omissions,
-    CudaWb97mvJkAdmissionFailure* failure) noexcept {
+cudaError_t CudaWb97mvNuclearJk::Plan::build(const CudaWb97mvJkShape& shape,
+                                             std::span<const Shell> shells,
+                                             const CudaWb97mvJkOptions& options,
+                                             std::string* detail,
+                                             const integrals::CoulombDerivativeOmissions* omissions,
+                                             CudaWb97mvJkAdmissionFailure* failure) noexcept {
   impl_.reset();
   if (failure) *failure = CudaWb97mvJkAdmissionFailure::other;
   try {
@@ -2037,10 +2043,12 @@ cudaError_t CudaWb97mvNuclearJk::Plan::build(
     }
     if (failure && error == cudaErrorInvalidValue) *failure = selected.admission_failure;
     if (error == cudaSuccess) {
-      impl_ = std::make_unique<Impl>(Impl{std::move(selected), shape, options,
-                                        {shells.begin(), shells.end()},
-                                        omissions ? omissions->sources.size() : 0,
-                                        omissions ? omissions->bound : 0});
+      impl_ = std::make_unique<Impl>(Impl{std::move(selected),
+                                          shape,
+                                          options,
+                                          {shells.begin(), shells.end()},
+                                          omissions ? omissions->sources.size() : 0,
+                                          omissions ? omissions->bound : 0});
     }
     return error;
   } catch (...) {
@@ -2061,12 +2069,10 @@ CudaWb97mvNuclearJk::CudaWb97mvNuclearJk() : impl_(std::make_unique<Impl>()) {}
 CudaWb97mvNuclearJk::~CudaWb97mvNuclearJk() = default;
 const CudaWb97mvJkWork& CudaWb97mvNuclearJk::work() const noexcept { return impl_->work; }
 
-cudaError_t CudaWb97mvNuclearJk::prepare(const CudaWb97mvJkShape& shape,
-                                         std::span<const Shell> shells,
-                                         const CudaWb97mvJkOptions& options,
-                                         const CudaWb97mvJkReference& reference, void* workspace,
-                                         std::size_t workspace_bytes,
-                                         const integrals::CoulombDerivativeOmissions* omissions) noexcept {
+cudaError_t CudaWb97mvNuclearJk::prepare(
+    const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
+    const CudaWb97mvJkOptions& options, const CudaWb97mvJkReference& reference, void* workspace,
+    std::size_t workspace_bytes, const integrals::CoulombDerivativeOmissions* omissions) noexcept {
   Plan plan;
   const auto error = plan.build(shape, shells, options, nullptr, omissions);
   if (error == cudaSuccess) return prepare(plan, reference, workspace, workspace_bytes);
@@ -2204,8 +2210,7 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
   const auto& plan = state.schedule.plan;
   const bool replay = state.schedule.replay_windows != 0;
   if (!state.options.prefer_fresh_direction_batches ||
-      (!replay && state.schedule.windows.empty()) ||
-      plan.retained_window_source_bytes)
+      (!replay && state.schedule.windows.empty()) || plan.retained_window_source_bytes)
     return cudaErrorNotSupported;
   const auto& shape = state.shape;
   const auto coordinates = 3 * shape.atoms;
@@ -2222,10 +2227,13 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
       plan.projections > (UINT64_MAX - state.work.projection_terms_bound) / coordinates ||
       plan.reductions > (UINT64_MAX - state.work.reduction_terms) / coordinates)
     return cudaErrorInvalidValue;
-  const void* buffers[]{direction, density, zero_delta_density, table, transaction_status,
-                        reference.basis};
-  const std::size_t sizes[]{coordinates * sizeof(double), plan.panels * sizeof(double),
-                            plan.panels * sizeof(double), table_bytes, sizeof(int),
+  const void* buffers[]{direction,          density,        zero_delta_density, table,
+                        transaction_status, reference.basis};
+  const std::size_t sizes[]{coordinates * sizeof(double),
+                            plan.panels * sizeof(double),
+                            plan.panels * sizeof(double),
+                            table_bytes,
+                            sizeof(int),
                             plan.basis_elements * sizeof(double)};
   for (unsigned index = 0; index < std::size(buffers); ++index) {
     if ((error = device_buffer(buffers[index], reference.device_id)) != cudaSuccess) return error;
@@ -2277,15 +2285,17 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
                               stream);
     if (error == cudaSuccess && upload_complete) error = cudaEventRecord(upload_complete, stream);
     aot::FactorizedPairGeometry* prepared = nullptr;
-    if (error == cudaSuccess && window.plan.paired_radial_cache && window.frozen_atoms.size() >= 2 &&
-        window.plan.window_radials <= plan.prepared_count) {
+    if (error == cudaSuccess && window.plan.paired_radial_cache &&
+        window.frozen_atoms.size() >= 2 && window.plan.window_radials <= plan.prepared_count) {
       prepared = reinterpret_cast<aot::FactorizedPairGeometry*>(base + plan.prepared_geometry);
-      prepare_batch_geometry<<<std::min<std::size_t>(window.groups.size(), 65535), 128, 0, stream>>>(
+      prepare_batch_geometry<<<std::min<std::size_t>(window.groups.size(), 65535), 128, 0,
+                               stream>>>(
           reinterpret_cast<const DeviceGroup*>(base + window.plan.groups), window.groups.size(),
           reference.basis, reinterpret_cast<const double*>(base + window.plan.batch_records),
           prepared, status);
       error = cudaGetLastError();
-      if (error == cudaSuccess) state.work.prepared_geometry_records_bound += window.plan.window_radials;
+      if (error == cudaSuccess)
+        state.work.prepared_geometry_records_bound += window.plan.window_radials;
     }
     for (std::size_t index = 0; index < window.frozen_atoms.size(); ++index) {
       const auto atom = window.frozen_atoms[index];
@@ -2340,7 +2350,8 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
             }
             bind_window_tail(window, plan);
             if (plan.active_component_capacity && window.plan.paired_radial_cache &&
-                window.frozen_atoms.size() >= 2 && window.plan.window_radials <= plan.prepared_count) {
+                window.frozen_atoms.size() >= 2 &&
+                window.plan.window_radials <= plan.prepared_count) {
               // The upload event below protects these host indices along
               // with the other replay metadata. Allocation is optional.
               try {
@@ -2496,8 +2507,8 @@ cudaError_t CudaWb97mvNuclearJk::apply_impl(const double* direction, const doubl
       error = upload_schedule(selected, shape, reference.basis, state.workspace, status, stream);
     if (plan.batch_bytes && error == cudaSuccess) {
       const auto atom = frozen ? static_cast<long long>(frozen_column / 3) : -1LL;
-      error = run_batched(selected, shape, base, reference.basis, direction, density,
-                          delta_density, candidate, atom, reuse, status, stream, state.work);
+      error = run_batched(selected, shape, base, reference.basis, direction, density, delta_density,
+                          candidate, atom, reuse, status, stream, state.work);
     }
     for (std::size_t index = 0;
          !plan.batch_bytes && index < selected.groups.size() && error == cudaSuccess; ++index) {

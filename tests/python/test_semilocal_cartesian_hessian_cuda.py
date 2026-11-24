@@ -195,5 +195,9 @@ def test_dense_r2scan_cartesian_column_matches_signed_hvp() -> None:
         dense.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
     )
     np.testing.assert_allclose(dense.matrix, dense.matrix.T, atol=2e-8, rtol=0)
-    assert dense.diagnostics["response_backend"] == action.diagnostics["response_backend"] == "cuda"
+    assert (
+        dense.diagnostics["response_backend"]
+        == action.diagnostics["response_backend"]
+        == "cuda"
+    )
     assert not dense.diagnostics["numerical_host_fallbacks"]

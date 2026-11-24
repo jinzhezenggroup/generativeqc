@@ -124,13 +124,11 @@ enum class CudaWb97mvJkAdmissionFailure { other, canonical_source_limit };
 /** Host-only checked closure/work/arena admission, without CUDA initialization.
  * Every ordered shell class and raw component must be linked exactly once for
  * each requested radial kernel/omega. No name parsing, discovery or JIT exists. */
-cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape,
-                                     std::span<const integrals::CudaOneElectronShell> shells,
-                                     const CudaWb97mvJkOptions& options, std::size_t& bytes,
-                                     std::string* detail = nullptr,
-                                     const integrals::CoulombDerivativeOmissions* omissions =
-                                         nullptr,
-                                     CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
+cudaError_t cuda_wb97mv_jk_workspace(
+    const CudaWb97mvJkShape& shape, std::span<const integrals::CudaOneElectronShell> shells,
+    const CudaWb97mvJkOptions& options, std::size_t& bytes, std::string* detail = nullptr,
+    const integrals::CoulombDerivativeOmissions* omissions = nullptr,
+    CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
 
 /** Native compiler-AD J/K nuclear source, with signed symmetric D and dD.
  * Raw value/gradient/gradient-JVP are evaluated once per primitive component and
@@ -160,10 +158,10 @@ class CudaWb97mvNuclearJk {
     Plan& operator=(const Plan&) = delete;
 
     cudaError_t build(const CudaWb97mvJkShape& shape,
-                     std::span<const integrals::CudaOneElectronShell> shells,
-                     const CudaWb97mvJkOptions& options, std::string* detail = nullptr,
-                     const integrals::CoulombDerivativeOmissions* omissions = nullptr,
-                     CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
+                      std::span<const integrals::CudaOneElectronShell> shells,
+                      const CudaWb97mvJkOptions& options, std::string* detail = nullptr,
+                      const integrals::CoulombDerivativeOmissions* omissions = nullptr,
+                      CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
     std::size_t bytes() const noexcept;
 
    private:

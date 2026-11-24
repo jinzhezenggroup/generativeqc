@@ -165,9 +165,10 @@ class CudaGridGeometryResponse {
                                          cudaStream_t stream) noexcept;
   /** Same provisional mixed view for an authenticated unit direction on both
    * sides. Publish just the diagonal weight row with the ordinary AO panels. */
-  cudaError_t enqueue_private_cartesian_diagonal_view(
-      const double* direction, std::size_t column, CudaGridGeometryMixedView& view,
-      int* transaction_status, cudaStream_t stream) noexcept;
+  cudaError_t enqueue_private_cartesian_diagonal_view(const double* direction, std::size_t column,
+                                                      CudaGridGeometryMixedView& view,
+                                                      int* transaction_status,
+                                                      cudaStream_t stream) noexcept;
   /** Dense unit directions constructed by the caller. Return cudaErrorNotSupported
    * before enqueue if order-three spatial jets are not fully resident. */
   cudaError_t enqueue_private_cartesian_view(const double* left, const double* right,
@@ -179,10 +180,10 @@ class CudaGridGeometryResponse {
    * When requested, borrow its right first jets and weights for the CPKS RHS.
    * Both views remain live until the next geometry call that uses scratch.
    * If the batched fallback does not fit, return NotSupported before enqueue. */
-  cudaError_t enqueue_private_cartesian_column(const double* right, std::size_t right_column,
-                                               CudaGridGeometryCartesianView& view,
-                                               int* transaction_status, cudaStream_t stream,
-                                               CudaGridGeometryDirectionView* rhs = nullptr) noexcept;
+  cudaError_t enqueue_private_cartesian_column(
+      const double* right, std::size_t right_column, CudaGridGeometryCartesianView& view,
+      int* transaction_status, cudaStream_t stream,
+      CudaGridGeometryDirectionView* rhs = nullptr) noexcept;
   /** Admit all mixed actions of an endpoint before any partial work. */
   cudaError_t admit_actions(std::size_t actions) noexcept;
   /** Borrow [20,point,AO] spatial jets when resident and expanded. */
@@ -199,7 +200,8 @@ class CudaGridGeometryResponse {
                         const double* accepted = nullptr, bool reference_only = false) noexcept;
   cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream,
                              int* transaction_status = nullptr, std::size_t left_column = SIZE_MAX,
-                             std::size_t right_column = SIZE_MAX, bool weights_only = false) noexcept;
+                             std::size_t right_column = SIZE_MAX,
+                             bool weights_only = false) noexcept;
   cudaError_t mixed_view_impl(const double* left, const double* right,
                               CudaGridGeometryMixedView& view, int* transaction_status,
                               cudaStream_t stream, std::size_t diagonal_column = SIZE_MAX) noexcept;

@@ -165,7 +165,8 @@ __global__ void frozen_exact_response(const double* derivatives, const double* f
     double value = frozen[column * coordinates + left];
     for (std::size_t index = 0; index < panels; ++index) {
       const auto response = delta_density[index];
-      if (screened && !(fabs(response) <= integrals::CoulombDerivativeOmissions::max_response_element))
+      if (screened &&
+          !(fabs(response) <= integrals::CoulombDerivativeOmissions::max_response_element))
         atomicExch(status, 1);
       value += derivatives[left * panels + index] * response;
     }
@@ -535,8 +536,8 @@ struct CudaKsWb97mvHessian::Impl {
                                                     at(totals) + matrix, at(delta_totals) + matrix};
     bool streamed_exact = false;
     if (frozen_exact && error == cudaSuccess) {
-      const auto dense = exact.enqueue_private_frozen_dense(at(direction), at(zero), frozen_exact,
-                                                            status, stream);
+      const auto dense =
+          exact.enqueue_private_frozen_dense(at(direction), at(zero), frozen_exact, status, stream);
       if (dense == cudaErrorNotSupported && exact.work().omitted_frozen_source_groups)
         return cudaErrorInvalidResourceHandle;
       if (dense != cudaErrorNotSupported) {
@@ -664,10 +665,10 @@ struct CudaKsWb97mvHessian::Impl {
     CudaGridGeometryMixedView motion, vv10_motion;
     if (!cartesian_column.weights) {
       error = repeated_rhs && column < coordinates
-                  ? geometry.enqueue_private_cartesian_diagonal_view(
-                        at(direction), column, motion, at<int>(status_offset), stream)
-                  : geometry.enqueue_private_mixed_view(
-                        at(direction), at(direction), motion, at<int>(status_offset), stream);
+                  ? geometry.enqueue_private_cartesian_diagonal_view(at(direction), column, motion,
+                                                                     at<int>(status_offset), stream)
+                  : geometry.enqueue_private_mixed_view(at(direction), at(direction), motion,
+                                                        at<int>(status_offset), stream);
       if (error != cudaSuccess) return error;
       right_motion = {motion.ao + ao_panel, motion.weights + shape.points,
                       motion.point_directions + 3 * shape.points};
@@ -740,7 +741,8 @@ struct CudaKsWb97mvHessian::Impl {
       // Retain contracted AO derivatives, not four-index value/gradient jets.
       frozen_exact_response<<<maps::blocks(coordinates), 128, 0, stream>>>(
           frozen_exact, frozen_exact + coordinates * panels, at(delta_density), panels, coordinates,
-          column, vector(3), at<int>(status_offset), exact.work().omitted_frozen_source_groups != 0);
+          column, vector(3), at<int>(status_offset),
+          exact.work().omitted_frozen_source_groups != 0);
       error = cudaGetLastError();
       if (error == cudaSuccess) ++receipt.frozen_exact_contractions;
     } else if (has_exact) {
@@ -784,8 +786,8 @@ struct CudaKsWb97mvHessian::Impl {
                          at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     if (cartesian_column.weights &&
-        (error = grid.enqueue_private_cartesian_mixed(cartesian_column, vector(5),
-                                                      at<int>(status_offset), stream)) != cudaSuccess)
+        (error = grid.enqueue_private_cartesian_mixed(
+             cartesian_column, vector(5), at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     for (std::size_t coordinate = 0; !cartesian_column.weights && coordinate < coordinates;
          ++coordinate) {
@@ -899,7 +901,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     geometry_shape.radial_s = shape.nao > 64 && !separate;
     for (const auto& shell : owner->fock.primary->system().shells) {
       const auto angular = static_cast<std::size_t>(shell.angular_momentum);
-      geometry_shape.radial_s = geometry_shape.radial_s && angular == 0 &&
+      geometry_shape.radial_s =
+          geometry_shape.radial_s && angular == 0 &&
           std::all_of(shell.primitives.begin(), shell.primitives.end(), [](const auto& primitive) {
             return primitive.exponent >= 0x1p-32 && primitive.exponent <= 0x1p16 &&
                    std::abs(primitive.coefficient) <= 0x1p16;
@@ -1206,8 +1209,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
         std::min(exact_options.max_workspace_bytes, owner->remaining);
     if (owner->has_exact) {
       CudaWb97mvJkAdmissionFailure exact_failure{};
-      status = owner->exact.prepare(batch, item, expected, exact_options, detail, false,
-                                    &exact_failure);
+      status =
+          owner->exact.prepare(batch, item, expected, exact_options, detail, false, &exact_failure);
       if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
           exact_failure == CudaWb97mvJkAdmissionFailure::canonical_source_limit &&
           exact_options.prefer_fresh_direction_batches && frozen_bytes < owner->remaining &&
@@ -1355,14 +1358,14 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       constexpr std::size_t small_operator_bytes = 128ULL << 10;
       const auto cpks_shape = owner->cpks_reference.shape();
       constexpr std::size_t ordinary_operator_bytes = 512ULL << 10;
-      const bool extended = operator_bytes > ordinary_operator_bytes && cpks_shape.spins == 1 &&
-                            !owner->has_df && !owner->has_ecp && !owner->fock.correction &&
-                            !owner->expected.identity.model.nonlocal_grid &&
-                            owner->options.cpks.resident_precision ==
-                                response::CudaCpksResidentPrecision::fp64;
-      const auto operator_limit = extended ? options.max_resident_cpks_bytes
-                                           : std::min(options.max_resident_cpks_bytes,
-                                                      ordinary_operator_bytes);
+      const bool extended =
+          operator_bytes > ordinary_operator_bytes && cpks_shape.spins == 1 && !owner->has_df &&
+          !owner->has_ecp && !owner->fock.correction &&
+          !owner->expected.identity.model.nonlocal_grid &&
+          owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64;
+      const auto operator_limit =
+          extended ? options.max_resident_cpks_bytes
+                   : std::min(options.max_resident_cpks_bytes, ordinary_operator_bytes);
       const std::size_t build_actions_per_rhs = extended ? 8 : 6;
       std::size_t rotations{};
       for (unsigned spin = 0; spin < cpks_shape.spins; ++spin)
@@ -1371,8 +1374,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
           operator_bytes <= small_operator_bytes ||
           (owner->options.cpks.gmres.max_iterations > build_actions_per_rhs &&
            (rotations == 0 || (rotations - 1) / build_actions_per_rhs < coordinates));
-      if (eligible && amortized && operator_bytes &&
-          operator_bytes <= operator_limit && operator_bytes <= owner->remaining &&
+      if (eligible && amortized && operator_bytes && operator_bytes <= operator_limit &&
+          operator_bytes <= owner->remaining &&
           operator_bytes <= owner->options.cpks.max_workspace_bytes - owner->cpks_bytes) {
         const auto allocation =
             runtime::resource_cuda_malloc(&owner->operator_matrix, operator_bytes);
@@ -1387,8 +1390,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
                                      owner->options.cpks.resident_precision);
         }
       }
-      if (owner->has_exact && !owner->frozen_exact && frozen_bytes <= options.max_frozen_exact_bytes &&
-          frozen_bytes <= owner->remaining) {
+      if (owner->has_exact && !owner->frozen_exact &&
+          frozen_bytes <= options.max_frozen_exact_bytes && frozen_bytes <= owner->remaining) {
         const auto allocation = runtime::resource_cuda_malloc(&owner->frozen_exact, frozen_bytes);
         if (allocation == cudaErrorMemoryAllocation) {
           (void)cudaGetLastError();

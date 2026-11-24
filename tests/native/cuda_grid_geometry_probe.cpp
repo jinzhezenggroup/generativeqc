@@ -151,8 +151,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
   if (topology == "tiled-cartesian-extended") {
     // The random dense 96-center fixture can need more repairs than the
     // production budget. Reserve all its points for a derivative comparison.
-    options.max_cartesian_repair_pairs = 3 * shape.atoms * (shape.atoms * (shape.atoms - 1) / 2) *
-                                         shape.points;
+    options.max_cartesian_repair_pairs =
+        3 * shape.atoms * (shape.atoms * (shape.atoms - 1) / 2) * shape.points;
   }
   std::size_t bytes{};
   Storage storage;
@@ -164,7 +164,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       shape.ao_primitive_terms +=
           static_cast<std::size_t>(basis[offset + 16 * index + 2] * basis[offset + 16 * index + 3]);
     if (topology == "understated") --shape.ao_primitive_terms;
-    options.max_ao_primitive_terms = (shape.radial_s ? 4 : 20) * shape.points * shape.ao_primitive_terms;
+    options.max_ao_primitive_terms =
+        (shape.radial_s ? 4 : 20) * shape.points * shape.ao_primitive_terms;
   }
   check(cuda_grid_geometry_workspace(shape, options, bytes));
   const auto points = read(input, 3 * shape.points);
@@ -319,7 +320,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       check(cudaStreamSynchronize(storage.stream));
     };
     const auto left_column = std::distance(left.begin(), std::find(left.begin(), left.end(), 1.));
-    const auto right_column = std::distance(right.begin(), std::find(right.begin(), right.end(), 1.));
+    const auto right_column =
+        std::distance(right.begin(), std::find(right.begin(), right.end(), 1.));
     require(left_column < static_cast<std::ptrdiff_t>(left.size()) &&
                 right_column < static_cast<std::ptrdiff_t>(right.size()),
             "Cartesian fixture requires unit seeds");
@@ -343,8 +345,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       grid_options.nuclear_response = true;
       grid_options.max_nuclear_adjoint_bytes = 64ULL << 20;
       CudaWb97mvGridReference grid_reference{
-          reference.basis, reference.points, reference.weights, storage.upload(density),
-          reference.device_id, storage.stream, Owner::authenticate, &owner};
+          reference.basis,     reference.points, reference.weights,   storage.upload(density),
+          reference.device_id, storage.stream,   Owner::authenticate, &owner};
       std::size_t grid_bytes{};
       check(cuda_wb97mv_grid_workspace(grid_shape, grid_options, grid_bytes));
       check(grid.prepare(grid_shape, grid_options, grid_reference,
@@ -354,7 +356,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       require(grid.admits_cartesian_mixed(left.size()), "radial XC column not admitted");
     }
     for (const auto right_seed : {quadrature_column ? static_cast<std::size_t>(left_column) : 0,
-                                 static_cast<std::size_t>(right_column)}) {
+                                  static_cast<std::size_t>(right_column)}) {
       write_unit(cartesian_right, right_seed);
       check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
       CudaGridGeometryDirectionView rhs;
@@ -362,18 +364,20 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
           cartesian_right, right_seed, cartesian, cartesian_status, storage.stream, &rhs);
       std::vector<double> column, right_weights, xc_column;
       if (queued == cudaErrorNotSupported) {
-        require(!tiled_cartesian && shape.atoms > 3 && !cartesian.weights && !rhs.weights && !audit(),
-                "column admission did not preserve the scalar fallback");
+        require(
+            !tiled_cartesian && shape.atoms > 3 && !cartesian.weights && !rhs.weights && !audit(),
+            "column admission did not preserve the scalar fallback");
       } else {
         check(queued);
-        require(cartesian.rows == left.size() && !audit(), "Cartesian column rejected a valid source");
+        require(cartesian.rows == left.size() && !audit(),
+                "Cartesian column rejected a valid source");
         require(cartesian.radial_points == (shape.radial_s ? reference.points : nullptr),
                 "Cartesian view does not identify its spatial representation");
         column = download(cartesian.weights, 2 * shape.points * left.size());
         right_weights = download(rhs.weights, shape.points);
         CudaGridGeometryMixedView diagonal;
         check(scalar.enqueue_private_mixed_view(cartesian_right, cartesian_right, diagonal,
-                                               cartesian_status, storage.stream));
+                                                cartesian_status, storage.stream));
         require(!audit(), "scalar right direction rejected a valid source");
         const auto gathered = download(rhs.ao, ao_count / 3);
         const auto expanded = download(diagonal.ao + ao_count / 3, ao_count / 3);
@@ -400,11 +404,13 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
         // selected mixed row, diagonal, and first/last center's three axes.
         const auto left_atom = left_seed / 3;
         if (quadrature_column && left_seed != static_cast<std::size_t>(left_column) &&
-            left_seed != static_cast<std::size_t>(right_column)) continue;
+            left_seed != static_cast<std::size_t>(right_column))
+          continue;
         if (tiled_cartesian && (shape.radial_s || shape.atoms == cuda_grid_tiled_cartesian_atoms) &&
             left_atom != 0 && left_atom + 1 != shape.atoms && left_atom % 32 > 1 &&
             left_atom % 32 != 31 && left_seed != static_cast<std::size_t>(left_column) &&
-            left_seed != right_seed) continue;
+            left_seed != right_seed)
+          continue;
         write_unit(cartesian_left, left_seed);
         check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
         if (!tiled_cartesian) {
@@ -425,9 +431,11 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
           const auto tolerance = 3e-13 * (std::abs(atomic[point]) + std::abs(expected[index]));
           require(std::abs(cached[index] - expected[index]) <= tolerance,
                   "cached Cartesian row differs from scaled mixed jets");
-          const double actual = column.empty() ? cached[index] :
-              (plane == 1 ? right_weights[point] :
-                            column[(2 * left_seed + (plane == 2)) * shape.points + point]);
+          const double actual =
+              column.empty()
+                  ? cached[index]
+                  : (plane == 1 ? right_weights[point]
+                                : column[(2 * left_seed + (plane == 2)) * shape.points + point]);
           require(std::abs(actual - expected[index]) <= tolerance,
                   "compact Cartesian column differs from scaled mixed jets");
           if (capture_row) published_weights[index] = actual;
@@ -435,7 +443,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
         if (!xc_column.empty()) {
           CudaGridGeometryMixedView expanded;
           check(scalar.enqueue_private_mixed_view(cartesian_left, cartesian_right, expanded,
-                                                 cartesian_status, storage.stream));
+                                                  cartesian_status, storage.stream));
           check(grid.enqueue_private_nuclear_mixed(
               expanded.ao, expanded.ao + 2 * (ao_count / 3), expanded.weights,
               expanded.weights + 2 * shape.points, expanded.point_directions, cartesian_xc,
@@ -466,7 +474,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
                               storage.allocate(limited_bytes / sizeof(double)), limited_bytes));
         check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
         check(limited.enqueue_private_cartesian_column(cartesian_right, right_column, cartesian,
-                                                      cartesian_status, storage.stream));
+                                                       cartesian_status, storage.stream));
         require((audit() & cuda_grid_cartesian_repair_exhausted) &&
                     download(weight_output, weight_count) == original,
                 "incomplete repair queue did not invalidate its private transaction");
@@ -477,11 +485,10 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
     }
     CudaGridGeometryMixedView diagonal, scalar_diagonal;
     check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
-    check(response.enqueue_private_cartesian_diagonal_view(cartesian_right, right_column,
-                                                             diagonal, cartesian_status,
-                                                             storage.stream));
+    check(response.enqueue_private_cartesian_diagonal_view(cartesian_right, right_column, diagonal,
+                                                           cartesian_status, storage.stream));
     check(scalar.enqueue_private_mixed_view(cartesian_right, cartesian_right, scalar_diagonal,
-                                           cartesian_status, storage.stream));
+                                            cartesian_status, storage.stream));
     require(!audit() && (tiled_cartesian || response.work().cartesian_diagonal_sweeps > 0),
             "fixture did not exercise the diagonal Cartesian partition");
     const auto diagonal_ao = download(diagonal.ao, ao_count);
@@ -493,24 +500,24 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
     const auto actual_diagonal = download(diagonal.weights, weight_count);
     const auto expected_diagonal = download(scalar_diagonal.weights, weight_count);
     for (std::size_t index = 0; index < weight_count; ++index)
-      require(std::abs(actual_diagonal[index] - expected_diagonal[index]) <=
-                  3e-13 * (std::abs(atomic[index % shape.points]) + std::abs(expected_diagonal[index])),
-              "diagonal Cartesian partition differs from scaled mixed jets");
+      require(
+          std::abs(actual_diagonal[index] - expected_diagonal[index]) <=
+              3e-13 * (std::abs(atomic[index % shape.points]) + std::abs(expected_diagonal[index])),
+          "diagonal Cartesian partition differs from scaled mixed jets");
     check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
-    check(response.enqueue_private_cartesian_view(cartesian_left, cartesian_right, 0,
-                                                  right_column, cartesian, cartesian_status,
-                                                  storage.stream));
+    check(response.enqueue_private_cartesian_view(cartesian_left, cartesian_right, 0, right_column,
+                                                  cartesian, cartesian_status, storage.stream));
     require(audit() != 0, "Cartesian cache accepted a mismatched left direction");
     if (shape.atoms == 3 || tiled_cartesian) {
       check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
       check(response.enqueue_private_cartesian_column(cartesian_right, 0, cartesian,
-                                                       cartesian_status, storage.stream));
+                                                      cartesian_status, storage.stream));
       require(audit() != 0, "Cartesian column accepted a mismatched right direction");
     }
   }
   std::ofstream capture(output, std::ios::binary);
-  for (const auto& values : {spatial, download(ao_output, ao_count), published_weights,
-                             expected_motion})
+  for (const auto& values :
+       {spatial, download(ao_output, ao_count), published_weights, expected_motion})
     require(static_cast<bool>(capture.write(reinterpret_cast<const char*>(values.data()),
                                             values.size() * sizeof(double))),
             "probe output write failed");
@@ -624,14 +631,16 @@ int main(int argc, char** argv) {
                       mode.rfind("tiled-cartesian", 0) == 0)
             ? argv[3]
             : "";
-    const auto reject =
-        argc == 4 && (std::string(argv[3]) == "reject" || topology == "understated" ||
-                      topology == "radial-reject");
+    const auto reject = argc == 4 && (std::string(argv[3]) == "reject" ||
+                                      topology == "understated" || topology == "radial-reject");
     // The fixtures exercise full tiles followed by a short tail.
     auto tile = CudaGridGeometryOptions{}.point_tile;
-    if (mode.rfind("tiled-cartesian", 0) == 0 && mode != "tiled-cartesian-quadrature") tile = 7;
-    else if (replay) tile = 64;
-    else if (argc == 4 && !reject && topology.empty()) tile = std::stoull(argv[3]);
+    if (mode.rfind("tiled-cartesian", 0) == 0 && mode != "tiled-cartesian-quadrature")
+      tile = 7;
+    else if (replay)
+      tile = 64;
+    else if (argc == 4 && !reject && topology.empty())
+      tile = std::stoull(argv[3]);
     run(argv[1], argv[2], reject, tile, topology, replay, partial);
     return 0;
   } catch (const std::exception& error) {
