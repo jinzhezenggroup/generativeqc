@@ -25,10 +25,10 @@ struct CudaKsWb97mvHessianOptions {
   std::uint64_t max_nuclear_pairs{16'777'216};
   /** Optional repeated-RHS CPKS representation, additionally constrained by
    * the response/aggregate budgets and the rotation-to-RHS amortization gate.
-   * The extended ceiling accommodates up to 512 FP64 rotations in eligible
+   * The extended ceiling accommodates up to 724 FP64 rotations in eligible
    * Direct RKS; other paths retain their smaller admission limit. Zero
    * retains physical GMRES. */
-  std::size_t max_resident_cpks_bytes{2ULL << 20};
+  std::size_t max_resident_cpks_bytes{4ULL << 20};
   /** Optional full-Hessian frozen exact derivatives, inside max_device_bytes.
    * Stores O(3N*spin*AO^2) first Fock derivatives plus frozen HVP columns,
    * never a four-index derivative tensor. Zero keeps directional replay. */

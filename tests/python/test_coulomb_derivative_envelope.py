@@ -32,11 +32,14 @@ def _run(
     exponents: np.ndarray,
     *,
     budget: float = 1e-14,
-    limit: int = 0,
-) -> tuple[float, list[tuple[int, ...]], int]:
+    limit: int,
+    topology: tuple[int, ...] = (),
+) -> tuple[str, str]:
     rows = [f"{len(angular)} {budget} {limit}"]
     for order, center, exponent in zip(angular, positions, exponents, strict=True):
         rows.append(" ".join(map(str, [order, *center, 1, exponent, 1])))
+    if topology:
+        rows.append(" ".join(map(str, [max(topology) + 1, *topology])))
     completed = subprocess.run(
         [str(probe)],
         input="\n".join(rows),
@@ -45,9 +48,18 @@ def _run(
         check=True,
         timeout=20,
     )
-    bound, *omitted = completed.stdout.splitlines()
-    checks = int(completed.stderr.split("=")[-1]) if limit else 0
-    return float(bound), [tuple(map(int, source.split())) for source in omitted], checks
+    return completed.stdout, completed.stderr
+
+
+def _columns(
+    probe: Path,
+    angular: tuple[int, ...],
+    positions: np.ndarray,
+    exponents: np.ndarray,
+    topology: tuple[int, ...] = (),
+) -> np.ndarray:
+    stdout, _ = _run(probe, angular, positions, exponents, limit=0, topology=topology)
+    return np.array(stdout.splitlines(), dtype=float)
 
 
 @pytest.mark.parametrize(
@@ -59,17 +71,41 @@ def test_quartet_bound_against_libcint(
 ) -> None:
     pytest.importorskip("pyscf")
     positions = POSITIONS * distance
-    bound, _, _ = _run(probe, angular, positions, EXPONENTS)
+    bounds = _columns(probe, angular, positions, EXPONENTS)
     # Divide by the symmetry-orbit factor to check one ordered representative,
     # summing all component magnitudes for each independently displaced leg.
     _, gradient = reference(0, angular, positions)
-    assert np.max(np.sum(abs(gradient), axis=-1)) <= bound / 8
-    for right in np.eye(12).reshape(12, 4, 3):
+    for column, right in enumerate(np.eye(12).reshape(12, 4, 3)):
+        atom, axis = divmod(column, 3)
+        assert np.sum(abs(gradient[3 * atom + axis])) <= bounds[atom] / 8
         step = 0.00025
         plus = reference(0, angular, positions + step * right)[1]
         minus = reference(0, angular, positions - step * right)[1]
         mixed = (plus - minus) / (2 * step)
-        assert np.max(np.sum(abs(mixed), axis=-1)) <= bound / 8
+        assert np.max(np.sum(abs(mixed), axis=-1)) <= bounds[atom] / 8
+
+
+def test_shared_right_atom_counts_both_pair_tangents(probe: Path) -> None:
+    pytest.importorskip("pyscf")
+    angular = (1, 0, 1, 1)
+    topology = (0, 1, 1, 2)
+    positions = POSITIONS[list(topology)]
+    owners = np.array(topology)
+    bounds = _columns(probe, angular, positions, EXPONENTS, topology)
+    _, gradient = reference(0, angular, positions)
+    gradient = gradient.reshape(4, 3, -1)
+    for atom, bound in enumerate(bounds):
+        legs = owners == atom
+        assert np.max(np.sum(abs(gradient[legs].sum(axis=0)), axis=-1)) <= bound / 8
+        for axis in np.eye(3):
+            step = 0.00025
+            right = legs[:, None] * axis
+            plus = reference(0, angular, positions + step * right)[1]
+            minus = reference(0, angular, positions - step * right)[1]
+            mixed = ((plus - minus) / (2 * step)).reshape(4, 3, -1)
+            for left_atom in range(len(bounds)):
+                left = mixed[owners == left_atom].sum(axis=0)
+                assert np.max(np.sum(abs(left), axis=-1)) <= bound / 8
 
 
 def test_omissions_obey_aggregate_budget_and_census_bound(probe: Path) -> None:
@@ -80,11 +116,17 @@ def test_omissions_obey_aggregate_budget_and_census_bound(probe: Path) -> None:
     census = pairs * (pairs + 1) // 2
     budget = 1e-14
     # The certificate cannot use a smaller rank budget than its actual work.
-    assert _run(probe, angular, positions, exponents, limit=pairs) == (0, [], 0)
+    stdout, stderr = _run(probe, angular, positions, exponents, limit=pairs)
+    assert stdout.splitlines() == ["0"]
+    assert stderr.strip() == "candidate_checks=0"
     limit = census - 1
-    bound, omitted, checks = _run(
+    stdout, stderr = _run(
         probe, angular, positions, exponents, budget=budget, limit=limit
     )
+    bound_text, *sources = stdout.splitlines()
+    bound = float(bound_text)
+    omitted = [tuple(map(int, source.split())) for source in sources]
+    checks = int(stderr.split("=")[-1])
     assert 0 < bound <= budget
     assert 0 < checks <= limit
     assert 0 < len(omitted) < census
@@ -93,8 +135,13 @@ def test_omissions_obey_aggregate_budget_and_census_bound(probe: Path) -> None:
     # Each only affects its own atoms.
     charged = np.zeros(len(positions))
     for source in omitted:
-        value, _, _ = _run(
-            probe, (0, 0, 0, 0), positions[list(source)], exponents[list(source)]
+        atoms = sorted(set(source))
+        topology = tuple(atoms.index(atom) for atom in source)
+        charged[atoms] += _columns(
+            probe,
+            (0, 0, 0, 0),
+            positions[list(source)],
+            exponents[list(source)],
+            topology,
         )
-        charged[list(set(source))] += value
     assert 0 < charged.max() <= bound

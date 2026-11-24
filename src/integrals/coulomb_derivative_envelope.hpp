@@ -101,15 +101,27 @@ struct CoulombDerivativeEnvelope {
     return bounds;
   }
 
-  /** Bound the sum of absolute omitted derivatives for a canonical source's
-   * complete eightfold orbit. Coulomb Cauchy--Schwarz and the product rule
-   * apply to the separate left/right pair tangents; use the larger order. */
-  static double quartet(const Orders& left, const Orders& right) noexcept {
-    const auto first = upper(upper(left[1] * right[0]) + upper(left[0] * right[1]));
-    const auto mixed =
-        upper(upper(upper(left[2] * right[0]) + upper(2 * upper(left[1] * right[1]))) +
-              upper(left[0] * right[2]));
-    return upper(8 * std::max(first, mixed));
+  struct RightAtomBounds {
+    double left, right, both;
+
+    double operator()(bool on_left, bool on_right) const noexcept {
+      return on_left ? (on_right ? both : left) : (on_right ? right : 0);
+    }
+  };
+
+  /** Bound the complete eightfold orbit for an individual frozen column.
+   * The arbitrary left coordinate can act on either pair, but a fixed
+   * right atom cannot differentiate an AO pair that does not own it. Pair
+   * exchange in the orbit only exchanges which factor owns the derivative. */
+  static RightAtomBounds quartet(const Orders& left, const Orders& right) noexcept {
+    const auto first_left = upper(left[1] * right[0]);
+    const auto first_right = upper(left[0] * right[1]);
+    const auto cross = upper(left[1] * right[1]);
+    const auto mixed_left = upper(upper(left[2] * right[0]) + cross);
+    const auto mixed_right = upper(upper(left[0] * right[2]) + cross);
+    return {upper(8 * std::max(first_left, mixed_left)),
+            upper(8 * std::max(first_right, mixed_right)),
+            upper(8 * std::max(upper(first_left + first_right), upper(mixed_left + mixed_right)))};
   }
 
  private:
@@ -210,6 +222,13 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
   struct Candidate {
     double bound;
     CoulombSource source;
+    Envelope::RightAtomBounds columns;
+  };
+  const auto column_bound = [&shells](const Candidate& candidate, std::size_t atom) {
+    const auto& source = candidate.source;
+    return candidate.columns(
+        shells[source[0]].atom_index == atom || shells[source[1]].atom_index == atom,
+        shells[source[2]].atom_index == atom || shells[source[3]].atom_index == atom);
   };
   std::vector<Candidate> candidates;
   const auto charge = [&](std::size_t checks) {
@@ -226,10 +245,9 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
         const auto& right_pairs = by_dominant_order[right_order];
         const auto begin = right_pairs.begin() + (left_order == right_order ? index : 0);
         if (!charge(std::bit_width(static_cast<std::size_t>(right_pairs.end() - begin)))) return {};
-        // The dominant coordinate contributes at least one positive term to
-        // the outward quartet envelope. Its monotone product rules out the
-        // suffix without evaluating the other terms. The central 2* term is
-        // intentionally not needed for this necessary condition.
+        // At least one right atom is affected by each of these product-rule
+        // terms, even if the pairs have disjoint owners. Its monotone bound
+        // rules out the suffix before visiting candidate quartets.
         const auto coefficient = right_order == 0   ? std::max(left.bounds[1], left.bounds[2])
                                  : right_order == 1 ? std::max(left.bounds[0], left.bounds[1])
                                                     : left.bounds[0];
@@ -242,10 +260,14 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
         for (auto iter = begin; iter != eligible; ++iter) {
           const auto& first = left.shells < iter->shells ? left : *iter;
           const auto& second = left.shells < iter->shells ? *iter : left;
-          const auto bound = Envelope::quartet(first.bounds, second.bounds);
-          if (bound <= budget)
-            candidates.push_back(
-                {bound, {first.shells[0], first.shells[1], second.shells[0], second.shells[1]}});
+          Candidate candidate{
+              0,
+              {first.shells[0], first.shells[1], second.shells[0], second.shells[1]},
+              Envelope::quartet(first.bounds, second.bounds)};
+          for (const auto shell : candidate.source)
+            candidate.bound =
+                std::max(candidate.bound, column_bound(candidate, shells[shell].atom_index));
+          if (candidate.bound <= budget) candidates.push_back(candidate);
         }
       }
     }
@@ -262,12 +284,12 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
     std::sort(atoms.begin(), atoms.end());
     const auto end = std::unique(atoms.begin(), atoms.end());
     const auto fits = [&](std::size_t atom) {
-      return Envelope::upper(by_atom[atom] + candidate.bound) <= budget;
+      return Envelope::upper(by_atom[atom] + column_bound(candidate, atom)) <= budget;
     };
     if (!std::all_of(atoms.begin(), end, fits)) continue;
     for (auto iter = atoms.begin(); iter != end; ++iter) {
       auto& total = by_atom[*iter];
-      total = Envelope::upper(total + candidate.bound);
+      total = Envelope::upper(total + column_bound(candidate, *iter));
       result.bound = std::max(result.bound, total);
     }
     result.sources.push_back(candidate.source);

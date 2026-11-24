@@ -1971,15 +1971,108 @@ reject at J/K admission: offline sizing with the physical atom map finds
 Counting shells as separate atoms yields an inapplicable lower estimate.
 
 The 36-H r²SCAN default grid still rejects at moving-grid admission. At a
-matched coarser 31,104-point grid, the same screened native binary and
-GPU4PySCF complete: warm medians are 7.47 vs 8.71 s end to end and 7.31 vs
-7.84 s for Hessian, with `3.80e-9 Ha/Bohr²` maximum raw matrix difference.
+matched coarser 25,920-point grid (`36 × 10 × 6 × 12`), the same screened
+native binary and GPU4PySCF complete: warm medians are 7.47 vs 8.71 s end
+to end and 7.31 vs 7.84 s for Hessian, with `3.80e-9 Ha/Bohr²` maximum raw
+matrix difference. The old timing probe's reference point-count label was
+hardcoded to 12 radial points (31,104 total); it did not describe this run.
 Coarsening is a benchmark control, not a new production default. Neither
 this run nor the earlier 96-atom ordinary E/F comparison qualifies a
 96-atom Hessian. Evidence: `n5-sparse-certified-sources.log`,
 `monomial-topology-sizing.log`, and the `sparse-certified-sources/` deployment
 with separate candidate and private-tile binary hashes. These jobs used
 builds atop #3134, before updating the branch to include #3135.
+
+## Follow-up: charge only the pairs moved by a frozen right atom
+
+When the right atom belongs to only one AO pair, the derivative of the
+other pair in that column is identically zero. The mixed product rule
+needs only that pair's second-order term and one cross term; the shared
+atom still needs both second-order and both cross terms. Charge each
+column's own bound and sort by the maximum relevant bound. The monotone
+candidate-search rank condition still holds because every bound term it
+uses affects at least one atom. The tolerance and both work limits remain
+unchanged.
+
+The offline Cartesian STO-3G census with physical atom ownership keeps
+199,513 of 336,610 24-water sources, down from 201,028 with the coarser
+column bound, fitting the 200,000 retained-source gate. The rank check
+count stays at 172,708 and the maximum aggregate charge is below `1e-14`.
+This certifies one planner gate, not a full Hessian. Fourteen host tests
+pass, including independent libcint gradient finite differences with an
+atom shared across the bra and ket and a per-atom ledger reconstruction.
+Slurm 2617 passes 10 focused real-GPU J/K tests on the integrated #3135
+build. With the complete Python deployment, Slurm 2619 completes both
+24-water endpoints and all 72 columns, with maximum raw GPU4PySCF errors
+`2.73e-8` (PBE0) and `3.79e-8 Ha/Bohr²` (r²SCAN). The r²SCAN comparator
+has only one converged warm reference, not a reference median. The
+initial endpoint launch omitted runtime data files; only the later
+fully provisioned job supplies this comparison. Evidence:
+`atom-columns-sizing.log`, `atom-columns-host-pytest.log`, and
+`n5-atom-columns-master-complete.log`.
+
+For the 36-H default grid, a host census found essentially no switches
+clamped at the coordinate endpoints (19,595,520 of 19,595,520 interior).
+Do not expect an exact clamp-skip bitmap to solve this grid-work ceiling.
+The same is true for 96 H (378,224,640 pair visits). An offline run with
+12 million allowed rank checks, solely to size the 96-H integral problem,
+checks 9,375,944 candidates and still retains 2,129,205 of 10,841,496
+canonical sources at `1e-14`. Neither cap should be enlarged to fit that
+census. A reusable geometry and a more selective integral contraction
+need their own work receipts and independent tests. Slurm 2619 confirms
+default 36-H moving-grid refusal on the integrated binary.
+
+## Follow-up: bound the additional repeated-RHS CPKS lease
+
+With exact J/K admitted on 24 water atoms, the 640-rotation CPKS
+operator needs 3,276,800 FP64 bytes and fails both the 2 MiB size gate
+and the eight-rotations-per-RHS work gate. In the new 2–4 MiB tier for
+eligible dense Direct RKS, require at least one nuclear RHS per ten
+rotations. Smaller caches retain their existing thresholds, as do other
+backends. Keep the aggregate and response caps, the physical GMRES
+fallback and the physical residual check for every cached column.
+
+Slurm 2620, same RTX 5090 and two warm trials, holds the job geometry,
+grid, and frozen integrals fixed. PBE0 Hessian/endpoint times move from
+15.50/15.68 to 11.43/11.61 s; r²SCAN from 14.17/14.41 to 10.83/11.07 s.
+Physical Fock actions drop from 2,104 and 2,046 respectively to 784,
+including the 640 build columns and checks. The 72 published columns,
+5,184 XC contractions and 490,356,747 exact primitive components do not
+change. Native A/B raw differences are at most `3.31e-14 Ha/Bohr²` and
+cross-engine differences remain below `5e-8` for both methods. The
+reference Hessian is still faster (6.21 s for PBE0; one valid 6.04 s warm
+sample for r²SCAN). The 24-atom workaround is not a parity claim.
+
+Slurm 2621 finds no benefit from 128 versus 64 MiB of integral workspace
+on this path. The 24-water trace points first to four-center derivative
+replay and the physical induced J/K operator, then to fixed-grid features
+and AO pair reductions. Slurm 2623 doubles the canonical window from 1,024
+to 2,048 sources without changing the primitive census; it regresses
+21-water PBE Hessian time from 6.87 to 8.11 s and 24-water PBE0 from
+11.40 to 13.53 s. Keep 1,024. Slurm 2624 bounds a same-address graph of
+the private fixed-grid tile launches; 21-water PBE is unchanged and
+24-water PBE0 improves by only 0.065 s. Sixteen grid audit tests pass
+in Slurm 2625, but the endpoint result does not justify another retained
+graph. Changing submissions alone does not eliminate the repeated Fock
+or derivative work.
+
+Slurm 2622 verifies ordinary 96-atom r²SCAN-3c Direct on the screened
+plus larger-cache binary against #3134, without Hessian/HVP. Total energy
+and maximum force differences are at most `4.55e-13 Ha` and
+`1.05e-11 Ha/Bohr`; iterations, Fock builds, domain and J/K work match.
+The single warm observations are 10.24 and 10.27 s, not a speedup claim.
+
+Slurm 2626 requalifies the compiled change after the draft's formatting
+and test-fixture sync. On the same RTX 5090, ten focused GPU J/K cases
+pass, and each Direct FP64 24-water endpoint publishes all 72 columns
+with 784 physical Fock actions and 490,356,747 exact primitive components.
+With two warm repeats per engine, PBE0 takes 11.40/11.59 s for the
+Hessian/complete endpoint versus GPU4PySCF's 6.23/8.55 s. The r²SCAN
+times are 10.82/11.07 s versus 6.05/9.71 s. Maximum raw matrix differences
+over cold and warm repeats are `2.73e-8` and `3.79e-8 Ha/Bohr²`,
+respectively. The source-matched deployment path, binary hashes and
+qualification log are `synced-cpks-n5.path`, `synced-cpks.sha256`, and
+`n5-synced-cpks.log` in the local evidence directory.
 
 ## References
 

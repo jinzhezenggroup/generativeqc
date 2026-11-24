@@ -1366,7 +1366,12 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const auto operator_limit =
           extended ? options.max_resident_cpks_bytes
                    : std::min(options.max_resident_cpks_bytes, ordinary_operator_bytes);
-      const std::size_t build_actions_per_rhs = extended ? 8 : 6;
+      // Dense semilocal Direct solves in the larger lease can revisit the
+      // physical Fock operator more than 25 times per RHS. Still bound the
+      // one-time build to ten rotations per RHS in this additional regime.
+      constexpr std::size_t previous_extended_bytes = 2ULL << 20;
+      const std::size_t build_actions_per_rhs =
+          extended ? (operator_bytes > previous_extended_bytes ? 10 : 8) : 6;
       std::size_t rotations{};
       for (unsigned spin = 0; spin < cpks_shape.spins; ++spin)
         rotations += cpks_shape.occupied[spin] * (cpks_shape.nao - cpks_shape.occupied[spin]);

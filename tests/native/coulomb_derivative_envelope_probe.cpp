@@ -52,7 +52,12 @@ int main() {
                                    system.atoms[system.shells[2].atom_index].position,
                                    system.atoms[system.shells[3].atom_index].position);
     if (!ab || !cd) return 2;
-    std::cout << Envelope::quartet(*ab, *cd) << '\n';
+    const auto bounds = Envelope::quartet(*ab, *cd);
+    for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
+      std::cout << bounds(
+                       system.shells[0].atom_index == atom || system.shells[1].atom_index == atom,
+                       system.shells[2].atom_index == atom || system.shells[3].atom_index == atom)
+                << '\n';
     return 0;
   }
   const auto omitted = integrals::coulomb_derivative_omissions(system, budget, limit);
