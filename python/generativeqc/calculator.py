@@ -383,6 +383,35 @@ class Calculator:
                     or carrier_id in _method_manifest.NATIVE_DFT_METHOD_IDS
                 ):
                     from ._named_ks import resolve_named_graph
+                    from .ks import (
+                        KsOptions,
+                        _validate_named_ks_functional,
+                        resolve_ks_method,
+                    )
+
+                    if (
+                        carrier_id in _method_manifest.NATIVE_DFT_METHOD_IDS
+                        and composite is None
+                        and isinstance(ks_options, KsOptions)
+                        and ks_options._method_ir is None
+                        and (
+                            ks_options.composition is not None
+                            or ks_options.functional is not None
+                        )
+                    ):
+                        # Check the caller's explicit binding before discovery.
+                        # A full MethodIR may change coefficients, but not spin.
+                        # Native discovery still owns the accepted name binding.
+                        named, expected = resolve_ks_method(canonical_method)
+                        if ks_options.composition is not None:
+                            if ks_options.composition.spin != named.spin:
+                                raise NotImplementedError(
+                                    "KS composition/spin disagrees with native family selector"
+                                )
+                        elif ks_options.functional is not None:
+                            _validate_named_ks_functional(
+                                ks_options.functional, expected
+                            )
 
                     selected_library = _native.load_library(
                         device=device, device_id=int(device_id)

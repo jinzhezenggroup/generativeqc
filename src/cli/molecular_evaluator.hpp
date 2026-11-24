@@ -430,12 +430,13 @@ class NativeMolecularEvaluator {
     method.density_tolerance = options_.density_tolerance.value_or(1e-11);
     method.screening_tolerance = options_.screening_tolerance.value_or(1e-14);
     method.ks_options = &grid;
-    const generativeqc_named_ks_descriptor named{sizeof(named),
-                                                 GENERATIVEQC_ABI_VERSION,
-                                                 program_.name.data(),
-                                                 program_.identity.data(),
-                                                 invocation_.derivatives.dispersion_bytes,
-                                                 invocation_.derivatives.cpu_packed_eri_bytes};
+    generativeqc_named_ks_descriptor named{};
+    named.struct_size = sizeof(named);
+    named.abi_version = GENERATIVEQC_ABI_VERSION;
+    named.name = program_.name.data();
+    named.identity = program_.identity.data();
+    named.dispersion_maximum_bytes = invocation_.derivatives.dispersion_bytes;
+    named.cpu_packed_eri_maximum_bytes = invocation_.derivatives.cpu_packed_eri_bytes;
     const generativeqc_system* systems[]{frame->system->get()};
     generativeqc_batch* prepared{};
     const auto* cold =

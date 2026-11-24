@@ -68,7 +68,9 @@ class HostResources {
    * @execution Safe with native preparation and execution on separate contexts.
    */
   generativeqc_host_resource_snapshot snapshot() const {
-    generativeqc_host_resource_snapshot output{sizeof(output), GENERATIVEQC_ABI_VERSION};
+    generativeqc_host_resource_snapshot output{};
+    output.struct_size = sizeof(output);
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
     check(generativeqc_host_resources_snapshot_v1(handle_.get(), &output));
     return output;
   }

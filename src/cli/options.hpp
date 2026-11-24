@@ -88,8 +88,11 @@ struct RunOptions {
 inline System create_method_basis_system(Context& context, std::span<const generativeqc_atom> atoms,
                                          const RunOptions& options) {
   const auto& program = *options.basis_program;
-  const generativeqc_named_ks_descriptor named{
-      sizeof(named), GENERATIVEQC_ABI_VERSION, program.name.data(), program.identity.data(), 0, 0};
+  generativeqc_named_ks_descriptor named{};
+  named.struct_size = sizeof(named);
+  named.abi_version = GENERATIVEQC_ABI_VERSION;
+  named.name = program.name.data();
+  named.identity = program.identity.data();
   return System(context, atoms, named, options.charge, options.multiplicity);
 }
 

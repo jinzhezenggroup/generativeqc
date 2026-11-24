@@ -408,6 +408,21 @@ def test_linked_hessian_against_reconverged_gradient(
         pytest.skip("requires a linked native CPU semilocal Hessian inventory")
     pytest.importorskip("pyscf", reason="independent moving-grid gradient")
 
+    if method == "pbe-rks" and representation == "spherical":
+        from functools import partial
+        from types import SimpleNamespace
+
+        from pyscf.lib import diis
+        from scipy.linalg import eigh
+
+        # Match the PBE0 oracle workaround: change only the DIIS
+        # extrapolation eigensolver, not the physical SCF or derivative gates.
+        monkeypatch.setattr(
+            diis,
+            "scipy",
+            SimpleNamespace(linalg=SimpleNamespace(eigh=partial(eigh, driver="evd"))),
+        )
+
     def forbidden(*args: object, **kwargs: object) -> None:
         pytest.fail("linked semilocal Hessian entered the Python scientific owner")
 

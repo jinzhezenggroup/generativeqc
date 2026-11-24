@@ -299,12 +299,13 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   method.density_tolerance = options.density_tolerance.value_or(1e-10);
   method.screening_tolerance = options.screening_tolerance.value_or(1e-14);
   method.ks_options = &grid;
-  const generativeqc_named_ks_descriptor named{sizeof(named),
-                                               GENERATIVEQC_ABI_VERSION,
-                                               program->name.data(),
-                                               program->identity.data(),
-                                               invocation.dispersion_bytes,
-                                               invocation.cpu_packed_eri_bytes};
+  generativeqc_named_ks_descriptor named{};
+  named.struct_size = sizeof(named);
+  named.abi_version = GENERATIVEQC_ABI_VERSION;
+  named.name = program->name.data();
+  named.identity = program->identity.data();
+  named.dispersion_maximum_bytes = invocation.dispersion_bytes;
+  named.cpu_packed_eri_maximum_bytes = invocation.cpu_packed_eri_bytes;
   const generativeqc_system* systems[]{system.get()};
   generativeqc_batch* prepared{};
   check_status(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,

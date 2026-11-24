@@ -1054,6 +1054,8 @@ def resolve_ks_method(method: typing.Any) -> typing.Any:
         return resolution.method, resolution.plan.semilocal.functional
     identifier, spin = _public_dft_binding(method)
     method_ir = resolve_method(identifier, spin=spin)
+    if method_ir.spin != spin:
+        raise RuntimeError("MethodIR spin disagrees with native KS XC catalog")
     return method_ir, _named_functional(method_ir, identifier)
 
 
@@ -1182,6 +1184,22 @@ def native_xc_functional_code(method: typing.Any) -> int:
     return _native_semilocal_code(method_ir)
 
 
+def _validate_named_ks_functional(
+    resolved: FunctionalSpec, expected: FunctionalSpec
+) -> None:
+    if (
+        resolved.spin != expected.spin
+        or resolved.version != expected.version
+        or sorted(resolved.components) != sorted(expected.components)
+        or resolved.exact_exchange != expected.exact_exchange
+        or resolved.range_omega != expected.range_omega
+        or resolved.long_range_exchange != expected.long_range_exchange
+    ):
+        raise NotImplementedError(
+            "KS FunctionalSpec does not match the method's supported composition/spin"
+        )
+
+
 def resolve_ks_options(
     method: typing.Any,
     options: typing.Any = None,
@@ -1249,17 +1267,7 @@ def resolve_ks_options(
             raise ValueError("resolved KS functional disagrees with its MethodIR")
     else:
         resolved = expected if options.functional is None else options.functional
-        if (
-            resolved.spin != expected.spin
-            or resolved.version != expected.version
-            or sorted(resolved.components) != sorted(expected.components)
-            or resolved.exact_exchange != expected.exact_exchange
-            or resolved.range_omega != expected.range_omega
-            or resolved.long_range_exchange != expected.long_range_exchange
-        ):
-            raise NotImplementedError(
-                "KS FunctionalSpec does not match the method's supported composition/spin"
-            )
+        _validate_named_ks_functional(resolved, expected)
 
     grid = options.grid
     if grid is None:
