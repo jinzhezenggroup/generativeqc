@@ -356,7 +356,7 @@ raise SystemExit(pytest.main(["--collect-only", "-q", *sys.argv[2:]], plugins=[P
     assert set(rows) == {
         (device, route, *case)
         for device, route in (
-            ("cpu", "reference"),
+            ("cpu", "compatibility"),
             ("cuda", "native"),
             ("cuda", "compatibility"),
         )
