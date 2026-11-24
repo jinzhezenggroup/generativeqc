@@ -17,7 +17,7 @@ struct FactorizedIntegralBatch {
   long long atoms[4]{};
   double* output{};
   /** Optional shared molecular coordinates. Non-null selects compact records
-   * [center exponents,scale]; atoms supplies each mathematical center position.
+   * [orbital exponents,scale]; atoms supplies each mathematical center position.
    * Null retains the ordinary complete primitive-record layout. */
   const double* coordinates{};
 };

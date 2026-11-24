@@ -11,12 +11,24 @@ struct CenterPair;
 
 namespace generativeqc::dft {
 
+/** Maximum atom lanes in the one-warp Cartesian Becke column. Consumers
+ * reserve at most three reduction rows per supported atom. */
+inline constexpr std::size_t cuda_grid_cartesian_atoms = 32;
+/** Upper extent of the globally backed Cartesian point-tile schedule. */
+inline constexpr std::size_t cuda_grid_tiled_cartesian_atoms = 96;
+/** Private transaction status bit, independent of the generic invalid-data bit. */
+inline constexpr int cuda_grid_cartesian_repair_exhausted = 2;
+
 struct CudaGridGeometryShape {
   std::size_t atoms{}, primitives{}, nao{}, points{}, points_per_atom{};
   /** Optional sum over AO primitive/polynomial incidences, checked against
    * device AoBasis metadata before evaluating jets. Zero uses the generic
    * AO*all-primitives*3 upper bound for callers without shell topology. */
   std::size_t ao_primitive_terms{};
+  /** A verified single constant Cartesian monomial per AO can retain four
+   * radial moments instead of twenty spatial values. Requires a host incidence
+   * bound and device verification of the packed AO records. */
+  bool radial_s{};
 };
 
 struct CudaGridGeometryOptions {
@@ -25,7 +37,7 @@ struct CudaGridGeometryOptions {
   std::size_t point_tile{1024};
   std::uint64_t max_partition_pairs{16'777'216};
   std::uint64_t max_ao_jet_values{134'217'728};
-  /** Preparation work bound: 20*points*AO primitive/polynomial incidences,
+  /** Preparation work bound: (20 or 4)*points*AO primitive/polynomial incidences,
    * independent of the output/storage bound. Also bounds each replay pass. */
   std::uint64_t max_ao_primitive_terms{134'217'728};
   unsigned partition_iterations{3};
@@ -39,6 +51,11 @@ struct CudaGridGeometryOptions {
   std::uint64_t max_ao_replay_terms{};
   /** Disable prefix growth if a subsequent owner can use the shared capacity. */
   bool retain_partial_jets{true};
+  /** Reuse the idle directional AO scratch during a private Cartesian sweep. */
+  bool cache_cartesian_weights{true};
+  /** Pair visits reserved for rare scaled repairs of a tiled Cartesian
+   * column. Exhaustion invalidates the private transaction, not the primal. */
+  std::uint64_t max_cartesian_repair_pairs{16'777'216};
 };
 
 /** Immutable normalized AoBasis and native atom-major quadrature. Legacy
@@ -69,9 +86,18 @@ struct CudaGridGeometryWork {
   std::uint64_t prepared_ao_primitive_term_bound{};
   std::uint64_t action_point_values{};
   std::uint64_t replayed_ao_primitive_term_bound{};
+  std::uint64_t cartesian_partition_sweeps{};
+  std::uint64_t cartesian_diagonal_sweeps{};
+  std::uint64_t tiled_cartesian_sweeps{};
+  std::uint64_t tiled_cartesian_repair_pair_bound{};
 };
 
 struct CudaGridGeometryMixedView {
+  const double *ao{}, *weights{}, *point_directions{};
+};
+
+/** One direction: [4,point,AO] first jets, [point] weights, [point,xyz] motion. */
+struct CudaGridGeometryDirectionView {
   const double *ao{}, *weights{}, *point_directions{};
 };
 
@@ -80,6 +106,12 @@ struct CudaGridGeometryCartesianView {
   const double *basis{}, *spatial{}, *weights{};
   const std::uint64_t* atom_offsets{};
   std::size_t atoms{}, points_per_atom{}, left{}, right{};
+  // A single row has left/right/mixed weights. A full column stores only
+  // left/mixed per row; its common right weights belong to the direction view.
+  std::size_t rows{1};
+  /** Non-null for [4,point,AO] radial moments; reconstruct spatial derivatives
+   * using these same authenticated [point,xyz] coordinates. */
+  const double* radial_points{};
 };
 
 /** Pure host overflow/resource/work admission. The optional minimum reserves
@@ -131,15 +163,29 @@ class CudaGridGeometryResponse {
   cudaError_t enqueue_private_mixed_view(const double* left, const double* right,
                                          CudaGridGeometryMixedView& view, int* transaction_status,
                                          cudaStream_t stream) noexcept;
+  /** Same provisional mixed view for an authenticated unit direction on both
+   * sides. Publish just the diagonal weight row with the ordinary AO panels. */
+  cudaError_t enqueue_private_cartesian_diagonal_view(
+      const double* direction, std::size_t column, CudaGridGeometryMixedView& view,
+      int* transaction_status, cudaStream_t stream) noexcept;
   /** Dense unit directions constructed by the caller. Return cudaErrorNotSupported
    * before enqueue if order-three spatial jets are not fully resident. */
   cudaError_t enqueue_private_cartesian_view(const double* left, const double* right,
                                              std::size_t left_column, std::size_t right_column,
                                              CudaGridGeometryCartesianView& view,
                                              int* transaction_status, cudaStream_t stream) noexcept;
+  /** Borrow all left rows for the authenticated right unit column. The
+   * implicit left directions are generated by index, never read from a panel.
+   * When requested, borrow its right first jets and weights for the CPKS RHS.
+   * Both views remain live until the next geometry call that uses scratch.
+   * If the batched fallback does not fit, return NotSupported before enqueue. */
+  cudaError_t enqueue_private_cartesian_column(const double* right, std::size_t right_column,
+                                               CudaGridGeometryCartesianView& view,
+                                               int* transaction_status, cudaStream_t stream,
+                                               CudaGridGeometryDirectionView* rhs = nullptr) noexcept;
   /** Admit all mixed actions of an endpoint before any partial work. */
   cudaError_t admit_actions(std::size_t actions) noexcept;
-  /** Borrow [20,point,AO] spatial jets when resident; replay has no such view. */
+  /** Borrow [20,point,AO] spatial jets when resident and expanded. */
   cudaError_t spatial_jets(const double*& jets) noexcept;
   /** Borrow [left/right,point,xyz] from the last successful mixed() action.
    * Point motion is the actual owner-atom direction gathered on CUDA. The
@@ -149,18 +195,21 @@ class CudaGridGeometryResponse {
 
  private:
   cudaError_t authenticate(cudaStream_t stream) noexcept;
-  cudaError_t partition(const double* left, const double* right) noexcept;
+  cudaError_t partition(const double* left, const double* right, double* output = nullptr,
+                        const double* accepted = nullptr, bool reference_only = false) noexcept;
   cudaError_t evaluate_mixed(const double* left, const double* right, cudaStream_t stream,
-                             int* transaction_status = nullptr, bool weights_only = false) noexcept;
+                             int* transaction_status = nullptr, std::size_t left_column = SIZE_MAX,
+                             std::size_t right_column = SIZE_MAX, bool weights_only = false) noexcept;
   cudaError_t mixed_view_impl(const double* left, const double* right,
                               CudaGridGeometryMixedView& view, int* transaction_status,
-                              cudaStream_t stream) noexcept;
+                              cudaStream_t stream, std::size_t diagonal_column = SIZE_MAX) noexcept;
   void finish_mixed() noexcept;
   CudaGridGeometryShape shape_{};
   CudaGridGeometryOptions options_{};
   CudaGridGeometryReference reference_{};
   CudaGridGeometryWork work_{};
   void* workspace_{};
+  std::size_t cartesian_right_{SIZE_MAX};
   bool ready_{};
   bool motion_ready_{};
 };

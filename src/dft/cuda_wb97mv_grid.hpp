@@ -39,6 +39,8 @@ struct CudaWb97mvGridOptions {
   bool replay_nuclear_maps{true};
   /** Budget for dense RKS AO cotangents shared by every left contraction. */
   std::size_t max_nuclear_adjoint_bytes{};
+  /** Optional fixed-reference FP64 point Jacobians for repeated semilocal RKS actions. */
+  std::size_t max_point_linearization_bytes{};
   std::uint64_t max_nuclear_affine_terms{1ULL << 34};
   /** Physical point code from the converged Fock identity. Curated and
    * split-hybrid families use disjoint codes. Response owners must verify
@@ -122,6 +124,9 @@ class CudaWb97mvGridResponse {
   cudaError_t prepare(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& options,
                       const CudaWb97mvGridReference& reference, void* workspace,
                       std::size_t workspace_bytes) noexcept;
+  /** Attempt optional fixed-grid residency after the enclosing owner has
+   * admitted all mandatory resources. Capacity refusal keeps the scalar JVP. */
+  cudaError_t retain_fixed_point_linearization(std::size_t max_bytes) noexcept;
   /** Apply to a finite symmetric SIGNED/indefinite D direction, with both UKS
    * blocks together. Output is [spin,AO,AO], disjoint from all retained inputs.
    */
@@ -152,6 +157,11 @@ class CudaWb97mvGridResponse {
                                                 const double* points, const double* density,
                                                 double* potential, int* transaction_status,
                                                 cudaStream_t stream) noexcept;
+  /** Arm the private mixed contractions without assembling an unused dVxc. */
+  cudaError_t enqueue_private_nuclear_covector(const double* ao, const double* weights,
+                                               const double* points, const double* density,
+                                               int* transaction_status,
+                                               cudaStream_t stream) noexcept;
   /** Stationary left nuclear partial with zero left/mixed density motion.
    * The retained right density response participates in the mixed AO features.
    * Mixed point motion is zero for affine owner-atom coordinates. The scalar
@@ -168,8 +178,9 @@ class CudaWb97mvGridResponse {
                                             const double* left_weights, const double* mixed_weights,
                                             const double* left_points, double* output,
                                             int* transaction_status, cudaStream_t stream) noexcept;
-  /** The dense owner may contract directly from the live geometry lease. */
-  bool admits_cartesian_mixed() const noexcept;
+  /** Admit the number of rows that fit the existing adjoint scratch. */
+  bool admits_cartesian_mixed(std::size_t rows = 1) const noexcept;
+  /** Contract consecutive rows of a live geometry lease into a private panel. */
   cudaError_t enqueue_private_cartesian_mixed(const CudaGridGeometryCartesianView& motion,
                                               double* output, int* transaction_status,
                                               cudaStream_t stream) noexcept;
@@ -178,11 +189,13 @@ class CudaWb97mvGridResponse {
   const CudaWb97mvGridWork& work() const noexcept { return work_; }
 
  private:
+  void release_point_workspace() noexcept;
   cudaError_t authenticate(cudaStream_t stream, bool composable = false) noexcept;
   cudaError_t apply_impl(const double* direction, double* output, cudaStream_t stream,
                          bool private_panel) noexcept;
   cudaError_t evaluate(bool response, bool defer_status = false) noexcept;
-  cudaError_t evaluate_nuclear(bool response, bool defer_status = false) noexcept;
+  cudaError_t evaluate_nuclear(bool response, bool defer_status = false,
+                                bool assemble_potential = true) noexcept;
   cudaError_t prepare_nuclear_direction_impl(const double* ao, const double* weights,
                                              const double* points, const double* density,
                                              double* potential, int* transaction_status,
@@ -201,6 +214,9 @@ class CudaWb97mvGridResponse {
   CudaWb97mvGridReference reference_{};
   CudaWb97mvGridWork work_{};
   void* workspace_{};
+  void* fixed_point_workspace_{};
+  std::size_t fixed_point_bytes_{}, fixed_point_mask_offset_{};
+  unsigned fixed_point_axes_{};
   double beta_{};
   bool ready_{};
   bool nuclear_ready_{};

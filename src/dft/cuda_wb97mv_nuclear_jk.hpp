@@ -11,6 +11,10 @@
 
 #include "integrals/cuda_one_electron_response.hpp"
 
+namespace generativeqc::integrals {
+struct CoulombDerivativeOmissions;
+}
+
 namespace generativeqc::dft {
 
 /** Full+LR is the exact WB97M-V operator. Fitted primary J/K is NOT supplied
@@ -51,6 +55,11 @@ struct CudaWb97mvJkOptions {
    * Zero disables this fallback; it never enlarges the caller's arena. */
   std::size_t source_tile{1024};
   std::size_t max_source_groups{100'000};
+  /** Certified dense-only replay bounds individually visited sources per pass.
+   * Skipped sources are visited only as bitmap words, separately bounded by
+   * ceil(limit/32) even when very few bits are set. Zero disables replay.
+   * The primitive/projection/reduction and live arena limits still apply. */
+  std::size_t max_frozen_replay_candidates{};
   std::size_t radial_tile{64};  ///< Primitive streaming bound, in [1,64].
   std::uint64_t max_primitive_component_evaluations{67'108'864};
   std::uint64_t max_projection_terms{268'435'456};
@@ -102,7 +111,15 @@ struct CudaWb97mvJkWork {
   std::uint64_t integral_launches{}, projection_launches{}, reduction_launches{};
   std::uint64_t integral_source_builds{}, resident_integral_hits{};
   std::size_t streaming_tiles{}, source_groups{};
+  std::size_t omitted_frozen_source_groups{};
+  double omitted_frozen_derivative_bound{};
+  /** Cache fill work and primitive components consuming prepared geometry. */
+  std::uint64_t prepared_geometry_records_bound{}, prepared_geometry_components{};
+  std::uint64_t indexed_component_blocks{};
 };
+
+/** The source census is the only admission failure a certified omission can retry. */
+enum class CudaWb97mvJkAdmissionFailure { other, canonical_source_limit };
 
 /** Host-only checked closure/work/arena admission, without CUDA initialization.
  * Every ordered shell class and raw component must be linked exactly once for
@@ -110,7 +127,10 @@ struct CudaWb97mvJkWork {
 cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape,
                                      std::span<const integrals::CudaOneElectronShell> shells,
                                      const CudaWb97mvJkOptions& options, std::size_t& bytes,
-                                     std::string* detail = nullptr) noexcept;
+                                     std::string* detail = nullptr,
+                                     const integrals::CoulombDerivativeOmissions* omissions =
+                                         nullptr,
+                                     CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
 
 /** Native compiler-AD J/K nuclear source, with signed symmetric D and dD.
  * Raw value/gradient/gradient-JVP are evaluated once per primitive component and
@@ -130,6 +150,28 @@ cudaError_t cuda_wb97mv_jk_workspace(const CudaWb97mvJkShape& shape,
  */
 class CudaWb97mvNuclearJk {
  public:
+  /** Single-use, host-only admission plan. Owns the topology and options
+   * that sized the arena; the live basis is still authenticated on binding. */
+  class Plan {
+   public:
+    Plan();
+    ~Plan();
+    Plan(const Plan&) = delete;
+    Plan& operator=(const Plan&) = delete;
+
+    cudaError_t build(const CudaWb97mvJkShape& shape,
+                     std::span<const integrals::CudaOneElectronShell> shells,
+                     const CudaWb97mvJkOptions& options, std::string* detail = nullptr,
+                     const integrals::CoulombDerivativeOmissions* omissions = nullptr,
+                     CudaWb97mvJkAdmissionFailure* failure = nullptr) noexcept;
+    std::size_t bytes() const noexcept;
+
+   private:
+    friend class CudaWb97mvNuclearJk;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+  };
+
   CudaWb97mvNuclearJk();
   ~CudaWb97mvNuclearJk();
   CudaWb97mvNuclearJk(const CudaWb97mvNuclearJk&) = delete;
@@ -140,7 +182,10 @@ class CudaWb97mvNuclearJk {
   cudaError_t prepare(const CudaWb97mvJkShape& shape,
                       std::span<const integrals::CudaOneElectronShell> shells,
                       const CudaWb97mvJkOptions& options, const CudaWb97mvJkReference& reference,
-                      void* workspace, std::size_t workspace_bytes) noexcept;
+                      void* workspace, std::size_t workspace_bytes,
+                      const integrals::CoulombDerivativeOmissions* omissions = nullptr) noexcept;
+  cudaError_t prepare(Plan& plan, const CudaWb97mvJkReference& reference, void* workspace,
+                      std::size_t workspace_bytes) noexcept;
   cudaError_t apply(const double* direction, const double* density, const double* delta_density,
                     const CudaWb97mvJkOutput& output, cudaStream_t stream) noexcept;
   /** Enqueue a fresh action into private buffers. The caller owns the sticky
@@ -152,6 +197,13 @@ class CudaWb97mvNuclearJk {
                                     const double* delta_density, const CudaWb97mvJkOutput& output,
                                     int* transaction_status, cudaStream_t stream,
                                     std::size_t frozen_column = SIZE_MAX) noexcept;
+  /** Visit streamed source windows once for the complete Cartesian sweep.
+   * The caller owns direction scratch, a zero delta-density panel and a private
+   * column-major [Fock columns][HVP columns] table. The table is readable only
+   * after the enclosing transaction accepts it. NotSupported enqueues nothing. */
+  cudaError_t enqueue_private_frozen_dense(double* direction, const double* density,
+                                           const double* zero_delta_density, double* table,
+                                           int* transaction_status, cudaStream_t stream) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:

@@ -1,13 +1,18 @@
 namespace generativeqc::dft::hessian_aot {
 inline bool incomplete_closure = false;
+inline bool batch_closure = false;
 int launch(const double*, std::size_t, const long long*, const double*, double*, int*,
            cudaStream_t) {
+  return 0;
+}
+int batch_launch(double, const FactorizedIntegralBatch*, std::size_t, const double*, long long,
+                 int*, cudaStream_t) {
   return 0;
 }
 std::span<const Program> programs() noexcept {
   static constexpr unsigned angular[]{0, 0};
   static constexpr std::uint32_t components[]{0};
-  static const Program programs[]{{"s",
+  static Program programs[]{{"s",
                                    "s",
                                    Kind::integral,
                                    {},
@@ -43,6 +48,7 @@ std::span<const Program> programs() noexcept {
                                    nullptr,
                                    launch,
                                    {"nuclear_attraction", angular, "full_range", 0}}};
+  for (auto& program : programs) program.integral_batch = batch_closure ? batch_launch : nullptr;
   return {programs, incomplete_closure ? 2U : 3U};
 }
 }  // namespace generativeqc::dft::hessian_aot
@@ -127,6 +133,57 @@ int main() {
   }
   assert(stub::streams == 0 && stub::events == 0);
   cudaFree(arena);
+  // A modest byte budget can still admit batched shell blocks at this size.
+  // The scalar plan is the reference floor, not a hard-coded layout size.
+  {
+    constexpr std::size_t atoms = 12;
+    const CudaOneElectronShape larger{atoms, atoms, atoms};
+    CudaOneElectronShell atom_shells[atoms];
+    for (std::size_t atom = 0; atom < atoms; ++atom)
+      atom_shells[atom] = {atom, 0, atom, 1, atom, 1};
+    CudaOneElectronOptions bounded;
+    bounded.max_parallel_workspace_bytes = 4ULL << 20;
+    std::size_t admitted{}, mandatory{};
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, admitted) == cudaSuccess);
+    bounded.parallel_streams = 0;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, mandatory) == cudaSuccess);
+    assert(admitted > mandatory && admitted - mandatory <= bounded.max_parallel_workspace_bytes);
+  }
+  // A 34-center, three-primitive s basis must admit the batched schedule in
+  // the default 64 MiB integral budget, without inflating its task ceiling.
+  {
+    constexpr std::size_t atoms = 34, primitives_per_shell = 3;
+    const CudaOneElectronShape larger{atoms, atoms * primitives_per_shell, atoms};
+    CudaOneElectronShell atom_shells[atoms];
+    for (std::size_t atom = 0; atom < atoms; ++atom)
+      atom_shells[atom] = {atom, 0, atom * primitives_per_shell, primitives_per_shell, atom, 1};
+    CudaOneElectronOptions bounded;
+    bounded.max_workspace_bytes = 64ULL << 20;
+    bounded.max_parallel_tasks = bounded.max_jobs;
+    std::size_t admitted{}, mandatory{};
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, admitted) == cudaSuccess);
+    bounded.parallel_streams = 0;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, mandatory) == cudaSuccess);
+    assert(admitted > mandatory && admitted <= bounded.max_workspace_bytes);
+  }
+  // The 36-H dense workload does not fit with complete primitive records.
+  // Borrowing the immutable centers admits the batch at the same budget.
+  {
+    constexpr std::size_t atoms = 36, primitives_per_shell = 3;
+    const CudaOneElectronShape larger{atoms, atoms * primitives_per_shell, atoms};
+    CudaOneElectronShell atom_shells[atoms];
+    for (std::size_t atom = 0; atom < atoms; ++atom)
+      atom_shells[atom] = {atom, 0, atom * primitives_per_shell, primitives_per_shell, atom, 1};
+    CudaOneElectronOptions bounded;
+    bounded.max_workspace_bytes = 64ULL << 20;
+    bounded.max_parallel_tasks = bounded.max_jobs;
+    std::size_t ordinary{}, compact{};
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, ordinary) == cudaSuccess);
+    generativeqc::dft::hessian_aot::batch_closure = true;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, compact) == cudaSuccess);
+    generativeqc::dft::hessian_aot::batch_closure = false;
+    assert(compact > ordinary && compact <= bounded.max_workspace_bytes);
+  }
   // Mandatory metadata OOM and scientific closure/work refusals are not hidden.
   options.max_parallel_tasks = 2048;
   failure::allocation_size = sizeof(Job);

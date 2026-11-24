@@ -46,6 +46,49 @@ def factorized_package() -> tuple[Path, dict]:
     return executable, programs
 
 
+@pytest.mark.parametrize("angular", ((0, 0, 0, 0), (1, 0, 0, 0), (1, 1, 1, 1)))
+@pytest.mark.parametrize("argument_scale", (0.0, 1 - 1e-7, 1 + 1e-7, 64.0))
+def test_full_sp_moment_domains_against_libcint(
+    factorized_package: tuple, angular: tuple[int, int, int, int], argument_scale: float
+) -> None:
+    """Check the full primitive jet at coincidence, the recurrence switch, and the tail."""
+    executable, programs = factorized_package
+    selected = programs[("eri", angular, "full_range")]
+    program = selected[len(selected) // 2]
+    first, second = EXPONENTS[:2].sum(), EXPONENTS[2:].sum()
+    rho = first * second / (first + second)
+    threshold = sum(angular) + 3.5  # Highest derivative moment plus 1.5.
+    distance = np.sqrt(argument_scale * threshold / rho)
+    positions = np.array(((0, 0, 0), (0, 0, 0), (distance, 0, 0), (distance, 0, 0)))
+    record = np.r_[EXPONENTS, positions.ravel(), 1.0]
+    actual = np.asarray(
+        _run(
+            executable,
+            "integral",
+            program["name"],
+            1,
+            4,
+            values=np.r_[record, np.arange(4), DIRECTION.ravel()],
+        )
+    ).reshape(-1, 25)
+    value, gradient = reference(0, angular, positions)
+
+    def centered(step: float) -> np.ndarray:
+        plus = reference(0, angular, positions + step * DIRECTION)[1]
+        minus = reference(0, angular, positions - step * DIRECTION)[1]
+        return (plus - minus) / (2 * step)
+
+    jvp = (4 * centered(0.0025) - centered(0.005)) / 3
+    components = program["components"]
+    np.testing.assert_allclose(actual[:, 0], value[components], atol=2e-11, rtol=2e-10)
+    np.testing.assert_allclose(
+        actual[:, 1:13], gradient[:, components].T, atol=2e-11, rtol=2e-10
+    )
+    np.testing.assert_allclose(
+        actual[:, 13:], jvp[:, components].T, atol=3e-10, rtol=2e-9
+    )
+
+
 @pytest.mark.parametrize(
     "family,angular,radial",
     CASES,

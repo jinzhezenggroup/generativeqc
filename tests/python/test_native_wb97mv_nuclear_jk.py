@@ -94,11 +94,15 @@ def _native(
         [executable, str(source), str(result), cache_mode],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
         timeout=180,
         env={**os.environ, "PYTHONHOME": "/nonexistent", "PYTHONPATH": "/nonexistent"},
     )
+    assert completed.returncode == 0, completed.stderr
     receipt = json.loads(completed.stdout)
+    if cache_mode in {"screened-table", "indexed-table"}:
+        assert receipt == {"screened_table": True} and not result.exists()
+        return (), receipt
     if reject:
         assert receipt == {"prepare_rejected": True} and not result.exists()
         return (), receipt
@@ -113,6 +117,43 @@ def _native(
         ),
         values[1 + 2 * panel :].reshape(2, *fixture["centers"].shape),
     ), receipt
+
+
+def test_screened_frozen_jk_is_private_and_bounded(tmp_path: Path) -> None:
+    fixture = _fixture(spins=1)
+    fixture["centers"][1, 0] += 18.0
+    fixture["panels"][1] = 0
+    _native(fixture, tmp_path, part="full_hybrid", cache_mode="screened-table")
+
+
+@pytest.mark.parametrize("primitives", (1, 3))
+def test_indexed_frozen_jk_matches_dense_replay(
+    tmp_path: Path, primitives: int
+) -> None:
+    """Check indexed mixed shell masks for both short and two-chunk radial folds."""
+    fixture = _fixture(spins=1)
+    shells = [(0, 0, 0.8), (1, 1, 0.7), (2, 1, 0.6), (3, 0, 0.9)]
+    fixture.update(
+        numbers=np.array([1, 8, 8, 1]),
+        centers=np.array(
+            [[0.0, 0.0, 0.0], [1.3, -0.2, 0.5], [0.4, 1.6, -0.9], [20, 0, 0]]
+        ),
+        shells=[
+            (
+                atom,
+                angular,
+                [
+                    [exponent + 0.3 * index, (-0.4) ** index]
+                    for index in range(primitives)
+                ],
+            )
+            for atom, angular, exponent in shells
+        ],
+        nao=8,
+        panels=np.stack([0.25 * np.eye(8) + 0.05, np.zeros((8, 8))]),
+        direction=np.zeros((4, 3)),
+    )
+    _native(fixture, tmp_path, part="full_hybrid", cache_mode="indexed-table")
 
 
 def _oracle(fixture: dict, part: str) -> tuple:
@@ -252,6 +293,54 @@ def test_native_jk_runtime_omega_batch_and_scalar(spins: int, tmp_path: Path) ->
     _qualify(fixture, scalar, "exact")
     for actual, expected in zip(batched, scalar, strict=True):
         np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+
+
+@pytest.mark.parametrize(("angular", "part"), ((0, "full_hybrid"), (1, "coulomb")))
+def test_native_jk_retained_window_budget_fallback(
+    angular: int, part: str, tmp_path: Path
+) -> None:
+    """Retention and immediate replay share the same canonical Direct sources."""
+    fixture = _fixture(spins=1, angular=angular)
+    retained, retained_work = _native(
+        fixture, tmp_path, part=part, cache_mode="fresh-retained"
+    )
+    streamed, streamed_work = _native(
+        fixture, tmp_path, part=part, cache_mode="fresh-streamed"
+    )
+    assert retained_work["retained_source_bytes"] > 0
+    assert streamed_work["retained_source_bytes"] == 0
+    assert (
+        retained_work["bytes"] - streamed_work["bytes"]
+        == retained_work["retained_source_bytes"]
+    )
+    assert retained_work["streaming_tiles"] == streamed_work["streaming_tiles"] > 1
+    assert retained_work["components"] == streamed_work["components"]
+    for actual, expected in zip(retained, streamed, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    _qualify(fixture, retained, part)
+
+
+@pytest.mark.parametrize(
+    ("radials", "angular"), ((1, 0), (2, 1), (3, 0), (3, 1), (4, 1))
+)
+def test_native_jk_full_range_radial_pair(
+    radials: int, angular: int, tmp_path: Path
+) -> None:
+    """Compare short, two-chunk, and over-cap primitive lists with libcint."""
+    fixture = _fixture(spins=1, angular=angular)
+    basis = [[1.05, 0.8], [0.41, -0.15], [0.17, 0.25], [0.06, -0.04]]
+    fixture["shells"] = [(0, 0, basis[:radials]), (1, angular, basis[:radials])]
+    full, full_work = _native(
+        fixture, tmp_path, part="full_hybrid", tile=64, cache_mode="fresh-retained"
+    )
+    split, split_work = _native(
+        fixture, tmp_path, part="full_hybrid", tile=32, cache_mode="fresh-retained"
+    )
+    assert full_work["components"] == split_work["components"]
+    assert full_work["records"] == split_work["records"]
+    for actual, expected in zip(full, split, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-12)
+    _qualify(fixture, full, "full_hybrid")
 
 
 @pytest.mark.parametrize("spins", (1, 2))

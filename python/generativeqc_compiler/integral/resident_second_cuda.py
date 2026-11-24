@@ -80,10 +80,26 @@ def _runtime(
         include = '#include "dft/factorized_hessian_integral.hpp"\n'
         parameter = f", const {descriptor}* batches"
         scalar_argument = ", nullptr"
-        batch_binding = """  if (batches) {
+        batch_binding = """  const double* coordinates = nullptr;
+  if (batches) {
     const auto& batch = batches[blockIdx.y];
     records = batch.records; count = batch.count; atoms = batch.atoms; output = batch.output;
+    coordinates = batch.coordinates;
   }
+"""
+        bind_record = f"""      double expanded[{stride}];
+      const double* record;
+      if (coordinates) {{
+        const double* compact = records+(begin+threadIdx.x)*{exponents + 1};
+        for (int slot=0; slot<{exponents}; ++slot) expanded[slot]=compact[slot];
+        for (int center=0; center<{centers}; ++center)
+          for (int axis=0; axis<3; ++axis)
+            expanded[{exponents}+3*center+axis]=coordinates[3*atoms[center]+axis];
+        expanded[{stride - 1}]=compact[{exponents}];
+        record=expanded;
+      }} else {{
+        record=records+(begin+threadIdx.x)*{stride};
+      }}
 """
         batch_launch = f"""
 extern "C" int generativeqc_resident_integral_batch(double omega,
@@ -98,6 +114,7 @@ extern "C" int generativeqc_resident_integral_batch(double omega,
 """
     else:
         include = parameter = scalar_argument = batch_binding = batch_launch = ""
+        bind_record = f"      const double* record=records+(begin+threadIdx.x)*{stride};\n"
     return (
         source
         + f"""
@@ -118,8 +135,7 @@ __global__ void resident_integral_kernel(const double* records, size_t count,
     const size_t active = count-begin < 64 ? count-begin : 64;
     bool valid = true;
     if (threadIdx.x < active) {{
-      const double* record=records+(begin+threadIdx.x)*{stride};
-      double values[{outputs}]{{}};
+{bind_record}      double values[{outputs}]{{}};
       valid = resident_evaluate(component, record, direction, values);
       for (int index=0; index<{outputs}; ++index)
         terms[index][threadIdx.x]=record[{stride - 1}]*values[index];

@@ -943,6 +943,19 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_a
   }
 }
 
+cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t max_bytes) noexcept {
+  if (!impl_ || !impl_->ready || impl_->used) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  auto error = owner.authenticate(owner.stream);
+  if (error != cudaSuccess) return error;
+  const auto before = owner.grid.work().workspace_bytes;
+  error = owner.grid.retain_fixed_point_linearization(
+      std::min(max_bytes, owner.options.max_device_bytes - owner.receipt.device_bytes));
+  if (error != cudaSuccess) return error;
+  owner.receipt.device_bytes += owner.grid.work().workspace_bytes - before;
+  return cudaSuccess;
+}
+
 cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
   if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
   auto& owner = *impl_;

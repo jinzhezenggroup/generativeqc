@@ -19,6 +19,8 @@ import pytest
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.xc.grid_geometry_response import (
     ao_motion_program,
+    ao_s_radial_moment_program,
+    ao_s_radial_spatial_program,
     local_program,
     lower_cuda_geometry_powers,
 )
@@ -204,6 +206,55 @@ def test_build_time_ao_motion_has_independent_polynomial_oracle() -> None:
     )
 
 
+def _radial_fixture(points_per_atom: int = 5) -> dict:
+    """Signed s contractions with shared centers."""
+    fixture = _fixture(points_per_atom=points_per_atom)
+    records = fixture["records"]
+    records[:, 3:] = 0
+    records[:, 3] = 1
+    records[:, 7] = [1.0, -0.8, 0.6, 0.4]
+    # A grid point must not coincide with a center for Becke motion. The
+    # algebra-only test below separately covers the AO jet at coincidence.
+    return fixture
+
+
+def test_radial_spatial_pullback_matches_independent_gaussians() -> None:
+    fixture = _radial_fixture()
+    fixture["points"][0] = fixture["centers"][0]
+    moment_graph, moment_roots = ao_s_radial_moment_program()
+    spatial_graph, spatial_roots = ao_s_radial_spatial_program()
+    columns = []
+    for record in fixture["records"]:
+        center, begin, count = record[:3].astype(int)
+        distance = fixture["points"] - fixture["centers"][center]
+        variables = {f"d{axis}": distance[:, axis] for axis in range(3)}
+        terms = [
+            evaluate_array_graph(
+                moment_graph,
+                moment_roots,
+                dict(variables, exponent=exponent, weight=record[7] * weight),
+            )
+            for exponent, weight in fixture["primitives"][begin : begin + count]
+        ]
+        moments = np.sum(terms, axis=0)
+        columns.append(
+            evaluate_array_graph(
+                spatial_graph,
+                spatial_roots,
+                {
+                    **variables,
+                    **{f"moment{index}": value for index, value in enumerate(moments)},
+                },
+            )
+        )
+    np.testing.assert_allclose(
+        np.stack(columns, axis=-1),
+        _gaussians(fixture, _indices(3)),
+        atol=3e-15,
+        rtol=5e-14,
+    )
+
+
 @pytest.mark.parametrize("kind,limit", [("norm", 250), ("ratio", 300)])
 def test_cuda_geometry_power_lowering_retains_extended_range(
     kind: str, limit: int
@@ -354,22 +405,25 @@ def _native(
     )
     assert process.returncode == 0, process.stderr
     receipt = json.loads(process.stdout)
-    if reject or topology == "understated":
+    if reject or topology in ("understated", "radial-reject"):
         assert receipt["prepare_rejected"]
         return (), receipt
     values = np.fromfile(output, dtype=np.float64)
     panel = len(fixture["points"]) * nao
     points = len(fixture["points"])
-    assert len(values) == 32 * panel + 9 * points
+    compact = topology is not None and topology.startswith("radial")
+    spatial_values = 0 if compact else 20 * panel
+    moving_end = spatial_values + 12 * panel
+    assert len(values) == moving_end + 9 * points
     owners = fixture["owner"]
     np.testing.assert_array_equal(
-        values[32 * panel + 3 * points :].reshape(2, points, 3),
+        values[moving_end + 3 * points :].reshape(2, points, 3),
         np.stack((fixture["left"][owners], fixture["right"][owners])),
     )
     return (
-        values[: 20 * panel].reshape(20, -1, nao),
-        values[20 * panel : 32 * panel].reshape(3, 4, -1, nao),
-        values[32 * panel : 32 * panel + 3 * points].reshape(3, -1),
+        None if compact else values[:spatial_values].reshape(20, -1, nao),
+        values[spatial_values:moving_end].reshape(3, 4, -1, nao),
+        values[moving_end : moving_end + 3 * points].reshape(3, -1),
     ), receipt
 
 
@@ -525,6 +579,40 @@ def test_native_topology_work_bound_is_checked_on_device(tmp_path: Path) -> None
     _native(fixture, tmp_path, topology="understated")
 
 
+@pytest.mark.parametrize("mode", ("radial", "radial-replay", "radial-cartesian"))
+def test_native_radial_s_admission_and_actions(tmp_path: Path, mode: str) -> None:
+    fixture = _radial_fixture(1366 if mode == "radial-cartesian" else 5)
+    if mode == "radial-cartesian":
+        # Exercise the fused XC adjoint's all-left scratch, not a tiny shape
+        # whose fallback only admits a single Cartesian row.
+        fixture["records"] = np.tile(fixture["records"], (2, 1))
+        fixture["left"] = np.eye(9)[4].reshape(3, 3)
+        fixture["right"] = np.eye(9)[1].reshape(3, 3)
+    (_, _, weights), expanded = _native(fixture, tmp_path, topology="topology")
+    (spatial, motion, compact_weights), compact = _native(
+        fixture, tmp_path, topology=mode
+    )
+    assert spatial is None
+    assert compact["workspace_bytes"] < expanded["workspace_bytes"]
+    if mode == "radial":
+        assert (
+            5 * compact["ao_primitive_term_bound"]
+            == expanded["ao_primitive_term_bound"]
+        )
+    if mode == "radial-replay":
+        assert compact["ao_replay_term_bound"] > 0
+    jets = _gaussians(fixture, _indices(3))
+    np.testing.assert_allclose(
+        motion, _ao_motion(fixture, jets), rtol=2e-12, atol=2e-13
+    )
+    np.testing.assert_allclose(compact_weights, weights, rtol=2e-12, atol=2e-13)
+
+
+def test_native_radial_s_refuses_nonconstant_packed_monomials(tmp_path: Path) -> None:
+    fixture = _fixture()
+    _native(fixture, tmp_path, topology="radial-reject")
+
+
 def test_native_point_parallel_tiles_preserve_geometry(tmp_path: Path) -> None:
     """A non-divisible, multi-tile grid preserves jets and independent values."""
     fixture = _fixture(points_per_atom=345)
@@ -565,6 +653,153 @@ def test_native_borrowed_center_pairs_preserve_mixed_geometry(tmp_path: Path) ->
         prepared[2], (4 * fine - coarse) / 3, atol=2e-8, rtol=2e-6
     )
     assert receipt["capacity_alias_finite_capture_revocation_gates"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "legacy",
+        "adjusted",
+        "extended_measure",
+        "24_atoms",
+        "25_atoms",
+        "31_atoms",
+        "32_atoms",
+        "33_atoms",
+        "33_atoms_radial",
+        "36_atoms",
+        "36_atoms_adjusted",
+        "37_atoms",
+        "65_atoms",
+        "96_atoms",
+    ),
+)
+def test_native_batched_cartesian_partition(tmp_path: Path, case: str) -> None:
+    """Compare the actual cached row with displaced long-double quadratures."""
+    atoms = int(case.split("_", 1)[0]) if "_atoms" in case else 3
+    wide = atoms > 32
+    points_per_atom = 125 if case == "33_atoms_radial" else 1 if wide else 5
+    fixture = _fixture(atoms=atoms, points_per_atom=points_per_atom)
+    if atoms > 3:
+        # The matrix scratch must fit the rows for every nuclear coordinate,
+        # as it would for a large molecule with at least one AO per atom.
+        orbitals = np.arange(atoms) % len(fixture["records"])
+        fixture["records"] = fixture["records"][orbitals]
+        fixture["records"][:, :2] = np.column_stack(
+            (np.arange(atoms), 2 * np.arange(atoms))
+        )
+        fixture["primitives"] = fixture["primitives"][
+            (2 * orbitals[:, None] + np.arange(2)).ravel()
+        ]
+    fixture["left"] = np.eye(3 * atoms)[3 * atoms - 4].reshape(atoms, 3)
+    fixture["right"] = np.eye(3 * atoms)[1].reshape(atoms, 3)
+    if case in ("adjusted", "36_atoms_adjusted"):
+        fixture["radii"] = np.resize([0.66, 1.14, 2.55], atoms)
+        fixture["offsets"] = np.arange(atoms + 1) * points_per_atom
+        fixture["atomic"][::3] *= -1
+    if case in ("extended_measure", "24_atoms", "32_atoms"):
+        # Force a scaled fallback among otherwise cacheable weights, including
+        # in the larger fixture whose lane-local scratch uses a half warp.
+        fixture["atomic"][0] *= 2.0**36
+    topology = "cartesian"
+    if wide:
+        topology = "tiled-cartesian"
+        if case == "33_atoms_radial":
+            # Give the fused XC adjoint a realistic point count and a sparse
+            # axis of well-separated centers, keeping repairs exceptional.
+            separation = np.arange(atoms, dtype=float) * 4
+            fixture["centers"][:, 0] += separation
+            fixture["points"][:, 0] += separation[fixture["owner"]]
+            fixture["records"][:, 3] = 1
+            fixture["records"][:, 4:] = 0
+            fixture["records"][:, 7] = 1
+            topology = "radial-tiled-cartesian"
+        if atoms == 65:
+            # Choose a point with a nontrivial partition to exercise a nonzero
+            # mixed repair and a second one to exhaust the one-point queue.
+            repair = np.argsort(abs(fixture["weights"] / fixture["atomic"] - 0.5))[:2]
+            fixture["atomic"][repair] *= 2.0**36
+            repair_atom = fixture["owner"][repair[0]]
+            fixture["left"] = np.eye(3 * atoms)[3 * repair_atom].reshape(atoms, 3)
+            fixture["right"] = np.eye(3 * atoms)[3 * repair_atom + 1].reshape(atoms, 3)
+            topology += "-repair"
+        if atoms == 96:
+            topology += "-extended"
+    fixture["weights"] = _partition(fixture)
+    (_, _, weights), work = _native(fixture, tmp_path, topology=topology)
+    if wide:
+        assert work["tiled_cartesian_sweeps"] > 0
+        assert (
+            0
+            < work["tiled_cartesian_repair_pair_bound"]
+            < work["action_partition_pairs"]
+        )
+    coarse, fine = (_weight_differences(fixture, step) for step in (0.004, 0.002))
+    scale = abs(fixture["atomic"])
+    np.testing.assert_allclose(
+        weights / scale, (4 * fine - coarse) / (3 * scale), atol=2e-8, rtol=2e-6
+    )
+    if atoms == 65:
+        assert abs(weights[2, repair[0]] / scale[repair[0]]) > 1e-5
+
+
+def test_native_wide_hydrogen_cartesian_quadrature(tmp_path: Path) -> None:
+    """Check both directions of the terminal dimer against scalar geometry and XC."""
+    atoms = 34
+    centers = np.array(
+        [
+            (5.8 * (dimer % 4), 5.4 * (dimer // 4), 0.08 * dimer)
+            for dimer in range(atoms // 2)
+        ]
+    )
+    bonds = np.array(
+        [
+            (0.14 * (dimer % 3) - 0.14, 0.10 * (dimer % 2), 0.71)
+            for dimer in range(atoms // 2)
+        ]
+    )
+    centers = (
+        centers[:, None, :] + bonds[:, None, :] * np.array([-1, 1])[None, :, None]
+    ).reshape(-1, 3)
+    radial, radial_weight = np.polynomial.legendre.leggauss(12)
+    radial = (1 + radial) / 2
+    radius = radial / (1 - radial)
+    polar, polar_weight = np.polynomial.legendre.leggauss(6)
+    azimuth = np.arange(12) * (2 * np.pi / 12)
+    zz, pp = np.meshgrid(polar, azimuth, indexing="ij")
+    ring = np.sqrt(1 - zz**2)
+    spheres = np.stack((ring * np.cos(pp), ring * np.sin(pp), zz), axis=-1).reshape(
+        -1, 3
+    )
+    local_grid = (radius[:, None, None] * spheres).reshape(-1, 3)
+    local_measure = (
+        radial_weight[:, None]
+        / 2
+        * radial[:, None] ** 2
+        / (1 - radial[:, None]) ** 4
+        * np.repeat(polar_weight, 12)
+        * (2 * np.pi / 12)
+    ).ravel()
+    points_per_atom = len(local_grid)
+    records = np.zeros((atoms, 16))
+    records[:, 0] = np.arange(atoms)
+    records[:, 1] = np.arange(atoms)
+    records[:, 2:4] = 1
+    records[:, 7] = 1
+    fixture = {
+        "centers": centers,
+        "records": records,
+        "primitives": np.tile([0.5, 1.0], (atoms, 1)),
+        "owner": np.repeat(np.arange(atoms), points_per_atom),
+        "iterations": 3,
+        "points": (centers[:, None, :] + local_grid).reshape(-1, 3),
+        "atomic": np.tile(local_measure, atoms),
+        "left": np.eye(3 * atoms)[98].reshape(atoms, 3),
+        "right": np.eye(3 * atoms)[101].reshape(atoms, 3),
+    }
+    fixture["weights"] = _partition(fixture)
+    _, receipt = _native(fixture, tmp_path, topology="tiled-cartesian-quadrature")
+    assert receipt["tiled_cartesian_sweeps"] > 0
 
 
 @pytest.mark.parametrize("iterations", [1, 2, 3, 4, 5])

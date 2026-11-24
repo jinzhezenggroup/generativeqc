@@ -80,6 +80,8 @@ class CudaKsWb97mvResponse {
    * The additional-byte cap includes extra provider metadata, not just values.
    * A resource refusal keeps the exact replay; numerical/device faults fail. */
   generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, std::string& detail);
+  /** Spend only the remaining enclosing budget on fixed semilocal XC work. */
+  cudaError_t retain_fixed_grid_points(std::size_t maximum_additional_bytes) noexcept;
   /** Enqueue into CPKS's private output; audit failure poisons the panel.
    * CPKS owns stream completion and failure draining. Do not expose this panel
    * without checking it. Call collect_work at the outer endpoint boundary. */

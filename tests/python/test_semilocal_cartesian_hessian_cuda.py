@@ -1,4 +1,4 @@
-"""Qualify the public Direct Cartesian RKS Hessian on a water dimer (#1905)."""
+"""Qualify the public Direct Cartesian RKS Hessian and its directional route."""
 
 from __future__ import annotations
 
@@ -172,3 +172,28 @@ def test_public_cuda_rks_cartesian_water_dimer_live_peak(
         assert response["rejected_allocations"] == 0
         record_property(f"{endpoint}_live_bytes", response["live_bytes"])
         record_property(f"{endpoint}_peak_bytes", response["peak_bytes"])
+
+
+def test_dense_r2scan_cartesian_column_matches_signed_hvp() -> None:
+    """Compare the all-row atom/AO contraction with the generic signed action."""
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    positions = np.array(
+        [
+            (5.8 * (pair % 3), 5.4 * (pair // 3), 0.08 * pair + side * 0.71)
+            for pair in range(6)
+            for side in (-1, 1)
+        ]
+    )
+    atoms = list(zip(["H"] * len(positions), positions, strict=True))
+    direction = np.random.default_rng(1905).normal(size=positions.shape)
+    direction -= direction.mean(axis=0)
+    direction /= np.linalg.norm(direction)
+    calculator = _calculator("r2scan-rks", "cuda")
+    dense = calculator.hessian(atoms, block_size=1, solver_options=SOLVER)
+    action = calculator.hessian_vector_product(atoms, direction, solver_options=SOLVER)
+    np.testing.assert_allclose(
+        dense.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
+    )
+    np.testing.assert_allclose(dense.matrix, dense.matrix.T, atol=2e-8, rtol=0)
+    assert dense.diagnostics["response_backend"] == action.diagnostics["response_backend"] == "cuda"
+    assert not dense.diagnostics["numerical_host_fallbacks"]

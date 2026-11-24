@@ -144,10 +144,17 @@ void contract() {
   std::cout << "{\"contract\":true}\n";
 }
 
-void evaluate(const std::string& mode) {
+void evaluate(std::string mode) {
+  const bool bounded_factored = mode == "nuclear-pbe-factored";
+  const bool tight_adjoint = mode == "nuclear-pbe-adjoint-tight";
+  if (bounded_factored || tight_adjoint) mode = "nuclear-pbe";
+  const bool tight_points = mode.ends_with("-points-tight");
+  const bool cache_points = tight_points || mode.ends_with("-points");
+  if (cache_points) mode.resize(mode.size() - (tight_points ? 13 : 7));
   response::CudaWb97mvGridShape shape;
   std::cin >> shape.atoms >> shape.primitives >> shape.nao >> shape.points >> shape.spins;
-  if (!std::cin || shape.nao > 128 || shape.points > 4096 || shape.spins > 2 || shape.atoms > 128 ||
+  // Leave room to exercise the final partial tile beyond 4096 points.
+  if (!std::cin || shape.nao > 128 || shape.points > 8192 || shape.spins > 2 || shape.atoms > 128 ||
       shape.primitives > 4096)
     throw std::runtime_error("probe shape exceeds finite limits");
   response::CudaWb97mvGridOptions options;
@@ -156,6 +163,10 @@ void evaluate(const std::string& mode) {
                       mode == "nuclear-r2scan" || mode == "nuclear-m06-2x";
   options.nuclear_response = nuclear;
   options.replay_nuclear_maps = mode != "nuclear-serial";
+  const bool test_adjoint = mode == "nuclear-pbe" && shape.spins == 1;
+  if (test_adjoint) options.max_nuclear_adjoint_bytes = 64ULL << 20;
+  if (tight_adjoint)
+    options.max_nuclear_adjoint_bytes = 4 * shape.nao * shape.points * sizeof(double) + (128 << 10);
   if (mode == "nuclear-split-semilocal" || mode == "fixed-split-semilocal")
     options.component = response::CudaWb97mvGridComponent::semilocal_only;
   if (mode == "nuclear-split-vv10" || mode == "fixed-split-vv10")
@@ -182,6 +193,21 @@ void evaluate(const std::string& mode) {
     auto serial = options;
     serial.replay_nuclear_maps = false;
     check(response::cuda_wb97mv_grid_workspace(shape, serial, options.max_workspace_bytes));
+  }
+  if (tight_points) {
+    std::size_t baseline_bytes{};
+    check(response::cuda_wb97mv_grid_workspace(shape, options, baseline_bytes));
+    options.max_workspace_bytes = baseline_bytes;
+  }
+  if (cache_points) options.max_point_linearization_bytes = 16ULL << 20;
+  if (bounded_factored) {
+    options.max_nuclear_affine_terms = 1ULL << 30;
+    auto no_adjoint = options;
+    no_adjoint.max_nuclear_adjoint_bytes = 0;
+    std::size_t unusable{};
+    require(response::cuda_wb97mv_grid_workspace(shape, no_adjoint, unusable) ==
+                cudaErrorInvalidValue,
+            "over-budget affine grid was admitted without its factored replacement");
   }
   std::size_t bytes{};
   check(response::cuda_wb97mv_grid_workspace(shape, options, bytes));
@@ -253,7 +279,8 @@ void evaluate(const std::string& mode) {
   if (nuclear) {
     check(prepared);
     const auto panel = 4 * shape.points * shape.nao;
-    auto* right_ao = storage.upload(read(panel));
+    const auto input_right_ao = read(panel);
+    auto* right_ao = storage.upload(input_right_ao);
     auto* left_ao = storage.upload(read(panel));
     auto* mixed_ao = storage.upload(read(panel));
     auto* right_weights = storage.upload(read(shape.points));
@@ -277,7 +304,8 @@ void evaluate(const std::string& mode) {
     require(mixed() == cudaErrorInvalidResourceHandle, "unarmed nuclear cache accepted");
     check(arm());
     check(mixed());
-    std::cout << std::setprecision(17) << "{\"energy\":";
+    std::cout << std::setprecision(17) << "{\"workspace_bytes\":" << grid.work().workspace_bytes
+              << ",\"energy\":";
     array(energy, 1);
     std::cout << ",\"potential\":";
     array(potential, matrices);
@@ -386,11 +414,61 @@ void evaluate(const std::string& mode) {
     std::vector<double> replayed_direction(matrices), checked_direction(matrices);
     check(cudaMemcpy(replayed_direction.data(), output, matrices * sizeof(double),
                      cudaMemcpyDeviceToHost));
+    double cached_mixed{};
+    if (test_adjoint) {
+      require(grid.admits_cartesian_mixed(), "private AO adjoint not admitted");
+      private_mixed();
+      check(cudaMemcpy(&cached_mixed, scalar, sizeof(cached_mixed), cudaMemcpyDeviceToHost));
+      private_mixed();
+      check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+      require(candidate == cached_mixed, "private replay changed the cached left cotangent");
+      const auto before = grid.work().nuclear_affine_terms;
+      check(grid.enqueue_private_nuclear_covector(right_ao, right_weights, right_points, moving,
+                                                  transaction, stream));
+      const auto covector_terms = grid.work().nuclear_affine_terms - before;
+      private_mixed();
+      check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+      require(candidate == cached_mixed, "covector-only preparation changed the mixed result");
+      const auto before_full = grid.work().nuclear_affine_terms;
+      private_direction();
+      require(!status && covector_terms < grid.work().nuclear_affine_terms - before_full,
+              "covector-only preparation did not remove potential work");
+    }
     check(arm());
     check(cudaMemcpy(checked_direction.data(), output, matrices * sizeof(double),
                      cudaMemcpyDeviceToHost));
     require(replayed_direction == checked_direction,
             "private right replay disagrees with the checked direction");
+    if (test_adjoint) {
+      check(mixed());
+      check(cudaMemcpy(&checked, scalar, sizeof(checked), cudaMemcpyDeviceToHost));
+      require(std::abs(checked - cached_mixed) <= 2e-13 * (1 + std::abs(checked)),
+              "private adjoint disagrees after rearming the right tangent");
+    }
+    if (tight_adjoint) {
+      // Rebind nonzero signed AO and density motion after the zero-direction
+      // replay. The expanded checked contraction does not use the tiled VJP.
+      check(cudaMemcpyAsync(right_ao, input_right_ao.data(), panel * sizeof(double),
+                            cudaMemcpyHostToDevice, stream));
+      check(cudaMemcpyAsync(moving, direction.data(), matrices * sizeof(double),
+                            cudaMemcpyHostToDevice, stream));
+      check(arm());
+      check(mixed());
+      double expanded{};
+      check(cudaMemcpy(&expanded, scalar, sizeof(expanded), cudaMemcpyDeviceToHost));
+      require(std::abs(expanded - cached_mixed) > 1e-12, "right AO motion did not affect oracle");
+      check(cudaMemsetAsync(transaction, 0, sizeof(int), stream));
+      check(grid.enqueue_private_nuclear_covector(right_ao, right_weights, right_points, moving,
+                                                  transaction, stream));
+      for (int repeat = 0; repeat < 2; ++repeat) {
+        private_mixed();
+        check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+        check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+        require(!status && std::abs(candidate - expanded) <= 2e-13 * (1 + std::abs(expanded)),
+                "bounded private adjoint disagrees with expanded contraction");
+      }
+      check(arm());
+    }
     const auto injected_pair_count = grid.work().nuclear_response_pairs - checked_pair_count;
     sentinel();
     require(grid.prepare_nuclear_direction(right_ao, right_weights, right_points, moving, moving,

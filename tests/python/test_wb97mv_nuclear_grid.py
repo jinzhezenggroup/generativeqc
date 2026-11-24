@@ -45,8 +45,8 @@ from test_wb97mv_native_grid import (
 )
 
 
-def _data(spins: int) -> dict:
-    fixture = _fixture(spins)
+def _data(spins: int, *, points: int = 8, orbital_replicas: int = 1) -> dict:
+    fixture = _fixture(spins, points + 1, orbital_replicas=orbital_replicas)
     fixture["points"] = fixture["points"][:-1].copy()
     fixture["weights"] = fixture["weights"][:-1].copy()
     fixture["jets"] = fixture["jets"][:, :-1].copy()
@@ -636,6 +636,20 @@ def _scaled_libxc_grid(
     )
 
 
+def test_bounded_private_ao_adjoint_matches_expanded_contraction() -> None:
+    """Fit only one resident AO panel, including a short final tile."""
+    points = 4109
+    fixture = _data(1, points=points, orbital_replicas=9)
+    for name in ("weights", "weight_left", "weight_right", "weight_mixed"):
+        fixture[name] /= points
+    full = _native_action(fixture, tile=0, mode="nuclear-pbe", scales=(1.0, 1.0))
+    tight = _native_action(
+        fixture, tile=0, mode="nuclear-pbe-adjoint-tight", scales=(1.0, 1.0)
+    )
+    assert tight["workspace_bytes"] < full["workspace_bytes"]
+    np.testing.assert_array_equal(tight["mixed"], full["mixed"])
+
+
 @pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize(
     ("family", "scales"),
@@ -690,7 +704,71 @@ def test_scaled_native_semilocal_grid_against_libxc(
         np.testing.assert_allclose(
             actual["response"], moving.ravel(), atol=2e-8, rtol=2e-6
         )
-        np.testing.assert_allclose(actual["mixed"], mixed, atol=1e-7, rtol=2e-5)
+    np.testing.assert_allclose(actual["mixed"], mixed, atol=1e-7, rtol=2e-5)
+
+
+@pytest.mark.parametrize(("spins", "family"), ((1, "pbe"), (2, "r2scan")))
+@pytest.mark.parametrize("orbital_replicas", (2, 8, 9, 11, 17, 24))
+def test_large_native_grid_potentials_against_libxc(
+    spins: int, family: str, orbital_replicas: int
+) -> None:
+    """Check fixed and moving potentials across the one-strip crossover and a short tile."""
+    points = 4109 if orbital_replicas > 8 else 4096
+    fixture = _data(spins, points=points, orbital_replicas=orbital_replicas)
+    for name in ("weights", "weight_left", "weight_right", "weight_mixed"):
+        fixture[name] /= points
+    scales = (1.0, 1.0)
+    actual = _native_action(fixture, tile=0, mode=f"nuclear-{family}", scales=scales)
+
+    def potential(grid: dict, density: np.ndarray) -> np.ndarray:
+        return _scaled_libxc_grid(grid, density, family, scales)[1].ravel()
+
+    step = 0.001
+    fixed = (
+        potential(fixture, fixture["density"] + step * fixture["direction"])
+        - potential(fixture, fixture["density"] - step * fixture["direction"])
+    ) / (2 * step)
+    moving = (
+        potential(*_displaced(fixture, 0, step))
+        - potential(*_displaced(fixture, 0, -step))
+    ) / (2 * step)
+    np.testing.assert_allclose(actual["fixed_response"], fixed, atol=2e-8, rtol=2e-6)
+    np.testing.assert_allclose(actual["response"], moving, atol=2e-8, rtol=2e-6)
+    if spins == 1 and orbital_replicas > 16:
+        factored = _native_action(
+            fixture, tile=0, mode="nuclear-pbe-factored", scales=scales
+        )
+        for field in ("energy", "potential", "fixed_response", "response", "mixed"):
+            np.testing.assert_allclose(
+                factored[field], actual[field], atol=2e-12, rtol=2e-10
+            )
+
+
+@pytest.mark.parametrize(
+    ("family", "scales"),
+    (("pbe", (0.75, 1.0)), ("b3lyp", (1.0, 1.0)), ("r2scan", (1.0, 1.0))),
+)
+def test_optional_point_linearization_matches_checked_actions(
+    family: str, scales: tuple[float, float]
+) -> None:
+    """Check signed fixed and moving responses, with vacuum and measure motion."""
+    fixture = _data(1, points=4096)
+    fixture["points"][0] += 1e4
+    for field in ("jets", "left_ao", "right_ao", "mixed_ao"):
+        fixture[field][:, 0, :] = 0
+    for field in ("weights", "weight_left", "weight_right", "weight_mixed"):
+        fixture[field] /= 4096
+    mode = f"nuclear-{family}"
+    reference = _native_action(fixture, tile=0, mode=mode, scales=scales)
+    saved = _native_action(fixture, tile=0, mode=f"{mode}-points", scales=scales)
+    tight = _native_action(fixture, tile=0, mode=f"{mode}-points-tight", scales=scales)
+    assert saved["workspace_bytes"] > reference["workspace_bytes"]
+    assert tight["workspace_bytes"] == reference["workspace_bytes"]
+    for field in ("energy", "potential", "fixed_response", "response", "mixed"):
+        np.testing.assert_allclose(
+            saved[field], reference[field], atol=2e-12, rtol=2e-10
+        )
+        np.testing.assert_array_equal(tight[field], reference[field])
 
 
 @pytest.mark.parametrize("spins", (1, 2))

@@ -242,7 +242,7 @@ def test_native_radial_tiles_and_rigid_translation(
 def test_parallel_ordered_one_electron_and_bounded_fallback(
     schedule: int, spherical: bool, tmp_path: Path
 ) -> None:
-    """Parallel primitive chains retain physical-center and radial fold order."""
+    """Parallel and tight-arena routes preserve contracted physical-center results."""
     fixture = _fixture(spherical, removal=True)
     (expected_matrices, expected_vectors), parallel = _native(fixture, tmp_path)
     (matrices, vectors), selected = _native(fixture, tmp_path, schedule=schedule)

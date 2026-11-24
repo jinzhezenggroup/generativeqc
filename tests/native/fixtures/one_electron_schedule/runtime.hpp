@@ -56,7 +56,7 @@ template <class... Args>
 void build_records(Args...) {}
 // The host scheduler is real; this probe does not execute either record kernel.
 inline void build_batch_records(CudaOneElectronShape, const DeviceJob*, const ParallelTask*,
-                                std::size_t, const double*, const double*, char*, int*) {}
+                                std::size_t, const double*, const double*, char*, int*, bool) {}
 template <class... Args>
 void project(Args...) {}
 template <class... Args>

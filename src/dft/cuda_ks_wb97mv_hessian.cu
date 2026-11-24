@@ -13,6 +13,7 @@
 #include "dft/dispersion/d4_second_order.hpp"
 #include "dft/dispersion/gcp_cuda.hpp"
 #include "dft/hessian_aot.hpp"
+#include "integrals/coulomb_derivative_envelope.hpp"
 #include "response/cuda_ks_cpks_reference.hpp"
 #include "response/wb97mv_stationary_assembly.cuh"
 #include "runtime/resource_cuda.cuh"
@@ -158,12 +159,16 @@ __global__ void d3_direction(dispersion::D3CudaDirectionSource source,
 __global__ void frozen_exact_response(const double* derivatives, const double* frozen,
                                       const double* delta_density, std::size_t panels,
                                       std::size_t coordinates, std::size_t column, double* output,
-                                      int* status) {
+                                      int* status, bool screened) {
   for (std::size_t left = blockIdx.x * blockDim.x + threadIdx.x; left < coordinates;
        left += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     double value = frozen[column * coordinates + left];
-    for (std::size_t index = 0; index < panels; ++index)
-      value += derivatives[left * panels + index] * delta_density[index];
+    for (std::size_t index = 0; index < panels; ++index) {
+      const auto response = delta_density[index];
+      if (screened && !(fabs(response) <= integrals::CoulombDerivativeOmissions::max_response_element))
+        atomicExch(status, 1);
+      value += derivatives[left * panels + index] * response;
+    }
     if (!isfinite(value)) atomicExch(status, 1);
     output[left] = value;
   }
@@ -220,15 +225,15 @@ struct DenseAssemblyAudit {
 
 __global__ void store_column(const double* vector, std::size_t count, std::size_t column,
                              const int* column_status, double* matrix, DenseAssemblyAudit* audit) {
-  const bool failed = *column_status != 0;
+  const auto flags = *column_status;
   if (blockIdx.x == 0 && threadIdx.x == 0) {
     // One writer per column on the owner stream, before its status is reused.
-    if (failed)
-      audit->failed = 1;
+    if (flags)
+      audit->failed |= flags;
     else
       ++audit->completed;
   }
-  if (failed) return;
+  if (flags) return;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     matrix[index * count + column] = vector[index];
@@ -528,7 +533,20 @@ struct CudaKsWb97mvHessian::Impl {
       error = cudaMemsetAsync(at(delta_totals), 0, 2 * matrix * sizeof(double), stream);
     const integrals::CudaOneElectronWeights weights{at(totals), at(delta_totals),
                                                     at(totals) + matrix, at(delta_totals) + matrix};
+    bool streamed_exact = false;
+    if (frozen_exact && error == cudaSuccess) {
+      const auto dense = exact.enqueue_private_frozen_dense(at(direction), at(zero), frozen_exact,
+                                                            status, stream);
+      if (dense == cudaErrorNotSupported && exact.work().omitted_frozen_source_groups)
+        return cudaErrorInvalidResourceHandle;
+      if (dense != cudaErrorNotSupported) {
+        error = dense;
+        streamed_exact = error == cudaSuccess;
+        if (streamed_exact) receipt.frozen_exact_columns += coordinates;
+      }
+    }
     for (std::size_t column = 0; column < coordinates && error == cudaSuccess; ++column) {
+      if (!frozen_core && (!frozen_exact || streamed_exact)) break;
       unit<<<maps::blocks(coordinates), 128, 0, stream>>>(at(direction), coordinates, column);
       error = cudaGetLastError();
       if (error == cudaSuccess && frozen_core) {
@@ -541,7 +559,7 @@ struct CudaKsWb97mvHessian::Impl {
         error = one_electron.enqueue_private(at(direction), weights, output, status, stream);
         if (error == cudaSuccess) ++receipt.frozen_core_columns;
       }
-      if (!frozen_exact) continue;
+      if (!frozen_exact || streamed_exact) continue;
       if (error == cudaSuccess)
         error = exact.enqueue_private_frozen_column(column, at(direction), at(zero), exact_output(),
                                                     status, stream);
@@ -626,26 +644,41 @@ struct CudaKsWb97mvHessian::Impl {
                               stream)) != cudaSuccess)
         return error;
     }
-    // Right geometry is prepared once for the RHS, and again with solved dD.
-    // Mixed contractions below reuse AO jets and the cached bilateral VV10 JVP.
+    // Prepare the right geometry once. The full Cartesian column can keep the
+    // mixed weights live across CPKS without a second diagonal Becke sweep.
     result.failure_check = "moving-grid CPKS right-hand side";
-    CudaGridGeometryMixedView motion, vv10_motion;
-    if ((error = geometry.enqueue_private_mixed_view(
-             at(direction), at(direction), motion, at<int>(status_offset), stream)) != cudaSuccess)
-      return error;
     const auto shape = grid_reference.shape();
     const auto ao_panel = 4 * shape.points * shape.nao;
     const auto vv10_shape = vv10_reference.shape();
     const auto vv10_panel = 4 * vv10_shape.points * vv10_shape.nao;
     const bool separate = expected.identity.model.nonlocal_grid.has_value();
+    bool cartesian_mixed =
+        repeated_rhs && column < coordinates && !separate && grid.admits_cartesian_mixed();
+    CudaGridGeometryCartesianView cartesian_column;
+    CudaGridGeometryDirectionView right_motion;
+    if (cartesian_mixed && grid.admits_cartesian_mixed(coordinates)) {
+      error = geometry.enqueue_private_cartesian_column(
+          at(direction), column, cartesian_column, at<int>(status_offset), stream, &right_motion);
+      if (error != cudaSuccess && error != cudaErrorNotSupported) return error;
+    }
+    CudaGridGeometryMixedView motion, vv10_motion;
+    if (!cartesian_column.weights) {
+      error = repeated_rhs && column < coordinates
+                  ? geometry.enqueue_private_cartesian_diagonal_view(
+                        at(direction), column, motion, at<int>(status_offset), stream)
+                  : geometry.enqueue_private_mixed_view(
+                        at(direction), at(direction), motion, at<int>(status_offset), stream);
+      if (error != cudaSuccess) return error;
+      right_motion = {motion.ao + ao_panel, motion.weights + shape.points,
+                      motion.point_directions + 3 * shape.points};
+    }
     if (separate && (error = vv10_geometry.enqueue_private_mixed_view(
                          at(direction), at(direction), vv10_motion, at<int>(status_offset),
                          stream)) != cudaSuccess)
       return error;
     if ((error = grid.enqueue_private_nuclear_direction(
-             motion.ao + ao_panel, motion.weights + shape.points,
-             motion.point_directions + 3 * shape.points, at(zero), at(xc_direction),
-             at<int>(status_offset), stream)) != cudaSuccess)
+             right_motion.ao, right_motion.weights, right_motion.point_directions, at(zero),
+             at(xc_direction), at<int>(status_offset), stream)) != cudaSuccess)
       return error;
     if (separate) {
       if ((error = vv10_grid.enqueue_private_nuclear_direction(
@@ -707,7 +740,7 @@ struct CudaKsWb97mvHessian::Impl {
       // Retain contracted AO derivatives, not four-index value/gradient jets.
       frozen_exact_response<<<maps::blocks(coordinates), 128, 0, stream>>>(
           frozen_exact, frozen_exact + coordinates * panels, at(delta_density), panels, coordinates,
-          column, vector(3), at<int>(status_offset));
+          column, vector(3), at<int>(status_offset), exact.work().omitted_frozen_source_groups != 0);
       error = cudaGetLastError();
       if (error == cudaSuccess) ++receipt.frozen_exact_contractions;
     } else if (has_exact) {
@@ -741,19 +774,21 @@ struct CudaKsWb97mvHessian::Impl {
                                          stream)) != cudaSuccess)
       return error;
     result.failure_check = "moving-grid response Hessian contraction";
-    if ((error = grid.enqueue_private_nuclear_direction(
-             motion.ao + ao_panel, motion.weights + shape.points,
-             motion.point_directions + 3 * shape.points, at(delta_density), at(xc_direction),
-             at<int>(status_offset), stream)) != cudaSuccess)
+    if ((error = grid.enqueue_private_nuclear_covector(
+             right_motion.ao, right_motion.weights, right_motion.point_directions,
+             at(delta_density), at<int>(status_offset), stream)) != cudaSuccess)
       return error;
-    if (separate && (error = vv10_grid.enqueue_private_nuclear_direction(
+    if (separate && (error = vv10_grid.enqueue_private_nuclear_covector(
                          vv10_motion.ao + vv10_panel, vv10_motion.weights + vv10_shape.points,
                          vv10_motion.point_directions + 3 * vv10_shape.points, at(delta_density),
-                         at(vv10_direction), at<int>(status_offset), stream)) != cudaSuccess)
+                         at<int>(status_offset), stream)) != cudaSuccess)
       return error;
-    bool cartesian_mixed =
-        repeated_rhs && column < coordinates && !separate && grid.admits_cartesian_mixed();
-    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+    if (cartesian_column.weights &&
+        (error = grid.enqueue_private_cartesian_mixed(cartesian_column, vector(5),
+                                                      at<int>(status_offset), stream)) != cudaSuccess)
+      return error;
+    for (std::size_t coordinate = 0; !cartesian_column.weights && coordinate < coordinates;
+         ++coordinate) {
       unit<<<maps::blocks(coordinates), 128, 0, stream>>>(at(left), coordinates, coordinate);
       if ((error = cudaGetLastError()) != cudaSuccess) return error;
       if (cartesian_mixed) {
@@ -859,8 +894,16 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     }
     const auto vv10_shape = owner->vv10_reference.shape();
     auto vv10_geometry_shape = owner->vv10_reference.geometry_shape();
+    // Keep the existing read-heavy spatial cache for the qualified small
+    // endpoints. Wide, pure s bases need the smaller geometry lease.
+    geometry_shape.radial_s = shape.nao > 64 && !separate;
     for (const auto& shell : owner->fock.primary->system().shells) {
       const auto angular = static_cast<std::size_t>(shell.angular_momentum);
+      geometry_shape.radial_s = geometry_shape.radial_s && angular == 0 &&
+          std::all_of(shell.primitives.begin(), shell.primitives.end(), [](const auto& primitive) {
+            return primitive.exponent >= 0x1p-32 && primitive.exponent <= 0x1p16 &&
+                   std::abs(primitive.coefficient) <= 0x1p16;
+          });
       const bool spherical =
           owner->fock.primary->system().basis_representation == core::kSphericalBasis;
       const auto components = spherical ? 2 * angular + 1 : (angular + 1) * (angular + 2) / 2;
@@ -967,8 +1010,17 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->options.grid.nuclear_response = true;
     owner->options.grid.replay_nuclear_maps = false;
     owner->options.grid.max_nuclear_adjoint_bytes = 0;
-    check(cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes),
-          "stationary Hessian XC/VV10 workspace admission");
+    owner->options.grid.max_point_linearization_bytes = 0;
+    auto grid_admission = cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes);
+    if (grid_admission == cudaErrorInvalidValue && !separate && shape.spins == 1 &&
+        shape.nao > 64 && shape.nao <= 96 && !owner->options.grid.includes_nonlocal() &&
+        mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps) {
+      // The required adjoints are charged to the original shared grid arena.
+      // They replace the over-work affine fallback, not other consumers' budgets.
+      owner->options.grid.max_nuclear_adjoint_bytes = 512ULL << 20;
+      grid_admission = cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes);
+    }
+    check(grid_admission, "stationary Hessian XC/VV10 workspace admission");
     auto vv10_grid_options = owner->options.grid;
     if (separate) {
       vv10_grid_options.component = CudaWb97mvGridComponent::vv10_only;
@@ -1136,10 +1188,10 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     auto exact_options = options.exact;
     // A dense sweep can reuse contracted frozen Fock derivatives instead of
     // revisiting the same right direction's primitive jets.
+    const auto frozen_bytes = product(product(coordinates, panels + coordinates), sizeof(double));
     exact_options.prefer_fresh_direction_batches =
         mode == CudaKsWb97mvHessianMode::dense_and_action &&
-        product(product(coordinates, panels + coordinates), sizeof(double)) <=
-            options.max_frozen_exact_bytes;
+        frozen_bytes <= options.max_frozen_exact_bytes;
     const auto& exchange = owner->fock.primary->strategy().spec.exchange;
     exact_options.full_exchange_fraction = 0;
     if (owner->fock.correction) {
@@ -1153,7 +1205,22 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     exact_options.max_workspace_bytes =
         std::min(exact_options.max_workspace_bytes, owner->remaining);
     if (owner->has_exact) {
-      status = owner->exact.prepare(batch, item, expected, exact_options, detail);
+      CudaWb97mvJkAdmissionFailure exact_failure{};
+      status = owner->exact.prepare(batch, item, expected, exact_options, detail, false,
+                                    &exact_failure);
+      if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+          exact_failure == CudaWb97mvJkAdmissionFailure::canonical_source_limit &&
+          exact_options.prefer_fresh_direction_batches && frozen_bytes < owner->remaining &&
+          shape.spins == 1 && !owner->has_df && !owner->fock.correction) {
+        // A derivative-only schedule is not a fallback for arbitrary HVPs.
+        // Reserve its required table before admitting the screened source.
+        check(runtime::resource_cuda_malloc(&owner->frozen_exact, frozen_bytes));
+        owner->charge(frozen_bytes);
+        owner->receipt.frozen_exact_bytes = frozen_bytes;
+        exact_options.max_workspace_bytes =
+            std::min(exact_options.max_workspace_bytes, owner->remaining);
+        status = owner->exact.prepare(batch, item, expected, exact_options, detail, true);
+      }
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
         detail = "stationary Hessian exact nuclear J/K: " + detail;
         return status;
@@ -1162,8 +1229,11 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     }
     const auto grid_reserved = owner->bytes - owner->grid_offset;
     owner->options.grid.replay_nuclear_maps = options.grid.replay_nuclear_maps;
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps)
-      owner->options.grid.max_nuclear_adjoint_bytes = 64ULL << 20;
+    if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps) {
+      owner->options.grid.max_nuclear_adjoint_bytes =
+          std::max<std::size_t>(owner->options.grid.max_nuclear_adjoint_bytes, 64ULL << 20);
+      owner->options.grid.max_point_linearization_bytes = 16ULL << 20;
+    }
     // All arena slots are 256-byte aligned. Do not let an optional payload
     // consume the alignment bytes needed by its enclosing reservation.
     owner->options.grid.max_workspace_bytes =
@@ -1176,11 +1246,12 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->charge(layout.bytes - owner->bytes);
     owner->bytes = layout.bytes;
     core_options = options.one_electron;
-    // Dense replay amortizes a larger capture over 2*3N actions. Keep the
-    // existing byte and primitive-work limits, including scalar fallback.
+    // A dense sweep reuses the same packed batch for every coordinate. Bound
+    // its task descriptors by the admitted job census, and let payload bytes
+    // and primitive work decide whether the batch actually fits.
     if (mode == CudaKsWb97mvHessianMode::dense_and_action &&
         core_options.max_parallel_tasks == integrals::CudaOneElectronOptions{}.max_parallel_tasks)
-      core_options.max_parallel_tasks = 4096;
+      core_options.max_parallel_tasks = core_options.max_jobs;
     core_options.max_workspace_bytes =
         std::min(core_options.max_workspace_bytes, core_bytes + owner->remaining);
     status = owner->one_electron.prepare(batch, item, expected, core_options, detail);
@@ -1277,8 +1348,31 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const bool eligible =
           owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64 ||
           owner->options.cpks.gmres.max_iterations > 1;
-      if (eligible && operator_bytes && operator_bytes <= options.max_resident_cpks_bytes &&
-          operator_bytes <= owner->remaining &&
+      // Building the dense operator costs one physical Fock action per
+      // rotation. Keep the established small-cache regime, but require enough
+      // RHSs to amortize larger caches. A small molecule in a large basis can
+      // otherwise pay for many more columns than it has useful repeated work.
+      constexpr std::size_t small_operator_bytes = 128ULL << 10;
+      const auto cpks_shape = owner->cpks_reference.shape();
+      constexpr std::size_t ordinary_operator_bytes = 512ULL << 10;
+      const bool extended = operator_bytes > ordinary_operator_bytes && cpks_shape.spins == 1 &&
+                            !owner->has_df && !owner->has_ecp && !owner->fock.correction &&
+                            !owner->expected.identity.model.nonlocal_grid &&
+                            owner->options.cpks.resident_precision ==
+                                response::CudaCpksResidentPrecision::fp64;
+      const auto operator_limit = extended ? options.max_resident_cpks_bytes
+                                           : std::min(options.max_resident_cpks_bytes,
+                                                      ordinary_operator_bytes);
+      const std::size_t build_actions_per_rhs = extended ? 8 : 6;
+      std::size_t rotations{};
+      for (unsigned spin = 0; spin < cpks_shape.spins; ++spin)
+        rotations += cpks_shape.occupied[spin] * (cpks_shape.nao - cpks_shape.occupied[spin]);
+      const bool amortized =
+          operator_bytes <= small_operator_bytes ||
+          (owner->options.cpks.gmres.max_iterations > build_actions_per_rhs &&
+           (rotations == 0 || (rotations - 1) / build_actions_per_rhs < coordinates));
+      if (eligible && amortized && operator_bytes &&
+          operator_bytes <= operator_limit && operator_bytes <= owner->remaining &&
           operator_bytes <= owner->options.cpks.max_workspace_bytes - owner->cpks_bytes) {
         const auto allocation =
             runtime::resource_cuda_malloc(&owner->operator_matrix, operator_bytes);
@@ -1293,9 +1387,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
                                      owner->options.cpks.resident_precision);
         }
       }
-      const auto frozen_bytes =
-          product(product(owner->coordinates, owner->panels + owner->coordinates), sizeof(double));
-      if (owner->has_exact && frozen_bytes <= options.max_frozen_exact_bytes &&
+      if (owner->has_exact && !owner->frozen_exact && frozen_bytes <= options.max_frozen_exact_bytes &&
           frozen_bytes <= owner->remaining) {
         const auto allocation = runtime::resource_cuda_malloc(&owner->frozen_exact, frozen_bytes);
         if (allocation == cudaErrorMemoryAllocation) {
@@ -1327,6 +1419,12 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     const auto induced_bytes = owner->induced.work().device_bytes;
     status = owner->induced.retain_integrals(owner->remaining, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps &&
+        owner->remaining > owner->induced.work().device_bytes - induced_bytes) {
+      const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
+      check(owner->induced.retain_fixed_grid_points(std::min<std::size_t>(16ULL << 20, spare)),
+            "stationary Hessian optional fixed XC residency");
+    }
     owner->charge(owner->induced.work().device_bytes - induced_bytes);
     check(response::cuda_cpks_reference_weights(
         owner->cpks_reference.shape(), owner->options.cpks, owner->cpks_reference.reference(),
@@ -1451,7 +1549,12 @@ cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
       }
       if (!columns.failed) return pending;
       result.status = CudaKsWb97mvHessianStatus::failed;
-      result.failure_check = "nonfinite or nonsymmetric assembled Hessian";
+      if (columns.failed & cuda_grid_cartesian_repair_exhausted)
+        result.failure_check = "Cartesian moving-grid repair work exhausted";
+      else if (columns.completed != owner.coordinates)
+        result.failure_check = "Hessian column failed its device transaction audit";
+      else
+        result.failure_check = "nonfinite or nonsymmetric assembled Hessian";
       return pending == cudaSuccess ? cudaErrorInvalidValue : pending;
     };
     for (std::size_t coordinate = 0; coordinate < owner.coordinates; ++coordinate) {

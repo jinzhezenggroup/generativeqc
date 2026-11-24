@@ -5,6 +5,7 @@
 #include "dft/cuda_ks_wb97mv_model.hpp"
 #include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
 #include "dft/semilocal_family.hpp"
+#include "integrals/coulomb_derivative_envelope.hpp"
 #include "methods/dft_method.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/fock_prepared.hpp"
@@ -56,8 +57,10 @@ CudaKsWb97mvNuclearJk::~CudaKsWb97mvNuclearJk() = default;
 generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch, std::size_t item,
                                                    const CudaKsFinalStateToken& expected,
                                                    const CudaWb97mvJkOptions& options,
-                                                   std::string& detail) {
+                                                   std::string& detail, bool screened_frozen,
+                                                   CudaWb97mvJkAdmissionFailure* failure) {
   impl_.reset();
+  if (failure) *failure = CudaWb97mvJkAdmissionFailure::other;
   try {
     auto candidate = std::make_unique<Impl>(batch, item, expected);
     auto status = candidate->grid.prepare(detail);
@@ -125,15 +128,30 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     require(primitive_begin == shape.primitives && ao_begin == shape.nao,
             "J/K topology differs from normalized native basis");
     const CudaWb97mvJkShape integral_shape{shape.atoms, shape.primitives, shape.nao, shape.spins};
-    std::size_t bytes{};
-    const auto admission =
-        cuda_wb97mv_jk_workspace(integral_shape, shells, bound_options, bytes, &detail);
-    if (admission != cudaSuccess) throw std::runtime_error("J/K workspace admission: " + detail);
+    integrals::CoulombDerivativeOmissions omissions;
+    if (screened_frozen) {
+      require(shape.spins == 1 && !bound_options.range_exchange &&
+                  (bound_options.part == CudaWb97mvJkPart::coulomb ||
+                   bound_options.part == CudaWb97mvJkPart::full_hybrid),
+              "screened frozen derivatives require restricted full-range Direct J/K");
+      constexpr std::size_t envelope_candidate_limit = 200'000;
+      omissions = integrals::coulomb_derivative_omissions(
+          system, integrals::CoulombDerivativeOmissions::max_bound, envelope_candidate_limit);
+      require(!omissions.sources.empty(), "no certified frozen sources within the census budget");
+      bound_options.max_frozen_replay_candidates = envelope_candidate_limit;
+    }
+    const auto* certificate = screened_frozen ? &omissions : nullptr;
+    CudaWb97mvNuclearJk::Plan plan;
+    const auto admission = plan.build(integral_shape, shells, bound_options, &detail, certificate,
+                                      failure);
+    if (admission == cudaErrorInvalidValue)
+      throw std::runtime_error("J/K workspace admission: " + detail);
+    check(admission);
+    const auto bytes = plan.bytes();
     check(runtime::resource_cuda_malloc(&candidate->arena, bytes));
     const CudaWb97mvJkReference reference{lease.basis, device, candidate->stream,
                                           Impl::authenticate, candidate.get()};
-    check(candidate->response.prepare(integral_shape, shells, bound_options, reference,
-                                      candidate->arena, bytes));
+    check(candidate->response.prepare(plan, reference, candidate->arena, bytes));
     impl_ = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -161,6 +179,15 @@ cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_frozen_column(
   if (!lease.density) return cudaErrorInvalidResourceHandle;
   return impl_->response.enqueue_private_fresh(direction, lease.density, delta_density, output,
                                                transaction_status, stream, column);
+}
+cudaError_t CudaKsWb97mvNuclearJk::enqueue_private_frozen_dense(
+    double* direction, const double* zero_delta_density, double* table, int* transaction_status,
+    cudaStream_t stream) noexcept {
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  const auto lease = impl_->grid.reference();
+  if (!lease.density) return cudaErrorInvalidResourceHandle;
+  return impl_->response.enqueue_private_frozen_dense(
+      direction, lease.density, zero_delta_density, table, transaction_status, stream);
 }
 const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept {
   static const CudaWb97mvJkWork empty;

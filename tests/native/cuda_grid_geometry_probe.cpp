@@ -1,5 +1,6 @@
 #include <cuda_runtime_api.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "dft/cuda_grid_geometry.hpp"
+#include "dft/cuda_wb97mv_grid.hpp"
 
 namespace {
 using namespace generativeqc::dft;
@@ -118,6 +120,18 @@ void host_admission() {
   }
   options.max_partition_pairs = 0;
   check(cuda_grid_geometry_workspace({1, 2, 1, 3, 3}, options, bytes));
+  CudaGridGeometryShape wide{96, 288, 96, 82944, 864, 288, true};
+  CudaGridGeometryOptions wide_options;
+  wide_options.max_workspace_bytes = 1024ULL << 20;
+  require(cuda_grid_geometry_workspace(wide, wide_options, bytes) == cudaErrorInvalidValue,
+          "compact AO storage incorrectly bypassed the Becke work limit");
+  // Isolate AO admission without authorizing a large partition action.
+  wide_options.max_partition_pairs = 378'224'640;
+  check(cuda_grid_geometry_workspace(wide, wide_options, bytes));
+  require(bytes < wide_options.max_workspace_bytes, "compact AO layout does not fit");
+  wide.radial_s = false;
+  require(cuda_grid_geometry_workspace(wide, wide_options, bytes) == cudaErrorInvalidValue,
+          "expanded layout unexpectedly passed the wide AO ceilings");
   std::cout << "{\"host_admission_without_cuda_initialization\":true}\n";
 }
 
@@ -128,23 +142,31 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
   require(static_cast<bool>(input.read(reinterpret_cast<char*>(header.data()), sizeof(header))),
           "missing probe fixture header");
   CudaGridGeometryShape shape{header[0], header[1], header[2], header[3], header[5]};
+  const bool tiled_cartesian = topology.find("tiled-cartesian") != std::string::npos;
+  const bool quadrature_column = topology == "tiled-cartesian-quadrature";
   CudaGridGeometryOptions options;
   options.point_tile = point_tile;
   options.partition_iterations = static_cast<unsigned>(header[4]);
   options.coincident_tolerance = read(input, 1)[0];
+  if (topology == "tiled-cartesian-extended") {
+    // The random dense 96-center fixture can need more repairs than the
+    // production budget. Reserve all its points for a derivative comparison.
+    options.max_cartesian_repair_pairs = 3 * shape.atoms * (shape.atoms * (shape.atoms - 1) / 2) *
+                                         shape.points;
+  }
   std::size_t bytes{};
-  check(cuda_grid_geometry_workspace(shape, options, bytes));
   Storage storage;
   const auto basis = read(input, 3 * shape.atoms + 2 * shape.primitives + 16 * shape.nao);
   if (!topology.empty()) {
+    shape.radial_s = topology.rfind("radial", 0) == 0;
     const auto offset = 3 * shape.atoms + 2 * shape.primitives;
     for (std::size_t index = 0; index < shape.nao; ++index)
       shape.ao_primitive_terms +=
           static_cast<std::size_t>(basis[offset + 16 * index + 2] * basis[offset + 16 * index + 3]);
     if (topology == "understated") --shape.ao_primitive_terms;
-    options.max_ao_primitive_terms = 20 * shape.points * shape.ao_primitive_terms;
-    check(cuda_grid_geometry_workspace(shape, options, bytes));
+    options.max_ao_primitive_terms = (shape.radial_s ? 4 : 20) * shape.points * shape.ao_primitive_terms;
   }
+  check(cuda_grid_geometry_workspace(shape, options, bytes));
   const auto points = read(input, 3 * shape.points);
   const auto weights = read(input, shape.points);
   const auto atomic = read(input, shape.points);
@@ -229,8 +251,14 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
     return;
   }
   check(prepared);
-  check(response.spatial_jets(jets));
-  const auto spatial = download(jets, 20 * shape.points * shape.nao);
+  std::vector<double> spatial;
+  if (shape.radial_s) {
+    require(response.spatial_jets(jets) == cudaErrorNotSupported && !jets,
+            "compact geometry published a mislabelled expanded jet view");
+  } else {
+    check(response.spatial_jets(jets));
+    spatial = download(jets, 20 * shape.points * shape.nao);
+  }
   if (replay) {
     const auto resident_bytes = bytes;
     options.max_ao_replay_terms = 4 * response.work().prepared_ao_primitive_term_bound;
@@ -267,9 +295,222 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
                 download(view.point_directions, 6 * shape.points) == expected_motion,
             "borrowed geometry differs from copied results");
   }
+  auto published_weights = download(weight_output, weight_count);
+  if (topology == "cartesian" || topology == "radial-cartesian" || tiled_cartesian) {
+    auto scalar_options = options;
+    scalar_options.cache_cartesian_weights = false;
+    if (tiled_cartesian) scalar_options.point_tile = CudaGridGeometryOptions{}.point_tile;
+    auto scalar_shape = shape;
+    scalar_shape.radial_s = false;
+    if (shape.radial_s) scalar_options.max_ao_primitive_terms *= 5;
+    std::size_t scalar_bytes{};
+    check(cuda_grid_geometry_workspace(scalar_shape, scalar_options, scalar_bytes));
+    CudaGridGeometryResponse scalar;
+    check(scalar.prepare(scalar_shape, scalar_options, reference,
+                         storage.allocate(scalar_bytes / sizeof(double)), scalar_bytes));
+    auto* cartesian_status = reinterpret_cast<int*>(storage.allocate(1));
+    auto* cartesian_left = storage.allocate(left.size());
+    auto* cartesian_right = storage.allocate(right.size());
+    const auto write_unit = [&](double* buffer, std::size_t column) {
+      std::vector<double> unit(left.size());
+      unit[column] = 1;
+      check(cudaMemcpyAsync(buffer, unit.data(), unit.size() * sizeof(double),
+                            cudaMemcpyHostToDevice, storage.stream));
+      check(cudaStreamSynchronize(storage.stream));
+    };
+    const auto left_column = std::distance(left.begin(), std::find(left.begin(), left.end(), 1.));
+    const auto right_column = std::distance(right.begin(), std::find(right.begin(), right.end(), 1.));
+    require(left_column < static_cast<std::ptrdiff_t>(left.size()) &&
+                right_column < static_cast<std::ptrdiff_t>(right.size()),
+            "Cartesian fixture requires unit seeds");
+    const auto audit = [&] {
+      int audit_result{};
+      check(cudaMemcpyAsync(&audit_result, cartesian_status, sizeof(audit_result),
+                            cudaMemcpyDeviceToHost, storage.stream));
+      check(cudaStreamSynchronize(storage.stream));
+      return audit_result;
+    };
+    CudaGridGeometryCartesianView cartesian, baseline;
+    CudaWb97mvGridResponse grid;
+    double *density_motion{}, *cartesian_xc{};
+    if (shape.radial_s || quadrature_column) {
+      std::vector<double> density(shape.nao * shape.nao, 0);
+      for (std::size_t orbital = 0; orbital < shape.nao; ++orbital)
+        density[orbital * (shape.nao + 1)] = 0.65;
+      CudaWb97mvGridShape grid_shape{shape.atoms, shape.primitives, shape.nao, shape.points};
+      CudaWb97mvGridOptions grid_options;
+      grid_options.functional_code = semilocal_family_code(SemilocalFamily::Pbe);
+      grid_options.nuclear_response = true;
+      grid_options.max_nuclear_adjoint_bytes = 64ULL << 20;
+      CudaWb97mvGridReference grid_reference{
+          reference.basis, reference.points, reference.weights, storage.upload(density),
+          reference.device_id, storage.stream, Owner::authenticate, &owner};
+      std::size_t grid_bytes{};
+      check(cuda_wb97mv_grid_workspace(grid_shape, grid_options, grid_bytes));
+      check(grid.prepare(grid_shape, grid_options, grid_reference,
+                         storage.allocate(grid_bytes / sizeof(double)), grid_bytes));
+      density_motion = storage.upload(std::vector<double>(density.size(), 0.0));
+      cartesian_xc = storage.allocate(left.size());
+      require(grid.admits_cartesian_mixed(left.size()), "radial XC column not admitted");
+    }
+    for (const auto right_seed : {quadrature_column ? static_cast<std::size_t>(left_column) : 0,
+                                 static_cast<std::size_t>(right_column)}) {
+      write_unit(cartesian_right, right_seed);
+      check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+      CudaGridGeometryDirectionView rhs;
+      const auto queued = response.enqueue_private_cartesian_column(
+          cartesian_right, right_seed, cartesian, cartesian_status, storage.stream, &rhs);
+      std::vector<double> column, right_weights, xc_column;
+      if (queued == cudaErrorNotSupported) {
+        require(!tiled_cartesian && shape.atoms > 3 && !cartesian.weights && !rhs.weights && !audit(),
+                "column admission did not preserve the scalar fallback");
+      } else {
+        check(queued);
+        require(cartesian.rows == left.size() && !audit(), "Cartesian column rejected a valid source");
+        require(cartesian.radial_points == (shape.radial_s ? reference.points : nullptr),
+                "Cartesian view does not identify its spatial representation");
+        column = download(cartesian.weights, 2 * shape.points * left.size());
+        right_weights = download(rhs.weights, shape.points);
+        CudaGridGeometryMixedView diagonal;
+        check(scalar.enqueue_private_mixed_view(cartesian_right, cartesian_right, diagonal,
+                                               cartesian_status, storage.stream));
+        require(!audit(), "scalar right direction rejected a valid source");
+        const auto gathered = download(rhs.ao, ao_count / 3);
+        const auto expanded = download(diagonal.ao + ao_count / 3, ao_count / 3);
+        for (std::size_t index = 0; index < gathered.size(); ++index)
+          require(std::abs(gathered[index] - expanded[index]) <=
+                      (shape.radial_s ? 2e-13 * (1 + std::abs(expanded[index])) : 0),
+                  "column RHS changed the first AO jets");
+        require(download(rhs.point_directions, 3 * shape.points) ==
+                    download(diagonal.point_directions + 3 * shape.points, 3 * shape.points),
+                "column RHS changed the owner motion");
+        if (shape.radial_s || quadrature_column) {
+          check(grid.enqueue_private_nuclear_covector(rhs.ao, rhs.weights, rhs.point_directions,
+                                                      density_motion, cartesian_status,
+                                                      storage.stream));
+          check(grid.enqueue_private_cartesian_mixed(cartesian, cartesian_xc, cartesian_status,
+                                                     storage.stream));
+          require(!audit(), "XC refused a Cartesian column");
+          xc_column = download(cartesian_xc, left.size());
+        }
+      }
+      for (std::size_t left_seed = 0; left_seed < left.size(); ++left_seed) {
+        // Keep the scalar oracle bounded for the large fixture and for the
+        // wide fused XC fixture. Cross each warp boundary and retain the
+        // selected mixed row, diagonal, and first/last center's three axes.
+        const auto left_atom = left_seed / 3;
+        if (quadrature_column && left_seed != static_cast<std::size_t>(left_column) &&
+            left_seed != static_cast<std::size_t>(right_column)) continue;
+        if (tiled_cartesian && (shape.radial_s || shape.atoms == cuda_grid_tiled_cartesian_atoms) &&
+            left_atom != 0 && left_atom + 1 != shape.atoms && left_atom % 32 > 1 &&
+            left_atom % 32 != 31 && left_seed != static_cast<std::size_t>(left_column) &&
+            left_seed != right_seed) continue;
+        write_unit(cartesian_left, left_seed);
+        check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+        if (!tiled_cartesian) {
+          check(response.enqueue_private_cartesian_view(cartesian_left, cartesian_right, left_seed,
+                                                        right_seed, cartesian, cartesian_status,
+                                                        storage.stream));
+        }
+        check(scalar.enqueue_private_cartesian_view(cartesian_left, cartesian_right, left_seed,
+                                                    right_seed, baseline, cartesian_status,
+                                                    storage.stream));
+        require(!audit(), "Cartesian partition rejected a valid source");
+        const auto expected = download(baseline.weights, weight_count);
+        const auto cached = tiled_cartesian ? expected : download(cartesian.weights, weight_count);
+        const bool capture_row = left_seed == static_cast<std::size_t>(left_column) &&
+                                 right_seed == static_cast<std::size_t>(right_column);
+        for (std::size_t index = 0; index < weight_count; ++index) {
+          const auto point = index % shape.points, plane = index / shape.points;
+          const auto tolerance = 3e-13 * (std::abs(atomic[point]) + std::abs(expected[index]));
+          require(std::abs(cached[index] - expected[index]) <= tolerance,
+                  "cached Cartesian row differs from scaled mixed jets");
+          const double actual = column.empty() ? cached[index] :
+              (plane == 1 ? right_weights[point] :
+                            column[(2 * left_seed + (plane == 2)) * shape.points + point]);
+          require(std::abs(actual - expected[index]) <= tolerance,
+                  "compact Cartesian column differs from scaled mixed jets");
+          if (capture_row) published_weights[index] = actual;
+        }
+        if (!xc_column.empty()) {
+          CudaGridGeometryMixedView expanded;
+          check(scalar.enqueue_private_mixed_view(cartesian_left, cartesian_right, expanded,
+                                                 cartesian_status, storage.stream));
+          check(grid.enqueue_private_nuclear_mixed(
+              expanded.ao, expanded.ao + 2 * (ao_count / 3), expanded.weights,
+              expanded.weights + 2 * shape.points, expanded.point_directions, cartesian_xc,
+              cartesian_status, storage.stream));
+          require(!audit(), "XC refused the expanded comparison row");
+          const auto reference_row = download(cartesian_xc, 1)[0];
+          require(std::abs(xc_column[left_seed] - reference_row) <=
+                      3e-13 * (1 + std::abs(reference_row)),
+                  "Cartesian XC contraction differs from expanded AO motion");
+        }
+      }
+    }
+    require(response.work().cartesian_partition_sweeps > 0,
+            "fixture did not exercise the batched partition");
+    if (topology == "tiled-cartesian-repair") {
+      // Two extended measures force repair even when all denominator products
+      // are representable. A full queue and a disabled queue must both fail
+      // the private transaction without changing the separately published row.
+      const auto repair_cost = left.size() * shape.atoms * (shape.atoms - 1) / 2;
+      const auto original = download(weight_output, weight_count);
+      for (const auto budget : {std::size_t{0}, repair_cost}) {
+        auto limited_options = options;
+        limited_options.max_cartesian_repair_pairs = budget;
+        std::size_t limited_bytes{};
+        check(cuda_grid_geometry_workspace(shape, limited_options, limited_bytes));
+        CudaGridGeometryResponse limited;
+        check(limited.prepare(shape, limited_options, reference,
+                              storage.allocate(limited_bytes / sizeof(double)), limited_bytes));
+        check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+        check(limited.enqueue_private_cartesian_column(cartesian_right, right_column, cartesian,
+                                                      cartesian_status, storage.stream));
+        require((audit() & cuda_grid_cartesian_repair_exhausted) &&
+                    download(weight_output, weight_count) == original,
+                "incomplete repair queue did not invalidate its private transaction");
+        check(limited.mixed(left_device, right_device, ao_output, weight_output, storage.stream));
+        require(download(weight_output, weight_count) == original,
+                "repair overflow damaged the independent scaled fallback");
+      }
+    }
+    CudaGridGeometryMixedView diagonal, scalar_diagonal;
+    check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+    check(response.enqueue_private_cartesian_diagonal_view(cartesian_right, right_column,
+                                                             diagonal, cartesian_status,
+                                                             storage.stream));
+    check(scalar.enqueue_private_mixed_view(cartesian_right, cartesian_right, scalar_diagonal,
+                                           cartesian_status, storage.stream));
+    require(!audit() && (tiled_cartesian || response.work().cartesian_diagonal_sweeps > 0),
+            "fixture did not exercise the diagonal Cartesian partition");
+    const auto diagonal_ao = download(diagonal.ao, ao_count);
+    const auto scalar_ao = download(scalar_diagonal.ao, ao_count);
+    for (std::size_t index = 0; index < diagonal_ao.size(); ++index)
+      require(std::abs(diagonal_ao[index] - scalar_ao[index]) <=
+                  (shape.radial_s ? 2e-13 * (1 + std::abs(scalar_ao[index])) : 0),
+              "diagonal partition altered the AO response");
+    const auto actual_diagonal = download(diagonal.weights, weight_count);
+    const auto expected_diagonal = download(scalar_diagonal.weights, weight_count);
+    for (std::size_t index = 0; index < weight_count; ++index)
+      require(std::abs(actual_diagonal[index] - expected_diagonal[index]) <=
+                  3e-13 * (std::abs(atomic[index % shape.points]) + std::abs(expected_diagonal[index])),
+              "diagonal Cartesian partition differs from scaled mixed jets");
+    check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+    check(response.enqueue_private_cartesian_view(cartesian_left, cartesian_right, 0,
+                                                  right_column, cartesian, cartesian_status,
+                                                  storage.stream));
+    require(audit() != 0, "Cartesian cache accepted a mismatched left direction");
+    if (shape.atoms == 3 || tiled_cartesian) {
+      check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+      check(response.enqueue_private_cartesian_column(cartesian_right, 0, cartesian,
+                                                       cartesian_status, storage.stream));
+      require(audit() != 0, "Cartesian column accepted a mismatched right direction");
+    }
+  }
   std::ofstream capture(output, std::ios::binary);
-  for (const auto& values : {spatial, download(ao_output, ao_count),
-                             download(weight_output, weight_count), expected_motion})
+  for (const auto& values : {spatial, download(ao_output, ao_count), published_weights,
+                             expected_motion})
     require(static_cast<bool>(capture.write(reinterpret_cast<const char*>(values.data()),
                                             values.size() * sizeof(double))),
             "probe output write failed");
@@ -356,6 +597,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
             << ",\"prepared_partition_pairs\":" << work.prepared_partition_pairs
             << ",\"action_ao_values\":" << work.action_ao_jet_values
             << ",\"action_partition_pairs\":" << work.action_partition_pairs
+            << ",\"tiled_cartesian_sweeps\":" << work.tiled_cartesian_sweeps
+            << ",\"tiled_cartesian_repair_pair_bound\":" << work.tiled_cartesian_repair_pair_bound
             << ",\"ao_primitive_term_bound\":" << work.prepared_ao_primitive_term_bound
             << ",\"ao_replay_term_bound\":" << work.replayed_ao_primitive_term_bound << "}\n";
 }
@@ -372,18 +615,23 @@ int main(int argc, char** argv) {
     require(argc == 3 || argc == 4,
             "usage: cuda_grid_geometry_probe input output [reject|replay|partial|point-tile]");
     const auto partial = argc == 4 && std::string(argv[3]) == "partial";
-    const auto replay = partial || (argc == 4 && std::string(argv[3]) == "replay");
+    const std::string mode = argc == 4 ? argv[3] : "";
+    const auto replay = partial || mode == "replay" || mode == "radial-replay";
     const std::string topology =
         argc == 4 && (std::string(argv[3]) == "topology" || std::string(argv[3]) == "understated" ||
-                      std::string(argv[3]) == "prepared-centers")
+                      std::string(argv[3]) == "prepared-centers" ||
+                      std::string(argv[3]) == "cartesian" || mode.rfind("radial", 0) == 0 ||
+                      mode.rfind("tiled-cartesian", 0) == 0)
             ? argv[3]
             : "";
     const auto reject =
-        argc == 4 && (std::string(argv[3]) == "reject" || topology == "understated");
-    const auto tile = replay ? 64
-                      : argc == 4 && !reject && topology.empty()
-                          ? std::stoull(argv[3])
-                          : CudaGridGeometryOptions{}.point_tile;
+        argc == 4 && (std::string(argv[3]) == "reject" || topology == "understated" ||
+                      topology == "radial-reject");
+    // The fixtures exercise full tiles followed by a short tail.
+    auto tile = CudaGridGeometryOptions{}.point_tile;
+    if (mode.rfind("tiled-cartesian", 0) == 0 && mode != "tiled-cartesian-quadrature") tile = 7;
+    else if (replay) tile = 64;
+    else if (argc == 4 && !reject && topology.empty()) tile = std::stoull(argv[3]);
     run(argv[1], argv[2], reject, tile, topology, replay, partial);
     return 0;
   } catch (const std::exception& error) {

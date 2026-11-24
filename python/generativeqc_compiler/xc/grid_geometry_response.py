@@ -207,6 +207,53 @@ def ao_first_motion_program() -> tuple[Graph, tuple[Expr, ...]]:
 
 
 @cache
+def ao_s_radial_moment_program() -> tuple[Graph, tuple[Expr, ...]]:
+    """Four derivatives of a primitive along the half-squared-radius coordinate."""
+    graph = Graph()
+    exponent, weight = (graph.variable(name) for name in ("exponent", "weight"))
+    radius = graph.variable("radius")
+    distance = [graph.variable(f"d{axis}") for axis in range(3)]
+    primal = weight * graph.exponential(
+        -exponent
+        * (graph.sum(component * component for component in distance) + 2 * radius)
+    )
+    roots = [primal]
+    for _ in range(3):
+        roots.append(graph.differentiate(roots[-1], radius))
+    return graph.canonicalize_associative(
+        graph.replace_subexpressions(roots, {radius: graph.constant(0)})
+    )
+
+
+@cache
+def ao_s_radial_spatial_program() -> tuple[Graph, tuple[Expr, ...]]:
+    """Pull a radial Taylor jet back to the ordinary Cartesian AO jet ordering."""
+    graph = Graph()
+    delta = [graph.variable(f"delta{axis}") for axis in range(3)]
+    distance = [graph.variable(f"d{axis}") for axis in range(3)]
+    radius = graph.sum(
+        shift * (origin + Fraction(1, 2) * shift)
+        for shift, origin in zip(delta, distance, strict=True)
+    )
+    power = graph.constant(1)
+    terms = []
+    for order in range(4):
+        terms.append(graph.variable(f"moment{order}") * power / factorial(order))
+        power *= radius
+    primal = graph.sum(terms)
+    roots = []
+    for index in jet_indices(3):
+        root = primal
+        for shift, order in zip(delta, index, strict=True):
+            for _ in range(order):
+                root = graph.differentiate(root, shift)
+        roots.append(root)
+    return graph.canonicalize_associative(
+        graph.replace_subexpressions(roots, dict.fromkeys(delta, graph.constant(0)))
+    )
+
+
+@cache
 def gga_energy_mixed_program(
     functional: FunctionalSpec,
 ) -> tuple[Graph, tuple[Expr, ...]]:
