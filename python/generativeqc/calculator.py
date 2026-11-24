@@ -1907,8 +1907,7 @@ class Calculator:
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             if self._native_automatic_initial_guess_kind is None:
-                # Explicit requests and older images have not passed combined
-                # model admission. Keep their existing frontend errors.
+                # Explicit choices have not passed automatic model admission.
                 backend_ok = self._device_name == "cpu" or (
                     minao
                     and self._device_name == "cuda"

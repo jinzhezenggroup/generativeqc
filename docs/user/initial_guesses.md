@@ -11,14 +11,14 @@ callers can query `generativeqc_initial_guess_default_kind_v1()` to obtain the
 model's default descriptor kind, then set it explicitly. Python and the CLI's
 opt-in `--initial-guess auto` use this same native model query. The query
 requires positive provider and domain capabilities; it does not make the
-per-system choice. Python uses the separate provider queries only on older
-libraries that lack the combined symbol. Explicit requests keep their native
-provider and domain checks and do not query automatic policy.
+per-system choice. Python requires this query for automatic selection; a
+library without it reports the unsupported ABI instead of selecting a seed in
+Python. Explicit requests and `initial_guess=None` do not query automatic policy.
 
 Native CPU automatic admission resolves each item's element, ECP and population
 independently: unsupported items keep Hcore without disabling supported neighbors.
-Resource planning charges only admitted seeds. CUDA and older-library admission
-remains conservative at batch scope: an unsupported element or ECP keeps that
+Resource planning charges only admitted seeds. CUDA admission remains
+conservative at batch scope: an unsupported element or ECP keeps that
 whole batch on Hcore. Where the target has a qualified resource plan, eligible
 items include the same Hückel numeric inventory as an explicit request.
 Only ECP records belonging to atoms actually present in that batch affect this
