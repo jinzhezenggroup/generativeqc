@@ -9,6 +9,16 @@ from generativeqc import _generated_methods as manifest
 from generativeqc import _native
 
 
+def install_initial_guess_default_stub(library: Any) -> None:
+    """Return a fixed Hcore receipt for a facade test, not a seed policy."""
+
+    def query(request: Any, output: Any) -> int:
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = 0
+        return _native.STATUS_SUCCESS
+
+    library.generativeqc_initial_guess_default_kind_v1 = query
+
+
 def install_correlation_policy_stub(library: Any) -> None:
     """Inject a fixed strict receipt, never infer stopping limits from a budget.
 
