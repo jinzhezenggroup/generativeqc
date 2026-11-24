@@ -147,9 +147,16 @@ def method_capabilities(method: str) -> MethodCapabilities:
         _, spin = composite
         electronic = "r2scan-uks" if spin == "polarized" else "r2scan-rks"
         return replace(method_capabilities(electronic), method=canonical)
-    try:
-        method_id = _METHODS[canonical]
-    except KeyError:
+    method_id = _METHODS.get(canonical)
+    library = _native.load_library()
+    if method_id is None:
+        from ._named_ks import registry_carrier
+        from .ks import _named_catalog_selector
+
+        method_id = registry_carrier(library, _named_catalog_selector(canonical))
+    if method_id is None:
+        # A real catalog miss retains explicit compiler discovery for graphs
+        # outside the native registry projection, including corrections.
         from .ks import native_dft_carrier
 
         try:
@@ -157,7 +164,6 @@ def method_capabilities(method: str) -> MethodCapabilities:
         except ValueError as error:
             raise ValueError(f"unknown method {method!r}") from error
         method_id = _METHODS[carrier]
-    library = _native.load_library()
     return _native_method_capabilities(library, canonical, method_id)
 
 

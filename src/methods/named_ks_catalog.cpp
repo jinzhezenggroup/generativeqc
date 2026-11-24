@@ -159,6 +159,22 @@ extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+extern "C" generativeqc_status generativeqc_ks_catalog_registry_carrier_v1(const char* name,
+                                                                           std::size_t name_size,
+                                                                           std::int32_t* carrier) {
+  if (!name || !name_size || name_size > 256 || !carrier ||
+      !disjoint(carrier, sizeof(*carrier), name, name_size))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const std::string_view selector(name, name_size);
+  if (selector.find('\0') != std::string_view::npos) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+  const auto* entry = generativeqc::methods::named_ks::find_method(selector);
+  // A correction-bearing program can have a different public registry carrier
+  // than the one used to prepare the electronic program. Do not project it here.
+  *carrier = entry && (entry->cpu || entry->cuda) && !entry->dispersion.kind ? entry->carrier : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 /** Private additive named-program transport. A zero selection is an explicit
  * compiler/custom/old-catalog route, not failure or scientific fallback. An
  * actual refusal is transactional and must never be retried through Python.

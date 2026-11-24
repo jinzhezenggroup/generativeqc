@@ -104,6 +104,10 @@ library without that optional lookup retains explicit numeric-ID compatibility;
 a selected lookup/query error or inconsistent publication does not rediscover a
 default library or fall back to cached/Python capability metadata. Public aliases,
 explicit compiler compositions and later contextual admission remain separate.
+For correction-free named KS selectors represented by the native program catalog,
+registry discovery obtains the carrier from that catalog without rebuilding a
+compiler graph. A catalog miss retains the separate discovery route for other
+selectors, including corrected graphs; a missing or failed query is not a miss.
 For CPU KS selectors present in the shared native catalog, the installed
 library selects the default graph, including the public LDA, D4 and composite
 aliases. Python attaches a detached `MethodIR` view and verifies its identity;

@@ -96,6 +96,15 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
     return None
 
 
+def _named_catalog_selector(selector: str) -> str:
+    """Use the catalog spelling of an already classified named Libxc selector."""
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if selector.startswith(prefix):
+            canonical = "libxc:" if spin == "unpolarized" else "libxc-uks:"
+            return canonical + selector[len(prefix) :].strip()
+    return selector
+
+
 def _public_dft_identifier_index() -> dict[str, str]:
     result = {identifier.lower(): identifier for identifier in METHOD_CATALOG}
     for alias, canonical in METHOD_ALIASES.items():
