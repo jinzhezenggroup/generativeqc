@@ -465,7 +465,7 @@ extern "C" int host_ks_hessian_batch_apply(Handle* handle, std::size_t first, st
     if (!converged) return 1;
     const auto fields = 2 + 6 * handle->system.atoms.size();
     for (std::size_t index = 0; index < count; ++index) {
-      const auto column = handle->hessian->coordinate_column(index);
+      const auto column = handle->hessian->batch_column(index);
       std::copy(column.begin(), column.end(), output + index * fields);
     }
     return 0;

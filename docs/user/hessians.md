@@ -44,10 +44,30 @@ first-order equivalent is described under
 
 The following DFT calculations support second derivatives:
 
-**CPU LDA/PBE RKS.** Direct all-electron Cartesian closed-shell strict-FP64
-LDA and PBE, with no exact exchange, no density fitting, no dispersion
-correction, no nonlocal correlation and no ECP. Both `hvp` and `hessian` are
-advertised for this context.
+**CPU LDA/PBE RKS.** Direct all-electron closed-shell strict-FP64
+LDA and PBE, with no exact exchange, density fitting, nonlocal correlation
+or ECP. Canonical PBE also admits uncut two-body D3(BJ), ATM off, in the
+linked native package. Both `hvp` and `hessian` are
+advertised for this context. The default linked CPU package runs HVP and the
+default scalar Hessian in the native prepared owner without Python numerical
+kernels or runtime compilation. The linked recycled variant also runs dense
+groups of two to four directions natively. The linked owner admits Cartesian
+and real-spherical AOs. Packages without these bindings, and requests for
+unlinked Krylov schedules, use the Python compatibility path only for
+bare Cartesian contexts. Spherical or corrected contexts require a linked
+schedule.
+Native admission or execution errors do not retry that path.
+
+**CPU LDA/PBE UKS.** The default package also links canonical LDA
+(Dirac exchange and PW92 correlation), PBE, and PBE with uncut two-body
+D3(BJ), ATM off, for all-electron Direct strict-FP64 UKS in Cartesian or
+real-spherical AOs.
+The prepared native owner applies Coulomb response to the summed spin density
+and XC response to separate alpha and beta fields. D3 curvature is added once
+to the electronic result and does not require a second electronic response
+solve. HVP and scalar-column dense Hessian require the exact linked total
+method, with no Python numerical fallback. Recycled groups, density fitting,
+ECPs and other semilocal corrections do not inherit this admission.
 
 **CPU full-range PBE0 RKS and B3LYP RKS/UKS compositions.** Direct all-electron
 strict-FP64 calculations admit Cartesian or real-spherical AOs through f.
@@ -64,7 +84,21 @@ owner for RKS/UKS, including scalar ECPs within its operator/resource bounds.
 Its response, moving-grid assembly and optional D3 composition do not require
 Python numerical kernels or runtime compilation; missing linked electronic or
 total-method closure fails before SCF without a fallback. ECPs on PBE0 or
-coefficient-variable graphs remain excluded. This CPU admission does not extend to PBE0 UKS or density-fitted variants.
+coefficient-variable graphs and density-fitted variants remain excluded.
+Builds that select the [default CPU Hessian inventory](../developer/dft_hessian.md#linked-native-cpu-hessian-endpoint)
+also use the native aggregate for exact canonical all-electron PBE0 and
+named PBE0-D3(BJ), both RKS and UKS, with Direct FP64 and separate derivative
+reservations. That native path uses scalar columns and, for UKS, preserves
+both spin densities and their coupled response. Python retains the previous
+PBE0 RKS route when the package lacks the linked binding; PBE0 UKS requires
+the linked owner. For linked CPU endpoints, a Python
+`ResourceBudget` composes the declared SCF and correction peaks with the
+native derivative reservation. It rejects a host budget below the native
+mandatory floor before SCF. Explicit derivative numerical caps are also checked
+against that floor before SCF. Optional schedules and solver/work limits can
+still refuse after SCF. A resource refusal does not select the Python derivative.
+Export scratch, implicit BLAS workspace, caller storage and process RSS are
+outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
@@ -260,6 +294,18 @@ density response.
 
 ## Native SDK
 
+For a linked CPU context, prepare the named electronic or corrected
+catalog program with `Batch::prepare_named_ks` and successfully execute the
+energy-only batch. Set the current geometry, charge and multiplicity on the
+options initialized by `generativeqc_ks_hessian_cpu_default_options_v1`, then
+call `Batch::ks_cpu_hessian` or `Batch::ks_cpu_hvp` on the accepted input index.
+For C, the equivalent entry point is
+{ref}`generativeqc_ks_hessian_cpu_v1 <native-c-generativeqc-ks-hessian-cpu-v1>`
+in `generativeqc/ks_hessian.h`. It requires an initialized receipt header.
+After a successful coordinate update, use the updated coordinates, not the
+prepared geometry. The library checks the actual accepted state and refuses
+stale requests or missing providers without rerunning SCF or falling back.
+
 Prepare and successfully execute an energy-only CUDA KS batch first
 (`batch.execute({}, false)` in C++). C++ callers can then use
 `Batch::ks_hessian` or `Batch::ks_hvp` on the original
@@ -272,10 +318,11 @@ The linked-version query checks the library without opening a device; method,
 state and integral support are checked at execution.
 
 For `N` atoms, the dense output is `(3N) × (3N)` in row-major order; an HVP
-accepts and returns `3N` atom-major Cartesian values. Input and output buffers
-must not overlap. The SDK uses the batch's accepted physical SCF state and, if
-present, its shared device ledger. It does not rerun SCF, expose response
-panels, or switch providers. On failure it leaves caller outputs untouched.
+accepts and returns `3N` atom-major Cartesian values on both backends. Input
+and output buffers must not overlap. The SDK uses the batch's accepted physical
+SCF state and, on CUDA, its shared device ledger if present. It does not rerun
+SCF, expose response panels, or switch providers. On failure it leaves caller
+outputs untouched.
 
 ## Resource arguments
 
@@ -295,7 +342,7 @@ exposing one global cap:
 
 The linked native CPU owner's reservations, default work allowance and separate
 induced-Fock work are described in
-[Linked native CPU B3LYP endpoint](../developer/dft_hessian.md#linked-native-cpu-b3lyp-endpoint).
+[Linked native CPU Hessian endpoint](../developer/dft_hessian.md#linked-native-cpu-hessian-endpoint).
 The optional nuclear work override is not a time/RSS or induced-Fock integral
 bound. Other owners reject it rather than ignoring it.
 The explicit byte limits are positive signed-int64 values; the response
@@ -342,9 +389,9 @@ records retain no native owner. A fingerprint identifies exact contents; it
 does not replace independent numerical state/root matching or qualify a new
 method, geometry or artifact.
 
-The CPU LDA/PBE endpoints do not consume `grid_budget_bytes` or
-`max_nonlocal_pairs`; do not use these arguments as a grid-memory cap for those
-methods. An applicable budget that cannot hold its declared work raises before
+The native CPU LDA/PBE scalar endpoints consume `grid_budget_bytes`. Their
+Python compatibility paths do not. Neither uses `max_nonlocal_pairs`.
+An applicable budget that cannot hold its declared work raises before
 publication. Response and provider diagnostics are reported separately and are not a combined
 process-RSS or GPU-memory measurement; see
 [Resource planning](../maintainer/resource_planning.md) for how those capacity
@@ -379,8 +426,11 @@ substitutes for those comparisons.
 
 ## Solvers and strategies
 
-CPU LDA/PBE use the shared bounded response path with a `block_size` and
-`strategy` controlled Krylov solve. The native CUDA endpoint and CPU composite paths assemble scalar columns:
+The linked CPU LDA/PBE default selects native scalar columns. A request for
+`strategy="recycled"` uses groups of up to four directions by default. Groups
+of two to four use the linked native recycled solver when present. Block
+GMRES and other recycled widths use the bounded Python compatibility solver.
+The native CUDA endpoint and CPU composite paths assemble scalar columns:
 `block_size=None` or `1` is required, and CUDA accepts only
 `strategy="scalar"`. Requesting recycling or block solves on CUDA raises rather
 than being silently downgraded.

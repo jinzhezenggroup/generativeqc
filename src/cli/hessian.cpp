@@ -13,6 +13,7 @@
 #include "api/ks_host_hessian.hpp"
 #include "cli/molecular_system.hpp"
 #include "cli/native_basis.hpp"
+#include "cli/resources.hpp"
 
 #if GENERATIVEQC_CLI_NATIVE_HESSIAN
 #include <cuda_runtime_api.h>
@@ -199,11 +200,9 @@ double nonnegative_number(std::string_view text, std::string_view option) {
     throw UsageError(std::string(option) + " requires a finite nonnegative number");
   return parsed;
 }
-std::vector<double> read_direction(const std::string& path, std::size_t atoms) {
-  const auto panel = read_json(path);
+void append_direction(const Json& panel, std::size_t atoms, std::vector<double>& result) {
   if (!panel.is_array() || panel.size() != atoms)
     throw UsageError("direction must be a finite natoms-by-3 array");
-  std::vector<double> result;
   for (const auto& row : panel) {
     if (!row.is_array() || row.size() != 3)
       throw UsageError("direction must be a finite natoms-by-3 array");
@@ -213,22 +212,43 @@ std::vector<double> read_direction(const std::string& path, std::size_t atoms) {
       result.push_back(value.get<double>());
     }
   }
-  return result;
 }
 
-/** The same synchronous bridge serves Python and the Python-free CPU CLI. */
+std::vector<double> read_direction(const std::string& path, std::size_t atoms) {
+  std::vector<double> values;
+  append_direction(read_json(path), atoms, values);
+  return values;
+}
+
+std::vector<double> read_directions(const std::string& path, std::size_t atoms,
+                                    std::uint64_t output_bytes) {
+  const auto panel = read_json(path);
+  if (!panel.is_array() || panel.empty())
+    throw UsageError("directions must be a nonempty array of finite natoms-by-3 arrays");
+  const auto coordinates = 3 * atoms;
+  if (panel.size() > SIZE_MAX / coordinates ||
+      panel.size() > output_bytes / (2 * sizeof(double)) / coordinates)
+    throw UsageError("action panel and publication exceed --output-budget-bytes");
+  std::vector<double> values;
+  values.reserve(panel.size() * coordinates);
+  for (const auto& direction : panel) append_direction(direction, atoms, values);
+  return values;
+}
+
+/** The SDK, Python and CPU CLI share this synchronous prepared-batch bridge. */
 Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
                  const HessianInvocation& invocation, const std::vector<double>& motion) {
-  const auto* program = options.composition ? options.composition
-                                            : methods::named_ks::find_method(options.method_name);
-  if (generativeqc_ks_hessian_cpu_version_v1() != 1 || !program ||
-      !generativeqc_ks_hessian_cpu_method_v1(program->identity.data()))
+  const auto* program = linked_cpu_hessian_program(options);
+  if (!program)
     throw UsageError(
         "native CPU Hessian has no exact linked total MethodIR; no Python/JIT fallback");
+  if (invocation.response_sequential && program->carrier != GENERATIVEQC_METHOD_LDA_RKS &&
+      program->carrier != GENERATIVEQC_METHOD_PBE_RKS)
+    throw UsageError("--response-sequential requires linked LDA/PBE RKS");
   if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE ||
       options.auxiliary_basis_explicit || options.precision != GENERATIVEQC_PRECISION_FP64)
     throw UsageError("native CPU Hessian requires direct FP64 without an auxiliary basis");
-  if (invocation.cuda_controls_explicit || invocation.range_pbe || invocation.nonlocal_level ||
+  if (invocation.cuda_controls_explicit || invocation.nonlocal_level ||
       invocation.nonlocal_radial || invocation.response_fp32_proposal)
     throw UsageError("CPU Hessian does not use CUDA device/nonlocal budgets");
   const auto started = std::chrono::steady_clock::now();
@@ -238,18 +258,26 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   const auto basis = expand_basis_input(
       options.basis_name, atoms,
       options.representation_explicit ? std::optional(options.representation) : std::nullopt);
-  const generativeqc_system_descriptor geometry{sizeof(geometry),
-                                                GENERATIVEQC_ABI_VERSION,
-                                                atoms.data(),
-                                                static_cast<std::uint32_t>(atoms.size()),
-                                                basis.shells.data(),
-                                                static_cast<std::uint32_t>(basis.shells.size()),
-                                                basis.primitives.data(),
-                                                static_cast<std::uint32_t>(basis.primitives.size()),
-                                                options.charge,
-                                                options.multiplicity,
-                                                basis.representation};
-  System system = make_molecular_system(context, geometry, basis);
+  const auto system = make_cpu_hessian_system(context, options, atoms, basis);
+  const auto check_status = [&](generativeqc_status status) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context.get()));
+  };
+  auto controls = cpu_hessian_controls(options, atoms, invocation);
+  std::size_t minimum_bytes{};
+  check_status(cpu_hessian_minimum_bytes(context.get(), system.get(), program->identity.data(),
+                                         invocation, controls, &minimum_bytes));
+  if (minimum_bytes > controls.numeric_bytes)
+    throw Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                "CPU Hessian aggregate numerical reservation exceeded (required=" +
+                    std::to_string(minimum_bytes) +
+                    ", cap=" + std::to_string(controls.numeric_bytes) + ')');
+  std::optional<CpuHessianHostAdmission> host_admission;
+  if (options.host_bytes) {
+    host_admission =
+        admit_cpu_hessian_host_budget(options, atoms, invocation, basis, minimum_bytes);
+    controls.numeric_bytes = host_admission->derivative_cap_bytes;
+  }
   generativeqc_ks_options grid{};
   grid.struct_size = sizeof(grid);
   grid.abi_version = GENERATIVEQC_ABI_VERSION;
@@ -271,16 +299,13 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   method.density_tolerance = options.density_tolerance.value_or(1e-10);
   method.screening_tolerance = options.screening_tolerance.value_or(1e-14);
   method.ks_options = &grid;
-  const generativeqc_named_ks_descriptor named{sizeof(named),
-                                               GENERATIVEQC_ABI_VERSION,
-                                               program->name.data(),
-                                               program->identity.data(),
-                                               invocation.dispersion_bytes,
-                                               invocation.cpu_packed_eri_bytes};
-  const auto check_status = [&](generativeqc_status status) {
-    if (status != GENERATIVEQC_STATUS_SUCCESS)
-      throw Error(status, generativeqc_context_get_last_detail(context.get()));
-  };
+  generativeqc_named_ks_descriptor named{};
+  named.struct_size = sizeof(named);
+  named.abi_version = GENERATIVEQC_ABI_VERSION;
+  named.name = program->name.data();
+  named.identity = program->identity.data();
+  named.dispersion_maximum_bytes = invocation.dispersion_bytes;
+  named.cpu_packed_eri_maximum_bytes = invocation.cpu_packed_eri_bytes;
   const generativeqc_system* systems[]{system.get()};
   generativeqc_batch* prepared{};
   check_status(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
@@ -290,49 +315,60 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   generativeqc_batch_item_result_descriptor primal{};
   primal.struct_size = sizeof(primal);
   primal.abi_version = GENERATIVEQC_ABI_VERSION;
-  check_status(generativeqc_batch_execute(batch.get(), nullptr, 0, &primal, 1));
+  const auto scf_status = generativeqc_batch_execute(batch.get(), nullptr, 0, &primal, 1);
+  if (scf_status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
+      (scf_status == GENERATIVEQC_STATUS_SUCCESS &&
+       (primal.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
+        (primal.status == GENERATIVEQC_STATUS_SUCCESS && !primal.converged))))
+    throw Error(GENERATIVEQC_STATUS_NOT_CONVERGED,
+                "native CPU SCF did not converge; no Hessian published");
+  check_status(scf_status);
   check_status(primal.status);
   std::uint64_t scf_fock_builds{};
   check_status(generativeqc_batch_get_last_fock_builds(batch.get(), 0, &scf_fock_builds));
-  if (!primal.converged)
-    throw std::runtime_error("native CPU SCF did not converge; no Hessian published");
   const auto coordinates = 3 * atoms.size();
-  std::vector<double> output(motion.empty() ? coordinates * coordinates : coordinates);
-  generativeqc_ks_host_hessian_options_v1 controls;
-  controls.expected_atoms = atoms.data();
-  controls.expected_atom_count = atoms.size();
-  controls.expected_charge = options.charge;
-  controls.expected_multiplicity = options.multiplicity;
-  controls.numeric_bytes = invocation.numeric_bytes;
-  controls.integral_bytes = invocation.integral_bytes;
-  controls.grid_bytes = invocation.grid_bytes;
-  controls.response_bytes = invocation.response_bytes;
-  controls.gmres_bytes = invocation.response_bytes;
-  controls.ecp_bytes = invocation.ecp_bytes;
-  controls.dispersion_bytes = invocation.dispersion_bytes;
-  controls.output_bytes = invocation.output_bytes;
-  controls.max_eri_primitives = invocation.max_eri_primitives;
-  controls.max_map_terms = invocation.max_map_terms;
-  controls.max_d3_pairs = invocation.max_d3_pairs;
-  controls.relative_tolerance = invocation.response_rtol;
-  controls.absolute_tolerance =
-      invocation.response_atol_explicit ? invocation.response_atol : 1e-12;
-  controls.restart = invocation.response_restart;
-  controls.max_iterations = invocation.response_iterations;
-  generativeqc_ks_host_hessian_receipt_v1 receipt;
-  check_status(generativeqc_ks_hessian_cpu_v1(
-      batch.get(), 0, &controls, motion.empty() ? nullptr : motion.data(), motion.size(),
-      output.data(), output.size(), &receipt));
+  std::vector<double> output(motion.empty() ? coordinates * coordinates : motion.size());
+  auto receipt = api::empty_host_hessian_receipt();
+  if (invocation.hvp_directions)
+    check_status(generativeqc_ks_hvp_cpu_batch_v1(batch.get(), 0, &controls, motion.data(),
+                                                  motion.size(), output.data(), output.size(),
+                                                  &receipt));
+  else if (invocation.response_sequential)
+    check_status(generativeqc_ks_hessian_cpu_sequential_v1(batch.get(), 0, &controls, output.data(),
+                                                           output.size(), &receipt));
+  else if (invocation.response_recycle_block_size)
+    check_status(generativeqc_ks_hessian_cpu_recycled_v1(batch.get(), 0, &controls,
+                                                         invocation.response_recycle_block_size,
+                                                         output.data(), output.size(), &receipt));
+  else
+    check_status(generativeqc_ks_hessian_cpu_v1(
+        batch.get(), 0, &controls, motion.empty() ? nullptr : motion.data(), motion.size(),
+        output.data(), output.size(), &receipt));
   Json panel = Json::array();
   const auto row_size = motion.empty() ? coordinates : 3;
-  for (std::size_t begin = 0; begin < output.size(); begin += row_size)
-    panel.push_back(std::vector<double>(output.begin() + begin, output.begin() + begin + row_size));
+  const auto append_rows = [&](Json& destination, std::size_t begin, std::size_t end) {
+    for (; begin < end; begin += row_size)
+      destination.push_back(
+          std::vector<double>(output.begin() + begin, output.begin() + begin + row_size));
+  };
+  if (invocation.hvp_directions) {
+    for (std::size_t begin = 0; begin < output.size(); begin += coordinates) {
+      auto action = Json::array();
+      append_rows(action, begin, begin + coordinates);
+      panel.push_back(std::move(action));
+    }
+  } else {
+    append_rows(panel, 0, output.size());
+  }
   Json diagnostics{
       {"numerical_runtime", "native-cpp-cpu"},
       {"runtime_compilation", false},
       {"displaced_scf_evaluations", 0},
       {"posthoc_symmetrization", false},
       {"completed_directions", receipt.completed_directions},
+      {"response_strategy", invocation.response_sequential           ? "sequential"
+                            : invocation.response_recycle_block_size ? "recycled"
+                                                                     : "scalar"},
       {"response_iterations", receipt.response_iterations},
       {"response_residual_norm", receipt.response_residual_norm},
       {"response_absolute_tolerance", controls.absolute_tolerance},
@@ -354,6 +390,7 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
       {"d3_energy", receipt.d3_energy},
       {"raw_symmetry_error", receipt.raw_symmetry_error},
       {"numeric_reservation_bytes", receipt.numeric_reservation_bytes},
+      {"minimum_numeric_bytes", minimum_bytes},
       {"max_eri_primitives", controls.max_eri_primitives},
       {"max_map_terms", controls.max_map_terms},
       {"max_d3_pairs", controls.max_d3_pairs},
@@ -363,6 +400,20 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
       {"native_execution_seconds", receipt.execution_seconds},
       {"endpoint_seconds",
        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count()}};
+  if (invocation.response_recycle_block_size)
+    diagnostics["block_size"] = invocation.response_recycle_block_size;
+  if (invocation.response_sequential) diagnostics["response_concurrent_rhs"] = 1;
+  if (invocation.hvp_directions) {
+    diagnostics["response_strategy"] = "independent";
+    diagnostics["direction_count"] = invocation.hvp_directions;
+    diagnostics["output_bytes"] = receipt.output_bytes;
+  }
+  if (host_admission)
+    diagnostics["resource_admission"] = {
+        {"effective_host_limit_bytes", host_admission->effective_limit_bytes},
+        {"minimum_host_peak_bytes", host_admission->minimum_peak_bytes},
+        {"selected_host_peak_bytes", host_admission->selected_peak_bytes},
+        {"derivative_numeric_cap_bytes", host_admission->derivative_cap_bytes}};
   return {{"schema", "generativeqc.native-hessian-result/v1"},
           {"operation", invocation.operation},
           {"units", "hartree/bohr^2"},
@@ -750,6 +801,96 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
 #endif
 }  // namespace
 
+bool parse_cpu_hessian_byte_limit(HessianInvocation& invocation, std::string_view option,
+                                  std::string_view value) {
+  constexpr std::pair<std::string_view, std::uint64_t HessianInvocation::*> limits[]{
+      {"--integral-budget-bytes", &HessianInvocation::integral_bytes},
+      {"--grid-budget-bytes", &HessianInvocation::grid_bytes},
+      {"--output-budget-bytes", &HessianInvocation::output_bytes},
+      {"--response-budget-bytes", &HessianInvocation::response_bytes},
+      {"--numeric-budget-bytes", &HessianInvocation::numeric_bytes},
+      {"--ecp-budget-bytes", &HessianInvocation::ecp_bytes},
+      {"--dispersion-budget-bytes", &HessianInvocation::dispersion_bytes},
+      {"--cpu-packed-eri-budget-bytes", &HessianInvocation::cpu_packed_eri_bytes}};
+  for (const auto& [flag, member] : limits) {
+    if (flag != option) continue;
+    invocation.*member = positive_integer(value, option);
+    // The four generic source caps are also accepted by CUDA Hessian.
+    if (member == &HessianInvocation::numeric_bytes || member == &HessianInvocation::ecp_bytes ||
+        member == &HessianInvocation::dispersion_bytes ||
+        member == &HessianInvocation::cpu_packed_eri_bytes)
+      invocation.cpu_controls_explicit = true;
+    return true;
+  }
+  return false;
+}
+
+const method_generated::Method* linked_cpu_hessian_program(const RunOptions& options) {
+  const auto* program = options.composition ? options.composition
+                                            : methods::named_ks::find_method(options.method_name);
+  if (!program)
+    program = methods::named_ks::find_method(semilocal_catalog_selector(options.method_name));
+  return generativeqc_ks_hessian_cpu_version_v1() == 1 && program &&
+                 generativeqc_ks_hessian_cpu_method_v1(program->identity.data())
+             ? program
+             : nullptr;
+}
+
+System make_cpu_hessian_system(Context& context, const RunOptions& options,
+                               std::span<const generativeqc_atom> atoms,
+                               const NativeBasisData& basis) {
+  const generativeqc_system_descriptor geometry{sizeof(geometry),
+                                                GENERATIVEQC_ABI_VERSION,
+                                                atoms.data(),
+                                                static_cast<std::uint32_t>(atoms.size()),
+                                                basis.shells.data(),
+                                                static_cast<std::uint32_t>(basis.shells.size()),
+                                                basis.primitives.data(),
+                                                static_cast<std::uint32_t>(basis.primitives.size()),
+                                                options.charge,
+                                                options.multiplicity,
+                                                basis.representation};
+  return make_molecular_system(context, geometry, basis);
+}
+
+generativeqc_ks_host_hessian_options_v1 cpu_hessian_controls(
+    const RunOptions& options, std::span<const generativeqc_atom> atoms,
+    const HessianInvocation& invocation) {
+  auto controls = api::default_host_hessian_options();
+  controls.expected_atoms = atoms.data();
+  controls.expected_atom_count = atoms.size();
+  controls.expected_charge = options.charge;
+  controls.expected_multiplicity = options.multiplicity;
+  controls.numeric_bytes = invocation.numeric_bytes;
+  controls.integral_bytes = invocation.integral_bytes;
+  controls.grid_bytes = invocation.grid_bytes;
+  controls.response_bytes = invocation.response_bytes;
+  controls.gmres_bytes = invocation.response_bytes;
+  controls.ecp_bytes = invocation.ecp_bytes;
+  controls.dispersion_bytes = invocation.dispersion_bytes;
+  controls.output_bytes = invocation.output_bytes;
+  controls.max_eri_primitives = invocation.max_eri_primitives;
+  controls.max_map_terms = invocation.max_map_terms;
+  controls.max_d3_pairs = invocation.max_d3_pairs;
+  controls.relative_tolerance = invocation.response_rtol;
+  controls.absolute_tolerance =
+      invocation.response_atol_explicit ? invocation.response_atol : 1e-12;
+  controls.restart = invocation.response_restart;
+  controls.max_iterations = invocation.response_iterations;
+  return controls;
+}
+
+generativeqc_status cpu_hessian_minimum_bytes(
+    generativeqc_context* context, const generativeqc_system* system, const char* method,
+    const HessianInvocation& invocation, const generativeqc_ks_host_hessian_options_v1& controls,
+    std::size_t* minimum) {
+  if (invocation.hvp_directions)
+    return generativeqc_ks_hvp_cpu_batch_minimum_bytes_v1(
+        context, system, method, invocation.hvp_directions, &controls, minimum);
+  return generativeqc_ks_hessian_cpu_minimum_bytes_v1(
+      context, system, method, invocation.operation == "hessian", &controls, minimum);
+}
+
 HessianInvocation parse_hessian_invocation(int argc, char** argv) {
   if (argc < 3) throw UsageError("hessian/hvp requires an XYZ input path");
   HessianInvocation invocation;
@@ -779,11 +920,18 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
                                                "--grid-level",
                                                "--grid-radial-points",
                                                "--grid-polar-points",
-                                               "--grid-azimuth-points"};
+                                               "--grid-azimuth-points",
+                                               "--host-bytes",
+                                               "--host-reserve-bytes",
+                                               "--headroom-fraction"};
   for (int index = 3; index < argc; ++index) {
     const std::string_view option = argv[index];
     if (option == "--json") {
       invocation.run_arguments.emplace_back(option);
+      continue;
+    }
+    if (option == "--response-sequential") {
+      invocation.response_sequential = true;
       continue;
     }
     if (option == "--compiler-python" || option == "--compiler-library" || option == "--cache" ||
@@ -802,38 +950,24 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
       method_ir_file = value;
     } else if (option == "--direction")
       invocation.direction_file = value;
+    else if (option == "--directions")
+      invocation.directions_file = value;
     else if (option == "--device-budget-bytes") {
       invocation.device_bytes = positive_integer(value, option);
       invocation.cuda_controls_explicit = true;
-    } else if (option == "--numeric-budget-bytes" || option == "--ecp-budget-bytes" ||
-               option == "--dispersion-budget-bytes" || option == "--max-eri-primitives" ||
-               option == "--max-d3-pairs" || option == "--max-map-terms" ||
-               option == "--cpu-packed-eri-budget-bytes") {
+    } else if (parse_cpu_hessian_byte_limit(invocation, option, value)) {
+      continue;
+    } else if (option == "--max-eri-primitives" || option == "--max-d3-pairs" ||
+               option == "--max-map-terms") {
       invocation.cpu_controls_explicit = true;
       const auto parsed = positive_integer(value, option);
-      if (option == "--numeric-budget-bytes")
-        invocation.numeric_bytes = parsed;
-      else if (option == "--ecp-budget-bytes")
-        invocation.ecp_bytes = parsed;
-      else if (option == "--dispersion-budget-bytes")
-        invocation.dispersion_bytes = parsed;
-      else if (option == "--max-eri-primitives")
+      if (option == "--max-eri-primitives")
         invocation.max_eri_primitives = parsed;
-      else if (option == "--cpu-packed-eri-budget-bytes")
-        invocation.cpu_packed_eri_bytes = parsed;
       else if (option == "--max-map-terms")
         invocation.max_map_terms = parsed;
       else
         invocation.max_d3_pairs = parsed;
-    } else if (option == "--integral-budget-bytes")
-      invocation.integral_bytes = positive_integer(value, option);
-    else if (option == "--grid-budget-bytes")
-      invocation.grid_bytes = positive_integer(value, option);
-    else if (option == "--output-budget-bytes")
-      invocation.output_bytes = positive_integer(value, option);
-    else if (option == "--response-budget-bytes")
-      invocation.response_bytes = positive_integer(value, option);
-    else if (option == "--max-nonlocal-pairs") {
+    } else if (option == "--max-nonlocal-pairs") {
       invocation.max_nonlocal_pairs = positive_integer(value, option);
       invocation.cuda_controls_explicit = true;
     } else if (option == "--nonlocal-grid-radial-points")
@@ -856,15 +990,22 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
       invocation.response_restart = positive_integer(value, option, INT32_MAX);
     else if (option == "--response-max-iterations")
       invocation.response_iterations = positive_integer(value, option, INT32_MAX);
-    else if (option == "--response-cache-precision") {
+    else if (option == "--response-recycle-block-size") {
+      invocation.response_recycle_block_size = positive_integer(value, option, 4);
+      if (invocation.response_recycle_block_size < 2)
+        throw UsageError("--response-recycle-block-size requires a value from two to four");
+    } else if (option == "--response-cache-precision") {
       if (value != "fp64" && value != "fp32-proposal")
         throw UsageError("--response-cache-precision requires fp64 or fp32-proposal");
       invocation.response_fp32_proposal = value == "fp32-proposal";
     } else
       throw UsageError("unsupported hessian/hvp option: " + std::string(option));
   }
-  if ((invocation.operation == "hvp") != !invocation.direction_file.empty())
-    throw UsageError("only hvp requires --direction FILE.json (finite natoms-by-3 array)");
+  if (!invocation.direction_file.empty() && !invocation.directions_file.empty())
+    throw UsageError("--direction and --directions are mutually exclusive");
+  if ((invocation.operation == "hvp") !=
+      (!invocation.direction_file.empty() || !invocation.directions_file.empty()))
+    throw UsageError("only hvp requires --direction FILE.json or --directions FILE.json");
   if (invocation.operation == "hvp" && invocation.response_fp32_proposal)
     throw UsageError("fp32-proposal response cache requires a dense hessian");
   if (invocation.nonlocal_level &&
@@ -882,11 +1023,24 @@ HessianInvocation parse_hessian_invocation(int argc, char** argv) {
   return invocation;
 }
 int hessian_command(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
-                    const HessianInvocation& invocation) {
-  const auto* program = options.composition ? options.composition
-                                            : methods::named_ks::find_method(options.method_name);
-  const bool cpu = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE && program &&
-                   generativeqc_ks_hessian_cpu_method_v1(program->identity.data());
+                    HessianInvocation invocation) {
+  const bool cpu = options.backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  if (!invocation.directions_file.empty() && !cpu)
+    throw UsageError("--directions requires linked CPU hvp");
+  if (options.host_bytes && !cpu)
+    throw UsageError("--host-bytes for Hessian/HVP requires --backend cpu");
+  if (!options.host_bytes && (options.host_reserve_bytes || options.headroom_fraction))
+    throw UsageError("Hessian/HVP host reserve and headroom require --host-bytes");
+  if (invocation.response_recycle_block_size && (!cpu || invocation.operation != "hessian"))
+    throw UsageError("--response-recycle-block-size requires a dense CPU hessian");
+  if (invocation.response_sequential && (!cpu || invocation.operation != "hessian"))
+    throw UsageError("--response-sequential requires a dense CPU hessian");
+  if (invocation.response_sequential && invocation.response_recycle_block_size)
+    throw UsageError(
+        "--response-sequential and --response-recycle-block-size are mutually exclusive");
+  // Parsing uses PBE as a carrier for range-PBE, not as a CPU method substitute.
+  if (cpu && invocation.range_pbe)
+    throw UsageError("range-PBE MethodIR is not supported by native CPU hessian/hvp");
   if (!cpu) {
     if (!is_wb97mv(options.method_name) && semilocal_catalog_selector(options.method_name).empty())
       throw UsageError(
@@ -919,17 +1073,23 @@ int hessian_command(const RunOptions& options, const std::vector<generativeqc_at
       throw UsageError(
           "native hessian/hvp requires FP64 or an AUTO-qualified electronic method and provider");
   }
-  if (options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE)
+  if (!cpu && options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE)
     throw UsageError("CUDA hessian/hvp cannot select a CPU density-fitting provider");
   const auto coordinates = 3ULL * atoms.size();
+  if (invocation.response_recycle_block_size > coordinates)
+    throw UsageError("--response-recycle-block-size exceeds the Cartesian coordinate count");
   if (!coordinates || coordinates > SIZE_MAX / coordinates / sizeof(double))
     throw UsageError("Hessian dimensions overflow");
   const auto count = invocation.operation == "hvp" ? coordinates : coordinates * coordinates;
   if (count > invocation.output_bytes / (2 * sizeof(double)))
     throw UsageError("result and publication exceed --output-budget-bytes");
-  const auto motion = invocation.operation == "hvp"
-                          ? read_direction(invocation.direction_file, atoms.size())
-                          : std::vector<double>{};
+  std::vector<double> motion;
+  if (!invocation.directions_file.empty()) {
+    motion = read_directions(invocation.directions_file, atoms.size(), invocation.output_bytes);
+    invocation.hvp_directions = motion.size() / coordinates;
+  } else if (invocation.operation == "hvp") {
+    motion = read_direction(invocation.direction_file, atoms.size());
+  }
   if (cpu) {
     const auto result = execute_cpu(options, atoms, invocation, motion);
     if (options.json)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -24,6 +25,11 @@ struct HostKsHessianLimits {
   integrals::EcpDirectionLimits ecp;
   dispersion::HostD3ColumnLimits dispersion;
   double energy_absolute_tolerance{}, energy_relative_tolerance{};
+  /** Extra allowance outside the mandatory composition, shared by retained
+   * matrix and batch panels. The parent may already reserve more for its grid
+   * than this owner's suballocation requires; that slack cannot fund panels.
+   */
+  std::size_t max_optional_numeric_bytes{std::numeric_limits<std::size_t>::max()};
 };
 
 struct HostKsHessianResources {
@@ -117,10 +123,14 @@ class HostKsNuclearHessian {
    */
   std::vector<HostKsHessianDiagnostic> apply_coordinates(std::size_t first, std::size_t count,
                                                          const response::GmresOptions& options);
+  /** Apply one admitted group of packed external Cartesian directions. The
+   * same publication gate and assembly arena as coordinate batches apply. */
+  std::vector<HostKsHessianDiagnostic> apply_directions(std::span<const double> directions,
+                                                        const response::GmresOptions& options);
   /** Borrowed until the next action/admission; no caller or extra output panel
    * is hidden outside the admitted batch assembly arena.
    */
-  [[nodiscard]] std::span<const double> coordinate_column(std::size_t index) const;
+  [[nodiscard]] std::span<const double> batch_column(std::size_t index) const;
   [[nodiscard]] HostKsHessianResources resources(const response::GmresOptions& options) const;
   [[nodiscard]] HostKsHessianWork work() const noexcept;
 

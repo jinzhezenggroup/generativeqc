@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -219,5 +220,106 @@ class ResponseRecycleSpace {
   std::vector<runtime::TrackedVector<double>> vectors_;
   std::uint64_t generation_{};
 };
+
+/** Shape-only capacity of one recycle group. Retained data never crosses the
+ * group boundary. The operator's own scratch is reserved separately.
+ */
+struct RecycledBatchResources {
+  GmresPlan solve;
+  ResponseRecycleCapacity recycle;
+  std::size_t retained_solution_bytes{}, retained_diagnostic_bytes{}, peak_bytes{};
+  bool admitted{};
+};
+
+inline RecycledBatchResources recycled_batch_resources(std::size_t dimension,
+                                                       const GmresOptions& options,
+                                                       std::size_t count,
+                                                       std::size_t max_numeric_bytes) {
+  using detail::response_checked_add;
+  using detail::response_checked_multiply;
+  auto internal = options;
+  internal.collect_basis = options.collect_basis || count > 1;
+  RecycledBatchResources result;
+  result.solve = prepare_gmres(dimension, internal);
+  const auto vector_bytes = response_checked_multiply(dimension, sizeof(double));
+  const auto history_bytes =
+      options.collect_history ? response_checked_multiply(
+                                    response_checked_add(options.max_iterations, 2), sizeof(double))
+                              : 0;
+  const auto basis_bytes =
+      options.collect_basis ? response_checked_multiply(result.solve.restart, vector_bytes) : 0;
+  const auto diagnostic_bytes = response_checked_add(history_bytes, basis_bytes);
+  result.retained_solution_bytes = response_checked_multiply(count, vector_bytes);
+  result.retained_diagnostic_bytes = response_checked_multiply(count, diagnostic_bytes);
+  if (count) {
+    result.peak_bytes = response_checked_add(
+        result.solve.workspace_bytes,
+        response_checked_multiply(count - 1, response_checked_add(vector_bytes, diagnostic_bytes)));
+  }
+  if (count > 1) {
+    result.recycle = response_recycle_capacity(dimension, 8, 8U << 20);
+    // During projection/solve/update, the old recycle space remains live.
+    // Recycle scratch includes the projected guess or a complete replacement;
+    // those do not overlap each other. Arnoldi storage is in the GMRES bound.
+    result.peak_bytes = response_checked_add(
+        result.peak_bytes, response_checked_add(result.recycle.retained_bytes,
+                                                std::max(result.recycle.projection_workspace_bytes,
+                                                         result.recycle.update_workspace_bytes)));
+  }
+  result.admitted =
+      result.peak_bytes <= max_numeric_bytes && result.peak_bytes <= options.max_workspace_bytes;
+  return result;
+}
+
+/** One native sequential solve group with the existing recycle vector policy.
+ * Recycle vectors are guesses, never a substitute for GMRES or a residual
+ * check. Validated caller RHS/preconditioners are borrowed synchronously.
+ */
+inline ResponseBatchResult solve_recycled_response_batch(
+    const LinearResponseProblem& problem, const GmresOptions& options,
+    std::span<const ResponseSolveRequest> requests, std::size_t max_numeric_bytes) {
+  const auto dimension = problem.dimension();
+  const auto capacity =
+      recycled_batch_resources(dimension, options, requests.size(), max_numeric_bytes);
+  for (const auto& request : requests) {
+    if (request.rhs.size() != dimension || !request.initial_guess.empty())
+      throw std::invalid_argument(
+          "recycled response requires shaped RHS and owns the initial guess");
+  }
+  if (!capacity.admitted) return {{}, ResponseBatchStatus::workspace_limit, capacity.peak_bytes, 0};
+  ResponseBatchResult result;
+  result.planned_peak_numeric_bytes = capacity.peak_bytes;
+  result.retained_solution_bytes = capacity.retained_solution_bytes;
+  result.retained_diagnostic_bytes = capacity.retained_diagnostic_bytes;
+  result.responses.reserve(requests.size());
+  if (requests.empty()) return result;
+  const auto plan = prepare_response(problem, capacity.solve.options);
+  std::optional<ResponseRecycleSpace> recycle;
+  if (requests.size() > 1 && capacity.recycle.vector_capacity)
+    recycle.emplace(dimension, 8, 8U << 20);
+  for (const auto& request : requests) {
+    auto solved = [&] {
+      const auto guess =
+          (recycle && recycle->vector_count())
+              ? recycle->project(recycle->generation(), {request.rhs, dimension, 1, 0, 1, 0},
+                                 capacity.recycle.projection_workspace_bytes)
+              : runtime::TrackedVector<double>{};
+      return solve_response(plan, problem, request.rhs, guess, request.diagonal_preconditioner,
+                            request.right_preconditioner);
+    }();
+    if (recycle && solved.converged() && result.responses.size() + 1 < requests.size()) {
+      recycle->update(recycle->generation(), {solved.solution, dimension, 1, 0, 1, 0},
+                      {solved.basis, dimension, solved.basis_columns, 0, 1,
+                       static_cast<std::int64_t>(dimension)},
+                      8, 8U << 20, capacity.recycle.update_workspace_bytes);
+    }
+    if (!options.collect_basis) {
+      runtime::TrackedVector<double>{}.swap(solved.basis);
+      solved.basis_columns = 0;
+    }
+    result.responses.push_back(std::move(solved));
+  }
+  return result;
+}
 
 }  // namespace generativeqc::response

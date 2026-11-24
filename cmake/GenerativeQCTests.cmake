@@ -692,7 +692,23 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_ks_host_source_binding_tests
                        tests/native/test_ks_host_source_binding.cpp)
   if(GENERATIVEQC_ENABLE_HOST_KS_HESSIAN)
+    add_test(NAME generativeqc_ks_host_hessian_sdk_tests
+             COMMAND generativeqc_ks_hessian_sdk_tests --cpu)
+    set_tests_properties(generativeqc_ks_host_hessian_sdk_tests PROPERTIES
+      ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1" TIMEOUT 120)
     if(GENERATIVEQC_BUILD_CLI)
+      if(Python3_EXECUTABLE AND NOT GENERATIVEQC_MONOLITHIC_CLI)
+        get_target_property(_host_hessian_parity_inventory generativeqc_host_hessian_aot
+                            GENERATIVEQC_HOST_SCALAR_INVENTORY)
+        add_test(NAME generativeqc_ks_host_hessian_frontend_parity
+          COMMAND "${Python3_EXECUTABLE}"
+                  "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_ks_host_hessian_frontend_parity.py"
+                  $<TARGET_FILE:generativeqc_ks_hessian_sdk_tests> $<TARGET_FILE:generativeqc_cli>
+                  "${_host_hessian_parity_inventory}")
+        set_tests_properties(generativeqc_ks_host_hessian_frontend_parity PROPERTIES
+          ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;GENERATIVEQC_LIBRARY=$<TARGET_FILE:generativeqc>;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1"
+          TIMEOUT 120)
+      endif()
       generativeqc_native_test(generativeqc_cli_molecular_evaluator_tests
                            tests/native/test_cli_molecular_evaluator.cpp
                            LIBRARIES nlohmann_json::nlohmann_json)

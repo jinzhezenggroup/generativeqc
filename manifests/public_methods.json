@@ -202,6 +202,12 @@
       ]
     }
   ],
+  "named_ks_aliases": {
+    "lda-rks": "lda_xc_pw-rks",
+    "lda-uks": "lda_xc_pw-uks",
+    "pbe-d4-rks": "pbe-d4(bj-eeq-atm)-rks",
+    "wb97m-v": "wb97m-v-rks"
+  },
   "composite_methods": [
     {
       "name": "r2scan-3c",

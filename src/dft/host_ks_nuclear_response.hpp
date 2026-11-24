@@ -23,6 +23,8 @@ struct HostKsNuclearLimits {
    * the bounded streamed schedule. Admission precedes all source work.
    */
   std::size_t coordinate_source_bytes{};
+  /** Borrow Krylov vectors only within one admitted group, never across frames. */
+  bool recycle_rhs_groups{};
 };
 
 struct HostKsNuclearResources {
@@ -101,7 +103,7 @@ class HostKsNuclearResponse {
    * schedule for insufficient reserved storage, allocation failure or density
    * range. Numerical preparation failures are never converted to fallback.
    */
-  bool admit_coordinate_sources(const response::GmresOptions& options);
+  bool admit_coordinate_sources(const response::GmresOptions& options, std::size_t directions = 1);
   /** Allocate exact XC partials, then a whole-tile native AO prefix from the
    * remaining composed cap, reserving actual GMRES first. Returns all newly
    * owned numeric bytes. Optional allocation failures keep streamed fallbacks;

@@ -64,6 +64,54 @@ def test_native_hessian_default_respects_primitive_inventory(
         assert result.returncode == 0, result.stdout + result.stderr
         cache = (build / "CMakeCache.txt").read_text()
         assert f"GENERATIVEQC_ENABLE_HOST_KS_HESSIAN:BOOL={expected}" in cache
+        assert (
+            f"GENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY:FILEPATH="
+            f"{ROOT / 'manifests/host_hessian_aot_catalog.json'}" in cache
+        )
+
+
+@pytest.mark.parametrize("endpoint", [False, True])
+def test_missing_d3_leaf_cannot_claim_a_complete_cpu_hessian(
+    tmp_path: Path, required_native_cxx: Any, endpoint: bool
+) -> None:
+    """A legal scalar-only catalog is not necessarily a complete runtime package."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required to exercise the endpoint closure check")
+    payload = json.loads((ROOT / "manifests/host_hessian_aot_catalog.json").read_text())
+    payload["arrays"].remove("d3_scatter_column")
+    inventory = tmp_path / "incomplete.json"
+    inventory.write_text(json.dumps(payload))
+    result = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(ROOT),
+            "-B",
+            str(tmp_path / "build"),
+            "-DGENERATIVEQC_ENABLE_CUDA=OFF",
+            "-DGENERATIVEQC_BUILD_CLI=OFF",
+            "-DGENERATIVEQC_BUILD_TESTS=OFF",
+            "-DGENERATIVEQC_ENABLE_HOST_HESSIAN_AOT_LEAVES=ON",
+            f"-DGENERATIVEQC_ENABLE_HOST_KS_HESSIAN={'ON' if endpoint else 'OFF'}",
+            f"-DGENERATIVEQC_HOST_HESSIAN_AOT_INVENTORY={inventory}",
+            f"-DGENERATIVEQC_COMPILER_CACHE={required_native_cxx.cache}",
+            f"-DCMAKE_CXX_COMPILER={required_native_cxx.compiler}",
+            f"-DPython3_EXECUTABLE={sys.executable}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    if endpoint:
+        assert result.returncode != 0
+        diagnostic = " ".join(result.stderr.split())
+        assert "complete CPU Hessian endpoint lacks leaves: d3_scatter_column" in (
+            diagnostic
+        )
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("wheel", [False, True])
@@ -104,7 +152,7 @@ def test_cuda_linked_host_response_compiles_with_its_own_build_inputs(
         "add_library(leaves INTERFACE)\n"
         f'target_include_directories(leaves INTERFACE "{ROOT.as_posix()}/src")\n'
         "set_target_properties(leaves PROPERTIES GENERATIVEQC_HOST_SCALAR_INVENTORY\n"
-        f'  "{ROOT.as_posix()}/manifests/host_hessian_aot_b3lyp.json")\n'
+        f'  "{ROOT.as_posix()}/manifests/host_hessian_aot_catalog.json")\n'
         "add_library(core STATIC probe.cpp)\n"
         + runtime_target
         + "generativeqc_add_host_ks_response(host_response leaves core LINK_INTO_CORE)\n"

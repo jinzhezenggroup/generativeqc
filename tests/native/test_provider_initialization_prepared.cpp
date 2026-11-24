@@ -8,10 +8,14 @@
 #include "api/device_resources.hpp"
 #include "api/handles.hpp"
 #include "api/provider_initialization_intent.hpp"
+#include "dft/grid.hpp"
+#include "methods/dft_method_preparation.hpp"
 #include "methods/named_ks_catalog.hpp"
 #include "methods/provider_initialization_intent.hpp"
 #include "methods/provider_initialization_lifetime.hpp"
+#include "molecule/basis.hpp"
 #include "runtime/resource_ledger.hpp"
+#include "scf/density_fitting.hpp"
 
 namespace {
 std::weak_ptr<generativeqc::runtime::DeviceResourceLedger> ledger_witness;
@@ -83,10 +87,35 @@ namespace named_ks {
 // This fixture covers legacy/pending publisher ownership; actual named models
 // have their own native catalog and SDK qualification tests.
 const Method* find_method(std::string_view) noexcept { std::abort(); }
+const Method* cpu_df_energy_program(std::string_view) noexcept { std::abort(); }
 void electronic_options(const Method&, generativeqc_ks_options&) noexcept { std::abort(); }
 void validate_bound_basis(const Method&, const core::System&) { std::abort(); }
 }  // namespace named_ks
+namespace detail {
+// Any entry into the DF host admission path violates this metadata-only probe.
+scf::ScfOptions dft_options(const generativeqc_method_descriptor&, generativeqc_backend,
+                            NativeKsExecutionPlan&) {
+  std::abort();
+}
+dft::GridSpec ks_grid_options(const generativeqc_method_descriptor&, scf::ScfOptions&,
+                              const NativeKsExecutionPlan&) {
+  std::abort();
+}
+}  // namespace detail
 }  // namespace generativeqc::methods
+
+namespace generativeqc::scf {
+bool cpu_materialized_df_derivatives_requested() noexcept { std::abort(); }
+}  // namespace generativeqc::scf
+
+namespace generativeqc::dft {
+std::size_t grid_point_count(const core::System&, const GridSpec&) { std::abort(); }
+}  // namespace generativeqc::dft
+
+namespace generativeqc::molecule {
+std::size_t ao_count(const core::System&) noexcept { std::abort(); }
+std::size_t cartesian_ao_count(const core::System&) noexcept { std::abort(); }
+}  // namespace generativeqc::molecule
 
 int main(int argc, char** argv) {
   using namespace generativeqc;

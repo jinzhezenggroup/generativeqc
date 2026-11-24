@@ -5,6 +5,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/initial_guess_diagnostic.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/named_ks_inputs.hpp"
 #include "api/native_method_inputs.hpp"
@@ -61,9 +62,22 @@ generativeqc_status prepare_candidate(
           "auxiliary handle role requires its matching method and density-fitting backend";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
+    generativeqc_property_flags admitted_properties{};
+    std::unique_lock<std::mutex> host_workspace;
+    std::shared_ptr<runtime::HostResourceLease> host_lease;
+    if (named_inputs && named_inputs->selection.cpu_df_host_properties) {
+      generativeqc::api::CpuDfKsHostAdmission admission(*named_inputs,
+                                                        context->state.executed_backend);
+      admission.append(system->data, generativeqc::api::native_auxiliary_basis(*descriptor));
+      admitted_properties = admission.properties();
+      host_workspace = admission.use_workspace();
+      host_lease = admission.reserve();
+    }
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
+    candidate->host_lease = std::move(host_lease);
+    candidate->cpu_df_host_properties = admitted_properties;
     if (pending) {
       if (context->provider_initialization_calculation)
         throw std::runtime_error("context retains an explicit provider owner");
@@ -92,6 +106,10 @@ generativeqc_status prepare_candidate(
           named_inputs ? named_inputs->selection.dispersion_maximum_bytes : 0,
           named_inputs ? named_inputs->selection.cpu_packed_eri_maximum_bytes : 0);
     }
+    if (admitted_properties &&
+        (candidate->plan->supported_properties() & admitted_properties) != admitted_properties)
+      throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                 "prepared CPU DF KS owner lacks a budgeted property");
     *calculation = candidate.release();
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
@@ -193,6 +211,43 @@ generativeqc_status generativeqc_initial_guess_auto_kind_v2(
       request->method, capabilities->family, request->backend, request->precision_mode,
       request->density_fitting_mode, request->restricted != 0, request->has_ecp != 0);
   *resolved_kind = eligible && elements_eligible ? GENERATIVEQC_INITIAL_GUESS_HUCKEL : 0;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status generativeqc_initial_guess_default_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* descriptor_kind) {
+  if (!request || !descriptor_kind) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(request)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (request->atomic_numbers || request->atom_count) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+  uint32_t provider = 0;
+  auto status = generativeqc_initial_guess_auto_kind_v2(request, &provider);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto capabilities = generativeqc_initial_guess_capabilities_v1();
+  const bool cpu = request->backend == GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  const bool fitted = request->density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+  // Discovery returns the execution descriptor, not just an eligible provider:
+  // only the CPU automatic kinds can be shared across heterogeneous systems.
+  uint32_t huckel = GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL;
+  if (cpu)
+    huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU;
+  else if (request->method == GENERATIVEQC_METHOD_RHF)
+    huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF;
+  if (fitted) huckel |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HUCKEL_DF;
+  if (provider == GENERATIVEQC_INITIAL_GUESS_HUCKEL && (capabilities & huckel) == huckel) {
+    *descriptor_kind =
+        cpu ? GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU : GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  status = generativeqc_initial_guess_auto_kind_v1(request, &provider);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  uint32_t minao = GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO;
+  if (cpu) minao |= GENERATIVEQC_INITIAL_GUESS_CAPABILITY_AUTO_CPU;
+  *descriptor_kind =
+      provider == GENERATIVEQC_INITIAL_GUESS_MINAO && (capabilities & minao) == minao
+          ? (cpu ? GENERATIVEQC_INITIAL_GUESS_AUTO_CPU : GENERATIVEQC_INITIAL_GUESS_MINAO)
+          : 0;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -323,6 +378,7 @@ generativeqc_status generativeqc_calculation_get_supported_properties_v1(
   if (!calculation || !properties) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
   *properties = calculation->plan->supported_properties();
+  if (calculation->cpu_df_host_properties) *properties &= calculation->cpu_df_host_properties;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -382,6 +438,11 @@ static generativeqc_status execute_calculation(generativeqc_calculation* calcula
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   const bool omit_forces = output->forces == nullptr && output->force_count == 0;
+  if (!generativeqc::api::cpu_df_host_replay_allowed(calculation->cpu_df_host_properties,
+                                                     !omit_forces)) {
+    calculation->context->last_detail = "replay is outside the admitted CPU DF KS host budget";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   if (output->forces == nullptr && !omit_forces) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -422,6 +483,8 @@ static generativeqc_status execute_calculation(generativeqc_calculation* calcula
   if (mp2 && !ccsdt) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 
   try {
+    auto host_workspace = calculation->host_lease ? calculation->host_lease->use_workspace()
+                                                  : std::unique_lock<std::mutex>{};
     // NULL/zero is an execution request, not merely a copy-out choice: the
     // backend must not launch or assemble analytic-force work in this mode.
     generativeqc::methods::Result native = calculation->plan->execute(

@@ -18,6 +18,15 @@ std::span<const Method> methods() noexcept { return generated::kMethods; }
 
 const Method* find_method(std::string_view name) noexcept { return generated::find_method(name); }
 
+const Method* cpu_df_energy_program(std::string_view identity) noexcept {
+  if (identity.empty()) return nullptr;
+  for (const auto name : {"lda_xc_pw-rks", "lda_xc_pw-uks", "pbe-rks", "pbe-uks"}) {
+    const auto* entry = find_method(name);
+    if (entry && entry->cpu && entry->identity == identity) return entry;
+  }
+  return nullptr;
+}
+
 std::span<const generativeqc_ks_semilocal_component> components(const Method& method) noexcept {
   return std::span(generated::kComponents).subspan(method.component_offset, method.component_count);
 }
@@ -78,6 +87,14 @@ void validate_bound_basis(const Method& method, const core::System& system) {
 
 }  // namespace generativeqc::methods::named_ks
 
+namespace {
+bool valid_method_identity(std::string_view identity) noexcept {
+  return identity.size() == 64 && std::all_of(identity.begin(), identity.end(), [](char digit) {
+           return (digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f');
+         });
+}
+}  // namespace
+
 extern "C" generativeqc_status generativeqc_ks_catalog_name_v1(const char* identity,
                                                                generativeqc_backend backend,
                                                                const char** name) {
@@ -85,10 +102,7 @@ extern "C" generativeqc_status generativeqc_ks_catalog_name_v1(const char* ident
       (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA))
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   const std::string_view requested(identity);
-  if (requested.size() != 64 || !std::all_of(requested.begin(), requested.end(), [](char c) {
-        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-      }))
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!valid_method_identity(requested)) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *name = nullptr;
   for (const auto& entry : generativeqc::methods::named_ks::methods())
     if (entry.identity == requested &&
@@ -96,6 +110,15 @@ extern "C" generativeqc_status generativeqc_ks_catalog_name_v1(const char* ident
       *name = entry.name.data();
       break;
     }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+extern "C" generativeqc_status generativeqc_ks_cpu_df_energy_program_v1(const char* identity,
+                                                                        const char** name) {
+  if (!identity || !name || !valid_method_identity(identity))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* entry = generativeqc::methods::named_ks::cpu_df_energy_program(identity);
+  *name = entry ? entry->name.data() : nullptr;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -112,6 +135,29 @@ bool disjoint(const void* first, std::size_t first_bytes, const void* second,
          second_address + second_bytes <= first_address;
 }
 }  // namespace
+
+extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
+    const char* name, std::size_t name_size, generativeqc_backend backend,
+    generativeqc_ks_catalog_binding_v1* output) {
+  if (!output || output->struct_size != sizeof(*output) ||
+      output->abi_version != GENERATIVEQC_ABI_VERSION || !name || !name_size || name_size > 256 ||
+      (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
+      !disjoint(output, sizeof(*output), name, name_size))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const std::string_view selector(name, name_size);
+  if (selector.find('\0') != std::string_view::npos) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+  const auto* entry = generativeqc::methods::named_ks::find_method(selector);
+  generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
+                                             nullptr, 0};
+  if (entry && (backend == GENERATIVEQC_BACKEND_CUDA ? entry->cuda : entry->cpu)) {
+    binding.identifier = entry->source.data();
+    binding.identity = entry->identity.data();
+    binding.spin = entry->spin;
+  }
+  *output = binding;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
 
 /** Private additive named-program transport. A zero selection is an explicit
  * compiler/custom/old-catalog route, not failure or scientific fallback. An

@@ -3,10 +3,13 @@
 
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "cli/json.hpp"
+#include "cli/native_basis.hpp"
 #include "cli/options.hpp"
 
 namespace generativeqc::cli {
@@ -23,7 +26,8 @@ struct RangePbeMethodIR {
 struct HessianInvocation {
   std::vector<std::string> run_arguments;
   std::string operation;
-  std::string direction_file;
+  std::string direction_file, directions_file;
+  std::size_t hvp_directions{};
   std::optional<RangePbeMethodIR> range_pbe;
   std::uint64_t device_bytes{2ULL << 30};
   std::uint64_t integral_bytes{64ULL << 20};
@@ -40,17 +44,35 @@ struct HessianInvocation {
   double response_atol{1e-12};
   std::uint32_t response_restart{30};
   std::uint32_t response_iterations{200};
-  bool response_fp32_proposal{};
+  std::uint32_t response_recycle_block_size{};
+  bool response_sequential{}, response_fp32_proposal{};
   std::uint32_t nonlocal_radial{}, nonlocal_polar{}, nonlocal_azimuth{};
   std::optional<std::uint32_t> nonlocal_level;
 };
+
+/** Share derivative byte controls, total-program selection and normalized system creation
+ * between the native inventory and execution; neither needs a Python runtime. */
+bool parse_cpu_hessian_byte_limit(HessianInvocation& invocation, std::string_view option,
+                                  std::string_view value);
+const method_generated::Method* linked_cpu_hessian_program(const RunOptions& options);
+System make_cpu_hessian_system(Context& context, const RunOptions& options,
+                               std::span<const generativeqc_atom> atoms,
+                               const NativeBasisData& basis);
+generativeqc_ks_host_hessian_options_v1 cpu_hessian_controls(
+    const RunOptions& options, std::span<const generativeqc_atom> atoms,
+    const HessianInvocation& invocation);
+/** Query the native reservation for the resolved dense, scalar or panel product. */
+generativeqc_status cpu_hessian_minimum_bytes(
+    generativeqc_context* context, const generativeqc_system* system, const char* method,
+    const HessianInvocation& invocation, const generativeqc_ks_host_hessian_options_v1& controls,
+    std::size_t* minimum);
 
 // Split endpoint-only controls from the ordinary, centrally validated run flags.
 HessianInvocation parse_hessian_invocation(int argc, char** argv);
 
 // Execute linked CPU/CUDA compiler AD and publish a complete accepted result only.
 int hessian_command(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
-                    const HessianInvocation& invocation);
+                    HessianInvocation invocation);
 
 }  // namespace generativeqc::cli
 #endif

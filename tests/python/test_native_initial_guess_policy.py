@@ -13,9 +13,12 @@ from generativeqc.initial_guess import (
     _automatic_minao_model_eligible,
     _native_automatic_minao_eligible,
     _uses_native_automatic_cpu,
+    automatic_initial_guess_candidate,
     initial_guess_for_systems,
     with_initial_guess_resources,
 )
+
+DEFAULT_QUERY = "generativeqc_initial_guess_default_kind_v1"
 
 
 class PolicyQuery:
@@ -158,7 +161,7 @@ def test_failed_query_does_not_silently_fall_back() -> None:
 
 
 @pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
-def test_public_calculator_does_not_reselect_native_declined_policy(
+def test_legacy_calculator_does_not_reselect_native_declined_policy(
     monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
 ) -> None:
     library = _native.load_library(device="cpu")
@@ -166,6 +169,7 @@ def test_public_calculator_does_not_reselect_native_declined_policy(
     if not hasattr(library, name):
         pytest.skip("native automatic-policy export required")
     query = PolicyQuery(0)
+    monkeypatch.setattr(library, DEFAULT_QUERY, None, raising=False)
     monkeypatch.setattr(
         library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
     )
@@ -180,6 +184,62 @@ def test_public_calculator_does_not_reselect_native_declined_policy(
     assert calc.initial_guess is None
     assert query.requests and query.requests[0]["method"] == _native.METHOD_RHF
     assert not calc._method_descriptor(systems=[[("He", (0, 0, 0))]]).initial_guess
+
+
+@pytest.mark.parametrize("kind,provider", [(0, None), (4, "minao"), (6, "huckel")])
+def test_public_calculator_uses_native_default_transport(
+    monkeypatch: pytest.MonkeyPatch, kind: int, provider: str | None
+) -> None:
+    library = _native.load_library(device="cpu")
+    if not hasattr(library, DEFAULT_QUERY):
+        pytest.skip("requires the combined native model policy")
+    policy = PolicyQuery(kind)
+    monkeypatch.setattr(library, DEFAULT_QUERY, policy)
+
+    def forbidden(*_args: object) -> int:
+        pytest.fail("a combined native decision must not restart provider discovery")
+
+    monkeypatch.setattr(library, "generativeqc_initial_guess_auto_kind_v1", forbidden)
+    monkeypatch.setattr(library, "generativeqc_initial_guess_auto_kind_v2", forbidden)
+    monkeypatch.setattr(
+        library, "generativeqc_initial_guess_capabilities_v1", forbidden
+    )
+    monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
+    calc = Calculator("rhf", "sto-3g", device="cpu")
+    descriptor = calc._method_descriptor(systems=[[("He", (0, 0, 0))]])
+    if provider is None:
+        assert calc.initial_guess is None and not descriptor.initial_guess
+    else:
+        assert calc.initial_guess.kind == provider
+        assert descriptor.initial_guess.contents.kind == kind
+    assert len(policy.requests) == 1 and policy.requests[0]["atomic_numbers"] == ()
+    explicit = Calculator(
+        "rhf", "sto-3g", device="cpu", initial_guess=InitialGuessSpec("minao")
+    )
+    assert (
+        explicit._method_descriptor(
+            systems=[[("He", (0, 0, 0))]]
+        ).initial_guess.contents.kind
+        == 3
+    )
+    assert len(policy.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "kind,status", [(99, 0), (5, 0), (0, _native.STATUS_INVALID_ARGUMENT)]
+)
+def test_invalid_combined_policy_does_not_enter_legacy_discovery(
+    kind: int, status: int
+) -> None:
+    legacy = PolicyQuery(3)
+    calc = calculator(legacy)
+    setattr(calc._library, DEFAULT_QUERY, PolicyQuery(kind, status))
+    calc._library.generativeqc_status_message = lambda _status: b"invalid policy"
+    with pytest.raises(
+        RuntimeError, match="invalid policy|unsupported native automatic"
+    ):
+        automatic_initial_guess_candidate(calc, restricted=True, has_ecp=False)
+    assert not legacy.requests
 
 
 @pytest.mark.parametrize("kind,expected", [(0, False), (3, True)])
@@ -237,11 +297,15 @@ def test_positive_execution_capability_without_query_is_an_error() -> None:
 
 
 @pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
-def test_resource_planner_obeys_native_system_policy(
+def test_legacy_resource_planner_obeys_native_system_policy(
     monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
 ) -> None:
     """An eligible element/population must not override a native Hcore decision."""
     library = _native.load_library(device="cpu")
+    monkeypatch.setattr(library, DEFAULT_QUERY, None, raising=False)
+    monkeypatch.setattr(
+        library, "generativeqc_resource_preliminary_cpu_shape_v2", None, raising=False
+    )
     monkeypatch.setattr(
         library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
     )

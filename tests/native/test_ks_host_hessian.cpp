@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -10,6 +11,7 @@
 #include "api/handles.hpp"
 #include "api/ks_host_hessian.hpp"
 #include "dft/host_gga_fields.hpp"
+#include "dft/host_hessian_point.hpp"
 #include "dft/host_nuclear_integrals.hpp"
 #include "methods/dft_method.hpp"
 #include "methods/named_ks_catalog.hpp"
@@ -19,6 +21,82 @@ using namespace generativeqc;
 
 void require(bool condition, const std::string& detail) {
   if (!condition) throw std::runtime_error(detail);
+}
+
+void scaled_pbe0_point_case() {
+  namespace physical = dft::host_hessian_point;
+  constexpr auto domain = dft::host_hessian_aot::PointDomain::scaled_pbe0_rks;
+  constexpr double tail = 1e-120;
+  const std::array input{tail,  -12 * tail, 3 * tail,     2 * tail, 0.125 * tail,
+                         -tail, 0.5 * tail, -0.25 * tail, 1.0,      0.0};
+  std::array<double, 8> coefficients{};
+  require(physical::field_response<domain>(input.data(), input.size(), coefficients.data(),
+                                           coefficients.size(), 1) == 0 &&
+              coefficients[0] < 0 && coefficients[4] < 0,
+          "scaled PBE0 lost the physical tail response");
+  auto vacuum = input;
+  std::fill_n(vacuum.begin(), 4, 0.0);
+  require(physical::field_response<domain>(vacuum.data(), vacuum.size(), coefficients.data(),
+                                           coefficients.size(), 1) > 0,
+          "scaled PBE0 accepted a nonzero vacuum tangent");
+
+  // Differentiate weighted primal energy, not the adapter's response formula.
+  // The mixed test includes both basis-field motion and all weight derivatives.
+  const std::array<double, 20> moving{.47,  -.18, .03, .14, .02, .031, -.05, .01, -.13, .04,
+                                      -.12, .08,  .13, .02, .08, -.06, .81,  .11, -.12, .21};
+  std::array<double, 4> mixed{};
+  require(physical::energy_mixed<domain>(moving.data(), moving.size(), mixed.data(), mixed.size(),
+                                         1) == 0,
+          "scaled PBE0 mixed energy failed at an interior point");
+  const auto energy = [&](double left, double right) {
+    std::array<double, 4> fields{};
+    for (std::size_t index = 0; index < fields.size(); ++index)
+      fields[index] = moving[index] + left * moving[4 + index] + right * moving[8 + index] +
+                      left * right * moving[12 + index];
+    const auto weight =
+        moving[16] + left * moving[17] + right * moving[18] + left * right * moving[19];
+    return weight * physical::value<domain>(fields).energy;
+  };
+  constexpr double step = 2e-4;
+  const double finite_difference =
+      (energy(step, step) - energy(step, -step) - energy(-step, step) + energy(-step, -step)) /
+      (4 * step * step);
+  require(std::abs(mixed[3] - finite_difference) < 2e-8,
+          "scaled PBE0 weight/field mixed derivative disagrees with primal energy");
+}
+
+void scaled_pbe0_uks_point_case() {
+  namespace physical = dft::host_hessian_point;
+  constexpr auto domain = dft::host_hessian_aot::PointDomain::scaled_pbe0_uks;
+  constexpr std::array field{.47, -.18, .03, .14, .21, .12, -.07, .19};
+  constexpr std::array direction{0., 0., 0., 0., -.13, .04, -.12, .08};
+  constexpr double step = 1e-5;
+  auto plus = field, minus = field;
+  for (std::size_t component = 0; component < field.size(); ++component) {
+    plus[component] += step * direction[component];
+    minus[component] -= step * direction[component];
+  }
+  const auto primal_plus = physical::value<domain>(plus);
+  const auto primal_minus = physical::value<domain>(minus);
+  const auto response = physical::response<domain>(field, direction);
+  require(
+      primal_plus.valid && primal_minus.valid && response.valid && std::abs(response.rho[0]) > 1e-5,
+      "a beta-only direction did not induce the expected alpha response");
+  const auto upper = physical::potential<8>(primal_plus);
+  const auto lower = physical::potential<8>(primal_minus);
+  const auto tangent = physical::potential<8>(response);
+  for (std::size_t component = 0; component < field.size(); ++component) {
+    require(
+        std::abs(tangent[component] - (upper[component] - lower[component]) / (2 * step)) < 2e-9,
+        "scaled UKS PBE0 point response disagrees with the primal derivative");
+  }
+
+  auto empty_beta = field;
+  std::fill_n(empty_beta.begin() + 4, 4, 0.0);
+  const std::array alpha_only{.02, -.03, .01, .05, 0., 0., 0., 0.};
+  require(physical::response<domain>(empty_beta, alpha_only).valid &&
+              !physical::response<domain>(empty_beta, direction).valid,
+          "UKS PBE0 must preserve the fixed empty-spin sector");
 }
 
 /** Every derivative is requested through the bridge on a public prepared batch.
@@ -31,9 +109,9 @@ class NativeBatch {
   generativeqc_batch* batch{};
   std::size_t atoms{}, dimension{};
   std::vector<generativeqc_atom> centers;
-  generativeqc_ks_host_hessian_options_v1 options;
+  generativeqc_ks_host_hessian_options_v1 options = api::default_host_hessian_options();
 
-  NativeBatch(unsigned spins, bool bj, bool polarization = false)
+  NativeBatch(unsigned spins, bool bj, bool polarization = false, std::string method_name = {})
       : atoms(spins + 1), dimension(3 * atoms) {
     generativeqc_context_descriptor context_options{};
     context_options.struct_size = sizeof(context_options);
@@ -68,7 +146,9 @@ class NativeBatch {
     options.expected_atoms = centers.data();
     options.expected_atom_count = centers.size();
     options.expected_multiplicity = spins;
-    const auto name = std::string(bj ? "b3lyp-d3(bj)" : "b3lyp") + (spins == 1 ? "-rks" : "-uks");
+    const auto name = method_name.empty() ? std::string(bj ? "b3lyp-d3(bj)" : "b3lyp") +
+                                                (spins == 1 ? "-rks" : "-uks")
+                                          : method_name;
     const auto* named = methods::named_ks::find_method(name);
     require(named && named->cpu, "missing exact native total-method program");
     require(generativeqc_ks_hessian_cpu_method_v1(named->identity.data()),
@@ -195,7 +275,7 @@ void raw_symmetry_refusal(NativeBatch& fixture, const std::vector<double>& matri
   fixture.options.symmetry_absolute_tolerance = tolerance;
   fixture.options.symmetry_relative_tolerance = 0;
   std::vector<double> untouched(matrix.size(), -781.25);
-  generativeqc_ks_host_hessian_receipt_v1 receipt;
+  auto receipt = api::empty_host_hessian_receipt();
   receipt.total_energy = -781.25;
   unsigned char before[sizeof(receipt)];
   std::memcpy(before, &receipt, sizeof(receipt));
@@ -234,7 +314,7 @@ void endpoint_case(unsigned spins, bool bj) {
   NativeBatch fixture(spins, bj);
   const auto dimension = fixture.dimension;
   std::vector<double> matrix(dimension * dimension, -781.25);
-  generativeqc_ks_host_hessian_receipt_v1 receipt;
+  auto receipt = api::empty_host_hessian_receipt();
   receipt.total_energy = -781.25;
   const auto refusal = [&] {
     const auto before = matrix;
@@ -275,7 +355,7 @@ void endpoint_case(unsigned spins, bool bj) {
   std::vector<double> direction(dimension), product(dimension);
   for (std::size_t coordinate = 0; coordinate < dimension; ++coordinate)
     direction[coordinate] = .02 * std::sin(1.0 + coordinate);
-  generativeqc_ks_host_hessian_receipt_v1 hvp;
+  auto hvp = api::empty_host_hessian_receipt();
   fixture.check(fixture.apply(direction.data(), product, hvp));
   require(hvp.completed_directions == 1, "HVP replayed a full matrix");
   require(receipt.d3_pair_visits == dimension * hvp.d3_pair_visits &&
@@ -299,7 +379,8 @@ void endpoint_case(unsigned spins, bool bj) {
   const auto selected_cap = first_plan.eri_primitives + matrix_plan.eri_primitives;
   fixture.options.max_eri_primitives = selected_cap;
   std::vector<double> reused(matrix.size()), streamed(matrix.size());
-  generativeqc_ks_host_hessian_receipt_v1 reused_receipt, streamed_receipt;
+  auto reused_receipt = api::empty_host_hessian_receipt();
+  auto streamed_receipt = api::empty_host_hessian_receipt();
   fixture.check(fixture.apply(nullptr, reused, reused_receipt));
   require(reused_receipt.first_eri_primitives <= first_plan.eri_primitives,
           "matrix endpoint repeated the first primitive sweep for each coordinate");
@@ -401,7 +482,8 @@ void projected_endpoint_case(unsigned spins) {
   const auto dimension = fixture.dimension;
   std::vector<double> projected_matrix(dimension * dimension),
       public_matrix(projected_matrix.size());
-  generativeqc_ks_host_hessian_receipt_v1 projected_receipt, public_receipt;
+  auto projected_receipt = api::empty_host_hessian_receipt();
+  auto public_receipt = api::empty_host_hessian_receipt();
   fixture.options.max_eri_primitives = first.eri_primitives + projected.eri_primitives;
   fixture.check(fixture.apply(nullptr, projected_matrix, projected_receipt));
   require(projected_receipt.first_eri_primitives + projected_receipt.curvature_eri_primitives <=
@@ -434,10 +516,143 @@ void projected_endpoint_case(unsigned spins) {
             << " projected_eri=" << projected_receipt.curvature_eri_primitives
             << " public_eri=" << public_receipt.curvature_eri_primitives << '\n';
 }
+void sequential_endpoint_case() {
+  NativeBatch fixture(1, false, false, "pbe-rks");
+  fixture.run();
+  std::vector<double> sequential(fixture.dimension * fixture.dimension),
+      baseline(sequential.size());
+  auto receipt = api::empty_host_hessian_receipt();
+  auto reference = api::empty_host_hessian_receipt();
+  const auto apply_sequential = [&] {
+    return generativeqc_ks_hessian_cpu_sequential_v1(
+        fixture.batch, 0, &fixture.options, sequential.data(), sequential.size(), &receipt);
+  };
+  fixture.check(fixture.apply(nullptr, baseline, reference));
+  fixture.check(apply_sequential());
+  require(receipt.completed_directions == fixture.dimension && receipt.induced_fock_actions > 0 &&
+              receipt.first_eri_primitives == reference.first_eri_primitives &&
+              receipt.curvature_eri_primitives == reference.curvature_eri_primitives,
+          "sequential response lost full derivative work or geometry-source reuse");
+  for (std::size_t index = 0; index < baseline.size(); ++index)
+    require(std::abs(sequential[index] - baseline[index]) < 2e-8,
+            "sequential and automatic CPU Hessians disagree");
+
+  // Both output panels are a single transaction, even after a solver starts.
+  const auto saved = fixture.options;
+  fixture.options.output_bytes = receipt.output_bytes;
+  fixture.check(apply_sequential());
+  const auto before = sequential;
+  const auto before_receipt = receipt;
+  const auto unchanged = [&] {
+    return sequential == before && std::memcmp(&receipt, &before_receipt, sizeof(receipt)) == 0;
+  };
+  --fixture.options.output_bytes;
+  require(apply_sequential() != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "one-byte-short sequential output budget published output or receipt");
+  fixture.options = saved;
+  fixture.options.max_iterations = 1;
+  fixture.options.relative_tolerance = 1e-14;
+  fixture.options.absolute_tolerance = 1e-16;
+  require(apply_sequential() == GENERATIVEQC_STATUS_NUMERICAL_FAILURE && unchanged(),
+          "nonconverged sequential response published output or receipt");
+  fixture.options = saved;
+  fixture.centers[1].z += .01;
+  require(apply_sequential() != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "sequential response accepted different presentation geometry");
+}
+void multivector_endpoint_case(unsigned spins, bool corrected) {
+  NativeBatch fixture(spins, corrected, false, spins == 1 ? "pbe-rks" : "");
+  fixture.run();
+  const auto width = fixture.dimension;
+  constexpr std::size_t count = 5;
+  std::vector<double> directions(count * width), output(directions.size(), -751.0);
+  for (std::size_t index = 0; index < width; ++index) {
+    directions[width + index] = .19 * std::cos(2.0 * index);
+    directions[2 * width + index] = .13 * std::sin(static_cast<double>(index));
+    directions[3 * width + index] = directions[width + index];
+    directions[4 * width + index] = directions[width + index] - directions[2 * width + index];
+  }
+  const auto call = [&](auto input, auto result, auto& receipt) {
+    return generativeqc_ks_hvp_cpu_batch_v1(fixture.batch, 0, &fixture.options, input.data(),
+                                            input.size(), result.data(), result.size(), &receipt);
+  };
+  auto receipt = api::empty_host_hessian_receipt();
+  fixture.check(call(std::span<const double>(directions), std::span(output), receipt));
+  const auto grouped = receipt;
+  require(grouped.completed_directions == count && grouped.raw_symmetry_error == 0 &&
+              (grouped.d3_pair_visits > 0) == corrected,
+          "native multi-HVP did not publish complete action-only work");
+  std::uint64_t first_eri{}, curvature_eri{}, d3_pairs{};
+  for (std::size_t index = 0; index < count; ++index) {
+    std::vector<double> expected(width);
+    auto work = api::empty_host_hessian_receipt();
+    fixture.check(fixture.apply(directions.data() + index * width, expected, work));
+    first_eri += work.first_eri_primitives;
+    curvature_eri += work.curvature_eri_primitives;
+    d3_pairs += work.d3_pair_visits;
+    for (std::size_t row = 0; row < width; ++row)
+      require(std::abs(output[index * width + row] - expected[row]) < 2e-8,
+              "multi-HVP changed a direction or its action");
+  }
+  require(grouped.first_eri_primitives == first_eri &&
+              grouped.curvature_eri_primitives == curvature_eri &&
+              grouped.d3_pair_visits == d3_pairs,
+          "multi-HVP lost a first derivative, curvature or correction work term");
+
+  const auto original = fixture.options;
+  fixture.options.output_bytes = grouped.output_bytes;
+  const auto grouped_output = output;
+  fixture.check(call(std::span<const double>(directions), std::span(output), receipt));
+  require(receipt.completed_directions == count &&
+              receipt.numeric_reservation_bytes < grouped.numeric_reservation_bytes,
+          "exact output capacity did not execute the width-one fallback");
+  for (std::size_t index = 0; index < output.size(); ++index)
+    require(std::abs(output[index] - grouped_output[index]) < 2e-8,
+            "streamed and concurrent multi-HVP schedules disagree");
+
+  const auto before = output;
+  const auto before_receipt = receipt;
+  const auto unchanged = [&] {
+    return output == before && std::memcmp(&receipt, &before_receipt, sizeof(receipt)) == 0;
+  };
+  const std::span<const double> seeds(directions);
+  --fixture.options.output_bytes;
+  require(call(seeds, std::span(output), receipt) != GENERATIVEQC_STATUS_SUCCESS && unchanged(),
+          "short multi-HVP capacity published partial results");
+  fixture.options = original;
+  require(call(seeds.first(seeds.size() - 1), std::span(output), receipt) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "ragged direction panel published results");
+  require(call(seeds.first(0), std::span(output).first(0), receipt) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "empty direction panel did not fail atomically");
+  require(call(seeds, std::span(directions), receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "overlapping multi-HVP input/output was admitted");
+  directions.back() = std::numeric_limits<double>::quiet_NaN();
+  require(call(seeds, std::span(output), receipt) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              unchanged(),
+          "a nonfinite last seed was not rejected before publication");
+  directions.back() = directions[2 * width - 1] - directions[3 * width - 1];
+  fixture.options.output_bytes = grouped.output_bytes;
+  fixture.options.max_iterations = 1;
+  fixture.options.relative_tolerance = 1e-14;
+  fixture.options.absolute_tolerance = 1e-16;
+  std::vector<double> zero(width);
+  auto zero_work = api::empty_host_hessian_receipt();
+  fixture.check(call(seeds.first(width), std::span(zero), zero_work));
+  require(call(seeds, std::span(output), receipt) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              unchanged(),
+          "a late failed CPKS solve published a successful earlier action");
+}
 }  // namespace
 
 int main() {
   try {
+    scaled_pbe0_point_case();
+    scaled_pbe0_uks_point_case();
     const auto subnormal = std::numeric_limits<double>::denorm_min();
     require(dft::host_gga_spin_fields_admitted(0, {0, subnormal, -subnormal}),
             "physical density underflow incorrectly rejects raw subnormal gradients");
@@ -453,6 +668,9 @@ int main() {
     for (const auto spins : {1U, 2U})
       for (const auto bj : {false, true}) endpoint_case(spins, bj);
     for (const auto spins : {1U, 2U}) projected_endpoint_case(spins);
+    sequential_endpoint_case();
+    multivector_endpoint_case(1, false);
+    multivector_endpoint_case(2, true);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

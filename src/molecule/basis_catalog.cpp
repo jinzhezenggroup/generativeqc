@@ -1,7 +1,6 @@
 #include "molecule/basis_catalog.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 
 #include "molecule/basis_template.hpp"
@@ -10,19 +9,18 @@
 namespace generativeqc::molecule {
 namespace {
 
-std::string normalized_basis_name(std::string_view name) {
-  std::string result(name);
-  std::transform(result.begin(), result.end(), result.begin(), [](unsigned char value) {
-    if (value == '_') return '-';
-    return static_cast<char>(std::tolower(value));
-  });
-  return result;
+constexpr char normalized_basis_character(char value) noexcept {
+  if (value == '_') return '-';
+  return value >= 'A' && value <= 'Z' ? static_cast<char>(value - 'A' + 'a') : value;
 }
 
-const basis_generated::BasisRow* find_basis(std::string_view name) {
-  const std::string canonical = normalized_basis_name(name);
+const basis_generated::BasisRow* find_basis(std::string_view name) noexcept {
   for (const auto& basis : basis_generated::kBases)
-    if (basis.name == canonical) return &basis;
+    if (std::equal(name.begin(), name.end(), basis.name.begin(), basis.name.end(),
+                   [](char selector, char canonical) {
+                     return normalized_basis_character(selector) == canonical;
+                   }))
+      return &basis;
   return nullptr;
 }
 
@@ -55,10 +53,15 @@ std::string_view bundled_basis_name(std::size_t index) noexcept {
 
 std::string_view bundled_basis_pack_checksum() noexcept { return bundled_basis_catalog_sha256(); }
 
-std::string_view canonical_basis_name(std::string_view name) {
+std::string_view resolve_builtin_basis_name(std::string_view name) noexcept {
   const auto* basis = find_basis(name);
-  if (basis == nullptr) throw std::invalid_argument("unknown bundled basis: " + std::string(name));
-  return basis->name;
+  return basis == nullptr ? std::string_view{} : basis->name;
+}
+
+std::string_view canonical_basis_name(std::string_view name) {
+  const auto canonical = resolve_builtin_basis_name(name);
+  if (canonical.empty()) throw std::invalid_argument("unknown bundled basis: " + std::string(name));
+  return canonical;
 }
 
 std::vector<std::string_view> bundled_basis_names() {

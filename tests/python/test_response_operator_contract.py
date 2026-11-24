@@ -95,6 +95,7 @@ def test_native_response_plan_binding_and_solver_contracts(
         [
             ROOT / "src/response/native_gmres.cpp",
             ROOT / "src/response/resident_gmres.cpp",
+            ROOT / "src/tensor/cpu_linalg.cpp",
             ROOT / "tests/native/test_native_gmres.cpp",
         ],
         executable,

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "response/native_gmres.hpp"
+#include "response/recycle.hpp"
 #include "response/resident_krylov.hpp"
 #include "response/sequence.hpp"
 #include "response/solve.hpp"
@@ -1519,6 +1520,54 @@ void independent_response_batch_failures() {
   }
   require(threw, "independent result retention overflow was accepted");
 }
+void recycled_response_batch_contract() {
+  using namespace generativeqc::response;
+  std::size_t actions = 0;
+  const LinearResponseProblem problem(3, [&actions](auto input, auto output) {
+    ++actions;
+    for (std::size_t index = 0; index < input.size(); ++index)
+      output[index] = (1 + index) * input[index];
+  });
+  const std::array<double, 3> first{1, 0, 0}, different{1, 2, 3};
+  std::array<ResponseSolveRequest, 3> requests{{{first}, {first}, {different}}};
+  GmresOptions options;
+  const auto probe =
+      recycled_batch_resources(3, options, requests.size(), options.max_workspace_bytes);
+  require(probe.admitted && probe.recycle.vector_capacity == 3 && probe.peak_bytes > 0,
+          "recycle group did not publish its capacity");
+  const auto refused =
+      solve_recycled_response_batch(problem, options, requests, probe.peak_bytes - 1);
+  require(!refused.complete() && refused.responses.empty() && actions == 0,
+          "recycle group used the operator below capacity");
+  const auto exact = solve_recycled_response_batch(problem, options, requests, probe.peak_bytes);
+  require(exact.complete() && exact.responses.size() == 3 &&
+              exact.planned_peak_numeric_bytes == probe.peak_bytes,
+          "recycle group did not execute at its exact bound");
+  require(exact.responses[0].iterations > 0 && exact.responses[1].iterations == 0 &&
+              exact.responses[1].status == GmresStatus::initial_residual,
+          "the repeated RHS did not reuse a measured guess");
+  for (std::size_t request = 0; request < requests.size(); ++request) {
+    const auto& solved = exact.responses[request];
+    require(solved.converged() && solved.basis.capacity() == 0,
+            "recycled result retained private Arnoldi storage");
+    for (std::size_t index = 0; index < first.size(); ++index)
+      require(std::abs(solved.solution[index] - requests[request].rhs[index] / (1 + index)) < 1e-12,
+              "recycled GMRES disagrees with the analytic solution");
+  }
+  const auto isolated = solve_recycled_response_batch(problem, options, requests, probe.peak_bytes);
+  require(isolated.responses.front().iterations == exact.responses.front().iterations,
+          "recycle state escaped its admitted group");
+  const auto prior_actions = actions;
+  requests.back().initial_guess = first;
+  bool rejected = false;
+  try {
+    (void)solve_recycled_response_batch(problem, options, requests, probe.peak_bytes);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && actions == prior_actions,
+          "an external guess entered the owned recycle schedule");
+}
 }  // namespace
 
 int main() {
@@ -1541,6 +1590,7 @@ int main() {
     response_batch_contract();
     response_batch_diagnostic_storage();
     response_sequence_contract();
+    recycled_response_batch_contract();
     amortized_true_residuals();
     stable_norm_extremes();
     physical_hessian_diagonal_preconditioning();

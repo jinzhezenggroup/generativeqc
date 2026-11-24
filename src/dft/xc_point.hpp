@@ -116,7 +116,8 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
                                 ::fmax(::fabs(primal(gradient[1])), ::fabs(primal(gradient[2]))));
   Scalar terms[5];
   if (pbe) {
-    Scalar direction[3], norm2 = 0.0;
+    Scalar direction[3]{};
+    Scalar norm2 = 0.0;
     // Normalization is a fixed numerical scale, not a differentiated model
     // parameter. At grad=0 the low-u formula retains its nonzero Hessian.
     if (largest != 0.0)

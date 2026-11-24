@@ -21,6 +21,7 @@ function(generativeqc_register_named_ks_catalog target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/native_method_catalog.hpp"
     DEPENDS ${_generativeqc_named_ks_inputs}
+            "${CMAKE_CURRENT_SOURCE_DIR}/manifests/public_methods.json"
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/__init__.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/basis.py"
             "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/r2scan3c/def2-mtzvpp-h-ar.json"

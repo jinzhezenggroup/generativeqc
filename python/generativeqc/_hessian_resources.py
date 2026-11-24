@@ -1,4 +1,4 @@
-"""Compose CUDA Hessian capacity with the prepared KS resource request."""
+"""Compose native Hessian reservations with the prepared KS resource request."""
 
 from __future__ import annotations
 
@@ -19,10 +19,210 @@ from .resources_planning import plan_resources
 if TYPE_CHECKING:
     from generativeqc_compiler.common.resources import ResourceBudget, ResourcePlan
 
+    from ._native_cpu_hessian import _Options as _CpuOptions
     from ._native_hessian import _Options
+    from .batch import PreparedBatch
     from .calculator import Atom, Calculator
 
 HESSIAN_RESOURCE_OWNER = "ks-hessian"
+CPU_HESSIAN_PROVIDER = "cpu-stationary-hessian-v1"
+CPU_HESSIAN_CAPACITY = "SCF-overlapped native Hessian numerical cap"
+
+
+def _last_phase(requests: tuple[ResourceRequest, ...]) -> int:
+    """Conservatively overlap the derivative with every possible primal phase."""
+    return max(
+        (
+            estimate.last_phase
+            for request in requests
+            for candidate in request.candidates
+            for estimate in candidate.estimates
+        ),
+        default=0,
+    )
+
+
+def plan_cpu_hessian(
+    calculator: Calculator,
+    atoms: tuple[Atom, ...],
+    *,
+    charge: int,
+    multiplicity: int,
+    dense: bool,
+    budget: ResourceBudget,
+    options: _CpuOptions,
+    minimum: int,
+    staging_bytes: int,
+    direction_count: int | None = None,
+) -> tuple[ResourcePlan, ResourceRequest]:
+    """Compose the native mandatory byte floor with all live primal owners."""
+    library = calculator._library
+    if not hasattr(library, "generativeqc_resource_compose_v1"):
+        raise NotImplementedError(
+            "native CPU Hessian lacks shared ResourceBudget planning"
+        )
+    systems, charges, multiplicities = (atoms,), (charge,), (multiplicity,)
+    ks_options = calculator._effective_ks_options(
+        systems, charges=charges, multiplicities=multiplicities
+    )
+    scf = calculator._resource_request(
+        systems,
+        charges=charges,
+        multiplicities=multiplicities,
+        ks_options=ks_options,
+        properties=("energy",),
+    )
+    correction = calculator._dispersion_resource_request(systems, scf)
+    prerequisites = (scf,) if correction is None else (scf, correction)
+    topology = {"scf": scf.identity.identity, "atoms": len(atoms)}
+    return _compose_cpu_hessian(
+        library,
+        budget,
+        prerequisites,
+        scf.identity.method,
+        topology,
+        dense,
+        options,
+        minimum,
+        staging_bytes,
+        direction_count,
+    )
+
+
+def plan_prepared_cpu_hvp(
+    batch: PreparedBatch,
+    index: int,
+    direction_count: int,
+    options: _CpuOptions,
+    minimum: int,
+    staging_bytes: int,
+) -> tuple[ResourcePlan, ResourceRequest]:
+    """Overlap the action with the actual selected fleet, not a new one-item SCF."""
+    base = batch.resource_plan
+    selections = dict(base.selections)
+    if HESSIAN_RESOURCE_OWNER in selections:
+        raise ValueError("prepared HVP requires a primal-only ResourcePlan")
+    prerequisites = tuple(
+        replace(
+            owner,
+            candidates=tuple(
+                candidate
+                for candidate in owner.candidates
+                if candidate.name == selections[owner.name]
+            ),
+        )
+        for owner in base.requests
+    )
+    primary = next((owner for owner in prerequisites if owner.name == "ks"), None)
+    if primary is None:
+        raise ValueError("prepared HVP requires the admitted KS fleet reservation")
+    topology = {
+        "scf": primary.identity.identity,
+        "atoms": batch._atom_counts[index],
+        "system_index": index,
+    }
+    return _compose_cpu_hessian(
+        batch._library,
+        base.budget,
+        prerequisites,
+        primary.identity.method,
+        topology,
+        False,
+        options,
+        minimum,
+        staging_bytes,
+        direction_count,
+    )
+
+
+def _compose_cpu_hessian(
+    library: object,
+    budget: ResourceBudget,
+    prerequisites: tuple[ResourceRequest, ...],
+    method: str,
+    topology: dict[str, str | int],
+    dense: bool,
+    options: _CpuOptions,
+    minimum: int,
+    staging_bytes: int,
+    direction_count: int | None,
+) -> tuple[ResourcePlan, ResourceRequest]:
+    """Use the same native composition for a new or already prepared owner."""
+    if not hasattr(library, "generativeqc_resource_compose_v1"):
+        raise NotImplementedError(
+            "native CPU Hessian lacks shared ResourceBudget planning"
+        )
+    last_phase = _last_phase(prerequisites)
+    if direction_count is not None:
+        topology["directions"] = direction_count
+
+    def request(capacity: int) -> ResourceRequest:
+        return ResourceRequest(
+            HESSIAN_RESOURCE_OWNER,
+            ResourceIdentity(
+                method=method,
+                provider=CPU_HESSIAN_PROVIDER,
+                backend="cpu",
+                precision="fp64",
+                topology=json.dumps(topology),
+                observables=(
+                    "hessian"
+                    if dense
+                    else "hvp"
+                    if direction_count is None
+                    else "hvp-batch",
+                ),
+                schedule=(
+                    "scalar-columns"
+                    if dense
+                    else "action-only"
+                    if direction_count is None
+                    else "independent-action-panel"
+                ),
+            ),
+            (
+                ResourceCandidate(
+                    "bounded-response",
+                    "tiled",
+                    (
+                        ResourceEstimate(
+                            CPU_HESSIAN_CAPACITY,
+                            capacity,
+                            "pageable",
+                            0,
+                            last_phase,
+                        ),
+                        ResourceEstimate(
+                            "Hessian geometry and direction marshalling",
+                            staging_bytes,
+                            "pageable",
+                            0,
+                            last_phase,
+                        ),
+                    ),
+                ),
+            ),
+            scope_exclusions=(
+                "final-frame export scratch and implicit BLAS workspace",
+                "caller input storage, Python object and allocator overhead, and process RSS",
+            ),
+        )
+
+    provisional = plan_resources(
+        (*prerequisites, request(minimum)), budget, library=library
+    ).require_feasible()
+    capacity = options.numeric_bytes
+    if (limit := budget.limits().get("host")) is not None:
+        capacity = min(capacity, minimum + limit - provisional.peak_bytes["host"])
+    response = request(capacity)
+    plan = replace(
+        provisional,
+        requests=tuple(
+            response if owner.name == response.name else owner
+            for owner in provisional.requests
+        ),
+    )
+    return plan, response
 
 
 def plan_cuda_hessian(
@@ -69,15 +269,7 @@ def plan_cuda_hessian(
     minimum = byte_product(2, output) + direction
     if minimum > options.device_bytes:
         raise MemoryError("native Hessian buffers exceed the endpoint device limit")
-    last_phase = max(
-        (
-            estimate.last_phase
-            for prerequisite in prerequisites
-            for candidate in prerequisite.candidates
-            for estimate in candidate.estimates
-        ),
-        default=0,
-    )
+    last_phase = _last_phase(prerequisites)
 
     def request(capacity: int) -> ResourceRequest:
         return ResourceRequest(

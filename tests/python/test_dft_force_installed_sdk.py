@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -56,14 +57,35 @@ def installed_force_probe(
     return executable, cli, molecule, empty_path
 
 
-@pytest.mark.parametrize("device", ("cpu", "cuda"))
-@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
-@pytest.mark.parametrize("fitted", (False, True))
-@pytest.mark.parametrize("spin", (0, 1))
 @pytest.mark.parametrize(
-    "method,functional,nonlocal_level",
-    [(method, functional, 0) for method, functional in METHODS]
-    + [("wb97m-v", "WB97M_V", 1)],
+    "device,representation,fitted,spin,method,functional,nonlocal_level,packed_bytes",
+    [
+        (device, representation, fitted, spin, *program, 0)
+        for device, representation, fitted, spin, program in product(
+            ("cpu", "cuda"),
+            ("cartesian", "spherical"),
+            (False, True),
+            (0, 1),
+            [(method, functional, 0) for method, functional in METHODS]
+            + [("wb97m-v", "WB97M_V", 1)],
+        )
+    ]
+    + [
+        pytest.param(
+            "cpu",
+            "spherical",
+            False,
+            spin,
+            method,
+            functional,
+            0,
+            48,
+            id=f"packed-{method}-{'uks' if spin else 'rks'}",
+        )
+        for method, functional in METHODS
+        if method in ("pbe0", "b3lyp")
+        for spin in (0, 1)
+    ],
 )
 def test_installed_products_complete_forces_match_independent_oracle(
     installed_force_probe: tuple[Path, Path, Path, Path],
@@ -74,6 +96,7 @@ def test_installed_products_complete_forces_match_independent_oracle(
     method: str,
     functional: str,
     nonlocal_level: int,
+    packed_bytes: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No product may replace the native force with a Python diagnostic.
@@ -102,6 +125,7 @@ def test_installed_products_complete_forces_match_independent_oracle(
             str(spin),
             fitting,
             str(nonlocal_level),
+            str(packed_bytes),
         ],
         env={**os.environ, "PATH": str(empty_path)},
         check=True,
@@ -111,58 +135,77 @@ def test_installed_products_complete_forces_match_independent_oracle(
     )
     sdk = json.loads(completed.stdout)
     assert sdk["supported_properties"] & _native.PROPERTY_FORCES
+    cli_args = [
+        str(molecule),
+        "--method",
+        f"{'lda_xc_pw' if method == 'lda' else method}-{'uks' if spin else 'rks'}",
+        "--basis",
+        "sto-3g",
+        "--representation",
+        representation,
+        "--density-fitting",
+        fitting,
+        "--backend",
+        device,
+        "--charge",
+        str(spin),
+        "--multiplicity",
+        str(spin + 1),
+        "--units",
+        "bohr",
+        "--grid-level",
+        "0",
+        *(
+            ["--nonlocal-grid-level", str(nonlocal_level)]
+            if method == "wb97m-v"
+            else []
+        ),
+        "--max-iterations",
+        "200",
+        "--energy-tolerance",
+        "1e-12",
+        "--density-tolerance",
+        "1e-10",
+        "--screening-tolerance",
+        "1e-13",
+        *(["--cpu-packed-eri-budget-bytes", str(packed_bytes)] if packed_bytes else []),
+        "--forces",
+        "--json",
+    ]
+    cli_env = {**os.environ, "PATH": str(empty_path)}
+    host_limit = None
+    if packed_bytes:
+        inventory = subprocess.run(
+            [str(cli), "resources", *cli_args],
+            env=cli_env,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        host_limit = json.loads(inventory.stdout)["peak_bytes"]["host"]
+        cli_args += ["--host-bytes", str(host_limit)]
     completed_cli = subprocess.run(
-        [
-            str(cli),
-            "run",
-            str(molecule),
-            "--method",
-            f"{'lda_xc_pw' if method == 'lda' else method}-{'uks' if spin else 'rks'}",
-            "--basis",
-            "sto-3g",
-            "--representation",
-            representation,
-            "--density-fitting",
-            fitting,
-            "--backend",
-            device,
-            "--charge",
-            str(spin),
-            "--multiplicity",
-            str(spin + 1),
-            "--units",
-            "bohr",
-            "--grid-level",
-            "0",
-            *(
-                ["--nonlocal-grid-level", str(nonlocal_level)]
-                if method == "wb97m-v"
-                else []
-            ),
-            "--max-iterations",
-            "200",
-            "--energy-tolerance",
-            "1e-12",
-            "--density-tolerance",
-            "1e-10",
-            "--screening-tolerance",
-            "1e-13",
-            "--forces",
-            "--json",
-        ],
-        env={**os.environ, "PATH": str(empty_path)},
+        [str(cli), "run", *cli_args],
+        env=cli_env,
         check=True,
         capture_output=True,
         text=True,
         timeout=120,
     )
     cli_result = json.loads(completed_cli.stdout)
+    if host_limit is not None:
+        assert cli_result["resource_admission"] == {
+            "modeled_host_peak_bytes": host_limit,
+            "effective_host_limit_bytes": host_limit,
+        }
     calculator = Calculator(
         method=f"{method}-{'uks' if spin else 'rks'}",
         basis="sto-3g",
         basis_representation=representation,
         device=device,
         density_fitting=fitting,
+        cpu_packed_eri_maximum_bytes=packed_bytes,
         ks_options=KsOptions(
             grid=GridSpec.treutler(0),
             nonlocal_grid=(
@@ -174,9 +217,13 @@ def test_installed_products_complete_forces_match_independent_oracle(
         density_tolerance=1e-10,
         screening_tolerance=1e-13,
     )
-    with calculator.prepare_batch(
-        [H2], charges=[spin], multiplicities=[spin + 1]
-    ) as batch:
+    fleet = {"charges": [spin], "multiplicities": [spin + 1]}
+    resource_plan = (
+        calculator.estimate_resources([H2], properties=("energy", "forces"), **fleet)
+        if packed_bytes
+        else None
+    )
+    with calculator.prepare_batch([H2], resource_plan=resource_plan, **fleet) as batch:
         assert batch._native_dft_force_eligible(0)
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]

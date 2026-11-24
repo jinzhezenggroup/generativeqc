@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "dft/host_gga_fields.hpp"
+#include "dft/host_hessian_point.hpp"
 #include "host_grid_maps.hpp"
 
 namespace generativeqc::dft {
@@ -109,11 +110,9 @@ class HostGgaNuclearXc::Impl {
         resources.grid_pair_visits > limits.grid_pair_visits)
       throw std::length_error("host nuclear XC numeric or complete-source work cap exceeded");
     const auto* method = host_hessian_aot::find_method(method_identity);
-    if (!method || method->spins != spins || method->field_response_identity.empty())
+    if (!method || method->spins != spins)
       throw std::invalid_argument("missing exact host nuclear XC method/spin closure");
-    field = host_hessian_aot::find(
-        spins == 1 ? "gga_field_response_unpolarized" : "gga_field_response_polarized",
-        method->field_response_identity);
+    field = host_hessian_point::field_program(*method);
     if (!field || !field->evaluate || field->outputs != 8 * spins ||
         field->inputs.size() != 8 * spins + 2)
       throw std::invalid_argument("missing exact linked host GGA field response");

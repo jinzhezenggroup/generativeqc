@@ -32,6 +32,7 @@ from generativeqc.autotune import _source_identity_paths
         "tools/generate_ecp_response.py",
         "tools/generate_host_grid_maps.py",
         "tools/generate_host_nuclear_integrals.py",
+        "manifests/host_hessian_aot_catalog.json",
         "tools/generate_one_electron_mixed.py",
         "tools/generate_factorized_second.py",
         "tools/generate_native_stationary_cuda.py",

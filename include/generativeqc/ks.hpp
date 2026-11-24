@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -41,6 +42,51 @@ struct KsGrid {
   std::uint64_t force_tile_points{0};
 };
 
+/** @native-contract generativeqc::HostResources
+ * @behavior Own the metadata handle for a shared modeled native host cap.
+ * @lifetime Prepared owners retain their leases independently of this handle.
+ * @execution Do not race destruction with borrowing or querying the handle.
+ */
+class HostResources {
+ public:
+  /** @native-contract generativeqc::HostResources::HostResources
+   * @behavior Construct a metadata-only shared host cap.
+   * @inputs maximum_bytes is the effective modeled cap; zero is valid.
+   * @errors Throws Error if the native handle could not be created.
+   * @execution Synchronous; initializes no compute backend.
+   */
+  explicit HostResources(std::uint64_t maximum_bytes) {
+    generativeqc_host_resources* raw = nullptr;
+    check(generativeqc_host_resources_create_v1(maximum_bytes, &raw));
+    handle_.reset(raw);
+  }
+
+  /** @native-contract generativeqc::HostResources::snapshot
+   * @behavior Read one coherent modeled-reservation snapshot.
+   * @outputs Retained bytes, largest serialized workspace, cap and owner count.
+   * @errors Throws Error on native failure or a moved-from object.
+   * @execution Safe with native preparation and execution on separate contexts.
+   */
+  generativeqc_host_resource_snapshot snapshot() const {
+    generativeqc_host_resource_snapshot output{};
+    output.struct_size = sizeof(output);
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_host_resources_snapshot_v1(handle_.get(), &output));
+    return output;
+  }
+
+  /** @native-contract generativeqc::HostResources::get
+   * @behavior Borrow the native metadata handle for synchronous preparation.
+   * @outputs A non-owning handle, or NULL after move.
+   * @lifetime The wrapper must outlive uses of the borrowed handle.
+   */
+  const generativeqc_host_resources* get() const noexcept { return handle_.get(); }
+
+ private:
+  std::unique_ptr<generativeqc_host_resources, decltype(&generativeqc_host_resources_destroy_v1)>
+      handle_{nullptr, generativeqc_host_resources_destroy_v1};
+};
+
 /** @native-contract generativeqc::prepare_named_ks
  * @behavior Prepare a catalog KS graph, including range exchange, nonlocal correlation and
  * dispersion when present. The native library owns scientific assembly and admission.
@@ -48,18 +94,24 @@ struct KsGrid {
  * supplies the matching PBE spin carrier and solver controls. grid and budgets are explicit
  * execution policy; this helper replaces method.ks_options with those controls.
  * nonlocal_grid independently prescribes VV10 quadrature; omission shares grid.
+ * packed_eri_bytes optionally bounds the retained exact spherical CPU ERI values;
+ * zero keeps the ordinary provider. Forces still use the prepared derivative owner.
+ * cpu_df_host_bytes and cpu_df_host_properties optionally admit a named CPU
+ * semilocal DF-J calculation against an effective modeled host limit. Pass
+ * host_resources to additionally reserve from a shared cap.
  * @outputs Returns one owned Calculation.
  * @lifetime All inputs are copied at preparation; context must outlive the calculation.
  * @errors Throws Error on unsupported methods, identity mismatch or native admission failure.
  * @execution Synchronous, with no Python or external reference execution.
  * @units Grid coordinates in Bohr, memory budgets in bytes.
  */
-inline Calculation prepare_named_ks(Context& context, const System& system,
-                                    generativeqc_method_descriptor method, const std::string& name,
-                                    KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
-                                    std::uint64_t dispersion_bytes = 256ull << 20,
-                                    const char* identity = nullptr,
-                                    std::optional<KsGrid> nonlocal_grid = std::nullopt) {
+inline Calculation prepare_named_ks(
+    Context& context, const System& system, generativeqc_method_descriptor method,
+    const std::string& name, KsGrid grid = {}, std::uint64_t nonlocal_bytes = 256ull << 20,
+    std::uint64_t dispersion_bytes = 256ull << 20, const char* identity = nullptr,
+    std::optional<KsGrid> nonlocal_grid = std::nullopt, std::uint64_t packed_eri_bytes = 0,
+    std::uint64_t cpu_df_host_bytes = 0, generativeqc_property_flags cpu_df_host_properties = 0,
+    const generativeqc_host_resources* host_resources = nullptr) {
   generativeqc_ks_nonlocal_grid_options extended{};
   auto& options = extended.base.base;
   options.struct_size = nonlocal_grid ? sizeof(extended) : sizeof(options);
@@ -87,7 +139,10 @@ inline Calculation prepare_named_ks(Context& context, const System& system,
   }
   method.ks_options = &options;
   const generativeqc_named_ks_descriptor named{
-      sizeof(named), GENERATIVEQC_ABI_VERSION, name.c_str(), identity, dispersion_bytes, 0};
+      sizeof(named),     GENERATIVEQC_ABI_VERSION, name.c_str(),
+      identity,          dispersion_bytes,         packed_eri_bytes,
+      cpu_df_host_bytes, cpu_df_host_properties,   0,
+      host_resources};
   return Calculation(context, system, method, named);
 }
 

@@ -171,7 +171,7 @@ Evaluation explicit_batch(const Fixture& fixture, std::span<const double> positi
   require(primal.converged, "explicit molecular ECP state did not converge");
   result.energy = primal.energy;
   for (auto& component : result.gradient) component = -component;
-  generativeqc_ks_host_hessian_options_v1 controls;
+  auto controls = api::default_host_hessian_options();
   controls.expected_atoms = atoms.data();
   controls.expected_atom_count = atoms.size();
   controls.expected_charge = fixture.options.charge;
@@ -180,7 +180,7 @@ Evaluation explicit_batch(const Fixture& fixture, std::span<const double> positi
   controls.absolute_tolerance = fixture.invocation.derivatives.response_atol;
   controls.symmetry_absolute_tolerance = fixture.invocation.controls.raw_symmetry_tolerance;
   controls.symmetry_relative_tolerance = 0;
-  generativeqc_ks_host_hessian_receipt_v1 receipt;
+  auto receipt = api::empty_host_hessian_receipt();
   check(generativeqc_ks_hessian_cpu_v1(batch.get(), 0, &controls, nullptr, 0, result.hessian.data(),
                                        result.hessian.size(), &receipt));
   return result;

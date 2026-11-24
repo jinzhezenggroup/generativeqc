@@ -38,6 +38,10 @@ METHOD_FAMILY_PERTURBATION = 4
 METHOD_FAMILY_SEMIEMPIRICAL = 5
 PROPERTY_ENERGY = 1 << 0
 PROPERTY_FORCES = 1 << 1
+INITIAL_GUESS_MINAO = 3
+INITIAL_GUESS_AUTO_CPU = 4
+INITIAL_GUESS_HUCKEL = 5
+INITIAL_GUESS_AUTO_HUCKEL_CPU = 6
 INITIAL_GUESS_CAPABILITY_HF = 1 << 0
 INITIAL_GUESS_CAPABILITY_LDA = 1 << 1
 INITIAL_GUESS_CAPABILITY_MINAO = 1 << 2
@@ -347,6 +351,26 @@ class NamedKsDescriptor(ctypes.Structure):
         ("identity", ctypes.c_char_p),
         ("dispersion_maximum_bytes", ctypes.c_uint64),
         ("cpu_packed_eri_maximum_bytes", ctypes.c_uint64),
+    ]
+
+
+class NamedKsCpuDfHostDescriptor(ctypes.Structure):
+    """Size-tagged native capacity limit for a named CPU DF-J endpoint."""
+
+    _fields_ = [
+        ("base", NamedKsDescriptor),
+        ("cpu_df_host_maximum_bytes", ctypes.c_uint64),
+        ("cpu_df_host_properties", ctypes.c_uint32),
+        ("reserved", ctypes.c_uint32),
+    ]
+
+
+class NamedKsSharedHostDescriptor(ctypes.Structure):
+    """Optional shared ledger for a budgeted named KS owner."""
+
+    _fields_ = [
+        ("base", NamedKsCpuDfHostDescriptor),
+        ("host_resources", ctypes.c_void_p),
     ]
 
 

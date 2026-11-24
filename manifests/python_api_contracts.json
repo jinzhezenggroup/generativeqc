@@ -60,6 +60,8 @@
     "generativeqc.GridSpec": "generativeqc_compiler/dft/grid.py:GridSpec",
     "generativeqc.HFConvergence": "generativeqc/progressive_controller.py:HFConvergence",
     "generativeqc.HFPhysicalResidualAudit": "generativeqc/progressive_controller.py:HFPhysicalResidualAudit",
+    "generativeqc.HostResourceSnapshot": "generativeqc/host_resources.py:HostResourceSnapshot",
+    "generativeqc.HostResources": "generativeqc/host_resources.py:HostResources",
     "generativeqc.InactiveEigensolverProfileEntry": "generativeqc/_batch_diagnostics.py:InactiveEigensolverProfileEntry",
     "generativeqc.InitialGuessSpec": "generativeqc/initial_guess.py:InitialGuessSpec",
     "generativeqc.KsDiagnostic": "generativeqc/ks_diagnostics.py:KsDiagnostic",
@@ -1331,6 +1333,17 @@
         "values": "docs/reference/python_execution_contracts.md#python-batch-values"
       }
     },
+    "generativeqc/batch.py:PreparedBatch.hessian_vector_products": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_execution_contracts.md#python-batch-backends",
+        "errors": "docs/reference/python_execution_contracts.md#python-batch-errors",
+        "ownership": "docs/reference/python_execution_contracts.md#python-batch-ownership",
+        "values": "docs/reference/python_execution_contracts.md#python-batch-values"
+      }
+    },
     "generativeqc/batch.py:PreparedBatch.initialize_from": {
       "kind": "function",
       "profile": "execution",
@@ -1561,6 +1574,17 @@
       }
     },
     "generativeqc/calculator.py:Calculator.hessian_vector_product": {
+      "kind": "function",
+      "profile": "execution",
+      "facets": {
+        "behavior": "docstring",
+        "backends": "docs/reference/python_execution_contracts.md#python-calculation-backends",
+        "errors": "docs/reference/python_execution_contracts.md#python-calculation-errors",
+        "ownership": "docs/reference/python_execution_contracts.md#python-calculation-ownership",
+        "values": "docs/reference/python_execution_contracts.md#python-calculation-values"
+      }
+    },
+    "generativeqc/calculator.py:Calculator.hessian_vector_products": {
       "kind": "function",
       "profile": "execution",
       "facets": {
@@ -5686,6 +5710,72 @@
         "errors": "docs/reference/python_contracts.md#python-accuracy-errors",
         "ownership": "docs/reference/python_contracts.md#python-accuracy-ownership",
         "values": "docs/reference/python_contracts.md#python-accuracy-values"
+      }
+    },
+    "generativeqc/host_resources.py:HostResourceSnapshot": {
+      "kind": "class",
+      "profile": "record",
+      "facets": {
+        "behavior": "docstring",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership",
+        "values": "docs/reference/python_contracts.md#python-resources-values"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources": {
+      "kind": "class",
+      "profile": "resource",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership",
+        "values": "docs/reference/python_contracts.md#python-resources-values"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources.__enter__": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources.__exit__": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources.__init__": {
+      "kind": "function",
+      "profile": "resource",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership",
+        "values": "docs/reference/python_contracts.md#python-resources-values"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources.close": {
+      "kind": "function",
+      "profile": "lifecycle",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership"
+      }
+    },
+    "generativeqc/host_resources.py:HostResources.snapshot": {
+      "kind": "function",
+      "profile": "resource",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-resources-errors",
+        "ownership": "docs/reference/python_contracts.md#python-resources-ownership",
+        "values": "docs/reference/python_contracts.md#python-resources-values"
       }
     },
     "generativeqc/initial_guess.py:InitialGuessSpec": {

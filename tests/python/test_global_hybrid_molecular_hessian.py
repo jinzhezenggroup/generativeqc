@@ -6,10 +6,12 @@ from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
+import generativeqc.composite_rks_hessian as compatibility
 import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions
 from generativeqc._dft_gradient import StationaryKsState
+from generativeqc._native_cpu_hessian import linked_method
 from generativeqc.composite_rks_hessian import (
     CompositeRKSResponse,
     composite_rks_hessian,
@@ -23,12 +25,45 @@ from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.integral.ir import four_center_eri_operator
 from generativeqc_compiler.integral.range_separation import CoulombKernel
 from generativeqc_compiler.method import resolve_method
+from test_dft_complete_cpu import independent_global_hybrid_gradient
 from test_integral_autodiff_second import require_native_library  # noqa: F401
 
 ATOMS = [("H", (0.03, -0.02, -0.72)), ("H", (0.11, 0.13, 0.72))]
 DIRECTION = np.array([[0.02, -0.03, -0.1], [-0.02, 0.03, 0.1]])
+WATER = [
+    ("O", (0.0, 0.0, 0.12)),
+    ("H", (1.45, 0.04, -1.02)),
+    ("H", (-1.37, -0.11, -1.07)),
+]
+WATER_DIRECTION = np.array(
+    [[0.02, -0.03, 0.1], [-0.03, 0.01, -0.02], [0.01, 0.02, -0.08]]
+)
+AMMONIA = [
+    ("N", (0.01, -0.02, 0.22)),
+    ("H", (1.76, 0.04, -0.45)),
+    ("H", (-0.84, 1.49, -0.51)),
+    ("H", (-0.93, -1.57, -0.43)),
+]
+AMMONIA_DIRECTION = np.array(
+    [[0.02, -0.03, 0.10], [-0.03, 0.01, -0.02], [0.01, 0.04, -0.03], [0, -0.02, -0.05]]
+)
 GRID = GridSpec(radial_points=8, angular_polar=4, angular_azimuth=8)
 SOLVER = GMRESOptions(atol=1e-12, rtol=1e-11)
+
+
+@pytest.mark.parametrize("method", ("lda-uks", "pbe-uks", "pbe0-uks"))
+def test_unlinked_uks_does_not_advertise_cpu_second_order(
+    method: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Omitting the exact total binding cannot select the Python RKS owner."""
+    monkeypatch.setattr(
+        "generativeqc._native_cpu_hessian.linked_method", lambda *_: False
+    )
+    calculator = Calculator(method=method, device="cpu", basis="sto-3g")
+    assert not calculator.second_order_capabilities
+    with pytest.raises(NotImplementedError, match="does not expose public hessian"):
+        calculator.hessian(WATER, charge=1, multiplicity=2)
 
 
 def record_scalar_property(
@@ -151,6 +186,407 @@ def test_changed_semilocal_weights_do_not_inherit_public_qualification() -> None
         calculator.hessian(ATOMS)
 
 
+@pytest.mark.parametrize("case", ("heh+", "water", "water-cation"))
+def test_linked_pbe0_bj_curvature_matches_reconverged_forces(case: str) -> None:
+    """Differentiate the accepted electronic model plus exactly one D3 term."""
+    multiplicity = 2 if case == "water-cation" else 1
+    spin = "uks" if multiplicity == 2 else "rks"
+    if case == "heh+":
+        atoms = [("He", ATOMS[0][1]), ATOMS[1]]
+        charge, direction, grid = 1, DIRECTION, GRID
+    else:
+        atoms, charge, direction = WATER, int(multiplicity == 2), WATER_DIRECTION
+        grid = replace(GRID, radial_points=12)
+    bare, corrected = (
+        Calculator(
+            method=selector,
+            device="cpu",
+            basis="sto-3g",
+            basis_representation="spherical",
+            ks_options=KsOptions(grid=grid),
+            energy_tolerance=1e-13,
+            density_tolerance=1e-11,
+            max_iterations=240,
+        )
+        for selector in (f"pbe0-{spin}", f"pbe0-d3(bj)-{spin}")
+    )
+    if not linked_method(bare._library, bare.ks_options.method_ir.identity):
+        pytest.skip("requires the extended CPU Hessian inventory")
+
+    results = []
+    for calculator in (bare, corrected):
+        action = calculator.hessian_vector_product(
+            atoms,
+            direction,
+            charge=charge,
+            multiplicity=multiplicity,
+            solver_options=SOLVER,
+        )
+        matrix = calculator.hessian(
+            atoms, charge=charge, multiplicity=multiplicity, solver_options=SOLVER
+        )
+        for result in (action, matrix):
+            assert result.diagnostics["numerical_runtime"] == "native-cpp-cpu"
+            assert not result.diagnostics["runtime_compilation"]
+        assert action.diagnostics["nuclear_response_solves"] == 1
+        assert action.diagnostics["response_iterations"] > 0
+        np.testing.assert_allclose(matrix.matrix, matrix.matrix.T, atol=2e-8, rtol=0)
+        np.testing.assert_allclose(
+            matrix.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
+        )
+        results.append(action)
+
+    bare_action, corrected_action = results
+    assert bare_action.diagnostics["d3_pair_visits"] == 0
+    assert corrected_action.diagnostics["d3_pair_visits"] > 0
+    assert corrected_action.diagnostics["dispersion"]["electronic_response_solves"] == 0
+    assert corrected_action.diagnostics["total_energy"] == pytest.approx(
+        bare_action.diagnostics["total_energy"]
+        + corrected_action.diagnostics["d3_energy"],
+        abs=2e-10,
+        rel=0,
+    )
+
+    # The separately reconverged first-order endpoint sees the moving grid and
+    # one dispersion force. Subtract the bare action to resolve that small term.
+    correction = corrected_action.value - bare_action.value
+    assert np.max(np.abs(correction)) > 1e-7
+    for step in (3e-3, 1e-3, 3e-4):
+        reference_actions = []
+        for calculator, action in zip((bare, corrected), results, strict=True):
+            forces = []
+            for sign in (-1, 1):
+                displaced = [
+                    (element, np.asarray(center) + sign * step * delta)
+                    for (element, center), delta in zip(atoms, direction, strict=True)
+                ]
+                point = calculator.singlepoint(
+                    displaced,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    properties=("energy", "forces"),
+                )
+                assert point.converged
+                forces.append(point.forces)
+            reference = -(forces[1] - forces[0]) / (2 * step)
+            np.testing.assert_allclose(action.value, reference, atol=2e-7, rtol=0)
+            reference_actions.append(reference)
+        np.testing.assert_allclose(
+            correction, reference_actions[1] - reference_actions[0], atol=2e-9, rtol=0
+        )
+
+    with pytest.raises(NotImplementedError, match="supports only strategy='scalar'"):
+        corrected.hessian(
+            atoms, charge=charge, multiplicity=multiplicity, strategy="block"
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "molecule",
+        "direction",
+        "basis_name",
+        "representation",
+        "charge",
+        "multiplicity",
+        "functional",
+    ),
+    (
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "spherical",
+            0,
+            1,
+            "PBE0",
+            id="water-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            0,
+            1,
+            "PBE0",
+            id="water-def2-svp",
+        ),
+        pytest.param(
+            AMMONIA,
+            AMMONIA_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            0,
+            1,
+            "PBE0",
+            id="nh3-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            1,
+            2,
+            "PBE0",
+            id="water-cation-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            1,
+            2,
+            "PBE0",
+            id="water-cation-def2-svp",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            1,
+            2,
+            "PBE",
+            id="pbe-water-cation-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            1,
+            2,
+            "PBE",
+            id="pbe-water-cation-def2-svp",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "sto-3g",
+            "cartesian",
+            1,
+            2,
+            "LDA",
+            id="lda-water-cation-sto-3g",
+        ),
+        pytest.param(
+            WATER,
+            WATER_DIRECTION,
+            "def2-svp",
+            "spherical",
+            1,
+            2,
+            "LDA",
+            id="lda-water-cation-def2-svp",
+        ),
+    ),
+)
+def test_linked_full_matrix_against_independent_gradient(
+    molecule: list[tuple[str, tuple[float, float, float]]],
+    direction: np.ndarray,
+    basis_name: str,
+    representation: str,
+    charge: int,
+    multiplicity: int,
+    functional: str,
+    monkeypatch: pytest.MonkeyPatch,
+    record_property: Callable[[str, object], None],
+) -> None:
+    """Compare every raw column to the independent moving-grid gradient.
+
+    The independent solver consumes the same discretization and basis, but no
+    native density, Fock, orbitals, or response. Spherical def2-SVP exercises
+    a distinct integral-curvature schedule through its oxygen d shell.
+    Distorted ammonia checks a nonplanar Cartesian center and twelve raw columns.
+    The doublet has different alpha and beta orbitals with both blocks occupied.
+    """
+    unrestricted = multiplicity != 1
+    method = f"{functional.lower()}-{'uks' if unrestricted else 'rks'}"
+    exact_fraction = 0.25 if functional == "PBE0" else 0.0
+    oracle_functional = "LDA_X,LDA_C_PW" if functional == "LDA" else functional
+    calculator = Calculator(
+        method=method,
+        device="cpu",
+        basis=basis_name,
+        basis_representation=representation,
+        ks_options=KsOptions(grid=replace(GRID, radial_points=12)),
+        energy_tolerance=1e-13,
+        density_tolerance=1e-11,
+        max_iterations=240,
+    )
+    if not linked_method(calculator._library, calculator.ks_options.method_ir.identity):
+        pytest.skip("requires the extended CPU Hessian inventory")
+    pytest.importorskip("pyscf", reason="independent polyatomic stationary reference")
+
+    if method == "pbe0-rks" and basis_name == "def2-svp":
+        from functools import partial
+        from types import SimpleNamespace
+
+        from pyscf.lib import diis
+        from scipy.linalg import eigh
+
+        # EVR can fail on this tight-SCF DIIS history in CI. Select EVD only
+        # for DIIS; do not change the physical eigensolver or convergence gates.
+        monkeypatch.setattr(
+            diis,
+            "scipy",
+            SimpleNamespace(linalg=SimpleNamespace(eigh=partial(eigh, driver="evd"))),
+        )
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("linked CPU endpoint invoked the Python derivative owner")
+
+    monkeypatch.setattr(compatibility, "composite_rks_hessian", forbidden)
+    monkeypatch.setattr(compatibility, "composite_rks_hvp", forbidden)
+    monkeypatch.setattr(Calculator, "_run_public_rks_second_order", forbidden)
+    action = calculator.hessian_vector_product(
+        molecule,
+        direction,
+        charge=charge,
+        multiplicity=multiplicity,
+        solver_options=SOLVER,
+    )
+    dense = calculator.hessian(
+        molecule, charge=charge, multiplicity=multiplicity, solver_options=SOLVER
+    )
+    for result in (action, dense):
+        assert result.diagnostics["numerical_runtime"] == "native-cpp-cpu"
+        assert result.diagnostics["response_residual_norm"] < 2e-10
+        assert result.diagnostics["displaced_scf_evaluations"] == 0
+    assert dense.diagnostics["completed_directions"] == direction.size
+    np.testing.assert_allclose(dense.matrix, dense.matrix.T, atol=2e-8, rtol=0)
+    np.testing.assert_allclose(
+        dense.matrix @ np.tile(np.eye(3), (len(molecule), 1)), 0, atol=2e-8, rtol=0
+    )
+    np.testing.assert_allclose(
+        dense.matrix @ direction.ravel(), action.value.ravel(), atol=2e-8, rtol=0
+    )
+
+    def reference(offset: np.ndarray, *, center: bool = False) -> np.ndarray:
+        atoms = [
+            (element, np.asarray(position) + motion)
+            for (element, position), motion in zip(molecule, offset, strict=True)
+        ]
+        with (
+            calculator.prepare_batch(
+                [atoms],
+                charges=[charge],
+                multiplicities=[multiplicity],
+                warm_start=False,
+            ) as batch,
+            NativeAO(
+                atoms,
+                basis=basis_name,
+                representation=representation,
+                charge=charge,
+                multiplicity=multiplicity,
+            ) as basis,
+        ):
+            point = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                energy, gradient, mean_field = independent_global_hybrid_gradient(
+                    basis, state, method, xc=oracle_functional, return_mean_field=True
+                )
+                assert point.energy == pytest.approx(energy, abs=2e-9, rel=0)
+                np.testing.assert_allclose(point.forces, -gradient, atol=2e-8, rtol=0)
+                if center:
+                    assert point.energy == pytest.approx(
+                        dense.diagnostics["total_energy"], abs=2e-10, rel=0
+                    )
+                    density = mean_field.make_rdm1()
+                    coulomb, exchange = mean_field.get_jk(dm=density)
+                    if unrestricted:
+                        _, semilocal_xc, _ = mean_field._numint.nr_uks(
+                            mean_field.mol, mean_field.grids, mean_field.xc, density
+                        )
+                        assert np.linalg.norm(density[0] - density[1]) > 0.1
+                        hartree = 0.5 * np.vdot(
+                            density.sum(axis=0), coulomb.sum(axis=0)
+                        )
+                        exact_exchange = (
+                            -0.5 * exact_fraction * np.vdot(density, exchange)
+                        )
+                    else:
+                        _, semilocal_xc, _ = mean_field._numint.nr_rks(
+                            mean_field.mol, mean_field.grids, mean_field.xc, density
+                        )
+                        hartree = 0.5 * np.vdot(density, coulomb)
+                        exact_exchange = (
+                            -0.25 * exact_fraction * np.vdot(density, exchange)
+                        )
+                    assert point.ks_diagnostic is not None
+                    components = point.ks_diagnostic.components
+                    assert components.hartree == pytest.approx(hartree, abs=2e-8, rel=0)
+                    assert components.xc == pytest.approx(
+                        semilocal_xc + exact_exchange,
+                        abs=2e-8,
+                        rel=0,
+                    )
+                    points = np.random.default_rng(2227).normal(
+                        size=(3 * basis.nao + 20, 3)
+                    )
+                    native_ao = basis.evaluate(points, order=0)[0]
+                    eval_key = (
+                        "GTOval_cart" if representation == "cartesian" else "GTOval_sph"
+                    )
+                    oracle_ao = mean_field.mol.eval_gto(eval_key, points)
+                    transform, _, rank, _ = np.linalg.lstsq(
+                        native_ao, oracle_ao, rcond=1e-13
+                    )
+                    assert rank == basis.nao
+                    np.testing.assert_allclose(
+                        native_ao @ transform, oracle_ao, atol=2e-11, rtol=2e-11
+                    )
+                    orbitals = np.asarray(mean_field.mo_coeff)
+                    weighted = (
+                        orbitals
+                        * (mean_field.mo_energy * mean_field.mo_occ)[..., None, :]
+                    ) @ orbitals.swapaxes(-1, -2)
+                    for native, oracle in (
+                        (
+                            state.density,
+                            density if unrestricted else density[None],
+                        ),
+                        (
+                            state.weighted_density,
+                            weighted if unrestricted else weighted[None],
+                        ),
+                    ):
+                        np.testing.assert_allclose(
+                            native, transform @ oracle @ transform.T, atol=3e-7, rtol=0
+                        )
+            finally:
+                state._source.close()
+        return gradient.ravel()
+
+    reference(np.zeros_like(direction), center=True)
+    refine = functional in ("LDA", "PBE")
+    steps = (1e-3, 3e-4, 1e-4) if refine else (1e-3, 3e-4)
+    errors = []
+    for step in steps:
+        columns = []
+        for unit in np.eye(direction.size):
+            displacement = step * unit.reshape(direction.shape)
+            columns.append(
+                (reference(displacement) - reference(-displacement)) / (2 * step)
+            )
+        oracle = np.column_stack(columns)
+        error = np.max(np.abs(dense.matrix - oracle))
+        errors.append(error)
+        record_scalar_property(record_property, f"matrix_max_error_at_{step}", error)
+        # The coarsest semilocal stencil measures truncation; both finer stencils
+        # must meet the same raw-column gate as the hybrid controls.
+        if not refine or step < steps[0]:
+            np.testing.assert_allclose(dense.matrix, oracle, atol=2e-6, rtol=0)
+    if refine:
+        assert errors[1] <= 0.25 * errors[0]
+        assert errors[2] <= errors[1]
+
+
 @pytest.mark.parametrize(
     ("functional", "exchange"),
     (
@@ -252,6 +688,13 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
     public_matrix = calculator.hessian(
         fixture_atoms, charge=charge, cache=tmp_path, solver_options=SOLVER
     )
+    if (
+        functional == "PBE0"
+        and exchange == Fraction(1, 4)
+        and linked_method(calculator._library, method.identity)
+    ):
+        assert public_action.diagnostics["numerical_runtime"] == "native-cpp-cpu"
+        assert public_matrix.diagnostics["numerical_runtime"] == "native-cpp-cpu"
     for result in (public_action, public_matrix):
         assert result.diagnostics["public_calculator_endpoint"]
         assert result.diagnostics["scf_energy"] == pytest.approx(
@@ -443,7 +886,13 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
             atol=1e-5,
             rtol=0,
         )
-    curvature = float(np.sum(DIRECTION * native.value))
+        np.testing.assert_allclose(
+            (finite.sum(axis=0) - public_action.value) / np.linalg.norm(DIRECTION),
+            0,
+            atol=1e-5,
+            rtol=0,
+        )
+    curvature = float(np.sum(DIRECTION * public_action.value))
     energies = {tuple(np.zeros(DIRECTION.size)): center}
 
     def energy(offset: np.ndarray) -> float:
@@ -476,3 +925,4 @@ def test_complete_hvp_has_matched_state_independent_energy_curvature(
         error = float(np.max(abs(matrix - independent)))
         record_property(f"raw_hessian_max_error_step_{step:g}", error)
         np.testing.assert_allclose(matrix, independent, atol=1e-5, rtol=0)
+        np.testing.assert_allclose(public_matrix.matrix, independent, atol=1e-5, rtol=0)

@@ -150,6 +150,85 @@ def library() -> Any:
     return selected
 
 
+@pytest.mark.parametrize(
+    ("selector", "identifier", "spin"),
+    (
+        ("lda-rks", "LDA_XC_PW", "unpolarized"),
+        ("lda-uks", "LDA_XC_PW", "polarized"),
+        ("pbe-rks", "PBE", "unpolarized"),
+        ("pbe-uks", "PBE", "polarized"),
+        ("r2scan-rks", "R2SCAN", "unpolarized"),
+        ("r2scan-uks", "R2SCAN", "polarized"),
+        ("pbe-d4-rks", "PBE-D4(BJ-EEQ-ATM)", "unpolarized"),
+        ("wb97m-v", "WB97M-V", "unpolarized"),
+        ("r2scan-3c", "R2SCAN-3c", "unpolarized"),
+        ("pbeh-rks", "PBEH", "unpolarized"),
+        ("b3lypg-uks", "B3LYPG", "polarized"),
+        ("pbe-d3(bj)-uks", "PBE-D3(BJ)", "polarized"),
+    ),
+)
+def test_cpu_constructor_binds_the_native_named_selector(
+    library: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    selector: str,
+    identifier: str,
+    spin: str,
+) -> None:
+    from generativeqc import ks
+
+    original = ks._public_dft_binding
+
+    def forbidden(requested: str) -> tuple[str, str]:
+        assert requested != selector, "native selector retried Python alias discovery"
+        return original(requested)
+
+    monkeypatch.setattr(ks, "_public_dft_binding", forbidden)
+    calculator = Calculator(
+        method=selector.upper(), ks_options=KsOptions(grid=GridSpec(8, 4, 8))
+    )
+    assert (
+        calculator.method_ir.identity == resolve_method(identifier, spin=spin).identity
+    )
+    assert calculator.method_ir.spin == spin
+
+
+@pytest.mark.parametrize("selector", ["pbeh-rks", "lda-rks", "pbe-rks", "r2scan-3c"])
+def test_cpu_constructor_cannot_retry_a_native_identity_mismatch(
+    library: Any, monkeypatch: pytest.MonkeyPatch, selector: str
+) -> None:
+    from generativeqc import _named_ks
+
+    def mismatched(*args: Any) -> int:
+        binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBinding))
+        binding.contents.identifier = b"PBE0"
+        binding.contents.identity = b"0" * 64
+        binding.contents.spin = 1
+        return 0
+
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v1", mismatched)
+    with pytest.raises(RuntimeError, match="native KS catalog identity disagrees"):
+        Calculator(method=selector)
+
+
+@pytest.mark.parametrize(
+    ("selector", "canonical"),
+    [("pbeh-rks", "PBEH"), ("lda-rks", "LDA_XC_PW"), ("r2scan-3c", "R2SCAN-3c")],
+)
+def test_cpu_constructor_preserves_older_catalog_compatibility(
+    library: Any, monkeypatch: pytest.MonkeyPatch, selector: str, canonical: str
+) -> None:
+    class PreviousLibrary:
+        def __getattr__(self, name: str) -> Any:
+            if name == "generativeqc_ks_catalog_lookup_v1":
+                raise AttributeError(name)
+            return getattr(library, name)
+
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: PreviousLibrary())
+    calculator = Calculator(method=selector)
+    assert calculator.method_ir.identity == resolve_method(canonical).identity
+
+
 def program(descriptor: Any) -> tuple:
     """Detach the scientific wire while deliberately ignoring pointer identity."""
     return (

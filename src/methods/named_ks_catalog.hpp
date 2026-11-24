@@ -46,6 +46,9 @@ struct Method {
 
 GENERATIVEQC_API std::span<const Method> methods() noexcept;
 GENERATIVEQC_API const Method* find_method(std::string_view name) noexcept;
+/** Resolve the exact all-electron semilocal CPU DF energy inventory program.
+ * Lookup does not admit a basis, provider layout or runtime budget. */
+GENERATIVEQC_API const Method* cpu_df_energy_program(std::string_view identity) noexcept;
 GENERATIVEQC_API std::span<const generativeqc_ks_semilocal_component> components(
     const Method& method) noexcept;
 GENERATIVEQC_API std::span<const generativeqc_ks_exchange_term> exchanges(

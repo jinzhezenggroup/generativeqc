@@ -201,6 +201,11 @@ withheld before provider selection. Estimates bind owner, memory space, kind,
 scientific identity and inclusive logical phase lifetime. Shared buffers count
 once under their owner; overlap of phases models concurrent residency.
 
+`HostResources` takes an effective unsigned 64-bit cap for the modeled shared
+host capacity of admitted CPU DF-KS batches. `HostResourceSnapshot` reports the
+cap, total retained bytes, largest serialized workspace and live owner count.
+These counts are not allocator measurements or process RSS.
+
 `estimate_hf_resources`, `estimate_ks_resources`, `Calculator.estimate_resources`
 and `plan_resources` construct metadata plans, not scientific tensors or solves.
 The HF/KS estimators accept the same nonempty ragged atom systems, per-system
@@ -230,6 +235,11 @@ can then try a finite lower-memory candidate; numerical/driver failures are not
 reclassified by matching strings. Failed groups close in reverse order before
 retry. Scientific execution is never automatically retried by the session.
 
+A shared host cap refuses a batch that would exceed the aggregate capacity
+without disturbing existing leases. An unavailable native API or unsupported
+owner raises `NotImplementedError`. Snapshot and preparation cannot borrow
+a closed cap; closing it repeatedly is safe.
+
 (python-resources-ownership)=
 ## Resource ownership and concurrency
 
@@ -241,6 +251,11 @@ before allocating new ones and belongs to one synchronous orchestrator. Do not
 advance/close/use its provider concurrently. Already live providers keep their
 accepted selection during retries. Providers with internally phased arenas
 must manage those arenas themselves or expose separate request owners.
+
+`HostResources.close()` closes only the metadata handle. Prepared owners keep
+their independent leases and serialize their modeled workspace while they
+share a cap. Closing a batch releases that batch's reservation. Snapshots are
+detached values; exiting the metadata context does not suppress exceptions.
 
 (python-resources-backends)=
 ## Resource provider boundary

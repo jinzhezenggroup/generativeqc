@@ -83,6 +83,13 @@ extern "C" const char* generativeqc_builtin_basis_name_v1(uint64_t index) {
   return catalog::bundled_basis_name(static_cast<std::size_t>(index)).data();
 }
 
+extern "C" const char* generativeqc_builtin_basis_resolve_name_v1(const char* selector,
+                                                                  uint64_t selector_count) {
+  if (!selector || !selector_count || selector_count > 256) return nullptr;
+  return catalog::resolve_builtin_basis_name({selector, static_cast<std::size_t>(selector_count)})
+      .data();
+}
+
 extern "C" generativeqc_status generativeqc_builtin_basis_query_v1(
     const generativeqc_builtin_basis_descriptor_v1* descriptor,
     generativeqc_builtin_basis_capacity_v1* output) {

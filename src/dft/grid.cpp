@@ -9,7 +9,9 @@
 #include <stdexcept>
 #include <utility>
 
+#include "dft/host_force_resources.hpp"
 #include "generated_atomic_grid.hpp"
+#include "runtime/resource_usage.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -24,10 +26,6 @@ std::size_t multiply(std::size_t a, std::size_t b) {
   if (b && a > std::numeric_limits<std::size_t>::max() / b)
     throw std::invalid_argument("DFT grid size overflow");
   return a * b;
-}
-
-std::size_t partition_derivative_elements(std::size_t atoms) {
-  return add(multiply(3, multiply(atoms, atoms)), multiply(5, atoms));
 }
 
 bool overlapping_ranges(const void* first, std::size_t first_bytes, const void* second,
@@ -391,9 +389,13 @@ std::vector<double> MolecularGrid::contract_weight_derivative(
   const std::size_t atoms = system_.atoms.size();
   const std::size_t ncoord = multiply(atoms, std::size_t{3});
   std::vector<double> result(ncoord, 0.0);
-  if (atoms == 1) return result;
+  if (atoms == 1) {
+    runtime::sample_cpu_capacity(runtime::vector_bytes(result));
+    return result;
+  }
 
   std::vector<double> workspace(partition_derivative_elements(atoms));
+  runtime::sample_cpu_capacity(runtime::vector_capacities(result, workspace));
   visit_partition_derivative(
       0, point_count(), workspace,
       [&](std::size_t point_index, std::span<const double> owner_derivative,

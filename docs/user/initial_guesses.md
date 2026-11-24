@@ -6,14 +6,14 @@ including density-fitted (DF) targets.
 Other domains keep the ordinary Hcore guess. An already available explicit,
 imported or warm density always takes precedence. Use `initial_guess=None` to
 restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
-preparation limits. The low-level C API remains explicit-policy driven.
-Automatic selection also requires the supported preliminary-guess schema and a
-positive Hückel provider bit from `generativeqc_initial_guess_capabilities_v1()`.
-CUDA RHF and DF additionally require their respective target-domain capability
-bits; an older provider bit alone does not imply those integrations. Libraries
-without the new provider retain their previous exact-domain MINAO default when
-advertised, otherwise Hcore. Missing queries and unknown schemas retain Hcore.
-Explicit `InitialGuessSpec` requests retain native provider/domain checks.
+preparation limits. The low-level C API remains explicit-policy driven: SDK
+callers can query `generativeqc_initial_guess_default_kind_v1()` to obtain the
+model's default descriptor kind, then set it explicitly. Python and the CLI's
+opt-in `--initial-guess auto` use this same native model query. The query
+requires positive provider and domain capabilities; it does not make the
+per-system choice. Python uses the separate provider queries only on older
+libraries that lack the combined symbol. Explicit requests keep their native
+provider and domain checks and do not query automatic policy.
 
 Native CPU automatic admission resolves each item's element, ECP and population
 independently: unsupported items keep Hcore without disabling supported neighbors.

@@ -272,7 +272,7 @@ class NativeMolecularEvaluator {
 
   generativeqc_ks_host_hessian_options_v1 derivative_controls(const Frame& frame) const {
     const auto& input = invocation_.derivatives;
-    generativeqc_ks_host_hessian_options_v1 controls;
+    auto controls = api::default_host_hessian_options();
     controls.expected_atoms = frame.atoms.data();
     controls.expected_atom_count = frame.atoms.size();
     controls.expected_charge = options_.charge;
@@ -430,12 +430,13 @@ class NativeMolecularEvaluator {
     method.density_tolerance = options_.density_tolerance.value_or(1e-11);
     method.screening_tolerance = options_.screening_tolerance.value_or(1e-14);
     method.ks_options = &grid;
-    const generativeqc_named_ks_descriptor named{sizeof(named),
-                                                 GENERATIVEQC_ABI_VERSION,
-                                                 program_.name.data(),
-                                                 program_.identity.data(),
-                                                 invocation_.derivatives.dispersion_bytes,
-                                                 invocation_.derivatives.cpu_packed_eri_bytes};
+    generativeqc_named_ks_descriptor named{};
+    named.struct_size = sizeof(named);
+    named.abi_version = GENERATIVEQC_ABI_VERSION;
+    named.name = program_.name.data();
+    named.identity = program_.identity.data();
+    named.dispersion_maximum_bytes = invocation_.derivatives.dispersion_bytes;
+    named.cpu_packed_eri_maximum_bytes = invocation_.derivatives.cpu_packed_eri_bytes;
     const generativeqc_system* systems[]{frame->system->get()};
     generativeqc_batch* prepared{};
     const auto* cold =
@@ -536,7 +537,7 @@ class NativeMolecularEvaluator {
                     current_->positions.end()))
       throw std::runtime_error("Hessian geometry lacks its prepared energy/gradient batch");
     const auto controls = derivative_controls(*current_);
-    generativeqc_ks_host_hessian_receipt_v1 receipt;
+    auto receipt = api::empty_host_hessian_receipt();
     check(generativeqc_ks_hessian_cpu_v1(current_->batch.get(), 0, &controls, nullptr, 0,
                                          output.data(), output.size(), &receipt));
     add_work("nuclear_response_solves", receipt.completed_directions);

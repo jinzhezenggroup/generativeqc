@@ -12,6 +12,7 @@
 
 #include "dft/host_gga_fields.hpp"
 #include "dft/host_gga_ordered.hpp"
+#include "dft/host_hessian_point.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -119,41 +120,49 @@ HostGgaXcResponse::HostGgaXcResponse(HostGgaResponseShape shape, std::size_t bud
                                      std::span<const double> density, std::string_view xc_identity,
                                      std::string_view coefficient_response_identity,
                                      HostGgaTileReader reader,
-                                     std::function<void()> validate_current)
+                                     std::function<void()> validate_current,
+                                     host_hessian_aot::PointDomain domain)
     : shape_(shape),
       density_(density),
+      domain_(domain),
       reader_(std::move(reader)),
       validate_current_(std::move(validate_current)) {
   const auto bytes = workspace_bytes(shape);
   if (bytes > budget_bytes) throw std::length_error("host XC response scratch budget exceeded");
   if (density.size() != matrix_elements(shape) || !density.data() || !reader_ || !validate_current_)
     throw std::invalid_argument("host XC response requires density and live grid/state owners");
-  const auto suffix = shape.spins == 1 ? "unpolarized" : "polarized";
-  xc_ = host_hessian_aot::find(std::string("xc_") + suffix, xc_identity);
-  coefficients_ = host_hessian_aot::find(std::string("coefficient_response_") + suffix,
-                                         coefficient_response_identity);
-  const auto count = features(shape.spins);
-  if (!xc_ || !coefficients_ || xc_->inputs.size() != count ||
-      xc_->outputs != xc_roots(shape.spins) ||
-      coefficients_->inputs.size() != coefficient_inputs(shape.spins) ||
-      coefficients_->outputs != 4 * shape.spins)
-    throw std::invalid_argument("linked host GGA response identity or layout is unavailable");
-  constexpr std::array<std::string_view, 5> restricted{"rho", "sigma"};
-  constexpr std::array<std::string_view, 5> unrestricted{"rho_a", "rho_b", "sigma_aa", "sigma_ab",
-                                                         "sigma_bb"};
-  for (std::size_t feature = 0; feature < count; ++feature) {
-    feature_inputs_[feature] =
-        input_index(*xc_, shape.spins == 1 ? restricted[feature] : unrestricted[feature]);
-    if (feature >= shape.spins)
-      values_[feature] = input_index(*coefficients_, "v" + std::to_string(feature));
-    tangents_[feature] = input_index(*coefficients_, "dv" + std::to_string(feature));
-  }
-  for (std::size_t spin = 0; spin < shape.spins; ++spin)
-    for (std::size_t axis = 0; axis < 3; ++axis) {
-      const auto label = std::to_string(spin) + "_" + std::to_string(axis);
-      gradients_[3 * spin + axis] = input_index(*coefficients_, "g" + label);
-      gradient_tangents_[3 * spin + axis] = input_index(*coefficients_, "dg" + label);
+  if (domain_ != host_hessian_aot::PointDomain::linked_ad) {
+    if (shape.spins != host_hessian_aot::physical_spins(domain_) || !xc_identity.empty() ||
+        !coefficient_response_identity.empty())
+      throw std::invalid_argument("incompatible native physical point response binding");
+  } else {
+    const auto suffix = shape.spins == 1 ? "unpolarized" : "polarized";
+    xc_ = host_hessian_aot::find(std::string("xc_") + suffix, xc_identity);
+    coefficients_ = host_hessian_aot::find(std::string("coefficient_response_") + suffix,
+                                           coefficient_response_identity);
+    const auto count = features(shape.spins);
+    if (!xc_ || !coefficients_ || xc_->inputs.size() != count ||
+        xc_->outputs != xc_roots(shape.spins) ||
+        coefficients_->inputs.size() != coefficient_inputs(shape.spins) ||
+        coefficients_->outputs != 4 * shape.spins)
+      throw std::invalid_argument("linked host GGA response identity or layout is unavailable");
+    constexpr std::array<std::string_view, 5> restricted{"rho", "sigma"};
+    constexpr std::array<std::string_view, 5> unrestricted{"rho_a", "rho_b", "sigma_aa", "sigma_ab",
+                                                           "sigma_bb"};
+    for (std::size_t feature = 0; feature < count; ++feature) {
+      feature_inputs_[feature] =
+          input_index(*xc_, shape.spins == 1 ? restricted[feature] : unrestricted[feature]);
+      if (feature >= shape.spins)
+        values_[feature] = input_index(*coefficients_, "v" + std::to_string(feature));
+      tangents_[feature] = input_index(*coefficients_, "dv" + std::to_string(feature));
     }
+    for (std::size_t spin = 0; spin < shape.spins; ++spin)
+      for (std::size_t axis = 0; axis < 3; ++axis) {
+        const auto label = std::to_string(spin) + "_" + std::to_string(axis);
+        gradients_[3 * spin + axis] = input_index(*coefficients_, "g" + label);
+        gradient_tangents_[3 * spin + axis] = input_index(*coefficients_, "dg" + label);
+      }
+  }
   validate_current_();
   finite(density_);
   storage_count_ = bytes / sizeof(double);
@@ -169,6 +178,7 @@ bool HostGgaXcResponse::admit_primal_cache(std::size_t maximum_bytes) {
   validate_current_();
   if (work_.actions_started)
     throw std::logic_error("host XC primal cache must be admitted before actions");
+  if (domain_ != host_hessian_aot::PointDomain::linked_ad) return false;
   if (cache_) return cache_count_ * sizeof(double) <= maximum_bytes;
   const auto bytes = primal_cache_bytes(shape_, maximum_bytes);
   if (!bytes) return false;
@@ -224,6 +234,7 @@ void HostGgaXcResponse::apply_batch(std::span<const double> directions, std::spa
   finite(directions);
   const auto basis = shape_.basis_functions;
   const auto spins = shape_.spins;
+  const bool physical_point = domain_ != host_hessian_aot::PointDomain::linked_ad;
   const auto feature_count = features(spins);
   const std::size_t full_features = spins == 1 ? 3 : 7;
   const auto tile_capacity = std::min(shape_.points, shape_.tile_points);
@@ -254,9 +265,10 @@ void HostGgaXcResponse::apply_batch(std::span<const double> directions, std::spa
     const auto ao = take(4 * basis), weights = take(1);
     const auto single_primal = take(4 * spins), single_tangent = take(4 * spins);
     const auto primal = batched ? field_bank.first(4 * spins * count) : single_primal;
-    const auto xc_input = take(xc_->inputs.size()), xc_output = take(xc_->outputs);
-    const auto coefficient_input = take(coefficients_->inputs.size());
-    const auto coefficient_output = take(coefficients_->outputs);
+    const auto xc_input = take(physical_point ? 0 : xc_->inputs.size());
+    const auto xc_output = take(physical_point ? 0 : xc_->outputs);
+    const auto coefficient_input = take(coefficient_inputs(spins));
+    const auto coefficient_output = take(4 * spins);
     std::fill(ao.begin(), ao.end(), std::numeric_limits<double>::quiet_NaN());
     std::fill(weights.begin(), weights.end(), std::numeric_limits<double>::quiet_NaN());
     work_.tile_reads = add(work_.tile_reads, 1);
@@ -282,92 +294,128 @@ void HostGgaXcResponse::apply_batch(std::span<const double> directions, std::spa
       finite(single_tangent);
     }
     finite(primal);
-    for (std::size_t point = 0; point < count; ++point) {
-      std::array<double, 5> feature{};
-      for (std::size_t spin = 0; spin < spins; ++spin) {
-        feature[spin] = primal[4 * spin * count + point];
-        if (feature[spin] < 0.0)
-          throw std::domain_error("host GGA response requires nonnegative spin point densities");
-        if (!host_gga_spin_fields_admitted(feature[spin], {primal[(4 * spin + 1) * count + point],
-                                                           primal[(4 * spin + 2) * count + point],
-                                                           primal[(4 * spin + 3) * count + point]}))
-          throw std::domain_error(
-              "host GGA zero spin density requires a zero gradient (subnormal roundoff is "
-              "permitted)");
-        for (std::size_t axis = 0; axis < 3; ++axis) {
-          const auto value = primal[(4 * spin + axis + 1) * count + point];
-          feature[spins == 1 ? 1 : 2 + 2 * spin] += value * value;
-        }
-      }
-      if (spins == 2)
-        for (std::size_t axis = 0; axis < 3; ++axis)
-          feature[3] += primal[(axis + 1) * count + point] * primal[(axis + 5) * count + point];
-      for (std::size_t index = 0; index < feature_count; ++index)
-        xc_input[feature_inputs_[index] * count + point] = feature[index];
-    }
-    finite(xc_input);
     work_.point_visits = add(work_.point_visits, multiply(direction_count, count));
-    // The linked production graph owns its lazy vacuum branch and threshold.
-    // Do not floor densities, evaluate an inactive inverse power, or replace
-    // nonfinite derivatives at a non-vacuum spin endpoint with zero.
-    if (cache_ready_ && begin < cache_points_) {
-      for (std::size_t component = 0; component < xc_->inputs.size(); ++component)
-        if (std::memcmp(xc_input.data() + component * count,
-                        cache_.get() + component * cache_points_ + begin,
-                        count * sizeof(double)) != 0)
-          throw std::invalid_argument("host XC response cached point inputs changed");
-      for (std::size_t component = 0; component < xc_->outputs; ++component)
-        std::copy_n(cache_.get() + (xc_->inputs.size() + component) * cache_points_ + begin, count,
-                    xc_output.data() + component * count);
-      work_.cached_xc_points = add(work_.cached_xc_points, count);
-    } else {
-      work_.xc_evaluated_points = add(work_.xc_evaluated_points, count);
-      evaluate(*xc_, xc_input, xc_output, count);
-      if (cache_ && !cache_ready_ && begin < cache_points_) {
+    if (!physical_point) {
+      for (std::size_t point = 0; point < count; ++point) {
+        std::array<double, 5> feature{};
+        for (std::size_t spin = 0; spin < spins; ++spin) {
+          feature[spin] = primal[4 * spin * count + point];
+          if (feature[spin] < 0.0)
+            throw std::domain_error("host GGA response requires nonnegative spin point densities");
+          if (!host_gga_spin_fields_admitted(
+                  feature[spin],
+                  {primal[(4 * spin + 1) * count + point], primal[(4 * spin + 2) * count + point],
+                   primal[(4 * spin + 3) * count + point]}))
+            throw std::domain_error(
+                "host GGA zero spin density requires a zero gradient (subnormal roundoff is "
+                "permitted)");
+          for (std::size_t axis = 0; axis < 3; ++axis) {
+            const auto value = primal[(4 * spin + axis + 1) * count + point];
+            feature[spins == 1 ? 1 : 2 + 2 * spin] += value * value;
+          }
+        }
+        if (spins == 2)
+          for (std::size_t axis = 0; axis < 3; ++axis)
+            feature[3] += primal[(axis + 1) * count + point] * primal[(axis + 5) * count + point];
+        for (std::size_t index = 0; index < feature_count; ++index)
+          xc_input[feature_inputs_[index] * count + point] = feature[index];
+      }
+      finite(xc_input);
+      // The linked production graph owns its lazy vacuum branch and threshold.
+      // Do not floor densities, evaluate an inactive inverse power, or replace
+      // nonfinite derivatives at a non-vacuum spin endpoint with zero.
+      if (cache_ready_ && begin < cache_points_) {
         for (std::size_t component = 0; component < xc_->inputs.size(); ++component)
-          std::copy_n(xc_input.data() + component * count, count,
-                      cache_.get() + component * cache_points_ + begin);
+          if (std::memcmp(xc_input.data() + component * count,
+                          cache_.get() + component * cache_points_ + begin,
+                          count * sizeof(double)) != 0)
+            throw std::invalid_argument("host XC response cached point inputs changed");
         for (std::size_t component = 0; component < xc_->outputs; ++component)
-          std::copy_n(xc_output.data() + component * count, count,
-                      cache_.get() + (xc_->inputs.size() + component) * cache_points_ + begin);
+          std::copy_n(cache_.get() + (xc_->inputs.size() + component) * cache_points_ + begin,
+                      count, xc_output.data() + component * count);
+        work_.cached_xc_points = add(work_.cached_xc_points, count);
+      } else {
+        work_.xc_evaluated_points = add(work_.xc_evaluated_points, count);
+        evaluate(*xc_, xc_input, xc_output, count);
+        if (cache_ && !cache_ready_ && begin < cache_points_) {
+          for (std::size_t component = 0; component < xc_->inputs.size(); ++component)
+            std::copy_n(xc_input.data() + component * count, count,
+                        cache_.get() + component * cache_points_ + begin);
+          for (std::size_t component = 0; component < xc_->outputs; ++component)
+            std::copy_n(xc_output.data() + component * count, count,
+                        cache_.get() + (xc_->inputs.size() + component) * cache_points_ + begin);
+        }
       }
     }
     for (std::size_t direction = 0; direction < direction_count; ++direction) {
       const auto tangent =
           batched ? field_bank.subspan((direction + 1) * 4 * spins * count, 4 * spins * count)
                   : single_tangent;
-      for (std::size_t point = 0; point < count; ++point) {
-        std::array<double, 7> feature_tangent{}, potential_tangent{};
-        for (std::size_t spin = 0; spin < spins; ++spin) {
-          feature_tangent[spin] = tangent[4 * spin * count + point];
-          for (std::size_t axis = 0; axis < 3; ++axis) {
-            const auto index = (4 * spin + axis + 1) * count + point;
-            feature_tangent[spins == 1 ? 1 : 2 + 2 * spin] += 2 * primal[index] * tangent[index];
-            coefficient_input[gradients_[3 * spin + axis] * count + point] = primal[index];
-            coefficient_input[gradient_tangents_[3 * spin + axis] * count + point] = tangent[index];
+      if (physical_point) {
+        // The physical point JVP is direction-specific; the legacy cache holds
+        // rho/sigma partials and cannot be replayed in this physical domain.
+        work_.xc_evaluated_points = add(work_.xc_evaluated_points, count);
+        const auto evaluate_physical = [&]<std::size_t Width>(auto point_response) {
+          for (std::size_t point = 0; point < count; ++point) {
+            const auto value =
+                point_response(host_hessian_point::lane<Width>(primal.data(), count, point),
+                               host_hessian_point::lane<Width>(tangent.data(), count, point));
+            if (!value.valid)
+              throw std::domain_error("native physical point fixed-grid response failed");
+            const auto coefficients = host_hessian_point::potential<Width>(value);
+            for (std::size_t component = 0; component < Width; ++component)
+              coefficient_output[component * count + point] = coefficients[component];
+          }
+        };
+        if (domain_ == host_hessian_aot::PointDomain::lda_uks)
+          evaluate_physical.template operator()<8>(
+              host_hessian_point::response<host_hessian_aot::PointDomain::lda_uks>);
+        else if (domain_ == host_hessian_aot::PointDomain::pbe_uks)
+          evaluate_physical.template operator()<8>(
+              host_hessian_point::response<host_hessian_aot::PointDomain::pbe_uks>);
+        else if (domain_ == host_hessian_aot::PointDomain::scaled_pbe0_uks)
+          evaluate_physical.template operator()<8>(
+              host_hessian_point::response<host_hessian_aot::PointDomain::scaled_pbe0_uks>);
+        else
+          evaluate_physical.template operator()<4>(
+              [this](const auto& field, const auto& direction) {
+                return host_hessian_point::response(domain_, field, direction);
+              });
+      } else {
+        for (std::size_t point = 0; point < count; ++point) {
+          std::array<double, 7> feature_tangent{}, potential_tangent{};
+          for (std::size_t spin = 0; spin < spins; ++spin) {
+            feature_tangent[spin] = tangent[4 * spin * count + point];
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+              const auto index = (4 * spin + axis + 1) * count + point;
+              feature_tangent[spins == 1 ? 1 : 2 + 2 * spin] += 2 * primal[index] * tangent[index];
+              coefficient_input[gradients_[3 * spin + axis] * count + point] = primal[index];
+              coefficient_input[gradient_tangents_[3 * spin + axis] * count + point] =
+                  tangent[index];
+            }
+          }
+          if (spins == 2)
+            for (std::size_t axis = 0; axis < 3; ++axis) {
+              const auto alpha = (axis + 1) * count + point, beta = (axis + 5) * count + point;
+              feature_tangent[3] += tangent[alpha] * primal[beta] + primal[alpha] * tangent[beta];
+            }
+          std::size_t root = 1 + full_features;
+          for (std::size_t left = 0; left < full_features; ++left)
+            for (std::size_t right = left; right < full_features; ++right, ++root) {
+              const auto value = xc_output[root * count + point];
+              potential_tangent[left] += value * feature_tangent[right];
+              if (left != right) potential_tangent[right] += value * feature_tangent[left];
+            }
+          for (std::size_t index = 0; index < feature_count; ++index) {
+            if (index >= spins)
+              coefficient_input[values_[index] * count + point] =
+                  xc_output[(index + 1) * count + point];
+            coefficient_input[tangents_[index] * count + point] = potential_tangent[index];
           }
         }
-        if (spins == 2)
-          for (std::size_t axis = 0; axis < 3; ++axis) {
-            const auto alpha = (axis + 1) * count + point, beta = (axis + 5) * count + point;
-            feature_tangent[3] += tangent[alpha] * primal[beta] + primal[alpha] * tangent[beta];
-          }
-        std::size_t root = 1 + full_features;
-        for (std::size_t left = 0; left < full_features; ++left)
-          for (std::size_t right = left; right < full_features; ++right, ++root) {
-            const auto value = xc_output[root * count + point];
-            potential_tangent[left] += value * feature_tangent[right];
-            if (left != right) potential_tangent[right] += value * feature_tangent[left];
-          }
-        for (std::size_t index = 0; index < feature_count; ++index) {
-          if (index >= spins)
-            coefficient_input[values_[index] * count + point] =
-                xc_output[(index + 1) * count + point];
-          coefficient_input[tangents_[index] * count + point] = potential_tangent[index];
-        }
+        finite(coefficient_input);
+        evaluate(*coefficients_, coefficient_input, coefficient_output, count);
       }
-      finite(coefficient_input);
-      evaluate(*coefficients_, coefficient_input, coefficient_output, count);
       if (batched) {
         for (std::size_t component = 0; component < 4 * spins; ++component)
           for (std::size_t point = 0; point < count; ++point)

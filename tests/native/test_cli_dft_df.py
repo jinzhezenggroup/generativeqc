@@ -209,12 +209,12 @@ class NativeDftDfCliTests(unittest.TestCase):
         return self.call_xyz(MOLECULE, method, *flags)
 
     def call_xyz(
-        self, xyz: Path, method: str, *flags: str
+        self, xyz: Path, method: str, *flags: str, command: str = "run"
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 str(CLI),
-                "run",
+                command,
                 str(xyz),
                 "--method",
                 method,
@@ -424,6 +424,62 @@ class NativeDftDfCliTests(unittest.TestCase):
             data["energy_hartree"],
             delta=1.0e-9,
         )
+
+    def test_cpu_df_host_admission(self) -> None:
+        for method, extra in (
+            ("lda_xc_pw-rks", ()),
+            ("lda_xc_pw-rks", ("--forces",)),
+            (
+                "pbe-rks",
+                (
+                    "--forces",
+                    "--representation",
+                    "spherical",
+                    "--auxiliary-basis",
+                    "def2-svp",
+                ),
+            ),
+            ("pbe-uks", ("--forces", "--charge", "1", "--multiplicity", "2")),
+        ):
+            with self.subTest(method=method):
+                flags = (
+                    "--backend",
+                    "cpu",
+                    "--density-fitting",
+                    "cpu",
+                    *self.SMALL_GRID,
+                    *extra,
+                )
+                baseline = self.call_named(method, *flags)
+                self.assertEqual(baseline.returncode, 0, baseline.stderr)
+                quote = self.call_xyz(MOLECULE, method, *flags, command="resources")
+                self.assertEqual(quote.returncode, 0, quote.stderr)
+                inventory = json.loads(quote.stdout)
+                peak = inventory["peak_bytes"]["host"]
+                self.assertIn("auxiliary", inventory)
+                exact = self.call_named(method, *flags, "--host-bytes", str(peak))
+                self.assertEqual(exact.returncode, 0, exact.stderr)
+                result = json.loads(exact.stdout)
+                self.assertEqual(
+                    result.pop("resource_admission")["modeled_host_peak_bytes"], peak
+                )
+                self.assertEqual(result, json.loads(baseline.stdout))
+                short = self.call_named(method, *flags, "--host-bytes", str(peak - 1))
+                self.assertNotEqual(short.returncode, 0)
+                self.assertEqual(short.stdout, "")
+                self.assertIn("exceeds host budget", short.stderr)
+
+        for flags in ((), ("--forces",)):
+            unsupported = self.call_xyz(
+                MOLECULE,
+                "pbe0-rks",
+                "--density-fitting",
+                "cpu",
+                *flags,
+                command="resources",
+            )
+            self.assertEqual(unsupported.returncode, 2, unsupported.stderr)
+            self.assertEqual(json.loads(unsupported.stdout)["status"], "unsupported")
 
     def test_cpu_df_pbe_analytic_forces(self) -> None:
         result = self.call("--backend", "cpu", "--density-fitting", "cpu", "--forces")

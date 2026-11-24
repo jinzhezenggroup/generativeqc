@@ -34,8 +34,12 @@ in `_bytes` are integer byte capacities, never atom counts.
 Hartree/Bohr². `hessian_vector_product` accepts a finite real direction of shape
 `(natoms, 3)` and returns a detached record whose `value` has shape
 `(natoms, 3)`, containing that matrix applied to the direction; no rotational/translational projection or post-hoc symmetrization is
-implied. Integral workspace and full-Hessian publication have separate byte
-budgets. See the [energy/force/Hessian conventions](../learn/energy-force-hessian.md).
+implied. `hessian_vector_products` accepts a nonempty `(nrhs, natoms, 3)` panel
+and returns direction and action arrays of the same shape and order. The linked
+CPU KS owner uses one accepted state and does not form a dense Hessian. Byte
+and work limits apply to the whole panel, and the result is published only if
+every action succeeds. This panel API does not fall back on older libraries or
+other backends. See the [energy/force/Hessian conventions](../learn/energy-force-hessian.md).
 
 (python-calculation-errors)=
 ## Calculation failure and publication
@@ -100,6 +104,12 @@ library without that optional lookup retains explicit numeric-ID compatibility;
 a selected lookup/query error or inconsistent publication does not rediscover a
 default library or fall back to cached/Python capability metadata. Public aliases,
 explicit compiler compositions and later contextual admission remain separate.
+For CPU KS selectors present in the shared native catalog, the installed
+library selects the default graph, including the public LDA, D4 and composite
+aliases. Python attaches a detached `MethodIR` view and verifies its identity;
+explicit functional or composition options on stable carriers still undergo
+their normal validation. A missing catalog entry retains the explicit
+compiler/compatibility route, but a selected catalog error does not retry it.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
 method-, basis- and backend-specific domain listed in [Supported methods](../user/hessians.md#supported-methods).
@@ -155,6 +165,17 @@ published and force requests are rejected. Explicit `singlepoint(...,
 properties=("energy",))` CPU DFT calls select this energy-only mode automatically.
 SCF convergence alone is not a certificate of an exportable canonical projector.
 
+`PreparedBatch.hessian_vector_products(index, directions, coordinates=...)`
+uses the current verified CPU KS state of one item without running SCF. It
+returns the same immutable action panel as `Calculator.hessian_vector_products`.
+Use the original input index and a nonempty real `(nrhs, natoms_i, 3)` direction
+array. `coordinates=None` authenticates the original prepared geometry; after
+moving an item, pass its exact accepted `(natoms_i, 3)` coordinates in Bohr.
+The operation retains the fleet and composes the action's numerical floor with
+any selected resource reservation, without replanning the primal or publishing
+partial actions. It requires an exportable, accepted state and linked CPU KS
+second-order sources. Missing, failed or stale state is not retried through SCF.
+
 (python-batch-errors)=
 ## Batch failures and strict mode
 
@@ -188,7 +209,7 @@ resources promptly. Repeated close is safe; execution and native diagnostic
 queries after close raise. Finalization is best-effort cleanup, not a substitute
 for deterministic close.
 
-A prepared batch is not concurrently re-entrant. Execution, checkpointing,
+A prepared batch is not concurrently re-entrant. Execution, HVP, checkpointing,
 projection, warm-start controls, diagnostics and close must not race on one
 plan. Use separate prepared plans for concurrent callers. Successful executions
 can update warm densities. `set_warm_start_updates(False)` freezes existing

@@ -77,6 +77,17 @@ function(generativeqc_add_host_ks_response target leaves core)
   if(NOT _inventory)
     message(FATAL_ERROR "Host nuclear integral response requires the exact leaf inventory")
   endif()
+  if(_host_LINK_INTO_CORE)
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}"
+              "${PROJECT_SOURCE_DIR}/tools/generate_host_hessian_aot.py"
+              --inventory "${_inventory}" --check-endpoint
+      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      RESULT_VARIABLE _closure_status ERROR_VARIABLE _closure_error TIMEOUT 120)
+    if(NOT _closure_status STREQUAL "0")
+      message(FATAL_ERROR "Invalid native CPU Hessian closure: ${_closure_error}")
+    endif()
+  endif()
   set(_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/host_ks_response")
   set(_maps "${_directory}/host_ks_cpks_maps.hpp")
   generativeqc_register_generated_sources(

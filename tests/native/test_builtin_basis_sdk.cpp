@@ -42,6 +42,15 @@ void run() {
                 (index == 0 || std::strcmp(generativeqc_builtin_basis_name_v1(index - 1),
                                            generativeqc_builtin_basis_name_v1(index)) < 0),
             "installed names are missing or not deterministically ordered");
+  const std::array selector{'S', 'T', 'O', '_', '3', 'G', '\0', 'x'};
+  const auto* canonical = generativeqc_builtin_basis_resolve_name_v1(selector.data(), 6);
+  require(canonical && std::strcmp(canonical, "sto-3g") == 0 &&
+              !generativeqc_builtin_basis_resolve_name_v1(selector.data(), selector.size()) &&
+              !generativeqc_builtin_basis_resolve_name_v1(selector.data(), 5) &&
+              !generativeqc_builtin_basis_resolve_name_v1(selector.data(), 0) &&
+              !generativeqc_builtin_basis_resolve_name_v1(selector.data(), 257) &&
+              !generativeqc_builtin_basis_resolve_name_v1(nullptr, 6),
+          "builtin selection did not use the exact byte-counted alias");
   std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
   auto descriptor = versioned<generativeqc_builtin_basis_descriptor_v1>();
   descriptor.name = "STO_3G";
@@ -56,8 +65,7 @@ void run() {
           capacity.shell_count == 2 && capacity.primitive_count == 6 && capacity.ao_count == 2 &&
           capacity.expansion_bytes ==
               2 * sizeof(generativeqc_shell) + 6 * sizeof(generativeqc_primitive) &&
-          std::strcmp(capacity.canonical_name, "sto-3g") == 0 &&
-          std::strlen(capacity.pack_checksum) == 64,
+          capacity.canonical_name == canonical && std::strlen(capacity.pack_checksum) == 64,
       "installed shape query differs from the independent H2 basis");
   const auto published = capacity;
   alignas(generativeqc_builtin_basis_descriptor_v1)

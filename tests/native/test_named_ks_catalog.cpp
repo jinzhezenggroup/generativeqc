@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -21,6 +22,11 @@ extern "C" generativeqc_status generativeqc_ks_catalog_plan_v1(const char*, std:
                                                                generativeqc_backend,
                                                                generativeqc_ks_options*,
                                                                std::uint32_t*);
+extern "C" int generativeqc_resource_ks_cpu_df_fleet_v1(const std::uint64_t*, std::size_t,
+                                                        std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_ks_cpu_df_force_fleet_v1(const std::uint64_t*, std::size_t,
+                                                              std::uint64_t, std::uint64_t*,
+                                                              std::size_t);
 
 namespace {
 void require(bool condition, const char* message) {
@@ -38,6 +44,15 @@ struct OriginalNamedKsDescriptor {
 
 static_assert(sizeof(OriginalNamedKsDescriptor) ==
               offsetof(generativeqc_named_ks_descriptor, cpu_packed_eri_maximum_bytes));
+
+// A client built with packed ERIs passes no CPU DF host admission suffix.
+struct PackedNamedKsDescriptor {
+  OriginalNamedKsDescriptor prefix;
+  std::uint64_t cpu_packed_eri_maximum_bytes;
+};
+
+static_assert(sizeof(PackedNamedKsDescriptor) ==
+              offsetof(generativeqc_named_ks_descriptor, cpu_df_host_maximum_bytes));
 
 const generativeqc_named_ks_descriptor* original_wire(const OriginalNamedKsDescriptor& original) {
   // Pass the historical wire bytes; neither caller nor callee should read a
@@ -61,6 +76,38 @@ generativeqc_ks_options controls() {
   return result;
 }
 
+void test_cpu_df_inventory_identity() {
+  using generativeqc::methods::named_ks::find_method;
+  for (const auto selector : {"lda_xc_pw-rks", "lda_xc_pw-uks", "pbe-rks", "pbe-uks"}) {
+    const auto* method = find_method(selector);
+    require(method && method->cpu, "expected a linked CPU semilocal program");
+    const char* selected = nullptr;
+    require(generativeqc_ks_cpu_df_energy_program_v1(method->identity.data(), &selected) == 0 &&
+                selected && method->name == selected,
+            "exact semilocal graph lost its CPU DF inventory");
+  }
+  if (const auto* alias = find_method("libxc:pbe")) {
+    const auto* pbe = find_method("pbe-rks");
+    if (alias->identity == pbe->identity) {
+      const char* selected = nullptr;
+      require(generativeqc_ks_cpu_df_energy_program_v1(alias->identity.data(), &selected) == 0 &&
+                  selected && pbe->name == selected,
+              "alias order changed CPU DF inventory selection");
+    }
+  }
+  const auto* hybrid = find_method("pbe0-rks");
+  require(hybrid, "expected a neighboring hybrid program");
+  const char* selected = "unchanged";
+  require(generativeqc_ks_cpu_df_energy_program_v1(hybrid->identity.data(), &selected) == 0 &&
+              !selected,
+          "hybrid unexpectedly selected the semilocal CPU DF inventory");
+  selected = "unchanged";
+  require(generativeqc_ks_cpu_df_energy_program_v1("pbe-rks", &selected) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              selected && std::string_view(selected) == "unchanged",
+          "selector spelling bypassed MethodIR validation");
+}
+
 void test_complete_catalog() {
   using namespace generativeqc::methods::named_ks;
   require(methods().size() > 10, "catalog was lost in a library-only build");
@@ -73,6 +120,19 @@ void test_complete_catalog() {
                                               backend, &output, &selected) == 0,
               "metadata query loaded a backend or rejected a valid row");
       const bool complete = backend == GENERATIVEQC_BACKEND_CUDA ? entry.cuda : entry.cpu;
+      generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
+                                                 nullptr, 0};
+      require(generativeqc_ks_catalog_lookup_v1(entry.name.data(), entry.name.size(), backend,
+                                                &binding) == GENERATIVEQC_STATUS_SUCCESS,
+              "native selector lookup rejected a catalog spelling");
+      if (complete) {
+        require(binding.identifier && binding.identity && binding.identifier == entry.source &&
+                    binding.identity == entry.identity && binding.spin == entry.spin,
+                "selector metadata differs from the prepared program");
+      } else {
+        require(!binding.identifier && !binding.identity && !binding.spin,
+                "unavailable selector published metadata for the wrong backend");
+      }
       const bool admitted = complete && !entry.dispersion.kind;
       require(selected == static_cast<unsigned>(admitted), "catalog admission flags diverged");
       if (complete) {
@@ -121,6 +181,29 @@ void test_complete_catalog() {
                   output.nonlocal_coefficient == entry.nonlocal.coefficient,
               "complete nonlocal program was truncated");
     }
+  }
+}
+
+void test_public_alias_bindings() {
+  for (const auto& [selector, canonical] :
+       std::array<std::pair<std::string_view, std::string_view>, 5>{{
+           {"lda-rks", "lda_xc_pw-rks"},
+           {"lda-uks", "lda_xc_pw-uks"},
+           {"pbe-d4-rks", "pbe-d4(bj-eeq-atm)-rks"},
+           {"wb97m-v", "wb97m-v-rks"},
+           {"r2scan-3c", "r2scan-3c-rks"},
+       }}) {
+    using generativeqc::methods::named_ks::find_method;
+    const auto* expected = find_method(canonical);
+    require(expected && find_method(selector) == expected,
+            "public alias did not select the existing canonical native program");
+    generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
+                                               nullptr, 0};
+    require(generativeqc_ks_catalog_lookup_v1(selector.data(), selector.size(),
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE, &binding) == 0 &&
+                binding.identifier && binding.identity && binding.identifier == expected->source &&
+                binding.identity == expected->identity && binding.spin == expected->spin,
+            "public alias did not publish the canonical MethodIR binding");
   }
 }
 
@@ -462,6 +545,170 @@ void test_bound_basis_and_system_factory() {
           "method-owned and explicit bound basis differ after input destruction");
 }
 
+void test_cpu_df_native_host_budget() {
+  const auto* program = generativeqc::methods::named_ks::find_method("pbe-rks");
+  require(program && program->cpu, "CPU PBE catalog entry is required");
+  generativeqc::Context context({sizeof(generativeqc_context_descriptor), GENERATIVEQC_ABI_VERSION,
+                                 0, GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const std::array<generativeqc_atom, 2> atoms{{{1, 0, 0, -0.7}, {1, 0, 0, 0.7}}};
+  generativeqc::System system(context, atoms, "sto-3g");
+  const std::array<const generativeqc_system*, 2> fleet_systems{system.get(), system.get()};
+  const std::array<const generativeqc::System*, 2> sdk_fleet{&system, &system};
+  auto method = generativeqc::default_method_descriptor("pbe-rks");
+  method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  method.diis_history = 8;
+  method.max_iterations = 100;
+  auto grid = controls();
+  grid.grid_version = 1;
+  grid.radial_points = 8;
+  grid.angular_polar = 4;
+  grid.angular_azimuth = 8;
+  grid.tile_points = 101;
+  grid.force_tile_points = 400;
+  method.ks_options = &grid;
+  constexpr auto energy = GENERATIVEQC_PROPERTY_ENERGY;
+  constexpr auto both = energy | GENERATIVEQC_PROPERTY_FORCES;
+  const generativeqc_named_ks_descriptor ordinary{sizeof(ordinary),
+                                                  GENERATIVEQC_ABI_VERSION,
+                                                  "pbe-rks",
+                                                  program->identity.data(),
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0};
+  const PackedNamedKsDescriptor packed{
+      {sizeof(packed), ordinary.abi_version, ordinary.name, ordinary.identity, 0}, 0};
+  const auto* packed_wire = original_wire(packed.prefix);
+  generativeqc_calculation* legacy_calculation = nullptr;
+  generativeqc::check(generativeqc_calculation_prepare_named_ks_v1(
+      context.get(), system.get(), &method, packed_wire, &legacy_calculation));
+  generativeqc_calculation_destroy(legacy_calculation);
+  generativeqc_batch* legacy_batch = nullptr;
+  generativeqc::check(generativeqc_batch_prepare_named_ks_v1(context.get(), fleet_systems.data(),
+                                                             fleet_systems.size(), &method,
+                                                             packed_wire, 0, &legacy_batch));
+  generativeqc_batch_destroy(legacy_batch);
+
+  const auto quote = [&](bool forces, std::size_t copies) {
+    const std::array<std::uint64_t, 22> shape{
+        2, 2, 2, 2, 6, 1, 0, 0, 512, 8, 4, forces ? 400u : 101u, 8, 100, 1, 0, 0, 2, 2, 2, 6, 0};
+    std::array<std::uint64_t, 44> shapes{};
+    std::array<std::uint64_t, 47> values{};
+    std::copy(shape.begin(), shape.end(), shapes.begin());
+    std::copy(shape.begin(), shape.end(), shapes.begin() + shape.size());
+    const auto query = forces ? generativeqc_resource_ks_cpu_df_force_fleet_v1
+                              : generativeqc_resource_ks_cpu_df_fleet_v1;
+    require(query(shapes.data(), copies * shape.size(), 0, values.data(), 15 + 16 * copies) == 0,
+            "CPU DF fixture capacity could not be quoted");
+    return values;
+  };
+  for (bool forces : {false, true}) {
+    const auto properties = forces ? both : energy;
+    auto named = ordinary;
+    named.cpu_df_host_properties = properties;
+    named.cpu_df_host_maximum_bytes = quote(forces, 1)[14] - 1;
+    auto* rejected_single = reinterpret_cast<generativeqc_calculation*>(1);
+    require(generativeqc_calculation_prepare_named_ks_v1(context.get(), system.get(), &method,
+                                                         &named, &rejected_single) ==
+                    GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                !rejected_single,
+            "one-byte-short native calculation published an owner");
+    ++named.cpu_df_host_maximum_bytes;
+    generativeqc::Calculation bounded(context, system, method, named);
+    require(bounded.supported_properties() == properties,
+            "calculation did not retain its budgeted properties");
+    generativeqc::Calculation baseline(context, system, method, ordinary);
+    const auto expected = baseline.execute(properties);
+    const auto actual = bounded.execute(properties);
+    require(actual.iterations == expected.iterations && actual.energy == expected.energy &&
+                actual.forces == expected.forces,
+            "bounded native calculation changed the science");
+
+    named.cpu_df_host_maximum_bytes = quote(forces, 2)[14] - 1;
+    auto* rejected_batch = reinterpret_cast<generativeqc_batch*>(1);
+    require(generativeqc_batch_prepare_named_ks_v1(
+                context.get(), fleet_systems.data(), fleet_systems.size(), &method, &named, 0,
+                &rejected_batch) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                !rejected_batch,
+            "one-byte-short native fleet published an owner");
+    ++named.cpu_df_host_maximum_bytes;
+    auto batch = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, named);
+    named = {};
+    for (const auto& item : batch.execute({}, forces)) {
+      require(item.converged && item.iterations == expected.iterations &&
+                  item.energy == expected.energy &&
+                  item.forces == expected.forces.value_or(std::vector<double>{}),
+              "bounded native fleet changed the science");
+    }
+    if (!forces) {
+      try {
+        (void)batch.execute({}, true);
+        require(false, "an energy-only native fleet replayed forces");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                "unbudgeted fleet force replay returned the wrong status");
+      }
+    }
+  }
+
+  const auto calculation_quote = quote(false, 1);
+  const auto fleet_quote = quote(true, 2);
+  const auto retained = calculation_quote[12] + fleet_quote[12];
+  const auto scratch = std::max(calculation_quote[13], fleet_quote[13]);
+  auto single = ordinary;
+  single.cpu_df_host_properties = energy;
+  single.cpu_df_host_maximum_bytes = calculation_quote[14];
+  auto fleet = ordinary;
+  fleet.cpu_df_host_properties = both;
+  fleet.cpu_df_host_maximum_bytes = fleet_quote[14];
+  for (const auto limit : {retained + scratch - 1, retained + scratch}) {
+    auto pool = std::make_unique<generativeqc::HostResources>(limit);
+    single.host_resources = fleet.host_resources = pool->get();
+    const auto expect_snapshot = [&](std::uint64_t bytes, std::uint64_t workspace,
+                                     std::uint64_t count) {
+      const auto snapshot = pool->snapshot();
+      require(snapshot.maximum_bytes == limit && snapshot.retained_bytes == bytes &&
+                  snapshot.workspace_bytes == workspace && snapshot.owner_count == count,
+              "shared CPU host capacity snapshot differs from the admitted owner set");
+    };
+    auto owner = std::make_unique<generativeqc::Calculation>(context, system, method, single);
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    if (limit < retained + scratch) {
+      auto* rejected = reinterpret_cast<generativeqc_batch*>(1);
+      require(generativeqc_batch_prepare_named_ks_v1(
+                  context.get(), fleet_systems.data(), fleet_systems.size(), &method, &fleet, 0,
+                  &rejected) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                  !rejected,
+              "one-byte-short shared capacity published a fleet");
+      expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+      owner.reset();
+      expect_snapshot(0, 0, 0);
+      auto retry = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+      expect_snapshot(fleet_quote[12], fleet_quote[13], 1);
+      continue;
+    }
+    auto* bad_flags = reinterpret_cast<generativeqc_batch*>(1);
+    require(generativeqc_batch_prepare_named_ks_v1(
+                context.get(), fleet_systems.data(), fleet_systems.size(), &method, &fleet,
+                0x80000000u, &bad_flags) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                !bad_flags,
+            "invalid fleet setup published a shared lease");
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    {
+      auto both_owners = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+      expect_snapshot(retained, scratch, 2);
+    }
+    expect_snapshot(calculation_quote[12], calculation_quote[13], 1);
+    auto batch = generativeqc::Batch::prepare_named_ks(context, sdk_fleet, method, fleet);
+    pool.reset();
+    const auto expected = owner->execute(energy);
+    for (const auto& result : batch.execute({}, true))
+      require(result.converged && result.energy == expected.energy && result.forces.size() == 6,
+              "closed host metadata invalidated a live scientific owner");
+  }
+}
+
 void dump_bound_basis() {
   const auto* entry = generativeqc::methods::named_ks::find_method("r2scan-3c-rks");
   std::cout << std::setprecision(17);
@@ -491,6 +738,9 @@ int main(int argc, char**) {
     }
     test_bound_basis_and_system_factory();
     test_complete_catalog();
+    test_public_alias_bindings();
+    test_cpu_df_inventory_identity();
+    test_cpu_df_native_host_budget();
     test_identity_and_transaction_boundaries();
     test_borrowed_controls_and_extension_aliases();
     test_named_preparation_failures_and_lifetime();

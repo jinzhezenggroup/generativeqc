@@ -118,6 +118,7 @@ def frontend() -> tuple[Calculator, list[str]]:
     calculator = object.__new__(Calculator)
     calculator._composite_rks_second_order = True
     calculator._cuda_rks_second_order = True
+    calculator._native_cpu_second_order = False
     calculator._d3_second_order_spec = None
     calculator._dispersion_method_ir = None
     calculator._device_name = "cuda"

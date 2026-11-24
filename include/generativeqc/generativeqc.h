@@ -147,6 +147,7 @@ typedef struct generativeqc_system generativeqc_system;
 typedef struct generativeqc_calculation generativeqc_calculation;
 typedef struct generativeqc_batch generativeqc_batch;
 typedef struct generativeqc_device_resources generativeqc_device_resources;
+typedef struct generativeqc_host_resources generativeqc_host_resources;
 
 typedef struct generativeqc_d3_batch generativeqc_d3_batch;
 typedef struct generativeqc_d4_batch generativeqc_d4_batch;
@@ -757,9 +758,9 @@ GENERATIVEQC_API uint32_t generativeqc_ks_nonlocal_grid_version_v1(void);
  * identity may be NULL; otherwise it must match the exact 64-character MethodIR
  * digest. A positive dispersion budget is required by corrected programs. For
  * batches it bounds the aggregate correction owners, divided equally per item.
- * Set struct_size to sizeof this descriptor. The original size through
- * dispersion_maximum_bytes remains accepted by the v1 entry points and
- * implies zero packed ERI budget. Other sizes are rejected. */
+ * Set struct_size to sizeof this descriptor. The v1 entry points also accept
+ * earlier prefixes ending at dispersion_maximum_bytes, cpu_packed_eri_maximum_bytes,
+ * or reserved; omitted fields are zero. */
 typedef struct generativeqc_named_ks_descriptor {
   uint32_t struct_size;
   uint32_t abi_version;
@@ -770,6 +771,17 @@ typedef struct generativeqc_named_ks_descriptor {
    * the ordinary source. A positive budget requires full-range FP64 CPU
    * values and a real-spherical s/p/d/f basis; no dense retry on refusal. */
   uint64_t cpu_packed_eri_maximum_bytes;
+  /** Effective modeled host limit in bytes, after reserve and headroom.
+   * Applied to actual CPU FP64 semilocal DF-J systems before preparation.
+   * This is not an allocator-wide or process-RSS cap. */
+  uint64_t cpu_df_host_maximum_bytes;
+  /** ENERGY or ENERGY|FORCES freezes the admitted replay property set.
+   * Zero disables host admission and requires a zero maximum. */
+  generativeqc_property_flags cpu_df_host_properties;
+  uint32_t reserved;
+  /** Optional shared reservation for the same modeled capacity. Requires a
+   * nonzero admitted property mask. Borrowed only during preparation. */
+  const generativeqc_host_resources* host_resources;
 } generativeqc_named_ks_descriptor;
 
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
@@ -942,6 +954,23 @@ GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_system_kind
  */
 GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_auto_kind_v2(
     const generativeqc_initial_guess_auto_policy* request, uint32_t* resolved_kind);
+
+/** @native-contract generativeqc_initial_guess_default_kind_v1
+ * @behavior Select the native automatic cold-start descriptor for a model, preferring
+ * HUCKEL over MINAO when supported. Does not alter explicitly supplied descriptors.
+ * @inputs Same model facts as generativeqc_initial_guess_auto_kind_v1, but atomic_numbers
+ * must be NULL and atom_count zero. Precision describes the seed, not target arithmetic.
+ * @outputs On SUCCESS, writes a kind suitable for initial_guess_options.kind: AUTO_HUCKEL_CPU
+ * or AUTO_CPU on CPU, HUCKEL or MINAO on CUDA, or zero for a core-density start. CPU automatic
+ * kinds still require native per-system admission. CUDA callers must use the corresponding
+ * system policy query before installing a nonzero kind to retain automatic fallback.
+ * @lifetime Borrows the request for the call; retains no storage.
+ * @errors Uses the v1 model query status codes, rejects atom lists, and preserves output on
+ * failure.
+ * @execution Synchronous, allocation-free and context-free; performs no scientific or device work.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_initial_guess_default_kind_v1(
+    const generativeqc_initial_guess_auto_policy* request, uint32_t* descriptor_kind);
 
 /** @native-contract generativeqc_initial_guess_auto_system_kind_v2
  * @behavior Resolve automatic Huckel or Hcore for one system, including its population.
@@ -1548,6 +1577,51 @@ typedef struct generativeqc_device_resource_diagnostic {
   uint64_t capacity_reserved_bytes;
   generativeqc_device_resource_admission admission;
 } generativeqc_device_resource_diagnostic;
+
+/** Live modeled host reservations, not allocated bytes or process RSS. */
+typedef struct generativeqc_host_resource_snapshot {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint64_t maximum_bytes;
+  uint64_t retained_bytes;
+  uint64_t workspace_bytes;
+  uint64_t owner_count;
+} generativeqc_host_resource_snapshot;
+
+/** @native-contract generativeqc_host_resources_create_v1
+ * @behavior Create an explicit shared cap for modeled native host reservations.
+ * Supported owners sum retained capacity and serialize their setup/replay workspace.
+ * @inputs maximum_bytes is the effective cap after any caller margins; zero is valid.
+ * @outputs Clears the output slot and publishes one metadata handle on success.
+ * @lifetime Destroy the metadata handle with generativeqc_host_resources_destroy_v1.
+ * Successfully prepared owners retain their reservations independently.
+ * @errors A null output returns INVALID_ARGUMENT; allocation failure returns OUT_OF_MEMORY.
+ * @execution Synchronous metadata operation, with no context or backend initialization.
+ * @units Bytes of modeled capacity, excluding opaque library allocations and process RSS.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_create_v1(
+    uint64_t maximum_bytes, generativeqc_host_resources** resources);
+
+/** @native-contract generativeqc_host_resources_destroy_v1
+ * @behavior Close the shared cap's metadata handle without revoking outstanding leases.
+ * @inputs A live matching handle, or NULL for a no-op.
+ * @lifetime No further use of the handle is allowed. Prepared owners stay valid.
+ * @execution Must not race another call borrowing this metadata handle.
+ */
+GENERATIVEQC_API void generativeqc_host_resources_destroy_v1(
+    generativeqc_host_resources* resources);
+
+/** @native-contract generativeqc_host_resources_snapshot_v1
+ * @behavior Return the sum of retained reservations, the largest serialized workspace
+ * reservation and the count of active owners (including in-flight preparations).
+ * @inputs A live handle and output tagged with sizeof and GENERATIVEQC_ABI_VERSION.
+ * @outputs One coherent snapshot; no fields are changed on failure.
+ * @errors Null inputs return INVALID_ARGUMENT; incompatible output tags return ABI_MISMATCH.
+ * @execution May run during preparation or replay on another context using this cap.
+ * @units The limit, retained and workspace fields are modeled bytes, not allocator telemetry.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_host_resources_snapshot_v1(
+    const generativeqc_host_resources* resources, generativeqc_host_resource_snapshot* output);
 
 /** @native-contract generativeqc_device_resources_create
  * @behavior Derive allowance-separated numeric admission from selected capacity lifetimes.
@@ -2732,6 +2806,20 @@ GENERATIVEQC_API uint32_t generativeqc_builtin_basis_count_v1(void);
  */
 GENERATIVEQC_API const char* generativeqc_builtin_basis_name_v1(uint64_t index);
 
+/** @native-contract generativeqc_builtin_basis_resolve_name_v1
+ * @behavior Resolve an ASCII built-in name using the same catalog and aliases as native CLI.
+ * @inputs selector points to selector_count readable bytes, without a required NUL terminator.
+ * The supported selector length is 1 to 256 bytes; a name is not a path or system descriptor.
+ * @outputs Returns the NUL-terminated canonical name, or NULL for an invalid or unknown selector.
+ * @lifetime The returned immutable string belongs to the loaded library; no input is retained.
+ * @errors No provider initialization or allocation occurs; a missing name does not admit a
+ * fallback.
+ * @execution Synchronous metadata lookup without a context, device, compiler or runtime file reads.
+ * @units selector_count is in bytes; the return value is not a basis or execution-capability claim.
+ */
+GENERATIVEQC_API const char* generativeqc_builtin_basis_resolve_name_v1(const char* selector,
+                                                                        uint64_t selector_count);
+
 /** @native-contract generativeqc_builtin_basis_query_v1
  * @behavior Query shared AOT basis expansion counts and canonical pack provenance.
  * @inputs Versioned records, a byte-counted name, bounded nonempty atom array and valid
@@ -3360,12 +3448,14 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_create_named_ks_v1(
  * headers. descriptor.method must be the PBE_RKS/PBE_UKS transport carrier matching the
  * named program's spin. ks_options, when supplied, contributes execution controls only;
  * the catalog owns every scientific primitive. NULL ks_options selects level-3 quadrature,
- * device-fused XC and a 256 MiB nonlocal budget.
+ * device-fused XC and a 256 MiB nonlocal budget. The optional CPU DF host limit
+ * binds the modeled retained/scratch capacity and the named replay properties.
  * @outputs Clears the output slot on entry and publishes an owned calculation on success.
  * @lifetime Copies all inputs; context must outlive the returned calculation.
  * @errors Unknown/unavailable programs return NOT_IMPLEMENTED; identity/carrier conflicts
  * and changed defining basis data return INVALID_ARGUMENT. Bound composites require their
- * actual normalized orbital snapshot. Usual ABI, capacity and numerical gates apply.
+ * actual normalized orbital snapshot. A short effective CPU DF host limit
+ * returns OUT_OF_MEMORY before scientific preparation. Usual ABI and numerical gates apply.
  * @execution Synchronous native preparation, without Python, SCF or reference engines.
  * @units Energy in Hartree, coordinates in Bohr, capacities in bytes.
  */
@@ -3378,7 +3468,8 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_named_ks_v
  * @behavior Prepare a complete named KS program for an input-ordered native batch.
  * @inputs systems/system_count and flags follow generativeqc_batch_prepare. The method and
  * named descriptors follow generativeqc_calculation_prepare_named_ks_v1, including exact
- * identity checks and execution-control-only ks_options.
+ * identity checks and execution-control-only ks_options. The CPU DF host limit
+ * covers the aggregate retained fleet plus the largest serialized workspace.
  * @outputs Clears the output slot on entry; success publishes one owning batch.
  * @lifetime Copies inputs and retains the context, which must outlive the batch.
  * @errors Uses the same fail-closed preparation statuses as the single-system endpoint.

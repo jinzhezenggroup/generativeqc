@@ -188,6 +188,35 @@ def _initial_guess_precision(calculator: typing.Any) -> int:
     return calculator._precision_mode
 
 
+def _automatic_policy_request(
+    calculator: typing.Any,
+    *,
+    restricted: bool,
+    has_ecp: bool,
+    atomic_numbers: typing.Sequence[int] = (),
+) -> _native.InitialGuessAutoPolicyDescriptor:
+    """Marshal seed-model facts without deciding provider eligibility."""
+    storage = (
+        (ctypes.c_int32 * len(atomic_numbers))(*atomic_numbers)
+        if atomic_numbers
+        else None
+    )
+    return _native.InitialGuessAutoPolicyDescriptor(
+        ctypes.sizeof(_native.InitialGuessAutoPolicyDescriptor),
+        _native.ABI_VERSION,
+        calculator._method,
+        _native.BACKEND_CPU_REFERENCE
+        if calculator._device_name == "cpu"
+        else _native.BACKEND_CUDA,
+        _initial_guess_precision(calculator),
+        calculator._density_fitting_mode,
+        int(restricted),
+        int(has_ecp),
+        storage,
+        len(atomic_numbers),
+    )
+
+
 def _native_automatic_minao_eligible(
     calculator: typing.Any,
     *,
@@ -217,24 +246,11 @@ def _native_automatic_minao_eligible(
     )
     if query is None:
         return None
-    storage = (
-        (ctypes.c_int32 * len(atomic_numbers))(*atomic_numbers)
-        if atomic_numbers
-        else None
-    )
-    request = _native.InitialGuessAutoPolicyDescriptor(
-        ctypes.sizeof(_native.InitialGuessAutoPolicyDescriptor),
-        _native.ABI_VERSION,
-        calculator._method,
-        _native.BACKEND_CPU_REFERENCE
-        if calculator._device_name == "cpu"
-        else _native.BACKEND_CUDA,
-        _initial_guess_precision(calculator),
-        calculator._density_fitting_mode,
-        int(restricted),
-        int(has_ecp),
-        storage,
-        len(atomic_numbers),
+    request = _automatic_policy_request(
+        calculator,
+        restricted=restricted,
+        has_ecp=has_ecp,
+        atomic_numbers=atomic_numbers,
     )
     query.argtypes = [ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor)]
     if system_query:
@@ -260,6 +276,12 @@ def _uses_native_automatic_cpu(calculator: typing.Any) -> bool:
         or getattr(calculator, "_device_name", None) != "cpu"
     ):
         return False
+    native_kind = getattr(calculator, "_native_automatic_initial_guess_kind", None)
+    if native_kind is not None:
+        return native_kind in (
+            _native.INITIAL_GUESS_AUTO_CPU,
+            _native.INITIAL_GUESS_AUTO_HUCKEL_CPU,
+        )
     library = getattr(calculator, "_library", None)
     policy = getattr(calculator, "_initial_guess", None)
     huckel = policy is not None and policy.kind == "huckel"
@@ -305,8 +327,47 @@ def _automatic_minao_model_eligible(
 
 def automatic_initial_guess_candidate(
     calculator: typing.Any, *, restricted: bool, has_ecp: bool
-) -> InitialGuessSpec | None:
-    """Select Huckel through native v2; preserve MINAO/Hcore on older libraries."""
+) -> tuple[InitialGuessSpec | None, int | None]:
+    """Return the seed controls and native transport, if that ABI is available.
+
+    The native result alone chooses the candidate and CPU per-item transport.
+    ``None`` transport means the library predates combined discovery; zero is
+    an authoritative core-density choice. Native errors never use old policy.
+    """
+    library = calculator._library
+    query = getattr(library, "generativeqc_initial_guess_default_kind_v1", None)
+    if query is not None:
+        request = _automatic_policy_request(
+            calculator, restricted=restricted, has_ecp=has_ecp
+        )
+        query.argtypes = [
+            ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor),
+            ctypes.POINTER(ctypes.c_uint32),
+        ]
+        query.restype = ctypes.c_int
+        selected = ctypes.c_uint32(2**32 - 1)
+        _native.check(library, query(ctypes.byref(request), ctypes.byref(selected)))
+        if not selected.value:
+            return None, 0
+        kinds = (
+            {
+                _native.INITIAL_GUESS_AUTO_CPU: "minao",
+                _native.INITIAL_GUESS_AUTO_HUCKEL_CPU: "huckel",
+            }
+            if calculator._device_name == "cpu"
+            else {
+                _native.INITIAL_GUESS_MINAO: "minao",
+                _native.INITIAL_GUESS_HUCKEL: "huckel",
+            }
+        )
+        kind = kinds.get(selected.value)
+        if kind is None:
+            raise RuntimeError(
+                "unsupported native automatic initial-guess descriptor kind"
+            )
+        return InitialGuessSpec(kind), selected.value
+
+    # Only older images need to combine the independent provider tests.
     if supports_automatic_huckel(
         calculator._library,
         cuda_rhf=calculator._device_name == "cuda"
@@ -322,12 +383,12 @@ def automatic_initial_guess_candidate(
                 "native Huckel capability lacks its automatic policy query"
             )
         if admitted:
-            return InitialGuessSpec("huckel")
+            return InitialGuessSpec("huckel"), None
     if _automatic_minao_model_eligible(
         calculator, restricted=restricted, has_ecp=has_ecp
     ):
-        return InitialGuessSpec("minao")
-    return None
+        return InitialGuessSpec("minao"), None
+    return None, None
 
 
 def read_initial_guess_diagnostic(
@@ -628,6 +689,212 @@ def _huckel_preparation_capacity(
     return checked_bytes(int(result.value))
 
 
+class _PreliminaryShellShape(ctypes.Structure):
+    """Atom-local topology needed only for native Hückel channel counting."""
+
+    _fields_ = [
+        ("atom_index", ctypes.c_size_t),
+        ("angular_momentum", ctypes.c_uint),
+        ("primitives", ctypes.c_size_t),
+    ]
+
+
+def _with_native_cpu_preliminary_resources(
+    request: typing.Any,
+    calculator: typing.Any,
+    systems: typing.Any,
+    policy: InitialGuessSpec,
+    schedule: dict,
+) -> typing.Any | None:
+    """Use the runtime's per-item layout without constructing native handles.
+
+    The automatic query resolves the provider and its layout together.
+    Fitted/CUDA and older images keep their previous contracts; a rejected or
+    malformed receipt never restarts frontend sizing.
+    """
+    automatic = getattr(calculator, "_automatic_initial_guess", False)
+    version = 2 if automatic else 1
+    query = getattr(
+        calculator._library,
+        f"generativeqc_resource_preliminary_cpu_shape_v{version}",
+        None,
+    )
+    if (
+        query is None
+        or request.identity.backend != "cpu"
+        or request.identity.precision != "fp64"
+        or calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE
+    ):
+        return None
+    if automatic and (
+        request.identity.provider not in ("native-hf-direct-v1", "native-ks-direct-v1")
+        or not _uses_native_automatic_cpu(calculator)
+    ):
+        return None
+    from generativeqc_compiler.common.resources import (
+        ResourceEstimate,
+        byte_product,
+        checked_bytes,
+    )
+
+    items = json.loads(request.identity.topology)["items"]
+    if len(items) != len(systems):
+        raise ValueError("CPU preliminary inventory topology does not match the batch")
+    selected = None
+    if policy.kind == "huckel":
+        from ._api_types import Atom
+        from .basis import BasisSet
+        from .calculator import _snapshot_basis
+
+        selected = _snapshot_basis(calculator._basis, calculator._representation_name)
+
+    query.argtypes = [
+        ctypes.POINTER(_native.InitialGuessOptionsDescriptor),
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_int32),
+        ctypes.c_size_t,
+        ctypes.POINTER(_PreliminaryShellShape),
+        ctypes.c_size_t,
+        ctypes.c_int,
+        ctypes.c_int64,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+    ]
+    if automatic:
+        query.argtypes += [ctypes.c_uint32]
+    query.argtypes += [ctypes.POINTER(ctypes.c_uint64), ctypes.c_size_t]
+    query.restype = ctypes.c_int
+    descriptor = policy.native(automatic_cpu=automatic)
+    provider = 5 if policy.kind == "huckel" else 3
+    retained = workspace = 0
+    decisions = []
+    resolved_kinds = []
+    for system, item in zip(systems, items, strict=True):
+        orbital, electrons = item["orbital"], item["electrons"]
+        numbers = (ctypes.c_int32 * len(electrons["atomic_numbers"]))(
+            *electrons["atomic_numbers"]
+        )
+        shape = (ctypes.c_uint64 * 5)(
+            *(
+                orbital[key]
+                for key in (
+                    "nbf",
+                    "cartesian_nbf",
+                    "shells",
+                    "primitives",
+                    "maximum_angular",
+                )
+            )
+        )
+        rows, shell_count = None, 0
+        if policy.kind == "huckel":
+            shells = (
+                selected.shells_for(tuple(Atom.from_value(atom) for atom in system))
+                if isinstance(selected, BasisSet)
+                else selected
+            )
+            shell_count = len(shells)
+            rows = (_PreliminaryShellShape * shell_count)(
+                *(
+                    (shell.atom_index, shell.angular_momentum, len(shell.primitives))
+                    for shell in shells
+                )
+            )
+        size = 6 if automatic else 5
+        values = (ctypes.c_uint64 * size)(*([2**64 - 1] * size))
+        if query(
+            ctypes.byref(descriptor),
+            shape,
+            len(shape),
+            numbers,
+            len(numbers),
+            rows,
+            shell_count,
+            _native.BASIS_SPHERICAL
+            if orbital["representation"] == "spherical"
+            else _native.BASIS_CARTESIAN,
+            electrons["electron_count"],
+            electrons["multiplicity"],
+            any(electrons["ecp_core_electrons"]) or bool(orbital.get("ecp_terms")),
+            *((item["spins"],) if automatic else ()),
+            values,
+            len(values),
+        ):
+            raise ValueError(
+                "native CPU preliminary inventory rejected topology or policy"
+            )
+        required, cap, seed, scratch, decision, *kind = map(checked_bytes, values)
+        if cap != policy.maximum_numeric_bytes or (
+            (
+                decision == 0
+                and (
+                    not 0 < required <= cap
+                    or seed != byte_product(8, orbital["nbf"], orbital["nbf"])
+                    or checked_bytes(seed + scratch) < required
+                )
+            )
+            or (decision == 1 and (required <= cap or seed or scratch))
+            or (decision == 2 and (policy.kind != "lda" or required or seed or scratch))
+            or (decision == 3 and (not automatic or required or seed or scratch))
+            or decision not in (0, 1, 2, 3)
+            or (automatic and kind != [0 if decision == 3 else provider])
+        ):
+            raise ValueError(
+                "native CPU preliminary inventory returned an inconsistent layout"
+            )
+        retained = checked_bytes(retained + seed)
+        workspace = max(workspace, scratch)
+        decisions.append(decision)
+        resolved_kinds.extend(kind)
+
+    if automatic:
+        schedule = {
+            **schedule,
+            "initial_guess_execution": "native-auto-cpu-v1",
+            "initial_guess_resolved_kinds": resolved_kinds,
+        }
+    identity = replace(
+        request.identity,
+        schedule=json.dumps(
+            {
+                **schedule,
+                "initial_guess_inventory": f"native-cpu-direct-preliminary-v{version}",
+                "initial_guess_dispositions": decisions,
+            },
+            sort_keys=True,
+        ),
+    )
+    extra = (
+        (
+            ResourceEstimate(
+                f"all retained {policy.kind.upper()} cold seeds",
+                retained,
+                "pageable",
+                0,
+                0,
+            ),
+            ResourceEstimate(
+                "largest serialized CPU preliminary workspace",
+                workspace,
+                "pageable",
+                0,
+                0,
+            ),
+        )
+        if retained or workspace
+        else ()
+    )
+    return replace(
+        request,
+        identity=identity,
+        candidates=tuple(
+            replace(candidate, estimates=(*candidate.estimates, *extra))
+            for candidate in request.candidates
+        ),
+    )
+
+
 def with_initial_guess_resources(
     request: typing.Any,
     calculator: typing.Any,
@@ -644,11 +911,23 @@ def with_initial_guess_resources(
     policy = initial_guess_for_systems(calculator, systems)
     if policy is None:
         return request
+    # Preliminary capacity cannot repair a missing base allocation contract.
+    if request.unsupported_reason is not None:
+        return request
     schedule = {
         **json.loads(request.identity.schedule),
         "initial_guess": policy.to_payload(),
     }
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
+    # A missing target inventory stays unsupported; do not query its
+    # preliminary owner's policy or replace the target's diagnostic.
+    if not request.candidates:
+        return replace(request, identity=identity)
+    native = _with_native_cpu_preliminary_resources(
+        request, calculator, systems, policy, schedule
+    )
+    if native is not None:
+        return native
     if policy.kind == "huckel":
         from generativeqc_compiler.common.resources import (
             ResourceEstimate,
@@ -682,6 +961,10 @@ def with_initial_guess_resources(
                     multiplicity=electrons["multiplicity"],
                     kind="huckel",
                 )
+                if admitted is None:
+                    raise RuntimeError(
+                        "native automatic CPU policy lacks its system query"
+                    )
                 resolved_kinds.append(5 if admitted else 0)
                 if not admitted:
                     continue
@@ -760,6 +1043,10 @@ def with_initial_guess_resources(
                     electron_count=electrons["electron_count"],
                     multiplicity=electrons["multiplicity"],
                 )
+                if admitted is None:
+                    raise RuntimeError(
+                        "native automatic CPU policy lacks its system query"
+                    )
                 resolved_kinds.append(3 if admitted else 0)
                 if not admitted:
                     continue

@@ -253,10 +253,28 @@ def test_public_uks_raw_matrix_and_failure_recovery(
     assert np.isfinite(action.value).all() and not action.value.flags.writeable
 
 
-def test_unqualified_pbe0_uks_stays_closed() -> None:
-    """A failed unrestricted point provider cannot inherit RKS admission."""
+def test_pbe0_uks_without_linked_native_owner_stays_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing unrestricted point provider cannot inherit RKS admission."""
+    from generativeqc import _native_cpu_hessian
+
+    monkeypatch.setattr(_native_cpu_hessian, "linked_method", lambda *_: False)
     calculator = Calculator(
         method="pbe0-uks", device="cpu", ks_options=KsOptions(grid=GRID)
+    )
+    assert not calculator.second_order_capabilities
+    with pytest.raises(NotImplementedError, match="does not expose public hessian"):
+        calculator.hessian(ATOMS)
+
+
+def test_unqualified_df_pbe0_uks_stays_closed() -> None:
+    """DF must not inherit admission from the linked direct UKS owner."""
+    calculator = Calculator(
+        method="pbe0-uks",
+        device="cpu",
+        density_fitting="cpu",
+        ks_options=KsOptions(grid=GRID),
     )
     assert not calculator.second_order_capabilities
     with pytest.raises(NotImplementedError, match="does not expose public hessian"):

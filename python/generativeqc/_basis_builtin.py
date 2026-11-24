@@ -1,4 +1,4 @@
-"""Optional named-basis system materialization, never offline metadata resolution."""
+"""Native named-basis selection and materialization for installed execution."""
 
 from __future__ import annotations
 
@@ -65,6 +65,43 @@ def eligible(library: Any, basis: Any) -> bool:
             "generativeqc_system_create_builtin_basis_v1",
         )
     )
+
+
+def resolve_record(library: Any, selector: str, representation: str) -> BasisSet:
+    """Resolve a Calculator's name natively, then attach portable provenance.
+
+    An older library may lack name discovery. An installed resolver's refusal
+    or pack mismatch is authoritative, not permission to load another basis.
+    """
+    from ._model_resolution import _named_basis_record
+
+    resolve = getattr(library, "generativeqc_builtin_basis_resolve_name_v1", None)
+    if resolve is None:
+        return _named_basis_record(selector, representation)
+    resolve.argtypes = [ctypes.c_char_p, ctypes.c_uint64]
+    resolve.restype = ctypes.c_char_p
+    encoded = selector.encode("utf-8")
+    canonical = resolve(encoded, len(encoded))
+    if not canonical:
+        raise NotImplementedError(f"bundled basis {selector!r} is unavailable")
+    checksum = getattr(library, "generativeqc_bundled_basis_catalog_sha256", None)
+    if checksum is None:
+        raise RuntimeError("native builtin basis resolver has no pack provenance")
+    checksum.argtypes = []
+    checksum.restype = ctypes.c_char_p
+    try:
+        record = _named_basis_record(canonical.decode("ascii"), representation)
+    except NotImplementedError as error:
+        raise RuntimeError(
+            "native builtin basis name is absent from package metadata"
+        ) from error
+    if canonical != record.name.encode(
+        "ascii"
+    ) or checksum() != record.provenance.checksum.encode("ascii"):
+        raise RuntimeError(
+            "native builtin basis catalog does not match package metadata"
+        )
+    return record
 
 
 def create_system(

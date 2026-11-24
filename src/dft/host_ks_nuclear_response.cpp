@@ -95,7 +95,8 @@ class HostKsNuclearResponse::Impl {
           ao_prefix.read(begin, count, ao, weights);
           authenticate(identity);
         },
-        [this](const auto& current) { authenticate(current); }, limits.max_numeric_bytes);
+        [this](const auto& current) { authenticate(current); }, limits.max_numeric_bytes, 1e-12,
+        limits.recycle_rhs_groups);
     perturbation = std::make_unique<HostKsPerturbation>(
         *response,
         HostKsPerturbationOptions{limits.max_numeric_bytes, limits.perturbation_map_terms});
@@ -258,7 +259,7 @@ class HostKsNuclearResponse::Impl {
             ao_prefix.prefix_points()};
   }
 
-  bool admit_coordinates(const response::GmresOptions& options) {
+  bool admit_coordinates(const response::GmresOptions& options, std::size_t directions) {
     validate();
     if (census.source_attempts || integral_source->work().directions_started)
       throw std::logic_error("coordinate first sources must be admitted before source work");
@@ -269,9 +270,10 @@ class HostKsNuclearResponse::Impl {
     const auto plan = HostKsNuclearIntegrals::plan(geometry.basis(), identity.model.spins,
                                                    limits.integrals.eri_schedule,
                                                    HostNuclearFirstSchedule::CoordinatePanel);
-    const auto current = resources(options);
+    const auto current = resources(options, directions);
     if (!current.admitted || plan.numeric_bytes > limits.coordinate_source_bytes ||
-        plan.numeric_bytes > limits.max_numeric_bytes - fixed_bytes - current.gmres_workspace_bytes)
+        plan.numeric_bytes >
+            limits.max_numeric_bytes - current.fixed_bound_bytes - current.gmres_workspace_bytes)
       return false;
     auto panel_options = limits.integrals;
     panel_options.limits.numeric_bytes = plan.numeric_bytes;
@@ -320,9 +322,10 @@ HostKsNuclearResponse::HostKsNuclearResponse(const VerifiedKsFinalState& state,
                                    std::move(validate_current))) {}
 HostKsNuclearResponse::~HostKsNuclearResponse() = default;
 
-bool HostKsNuclearResponse::admit_coordinate_sources(const response::GmresOptions& options) {
+bool HostKsNuclearResponse::admit_coordinate_sources(const response::GmresOptions& options,
+                                                     std::size_t directions) {
   Invocation guard(impl_->busy);
-  return impl_->admit_coordinates(options);
+  return impl_->admit_coordinates(options, directions);
 }
 
 std::size_t HostKsNuclearResponse::admit_response_cache(const response::GmresOptions& options,

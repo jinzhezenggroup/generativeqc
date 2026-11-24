@@ -30,6 +30,13 @@ def generate(payload: dict) -> str:
     methods = {
         spin: resolve_method(inventory.method, spin=spin) for spin in inventory.spins
     }
+    methods.update(
+        {
+            f"{spin}_{name.lower()}": resolve_method(name, spin=spin)
+            for name in inventory.additional_methods
+            for spin in inventory.spins_for(name)
+        }
+    )
     projection = next(
         (
             entry.identity
@@ -79,11 +86,16 @@ def generate(payload: dict) -> str:
         + json.dumps(projection)
         + ";\n"
     )
-    source += "inline std::string_view method_identity(std::size_t spins) noexcept {\n"
-    for spin, method in methods.items():
+    source += (
+        "inline std::string_view method_map_key(std::string_view identity, "
+        "std::size_t spins) noexcept {\n"
+    )
+    for key, method in methods.items():
         source += (
-            f" if (spins == {2 if spin == 'polarized' else 1}) return "
+            f" if (spins == {2 if method.spin == 'polarized' else 1} && identity == "
             + json.dumps(method.identity)
+            + ") return "
+            + json.dumps(key)
             + ";\n"
         )
     source += ' return ""; }\n}\n'

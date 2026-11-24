@@ -13,6 +13,7 @@
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/initial_guess/huckel_capacity.hpp"
 #include "scf/initial_guess/minao.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
@@ -28,6 +29,15 @@ extern "C" int generativeqc_resource_huckel_numeric_capacity_v1(
     const std::int32_t* atomic_numbers, std::size_t atom_count, const std::uint32_t* shell_atoms,
     const std::uint32_t* angular_momenta, const std::uint64_t* primitive_counts,
     std::size_t shell_count, int representation, std::uint32_t diis_history, std::uint64_t* output);
+extern "C" int generativeqc_resource_preliminary_cpu_shape_v1(
+    const generativeqc_initial_guess_options*, const std::uint64_t*, std::size_t,
+    const std::int32_t*, std::size_t, const generativeqc::scf::initial_guess::HuckelShellShape*,
+    std::size_t, int, std::int64_t, std::uint32_t, std::uint32_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_preliminary_cpu_shape_v2(
+    const generativeqc_initial_guess_options*, const std::uint64_t*, std::size_t,
+    const std::int32_t*, std::size_t, const generativeqc::scf::initial_guess::HuckelShellShape*,
+    std::size_t, int, std::int64_t, std::uint32_t, std::uint32_t, std::uint32_t, std::uint64_t*,
+    std::size_t);
 
 namespace {
 using namespace generativeqc;
@@ -61,6 +71,88 @@ core::System water() {
   require(molecule::validate_and_normalize(s, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "bad fixture");
   return s;
+}
+
+void check_compact_preliminary_inventory() {
+  const auto system = water();
+  const std::array<std::int32_t, 3> elements{8, 1, 1};
+  const std::array<HuckelShellShape, 5> shells{
+      {{0, 0, 3}, {0, 0, 3}, {0, 1, 3}, {1, 0, 3}, {2, 0, 3}}};
+  const std::array<std::uint64_t, 5> topology{7, 7, 5, 15, 1};
+  std::array<std::uint64_t, 5> result{};
+  for (auto kind : {GENERATIVEQC_INITIAL_GUESS_HF, GENERATIVEQC_INITIAL_GUESS_LDA,
+                    GENERATIVEQC_INITIAL_GUESS_MINAO, GENERATIVEQC_INITIAL_GUESS_HUCKEL}) {
+    generativeqc_initial_guess_options descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.kind = kind;
+    auto policy = *preliminary_options(&descriptor);
+    const auto native = cpu_direct_preliminary_inventory(system, policy, false);
+    const bool huckel = kind == GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    const auto query = [&](const auto& shape) {
+      return generativeqc_resource_preliminary_cpu_shape_v1(
+          &descriptor, shape.data(), shape.size(), elements.data(), elements.size(),
+          huckel ? shells.data() : nullptr, huckel ? shells.size() : 0, system.basis_representation,
+          system.electron_count, system.multiplicity, 0, result.data(), result.size());
+    };
+    require(query(topology) == 0 && result[0] == native.required_numeric_bytes &&
+                result[1] == native.maximum_numeric_bytes && result[2] == native.seed_bytes &&
+                result[3] == native.workspace_bytes && result[4] == 0,
+            "compact and normalized CPU preliminary inventories disagree");
+    descriptor.maximum_numeric_bytes = native.required_numeric_bytes - 1;
+    require(query(topology) == 0 && result[0] == native.required_numeric_bytes &&
+                result[1] == descriptor.maximum_numeric_bytes && !result[2] && !result[3] &&
+                result[4] == 1,
+            "local cap skip charged a CPU preliminary owner");
+    const auto committed = result;
+    auto invalid_shape = topology;
+    invalid_shape[0] = huckel ? 6 : 0;
+    require(query(invalid_shape) != 0 && result == committed,
+            "malformed compact CPU preliminary input changed the previous receipt");
+  }
+
+  for (const bool huckel : {false, true}) {
+    generativeqc_initial_guess_options descriptor{};
+    descriptor.struct_size = sizeof(descriptor);
+    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+    descriptor.kind =
+        huckel ? GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU : GENERATIVEQC_INITIAL_GUESS_AUTO_CPU;
+    auto policy = *preliminary_options(&descriptor);
+    policy.automatic_cpu = false;
+    const auto layout = cpu_direct_preliminary_inventory(system, policy, false);
+    const auto kind = static_cast<std::uint64_t>(policy.kind);
+    descriptor.maximum_numeric_bytes = layout.required_numeric_bytes;
+    std::array<std::uint64_t, 6> automatic{};
+    const auto query = [&](const auto& numbers, unsigned spin, unsigned ecp,
+                           unsigned multiplicity) {
+      return generativeqc_resource_preliminary_cpu_shape_v2(
+          &descriptor, topology.data(), topology.size(), numbers.data(), numbers.size(),
+          huckel ? shells.data() : nullptr, huckel ? shells.size() : 0, system.basis_representation,
+          system.electron_count, multiplicity, ecp, spin, automatic.data(), automatic.size());
+    };
+    require(
+        query(elements, 1, 0, 1) == 0 &&
+            automatic == std::array{layout.required_numeric_bytes, layout.required_numeric_bytes,
+                                    layout.seed_bytes, layout.workspace_bytes, UINT64_C(0), kind},
+        "automatic compact admission disagrees with explicit capacity");
+    --descriptor.maximum_numeric_bytes;
+    const auto cap = descriptor.maximum_numeric_bytes;
+    require(query(elements, 1, 0, 1) == 0 &&
+                automatic == std::array{layout.required_numeric_bytes, cap, UINT64_C(0),
+                                        UINT64_C(0), UINT64_C(1), kind},
+            "local cap skip lost the resolved provider");
+    const std::array declined{UINT64_C(0), cap, UINT64_C(0), UINT64_C(0), UINT64_C(3), UINT64_C(0)};
+    require(query(elements, 2, 0, 1) == 0 && automatic == declined,
+            "unrestricted singlet was conflated with a restricted target");
+    require(query(elements, 1, 1, 1) == 0 && automatic == declined,
+            "ECP target reserved a cold seed");
+    require(query(elements, 1, 0, 3) == 0 && automatic == declined,
+            "nonsinglet target reserved a cold seed");
+    require(query(std::array<std::int32_t, 3>{20, 1, 1}, 1, 0, 1) == 0 && automatic == declined,
+            "out-of-domain element reserved a cold seed");
+    require(query(elements, 0, 0, 1) != 0 && automatic == declined,
+            "invalid spin metadata modified the receipt");
+  }
 }
 void matched(const scf::ScfResult& a, const scf::ScfResult& b) {
   require(a.converged && b.converged, "SCF did not converge");
@@ -623,6 +715,62 @@ void check_huckel_automatic_policy() {
           "Huckel invalid request overwrote output");
 }
 
+void check_default_initial_guess_kind() {
+  generativeqc_initial_guess_auto_policy request{};
+  request.struct_size = sizeof(request);
+  request.abi_version = GENERATIVEQC_ABI_VERSION;
+  request.method = GENERATIVEQC_METHOD_RHF;
+  request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  request.restricted = 1;
+  const auto selected = [&](uint32_t expected) {
+    uint32_t kind = 99;
+    require(generativeqc_initial_guess_default_kind_v1(&request, &kind) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                kind == expected,
+            "automatic model discovery returned the wrong descriptor kind");
+  };
+  for (const auto backend : {GENERATIVEQC_BACKEND_CPU_REFERENCE, GENERATIVEQC_BACKEND_CUDA}) {
+    request.backend = backend;
+    const uint32_t expected = backend == GENERATIVEQC_BACKEND_CPU_REFERENCE
+                                  ? GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU
+                                  : GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    for (const auto method : {GENERATIVEQC_METHOD_RHF, GENERATIVEQC_METHOD_PBE_RKS}) {
+      request.method = method;
+      for (const auto fitting :
+           {GENERATIVEQC_DENSITY_FITTING_NONE, GENERATIVEQC_DENSITY_FITTING_AUTO}) {
+        request.density_fitting_mode = fitting;
+        selected(expected);
+      }
+    }
+    request.restricted = 0;
+    selected(0);
+    request.restricted = 1;
+    request.has_ecp = 1;
+    selected(0);
+    request.has_ecp = 0;
+    request.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+    selected(0);
+    request.precision_mode = GENERATIVEQC_PRECISION_FP64;
+    request.method = GENERATIVEQC_METHOD_MP2;
+    selected(0);
+  }
+  const int32_t helium = 2;
+  request.atomic_numbers = &helium;
+  request.atom_count = 1;
+  uint32_t kind = 99;
+  require(generativeqc_initial_guess_default_kind_v1(&request, &kind) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              kind == 99,
+          "the model-only query accepted topology or modified a failed receipt");
+  request.atomic_numbers = nullptr;
+  request.atom_count = 0;
+  request.struct_size = 0;
+  require(generativeqc_initial_guess_default_kind_v1(&request, &kind) ==
+                  GENERATIVEQC_STATUS_ABI_MISMATCH &&
+              kind == 99,
+          "the model-only query modified output after an ABI mismatch");
+}
+
 void check_sdk_diagnostic_lifetime() {
   // The public C++ adapter must distinguish no execution from a recorded
   // bounded fallback, and its copied diagnostic must survive owner teardown.
@@ -640,7 +788,20 @@ void check_sdk_diagnostic_lifetime() {
     generativeqc_initial_guess_options guess{};
     guess.struct_size = sizeof(guess);
     guess.abi_version = GENERATIVEQC_ABI_VERSION;
-    guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
+    const generativeqc_initial_guess_auto_policy request{sizeof(request),
+                                                         GENERATIVEQC_ABI_VERSION,
+                                                         method.method,
+                                                         context_descriptor.backend,
+                                                         method.precision_mode,
+                                                         method.density_fitting_mode,
+                                                         1,
+                                                         0,
+                                                         nullptr,
+                                                         0};
+    uint32_t kind{};
+    generativeqc::check(generativeqc_initial_guess_default_kind_v1(&request, &kind));
+    require(kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU, "unexpected SDK default policy");
+    guess.kind = static_cast<generativeqc_initial_guess_kind>(kind);
     guess.maximum_numeric_bytes = 1;
     method.initial_guess = &guess;
     generativeqc::Calculation original(context, system, method);
@@ -659,8 +820,10 @@ void check_sdk_diagnostic_lifetime() {
 int main() {
   try {
     check_sdk_diagnostic_lifetime();
+    check_compact_preliminary_inventory();
     check_automatic_policy();
     check_huckel_automatic_policy();
+    check_default_initial_guess_kind();
     check();
     std::cout << "preliminary SCF contracts passed\n";
     return 0;

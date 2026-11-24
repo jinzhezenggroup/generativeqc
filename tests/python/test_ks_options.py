@@ -242,12 +242,37 @@ def test_method_ir_projection_preserves_catalog_identity(
     ),
     ids=("coefficient", "missing-component", "extra-component", "family", "spin"),
 )
-@pytest.mark.parametrize("consumer", ("options", "calculator", "resources"))
-def test_method_ir_mismatch_fails_before_native_load(
+@pytest.mark.parametrize(
+    "consumer", ("options", "legacy-calculator", "resources", "native-catalog")
+)
+def test_method_ir_mismatch_fails_at_binding(
     monkeypatch: typing.Any, graph: typing.Any, consumer: typing.Any
 ) -> None:
     import generativeqc.ks as ks_module
     from generativeqc import _native
+
+    if consumer == "native-catalog":
+        import ctypes
+        from types import SimpleNamespace
+
+        import generativeqc_compiler.method as compiler
+        from generativeqc import _named_ks
+
+        canonical_identity = resolve_method("PBE").identity.encode("ascii")
+
+        def lookup(*args: typing.Any) -> int:
+            binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBinding))
+            binding.contents.identifier = b"PBE"
+            binding.contents.identity = canonical_identity
+            binding.contents.spin = 1
+            return 0
+
+        library = SimpleNamespace(generativeqc_ks_catalog_lookup_v1=lookup)
+        monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+        monkeypatch.setattr(compiler, "resolve_method", lambda *args, **kwargs: graph)
+        with pytest.raises(RuntimeError, match="native KS catalog identity disagrees"):
+            Calculator(method="pbe-rks")
+        return
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
         pytest.fail("inconsistent MethodIR reached native loading")
@@ -255,11 +280,15 @@ def test_method_ir_mismatch_fails_before_native_load(
     # The common resolver is authoritative for composition, but native selectors
     # still execute fixed LDA/PBE mathematics. Any drift must fail at the boundary.
     monkeypatch.setattr(ks_module, "resolve_method", lambda *args, **kwargs: graph)
-    monkeypatch.setattr(_native, "load_library", forbidden)
+    if consumer == "legacy-calculator":
+        # A loader result without the catalog symbol selects the legacy resolver.
+        monkeypatch.setattr(_native, "load_library", lambda **kwargs: object())
+    else:
+        monkeypatch.setattr(_native, "load_library", forbidden)
     with pytest.raises(RuntimeError, match="disagrees with native KS XC catalog"):
         if consumer == "options":
             resolve_ks_options("pbe-rks")
-        elif consumer == "calculator":
+        elif consumer == "legacy-calculator":
             Calculator(method="pbe-rks")
         else:
             estimate_ks_resources([H2], method="pbe-rks")
@@ -297,6 +326,11 @@ def test_unsupported_compositions_and_policy_fail_before_native_load(
     ):
         with pytest.raises(NotImplementedError, match="composition/spin"):
             Calculator(method="pbe-rks", ks_options=KsOptions(functional=spec))
+    with pytest.raises(NotImplementedError, match="composition/spin"):
+        Calculator(
+            method="pbe-rks",
+            ks_options=KsOptions(composition=resolve_method("PBE", spin="polarized")),
+        )
     with pytest.raises(NotImplementedError, match="domain"):
         KsOptions(scf_domain="unversioned-clipping")
     with pytest.raises(ValueError, match="RKS/UKS"):

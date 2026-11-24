@@ -29,6 +29,48 @@ class CompositeCorrectionResult(ct.Structure):
     ]
 
 
+class _CatalogBinding(ct.Structure):
+    _fields_ = [
+        ("struct_size", ct.c_uint32),
+        ("abi_version", ct.c_uint32),
+        ("identifier", ct.c_char_p),
+        ("identity", ct.c_char_p),
+        ("spin", ct.c_uint32),
+    ]
+
+
+def resolve_named_graph(library: Any, selector: str, backend: int) -> Any:
+    """Use native name selection and authenticate the detached Python graph view."""
+    query = getattr(library, "generativeqc_ks_catalog_lookup_v1", None)
+    if query is None:
+        return None
+    name = selector.encode("utf-8")
+    if not name or len(name) > 256 or b"\0" in name:
+        return None
+    binding = _CatalogBinding(ct.sizeof(_CatalogBinding), _native.ABI_VERSION)
+    query.argtypes = [ct.c_char_p, ct.c_size_t, ct.c_int32, ct.POINTER(_CatalogBinding)]
+    query.restype = ct.c_int
+    _native.check(library, query(name, len(name), backend, ct.byref(binding)))
+    if binding.identifier is None and binding.identity is None and binding.spin == 0:
+        return None
+    if (
+        binding.identifier is None
+        or binding.identity is None
+        or binding.spin not in (1, 2)
+    ):
+        raise RuntimeError("incomplete native KS catalog binding")
+
+    from generativeqc_compiler.method import resolve_method
+
+    graph = resolve_method(
+        binding.identifier.decode("utf-8"),
+        spin="unpolarized" if binding.spin == 1 else "polarized",
+    )
+    if graph.identity.encode("ascii") != binding.identity:
+        raise RuntimeError("native KS catalog identity disagrees with Python metadata")
+    return graph
+
+
 def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None:
     """Discover an exact full graph; missing symbols/catalog entries retain compatibility."""
     query = getattr(library, "generativeqc_ks_catalog_name_v1", None)
@@ -40,6 +82,18 @@ def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None
     _native.check(
         library, query(graph.identity.encode("ascii"), backend, ct.byref(selected))
     )
+    return selected.value
+
+
+def select_cpu_df_energy_program(library: Any, graph: Any) -> bytes | None:
+    """Ask the shared CLI/native catalog which exact graph admits CPU DF sizing."""
+    query = getattr(library, "generativeqc_ks_cpu_df_energy_program_v1", None)
+    if query is None or not hasattr(library, "generativeqc_batch_prepare_named_ks_v1"):
+        return None
+    query.argtypes = [ct.c_char_p, ct.POINTER(ct.c_char_p)]
+    query.restype = ct.c_int
+    selected = ct.c_char_p()
+    _native.check(library, query(graph.identity.encode("ascii"), ct.byref(selected)))
     return selected.value
 
 
@@ -84,6 +138,14 @@ def select_resource_program(calculator: Any, electronic_request: Any) -> bytes |
 
     graph = calculator._resource_dispersion_graph()
     if graph is None:
+        from .resources_ks import native_dense_force_request
+
+        if calculator._cpu_packed_eri_maximum_bytes or native_dense_force_request(
+            electronic_request
+        ):
+            return select_named_program(
+                calculator._library, calculator.method_ir, _native.BACKEND_CPU_REFERENCE
+            )
         return None
     composite = any(
         isinstance(node, GeometricCounterpoisePrimitive) for node in graph.primitives
@@ -205,6 +267,8 @@ def prepare_named_batch(
     *,
     cpu_packed_eri_maximum_bytes: int = 0,
     cold_rks_fock: _native.RksColdFockOptions | None = None,
+    cpu_df_host_budget: tuple[int, int] | None = None,
+    host_resources: Any = None,
 ) -> int:
     """Pass controls plus a pinned full identity to the selected library."""
     if cold_rks_fock is not None:
@@ -243,6 +307,14 @@ def prepare_named_batch(
         maximum_bytes,
         cpu_packed_eri_maximum_bytes,
     )
+    if cpu_df_host_budget is not None:
+        named.struct_size = ct.sizeof(_native.NamedKsCpuDfHostDescriptor)
+        extended = _native.NamedKsCpuDfHostDescriptor(named, *cpu_df_host_budget, 0)
+        named = extended.base
+        if host_resources is not None:
+            named.struct_size = ct.sizeof(_native.NamedKsSharedHostDescriptor)
+            shared = _native.NamedKsSharedHostDescriptor(extended, host_resources)
+            named = shared.base.base
     # The complete catalog graph owns its spin. PBE here is only the existing
     # ABI transport carrier, including when the public alias is legacy PBE-D4.
     method.method = (

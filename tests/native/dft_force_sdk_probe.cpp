@@ -30,9 +30,9 @@ void write_result(const char* name, const generativeqc::CalculationResult& resul
  * successful-looking partial JSON receipt. */
 int main(int argc, char** argv) {
   try {
-    if (argc != 7)
+    if (argc != 7 && argc != 8)
       throw std::invalid_argument(
-          "expected device, method, representation, spin, fitting, nonlocal level");
+          "expected device, method, representation, spin, fitting, nonlocal level [packed bytes]");
     const std::string device = argv[1], method = argv[2], representation = argv[3];
     const std::string fitting = argv[5];
     const int spin = std::stoi(argv[4]);
@@ -74,9 +74,9 @@ int main(int argc, char** argv) {
     const std::string selector =
         automatic ? (spin ? "libxc-uks:" : "libxc:") + method.substr(6)
                   : (method == "lda" ? "lda_xc_pw" : method) + (spin ? "-uks" : "-rks");
-    auto calculation =
-        generativeqc::prepare_named_ks(context, system, descriptor, selector, grid, 256ull << 20,
-                                       256ull << 20, nullptr, nonlocal_grid);
+    auto calculation = generativeqc::prepare_named_ks(
+        context, system, descriptor, selector, grid, 256ull << 20, 256ull << 20, nullptr,
+        nonlocal_grid, argc == 8 ? std::stoull(argv[7]) : 0);
     const auto properties = calculation.supported_properties();
     constexpr auto requested = GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES;
     if ((properties & requested) != requested)

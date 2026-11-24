@@ -226,7 +226,10 @@ void print_usage(std::ostream& out) {
          "  generativeqc profile diagnose\n"
          "Resource budget options (JSON output; no calculation or device probe):\n"
          "  --batch N --host-bytes N --device-bytes N --pinned-host-bytes N\n"
-         "  --host-reserve-bytes N --device-reserve-bytes N --headroom-fraction F\n\n"
+         "  --host-reserve-bytes N --device-reserve-bytes N --headroom-fraction F\n"
+         "  --property hessian|hvp  Include a linked CPU derivative's mandatory byte floor\n"
+         "  --forces                 Plan a supported native CPU KS force endpoint\n"
+         "  --cpu-packed-eri-budget-bytes N  Optional packed CPU ERI cap\n\n"
          "Native run options:\n"
          "  --method NAME            Any registered native method or MethodIR RKS/UKS selector\n"
          "  --basis NAME|FILE.json   Bundled or checked canonical local basis (default: sto-3g)\n"
@@ -237,10 +240,13 @@ void print_usage(std::ostream& out) {
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --owned-device-bytes N   Run-only native numeric allocation cap (not total GPU/RSS)\n"
+         "  --host-bytes N           Admit a supported CPU RHF or KS endpoint before setup\n"
+         "  --host-reserve-bytes N --headroom-fraction F  Optional host budget margins\n"
+         "  --cpu-packed-eri-budget-bytes N  Run with bounded exact spherical CPU KS values\n"
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --diis-history N         SCF history length (default: 8)\n"
-         "  --initial-guess none|hf|lda|minao|huckel  Explicit run-only cold start (default: "
+         "  --initial-guess none|auto|hf|lda|minao|huckel  Cold start for run/resources (default: "
          "none)\n"
          "  --initial-guess-max-iterations N  Preliminary iteration limit (native default: 32)\n"
          "  --initial-guess-bytes N   Preliminary numeric cap; 0 selects native 256 MiB default\n"
@@ -275,16 +281,21 @@ void print_usage(std::ostream& out) {
   out << "Native compiler AD Hessian/HVP options (linked CPU/CUDA AOT; no Python/JIT):\n"
          "  --method-ir FILE.json  Range-separated PBE MethodIR payload (instead of --method)\n"
          "  --direction FILE.json   HVP only: finite natoms-by-3 direction\n"
+         "  --directions FILE.json  CPU HVP only: nonempty nrhs-by-natoms-by-3 panel\n"
+         "  resources --property hvp --hvp-directions N  Plan a CPU HVP panel by count\n"
          "  --device-budget-bytes N Aggregate response/output device bound (default: 2 GiB)\n"
          "  --integral-budget-bytes N --grid-budget-bytes N --output-budget-bytes N\n"
          "  --response-budget-bytes N --max-nonlocal-pairs N\n"
          "  CPU: --numeric-budget-bytes N --ecp-budget-bytes N --dispersion-budget-bytes N\n"
+         "       --host-bytes N [--host-reserve-bytes N] [--headroom-fraction F]\n"
          "       --cpu-packed-eri-budget-bytes N\n"
          "  CPU: --max-eri-primitives N --max-map-terms N --max-d3-pairs N (work caps)\n"
          "  --nonlocal-grid-level N  Treutler/Lebedev level 0..9 for WB97M-V VV10\n"
          "  --nonlocal-grid-radial-points N --nonlocal-grid-polar-points N\n"
          "  --nonlocal-grid-azimuth-points N (specify all three for a separate WB97M-V grid)\n"
          "  --response-rtol F --response-atol F --response-restart N --response-max-iterations N\n"
+         "  CPU dense LDA/PBE RKS: --response-recycle-block-size N (2..4)\n"
+         "                        --response-sequential (one independent RHS at a time)\n"
          "  --response-cache-precision fp64|fp32-proposal (dense hessian only)\n";
   out << "Native saddle options (CPU B3LYP RKS/UKS; no Python/JIT or preoptimization):\n"
          "  --masses FILE.json       Required ordered positive masses in dalton\n"
@@ -424,6 +435,40 @@ bool is_correlated(const RunOptions& options) {
                    entry->family == GENERATIVEQC_METHOD_FAMILY_PERTURBATION);
 }
 
+/** Choose the model-level candidate; the native prepared target separately
+ * resolves this automatic descriptor against actual atoms and population. */
+generativeqc_initial_guess_kind automatic_initial_guess(const RunOptions& options) {
+  const auto* entry = generativeqc::methods::generated::find_method(options.method);
+  const bool restricted = options.composition ? options.composition->spin == 1
+                          : is_dft(options)   ? entry->name.ends_with("-rks")
+                                              : options.method == GENERATIVEQC_METHOD_RHF;
+  if (!restricted || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+      options.precision != GENERATIVEQC_PRECISION_FP64 || options.basis_program ||
+      options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
+    throw UsageError(
+        "--initial-guess auto requires a Direct FP64 CPU RHF/RKS target with an expandable "
+        "Gaussian basis");
+
+  const generativeqc_initial_guess_auto_policy request{sizeof(request),
+                                                       GENERATIVEQC_ABI_VERSION,
+                                                       options.method,
+                                                       options.backend,
+                                                       options.precision,
+                                                       options.density_fitting,
+                                                       1,
+                                                       0,
+                                                       nullptr,
+                                                       0};
+  std::uint32_t kind{};
+  generativeqc::check(generativeqc_initial_guess_default_kind_v1(&request, &kind));
+  if (!kind)
+    throw UsageError("no native automatic CPU initial-guess provider admits the selected model");
+  if (kind != GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU &&
+      kind != GENERATIVEQC_INITIAL_GUESS_AUTO_CPU)
+    throw std::runtime_error("unexpected native automatic CPU initial-guess descriptor kind");
+  return static_cast<generativeqc_initial_guess_kind>(kind);
+}
+
 std::string_view representation_name(generativeqc_basis_representation representation) {
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
 }
@@ -478,19 +523,22 @@ generativeqc_method_descriptor method_descriptor(
   return descriptor;
 }
 
-RunOptions parse_run(int argc, char** argv) {
+RunOptions parse_run(int argc, char** argv,
+                     generativeqc::cli::HessianInvocation* resource_derivative = nullptr) {
   if (argc < 3) throw UsageError("run requires an XYZ input path");
   RunOptions options;
   const bool resources = std::string_view(argv[1]) == "resources";
+  const bool singlepoint = std::string_view(argv[1]) == "run";
   const bool optimizing = std::string_view(argv[1]) == "optimize";
-  const bool compiler_second_order = std::string_view(argv[1]) == "hessian" ||
-                                     std::string_view(argv[1]) == "hvp" ||
-                                     std::string_view(argv[1]) == "saddle";
+  const bool hessian = std::string_view(argv[1]) == "hessian" || std::string_view(argv[1]) == "hvp";
+  const bool compiler_second_order = hessian || std::string_view(argv[1]) == "saddle";
   if (resources) {
     options.method_name = "rhf";
     options.method = GENERATIVEQC_METHOD_RHF;
   }
   options.input = argv[2];
+  bool derivative_limit_explicit = false;
+  bool dispersion_memory_explicit = false;
 
   for (int index = 3; index < argc; ++index) {
     const std::string_view option = argv[index];
@@ -588,7 +636,7 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (option == "--initial-guess") {
       options.initial_guess_name = lower(std::string(value()));
       const auto& selected = options.initial_guess_name;
-      if (selected == "none")
+      if (selected == "none" || selected == "auto")
         options.initial_guess.kind = 0;
       else if (selected == "hf")
         options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HF;
@@ -599,7 +647,7 @@ RunOptions parse_run(int argc, char** argv) {
       else if (selected == "huckel")
         options.initial_guess.kind = GENERATIVEQC_INITIAL_GUESS_HUCKEL;
       else
-        throw UsageError("--initial-guess must be none, hf, lda, minao, or huckel");
+        throw UsageError("--initial-guess must be none, auto, hf, lda, minao, or huckel");
       options.initial_guess_explicit = true;
     } else if (option == "--initial-guess-max-iterations") {
       options.initial_guess.max_iterations =
@@ -608,22 +656,39 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (option == "--initial-guess-bytes") {
       options.initial_guess.maximum_numeric_bytes = parse_bytes(value(), "initial-guess bytes");
       options.initial_guess_controls_explicit = true;
+    } else if (resource_derivative && option == "--property") {
+      if (!resource_derivative->operation.empty()) throw UsageError("duplicate --property");
+      const auto property = value();
+      if (property != "hessian" && property != "hvp")
+        throw UsageError("resources --property requires hessian or hvp");
+      resource_derivative->operation = property;
+    } else if (resource_derivative && option == "--hvp-directions") {
+      if (resource_derivative->hvp_directions) throw UsageError("duplicate --hvp-directions");
+      resource_derivative->hvp_directions = parse_positive_u32(value(), "hvp directions");
+    } else if ((singlepoint || resources) && option == "--cpu-packed-eri-budget-bytes") {
+      options.cpu_packed_eri_bytes = parse_bytes(value(), "CPU packed ERI bytes");
+      if (!options.cpu_packed_eri_bytes)
+        throw UsageError("--cpu-packed-eri-budget-bytes must be positive");
+    } else if (resource_derivative && option.ends_with("-budget-bytes")) {
+      if (!generativeqc::cli::parse_cpu_hessian_byte_limit(*resource_derivative, option, value()))
+        throw UsageError("unsupported derivative inventory control: " + std::string(option));
+      derivative_limit_explicit = true;
     } else if (resources && option == "--batch") {
       options.batch = parse_positive_u32(value(), "batch");
       if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
-    } else if (std::string_view(argv[1]) == "run" && option == "--owned-device-bytes") {
+    } else if (singlepoint && option == "--owned-device-bytes") {
       options.owned_device_bytes = parse_bytes(value(), "owned device bytes");
-    } else if (resources && option == "--host-bytes") {
+    } else if ((resources || hessian || singlepoint) && option == "--host-bytes") {
       options.host_bytes = parse_bytes(value(), "host bytes");
     } else if (resources && option == "--device-bytes") {
       options.device_bytes = parse_bytes(value(), "device bytes");
     } else if (resources && option == "--pinned-host-bytes") {
       options.pinned_host_bytes = parse_bytes(value(), "pinned host bytes");
-    } else if (resources && option == "--host-reserve-bytes") {
+    } else if ((resources || hessian || singlepoint) && option == "--host-reserve-bytes") {
       options.host_reserve_bytes = parse_bytes(value(), "host reserve bytes");
     } else if (resources && option == "--device-reserve-bytes") {
       options.device_reserve_bytes = parse_bytes(value(), "device reserve bytes");
-    } else if (resources && option == "--headroom-fraction") {
+    } else if ((resources || hessian || singlepoint) && option == "--headroom-fraction") {
       const auto text = value();
       const std::string input(text);
       char* end = nullptr;
@@ -652,6 +717,7 @@ RunOptions parse_run(int argc, char** argv) {
     } else if (option == "--nonlocal-memory-bytes") {
       options.nonlocal_memory_bytes = parse_bytes(value(), "nonlocal memory bytes");
     } else if (option == "--dispersion-memory-bytes") {
+      dispersion_memory_explicit = true;
       options.dispersion_memory_bytes = parse_bytes(value(), "dispersion memory bytes");
     } else if (option == "--correlation-memory-bytes") {
       options.correlation_memory_bytes = parse_bytes(value(), "correlation memory bytes");
@@ -763,11 +829,13 @@ RunOptions parse_run(int argc, char** argv) {
   }
   if (options.composition && options.owned_device_bytes.has_value())
     throw UsageError("--owned-device-bytes is not supported for named KS preparation");
-  if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) &&
-      std::string_view(argv[1]) != "run")
-    throw UsageError("initial-guess controls currently require the run command");
-  if (options.initial_guess_controls_explicit && !options.initial_guess.kind)
-    throw UsageError("initial-guess limits require --initial-guess hf, lda, minao, or huckel");
+  if ((options.initial_guess_explicit || options.initial_guess_controls_explicit) && !singlepoint &&
+      !resources)
+    throw UsageError("initial-guess controls require run or resources");
+  if (options.initial_guess_controls_explicit && !options.initial_guess.kind &&
+      !options.automatic_initial_guess())
+    throw UsageError(
+        "initial-guess limits require --initial-guess auto, hf, lda, minao, or huckel");
   if (is_gfn2(options) && options.initial_guess.kind)
     throw UsageError("initial-guess preparation requires a Gaussian HF/DFT method");
   if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit ||
@@ -783,7 +851,16 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
-  if ((options.grid_explicit || options.nonlocal_grid) && !options.composition && is_dft(options)) {
+  const bool derivative_inventory = resource_derivative && !resource_derivative->operation.empty();
+  if (derivative_inventory) {
+    resource_derivative->cpu_packed_eri_bytes = options.cpu_packed_eri_bytes;
+    options.cpu_packed_eri_bytes = 0;
+  }
+  if (singlepoint && !options.host_bytes &&
+      (options.host_reserve_bytes || options.headroom_fraction != 0))
+    throw UsageError("host budget margins require run --host-bytes");
+  if ((options.grid_explicit || options.nonlocal_grid || options.cpu_packed_eri_bytes) &&
+      !options.composition && is_dft(options)) {
     // A registered carrier may share its public name with a complete compiled
     // composition. Explicit grids must reach that same native scientific owner,
     // while requests without grid controls retain their native defaults.
@@ -793,11 +870,19 @@ RunOptions parse_run(int argc, char** argv) {
       options.method = compiled->carrier;
     }
   }
+  // A derivative dry-run uses the same native grid as hessian/hvp, even
+  // for registered methods that do not have a materialized CLI composition.
   if ((options.grid_explicit || options.nonlocal_grid) && !options.composition &&
-      !(compiler_second_order && is_dft(options)))
+      !((compiler_second_order || derivative_inventory) && is_dft(options)))
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
   if (options.nonlocal_grid && std::string_view(argv[1]) != "run")
     throw UsageError("--nonlocal-grid-level currently requires the run command");
+  if (singlepoint && options.cpu_packed_eri_bytes &&
+      (!options.composition || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+       options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE ||
+       options.precision != GENERATIVEQC_PRECISION_FP64 || options.owned_device_bytes ||
+       options.composition->range_omega != 0 || options.composition->nonlocal.variant))
+    throw UsageError("packed ERIs require a linked direct FP64 CPU KS program with full-range J/K");
   if (is_dft(options) && !options.composition && !options.grid_explicit) {
     // Registered methods leave ks_options null, so native preparation owns
     // their grid defaults. Keep the metadata-only inventory on that same grid.
@@ -829,6 +914,18 @@ RunOptions parse_run(int argc, char** argv) {
       options.representation = GENERATIVEQC_BASIS_SPHERICAL;
     }
   }
+  if (derivative_limit_explicit && !derivative_inventory)
+    throw UsageError("derivative byte limits require resources --property hessian or hvp");
+  if (resource_derivative && resource_derivative->hvp_directions &&
+      resource_derivative->operation != "hvp")
+    throw UsageError("--hvp-directions requires resources --property hvp");
+  if (derivative_inventory && dispersion_memory_explicit)
+    throw UsageError("derivative resource inventories use --dispersion-budget-bytes");
+  if (options.automatic_initial_guess()) {
+    if (derivative_inventory)
+      throw UsageError("--initial-guess auto is unavailable for derivative inventories");
+    options.initial_guess.kind = automatic_initial_guess(options);
+  }
   return options;
 }
 
@@ -857,12 +954,6 @@ std::string_view initial_guess_outcome_name(std::uint32_t outcome) {
 
 int run(RunOptions options) {
   const std::vector<generativeqc_atom> atoms = read_xyz(options);
-
-  const generativeqc_context_descriptor context_descriptor{sizeof(generativeqc_context_descriptor),
-                                                           GENERATIVEQC_ABI_VERSION,
-                                                           options.device_id, options.backend};
-  generativeqc::Context context(context_descriptor);
-
   generativeqc::cli::NativeBasisData basis;
   if (!is_gfn2(options) && !options.basis_program) {
     try {
@@ -875,6 +966,17 @@ int run(RunOptions options) {
     }
   }
   if (options.basis_program) basis.identity = options.basis_program->basis_identity;
+  std::optional<generativeqc::cli::CpuHostAdmission> host_admission;
+  // Keep ordinary dry runs before context creation. An unsupported host
+  // admission request must never initialize a GPU to resolve a guess policy.
+  if (options.host_bytes && (!options.initial_guess.kind || options.automatic_initial_guess() ||
+                             options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE))
+    host_admission = generativeqc::cli::admit_cpu_host_budget(options, atoms, basis);
+
+  const generativeqc_context_descriptor context_descriptor{sizeof(generativeqc_context_descriptor),
+                                                           GENERATIVEQC_ABI_VERSION,
+                                                           options.device_id, options.backend};
+  generativeqc::Context context(context_descriptor);
   const auto* shells = is_gfn2(options) ? nullptr : basis.shells.data();
   const auto* primitives = is_gfn2(options) ? nullptr : basis.primitives.data();
   const std::uint32_t shell_count =
@@ -897,6 +999,9 @@ int run(RunOptions options) {
       options.basis_program
           ? generativeqc::cli::create_method_basis_system(context, atoms, options)
           : generativeqc::cli::make_molecular_system(context, system_descriptor, basis);
+  if (options.host_bytes && !host_admission)
+    host_admission =
+        generativeqc::cli::admit_cpu_host_budget(options, atoms, basis, &context, &system);
 
   generativeqc::cli::NativeBasisData auxiliary_basis_data;
   std::optional<generativeqc::System> auxiliary_basis;
@@ -949,10 +1054,16 @@ int run(RunOptions options) {
     if (!row) return {context, system, method, resources.get()};
     if (resources)
       throw UsageError("named KS native preparation does not support --owned-device-bytes");
-    return generativeqc::prepare_named_ks(context, system, method, std::string(row->name),
-                                          options.grid, options.nonlocal_memory_bytes,
-                                          options.dispersion_memory_bytes, row->identity.data(),
-                                          options.nonlocal_grid);
+    const bool cpu_df_budget =
+        host_admission && options.density_fitting == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+    return generativeqc::prepare_named_ks(
+        context, system, method, std::string(row->name), options.grid,
+        options.nonlocal_memory_bytes, options.dispersion_memory_bytes, row->identity.data(),
+        options.nonlocal_grid, options.cpu_packed_eri_bytes,
+        cpu_df_budget ? host_admission->effective_limit_bytes : 0,
+        cpu_df_budget
+            ? GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u)
+            : 0u);
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.
@@ -965,8 +1076,20 @@ int run(RunOptions options) {
   const auto result = calculation.execute(requested);
   const auto guess =
       options.initial_guess.kind ? calculation.initial_guess_diagnostic() : std::nullopt;
-  if (options.initial_guess.kind && !guess)
+  const bool guess_declined =
+      options.automatic_initial_guess() && !guess &&
+      generativeqc::cli::automatic_preliminary_target_declined(options, atoms, basis);
+  if (options.initial_guess.kind && !guess && !guess_declined)
     throw std::runtime_error("native initial-guess execution did not publish its diagnostic");
+  std::string_view resolved_guess;
+  if (options.automatic_initial_guess() && guess) {
+    const auto expected = options.initial_guess.kind == GENERATIVEQC_INITIAL_GUESS_AUTO_HUCKEL_CPU
+                              ? GENERATIVEQC_INITIAL_GUESS_HUCKEL
+                              : GENERATIVEQC_INITIAL_GUESS_MINAO;
+    if (guess->requested_kind != expected)
+      throw std::runtime_error("native automatic initial-guess execution changed the provider");
+    resolved_guess = expected == GENERATIVEQC_INITIAL_GUESS_HUCKEL ? "huckel" : "minao";
+  }
   std::optional<generativeqc_device_resource_diagnostic> resource_diagnostic;
   if (resources) {
     generativeqc_device_resource_diagnostic snapshot{};
@@ -996,9 +1119,15 @@ int run(RunOptions options) {
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
+    if (host_admission)
+      std::cout << ",\"resource_admission\":{\"modeled_host_peak_bytes\":"
+                << host_admission->peak_bytes
+                << ",\"effective_host_limit_bytes\":" << host_admission->effective_limit_bytes
+                << "}";
     if (guess) {
-      std::cout << ",\"initial_guess\":{\"kind\":\"" << options.initial_guess_name
-                << "\",\"outcome\":\"" << initial_guess_outcome_name(guess->outcome)
+      std::cout << ",\"initial_guess\":{\"kind\":\"" << options.initial_guess_name << '"';
+      if (!resolved_guess.empty()) std::cout << ",\"resolved_kind\":\"" << resolved_guess << '"';
+      std::cout << ",\"outcome\":\"" << initial_guess_outcome_name(guess->outcome)
                 << "\",\"outcome_code\":" << guess->outcome
                 << ",\"preliminary_iterations\":" << guess->preliminary_iterations
                 << ",\"preliminary_fock_builds\":" << guess->preliminary_fock_builds
@@ -1010,6 +1139,9 @@ int run(RunOptions options) {
                 << ",\"work_counters_complete\":"
                 << (guess->work_counters_complete ? "true" : "false") << "}";
     }
+    if (guess_declined)
+      std::cout << ",\"initial_guess\":{\"kind\":\"auto\",\"resolved_kind\":\"none\","
+                   "\"outcome\":\"target_declined\"}";
     if (resource_diagnostic) {
       const auto& snapshot = *resource_diagnostic;
       std::cout
@@ -1058,11 +1190,20 @@ int run(RunOptions options) {
     }
     std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
-    if (guess)
-      std::cout << "initial_guess: " << options.initial_guess_name << '\n'
-                << "initial_guess_outcome: " << initial_guess_outcome_name(guess->outcome) << '\n'
+    if (host_admission)
+      std::cout << "modeled_host_peak_bytes: " << host_admission->peak_bytes << '\n'
+                << "effective_host_limit_bytes: " << host_admission->effective_limit_bytes << '\n';
+    if (guess) {
+      std::cout << "initial_guess: " << options.initial_guess_name << '\n';
+      if (!resolved_guess.empty())
+        std::cout << "initial_guess_resolved_kind: " << resolved_guess << '\n';
+      std::cout << "initial_guess_outcome: " << initial_guess_outcome_name(guess->outcome) << '\n'
                 << "initial_guess_numeric_capacity_bytes: " << guess->preparation_numeric_capacity
                 << '\n';
+    }
+    if (guess_declined)
+      std::cout << "initial_guess: auto\ninitial_guess_resolved_kind: none\n"
+                   "initial_guess_outcome: target_declined\n";
     if (result.forces) {
       std::cout << "forces_hartree_per_bohr:\n";
       for (std::size_t atom = 0; atom < atoms.size(); ++atom) {
@@ -1366,7 +1507,7 @@ int main(int argc, char** argv) {
       std::vector<char*> arguments;
       for (auto& argument : invocation.run_arguments) arguments.push_back(argument.data());
       const auto options = parse_run(static_cast<int>(arguments.size()), arguments.data());
-      return generativeqc::cli::hessian_command(options, read_xyz(options), invocation);
+      return generativeqc::cli::hessian_command(options, read_xyz(options), std::move(invocation));
     }
     if (command == "run") {
       if (argc == 3 &&
@@ -1399,8 +1540,10 @@ int main(int argc, char** argv) {
         print_usage(std::cout);
         return 0;
       }
-      const auto options = parse_run(argc, argv);
-      return generativeqc::cli::resources_command(options, read_xyz(options));
+      generativeqc::cli::HessianInvocation derivative;
+      const auto options = parse_run(argc, argv, &derivative);
+      return generativeqc::cli::resources_command(
+          options, read_xyz(options), derivative.operation.empty() ? nullptr : &derivative);
     }
 
     throw UsageError("unknown command: " + std::string(command) +

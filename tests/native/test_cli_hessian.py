@@ -38,7 +38,7 @@ class HessianCli(unittest.TestCase):
         self, *arguments: str, operation: str = "hvp", trace: Path | None = None
     ) -> subprocess.CompletedProcess:
         command = [str(CLI), operation, str(self.xyz), "--units", "bohr", "--json"]
-        if operation == "hvp":
+        if operation == "hvp" and "--directions" not in arguments:
             command += ["--direction", str(self.direction)]
         return subprocess.run(
             [*command, *arguments],
@@ -87,8 +87,11 @@ class HessianCli(unittest.TestCase):
         self.assertIn("--method-ir", result.stdout)
         self.assertNotIn("--compiler-python", result.stdout)
 
-    def test_no_cpu_or_implicit_python_fallback(self) -> None:
-        self.rejected(self.call(), "requires --backend cuda")
+    def test_unlinked_cpu_method_does_not_fall_back(self) -> None:
+        self.rejected(
+            self.call("--method", "pbe-d3(0)-rks"),
+            "native CPU Hessian has no exact linked total MethodIR",
+        )
 
     def test_obsolete_worker_controls_cannot_execute_any_interpreter(self) -> None:
         worker = self.root / "Fake Worker"
@@ -138,6 +141,50 @@ class HessianCli(unittest.TestCase):
         self.rejected(
             self.call("--direction", str(self.direction), operation="hessian"),
             "only hvp",
+        )
+
+    def test_action_panel_rejects_ambiguous_or_malformed_requests(self) -> None:
+        panel = self.root / "Panel With Spaces.json"
+        flags = ("--directions", str(panel))
+        self.rejected(
+            self.call(*flags, "--direction", str(self.direction), "--backend", "cpu"),
+            "mutually exclusive",
+        )
+        self.rejected(self.call(*flags, "--backend", "cuda"), "requires linked CPU hvp")
+        self.rejected(self.call(*flags, operation="hessian"), "only hvp")
+        for malformed in ([], [[[1, 2, 3]]], [[[1, 2, 3], [1, 2, "nan"]]]):
+            panel.write_text(json.dumps(malformed))
+            self.rejected(self.call(*flags, "--backend", "cpu"), "natoms-by-3")
+
+    def test_recycle_groups_require_dense_cpu(self) -> None:
+        flags = ("--response-recycle-block-size", "3")
+        self.rejected(
+            self.call(*flags, "--backend", "cpu"), "requires a dense CPU hessian"
+        )
+        self.rejected(
+            self.call(*flags, "--backend", "cuda", operation="hessian"),
+            "requires a dense CPU hessian",
+        )
+
+    def test_sequential_requires_an_unambiguous_dense_cpu_request(self) -> None:
+        for arguments, operation in (
+            (("--backend", "cpu"), "hvp"),
+            (("--backend", "cuda"), "hessian"),
+        ):
+            self.rejected(
+                self.call("--response-sequential", *arguments, operation=operation),
+                "requires a dense CPU hessian",
+            )
+        self.rejected(
+            self.call(
+                "--response-sequential",
+                "--response-recycle-block-size",
+                "3",
+                "--backend",
+                "cpu",
+                operation="hessian",
+            ),
+            "mutually exclusive",
         )
 
     def test_wrong_method_precision_and_provider_never_touch_cuda(self) -> None:
@@ -237,6 +284,516 @@ class HessianCli(unittest.TestCase):
                     delta=2e-12,
                 )
                 self.assertLess(diagnostic["d3_energy"], 0)
+
+                for selected, corrected in ((f"b3lyp-{suffix}", False), (method, True)):
+                    flags = ("--method", selected, *controls)
+                    for product in ("hvp", "hessian"):
+                        with self.subTest(selected=selected, product=product):
+                            planned = self.call(
+                                *flags, "--property", product, operation="resources"
+                            )
+                            self.assertEqual(
+                                planned.returncode, 0, planned.stderr or planned.stdout
+                            )
+                            inventory = json.loads(planned.stdout)
+                            host_peak = inventory["peak_bytes"]["host"]
+                            derivative = inventory["derivative_inventory"]
+                            self.assertEqual(
+                                "correction_inventory" in inventory, corrected
+                            )
+                            if corrected:
+                                self.assertEqual(
+                                    inventory["correction_inventory"][
+                                        "method_identity"
+                                    ],
+                                    derivative["method_identity"],
+                                )
+                            exact = self.call(
+                                *flags,
+                                "--host-bytes",
+                                str(host_peak),
+                                operation=product,
+                            )
+                            self.assertEqual(exact.returncode, 0, exact.stderr)
+                            bounded = json.loads(exact.stdout)
+                            receipt = bounded["diagnostics"]
+                            self.assertEqual(
+                                bounded["method_ir_identity"],
+                                derivative["method_identity"],
+                            )
+                            self.assertEqual(
+                                receipt["numeric_reservation_bytes"],
+                                derivative["minimum_numeric_bytes"],
+                            )
+                            self.assertEqual(
+                                receipt["resource_admission"][
+                                    "selected_host_peak_bytes"
+                                ],
+                                host_peak,
+                            )
+                            self.assertEqual(receipt["d3_pair_visits"] > 0, corrected)
+                            reference = matrix if corrected else bare
+                            if product == "hessian":
+                                for actual_row, expected_row in zip(
+                                    bounded["matrix"], reference["matrix"], strict=True
+                                ):
+                                    for actual, expected in zip(
+                                        actual_row, expected_row, strict=True
+                                    ):
+                                        self.assertAlmostEqual(
+                                            actual, expected, delta=2e-8
+                                        )
+                            else:
+                                for row, actual in zip(
+                                    reference["matrix"],
+                                    (
+                                        value
+                                        for atom in bounded["value"]
+                                        for value in atom
+                                    ),
+                                    strict=True,
+                                ):
+                                    self.assertAlmostEqual(
+                                        actual,
+                                        sum(
+                                            entry * step
+                                            for entry, step in zip(
+                                                row, vector, strict=True
+                                            )
+                                        ),
+                                        delta=2e-8,
+                                    )
+                            self.rejected(
+                                self.call(
+                                    *flags,
+                                    "--host-bytes",
+                                    str(host_peak - 1),
+                                    operation=product,
+                                ),
+                                "allocation inventory exceeds host budget",
+                            )
+
+    def test_cpu_resource_aliases_use_the_same_prepared_identity(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        controls = (
+            "--backend",
+            "cpu",
+            "--basis",
+            "sto-3g",
+            "--grid-radial-points",
+            "8",
+            "--grid-polar-points",
+            "4",
+            "--grid-azimuth-points",
+            "8",
+        )
+        for canonical, alias in (
+            ("lda-rks", "lda_xc_pw-rks"),
+            ("pbe0-rks", "pbeh-rks"),
+            ("pbe0-rks", "pbe1pbe-rks"),
+            ("b3lyp-rks", "b3lypg-rks"),
+        ):
+            with self.subTest(canonical=canonical, alias=alias):
+                query = (*controls, "--property", "hessian")
+                control = self.call(
+                    *query, "--method", canonical, operation="resources"
+                )
+                self.assertEqual(
+                    control.returncode, 0, control.stderr or control.stdout
+                )
+                reference = json.loads(control.stdout)
+                alias_plan = self.call(*query, "--method", alias, operation="resources")
+                self.assertEqual(
+                    alias_plan.returncode, 0, alias_plan.stderr or alias_plan.stdout
+                )
+                plan = json.loads(alias_plan.stdout)
+                self.assertEqual(plan.pop("method"), alias)
+                self.assertEqual(reference.pop("method"), canonical)
+                self.assertNotEqual(plan.pop("identity"), reference.pop("identity"))
+                self.assertEqual(plan, reference)
+
+                host_peak = plan["peak_bytes"]["host"]
+                calculation = (*controls, "--method", alias, "--host-bytes")
+                exact = self.call(*calculation, str(host_peak), operation="hessian")
+                self.assertEqual(exact.returncode, 0, exact.stderr or exact.stdout)
+                result = json.loads(exact.stdout)
+                self.assertEqual(
+                    result["method_ir_identity"], plan["method_ir_identity"]
+                )
+                self.assertEqual(
+                    result["diagnostics"]["resource_admission"][
+                        "minimum_host_peak_bytes"
+                    ],
+                    host_peak,
+                )
+                baseline = self.call(
+                    *controls,
+                    "--method",
+                    canonical,
+                    "--host-bytes",
+                    str(host_peak),
+                    operation="hessian",
+                )
+                self.assertEqual(
+                    baseline.returncode, 0, baseline.stderr or baseline.stdout
+                )
+                self.assertEqual(
+                    result["matrix"], json.loads(baseline.stdout)["matrix"]
+                )
+                trace = self.root / f"short-{alias}.jsonl"
+                self.rejected(
+                    self.call(
+                        *calculation,
+                        str(host_peak - 1),
+                        operation="hessian",
+                        trace=trace,
+                    ),
+                    "allocation inventory exceeds host budget",
+                )
+                self.assertFalse(trace.exists())
+        unlinked_correction = self.call(
+            *controls,
+            "--method",
+            "pbe-d3(0)-rks",
+            "--property",
+            "hessian",
+            operation="resources",
+        )
+        self.assertEqual(unlinked_correction.returncode, 2, unlinked_correction.stderr)
+        refusal = json.loads(unlinked_correction.stdout)
+        self.assertEqual(refusal["status"], "unsupported")
+        self.assertIn("no exact linked total MethodIR", refusal["diagnostic"])
+
+    def test_cpu_resource_floor_matches_execution_before_scf(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        controls = (
+            "--backend",
+            "cpu",
+            "--basis",
+            "sto-3g",
+            "--grid-radial-points",
+            "8",
+            "--grid-polar-points",
+            "4",
+            "--grid-azimuth-points",
+            "8",
+            "--grid-budget-bytes",
+            str(4 << 20),
+            "--response-budget-bytes",
+            str(1 << 20),
+        )
+        for method in ("pbe-rks", "pbe0-d3(bj)-rks"):
+            for product in ("hessian", "hvp"):
+                with self.subTest(method=method, product=product):
+                    flags = ("--method", method, *controls)
+                    inventory = ("--property", product, *flags)
+                    planned = self.call(*inventory, operation="resources")
+                    self.assertEqual(
+                        planned.returncode, 0, planned.stderr or planned.stdout
+                    )
+                    plan = json.loads(planned.stdout)
+                    floor = plan["derivative_inventory"]["minimum_numeric_bytes"]
+                    host_peak = plan["peak_bytes"]["host"]
+                    self.assertGreater(host_peak, floor)
+                    self.assertEqual("correction_inventory" in plan, "d3(bj)" in method)
+
+                    for delta, expected in ((0, "feasible"), (-1, "infeasible")):
+                        result = self.call(
+                            *inventory,
+                            "--host-bytes",
+                            str(host_peak + 1024 + delta),
+                            "--host-reserve-bytes",
+                            "1024",
+                            "--numeric-budget-bytes",
+                            str(floor),
+                            operation="resources",
+                        )
+                        self.assertEqual(
+                            result.returncode, 0 if delta == 0 else 2, result.stderr
+                        )
+                        self.assertEqual(json.loads(result.stdout)["status"], expected)
+                    short_inventory = self.call(
+                        *inventory,
+                        "--numeric-budget-bytes",
+                        str(floor - 1),
+                        operation="resources",
+                    )
+                    self.assertEqual(
+                        short_inventory.returncode, 2, short_inventory.stderr
+                    )
+                    self.assertEqual(
+                        json.loads(short_inventory.stdout)["status"], "infeasible"
+                    )
+
+                    capped = self.call(
+                        *flags, "--numeric-budget-bytes", str(floor), operation=product
+                    )
+                    self.assertEqual(capped.returncode, 0, capped.stderr)
+                    diagnostic = json.loads(capped.stdout)["diagnostics"]
+                    self.assertEqual(diagnostic["minimum_numeric_bytes"], floor)
+                    self.assertEqual(diagnostic["numeric_reservation_bytes"], floor)
+                    for slack in (0, 4096):
+                        effective = host_peak + slack
+                        host_flags = (
+                            "--host-bytes",
+                            str(2 * (effective + 1024)),
+                            "--host-reserve-bytes",
+                            "1024",
+                            "--headroom-fraction",
+                            "0.5",
+                        )
+                        planned_host = self.call(
+                            *inventory, *host_flags, operation="resources"
+                        )
+                        self.assertEqual(
+                            planned_host.returncode, 0, planned_host.stderr
+                        )
+                        selected = json.loads(planned_host.stdout)[
+                            "derivative_inventory"
+                        ]
+                        bounded = self.call(*flags, *host_flags, operation=product)
+                        self.assertEqual(bounded.returncode, 0, bounded.stderr)
+                        result = json.loads(bounded.stdout)
+                        actual = result["diagnostics"]["resource_admission"]
+                        self.assertEqual(actual["minimum_host_peak_bytes"], host_peak)
+                        self.assertEqual(
+                            actual["effective_host_limit_bytes"], effective
+                        )
+                        self.assertEqual(actual["selected_host_peak_bytes"], effective)
+                        self.assertEqual(
+                            actual["derivative_numeric_cap_bytes"], floor + slack
+                        )
+                        self.assertEqual(
+                            selected["selected_host_peak_bytes"], effective
+                        )
+                        self.assertEqual(
+                            selected["selected_numeric_cap_bytes"], floor + slack
+                        )
+                        self.assertLessEqual(
+                            result["diagnostics"]["numeric_reservation_bytes"],
+                            floor + slack,
+                        )
+                        panel = "matrix" if product == "hessian" else "value"
+                        reference = json.loads(capped.stdout)[panel]
+                        for candidate_row, reference_row in zip(
+                            result[panel], reference, strict=True
+                        ):
+                            for candidate, expected in zip(
+                                candidate_row, reference_row, strict=True
+                            ):
+                                self.assertAlmostEqual(candidate, expected, delta=2e-8)
+
+                    one_step = ("--max-iterations", "1")
+                    one_step_plan = self.call(
+                        *inventory, *one_step, operation="resources"
+                    )
+                    self.assertEqual(one_step_plan.returncode, 0, one_step_plan.stderr)
+                    one_step_peak = json.loads(one_step_plan.stdout)["peak_bytes"][
+                        "host"
+                    ]
+                    self.rejected(
+                        self.call(
+                            *flags,
+                            *one_step,
+                            "--host-bytes",
+                            str(one_step_peak - 1),
+                            operation=product,
+                        ),
+                        "allocation inventory exceeds host budget",
+                    )
+                    # An admitted one-iteration solve cannot converge. A one-byte-short
+                    # request must instead fail sizing before entering that same SCF.
+                    self.rejected(
+                        self.call(*flags, "--max-iterations", "1", operation=product),
+                        "SCF did not converge",
+                    )
+                    self.rejected(
+                        self.call(
+                            *flags,
+                            "--max-iterations",
+                            "1",
+                            "--numeric-budget-bytes",
+                            str(floor - 1),
+                            operation=product,
+                        ),
+                        "CPU Hessian aggregate numerical reservation exceeded",
+                    )
+
+    def test_unqualified_derivative_inventory_does_not_probe_cuda(self) -> None:
+        result = self.call(
+            "--property",
+            "hessian",
+            "--method",
+            "pbe-rks",
+            "--backend",
+            "cuda",
+            operation="resources",
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["status"], "unsupported")
+        self.assertIn("Direct FP64 CPU", plan["diagnostic"])
+        self.assertNotIn("derivative_inventory", plan)
+        self.rejected(
+            self.call(
+                "--backend", "cuda", "--method", "pbe-rks", "--host-bytes", "1024"
+            ),
+            "--host-bytes for Hessian/HVP requires --backend cpu",
+        )
+
+    def test_packed_eri_and_host_budgets_admit_exact_fit_before_scf(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        self.xyz.write_text("2\nBohr\nHe 0.03 -0.02 0.01\nH 0.15 0.13 1.5\n")
+        common = (
+            "--backend",
+            "cpu",
+            "--basis",
+            "sto-3g",
+            "--representation",
+            "spherical",
+            "--grid-radial-points",
+            "8",
+            "--grid-polar-points",
+            "4",
+            "--grid-azimuth-points",
+            "8",
+        )
+        # Two AOs have three distinct pairs and six FP64 pair-pair orbits.
+        packed_size = 6 * 8
+        saving = 2**4 * 8 - packed_size
+        for method, spin in (
+            ("pbe0-rks", ("--charge", "1")),
+            ("b3lyp-d3(bj)-uks", ("--multiplicity", "2")),
+        ):
+            for product, panel in (("hessian", "matrix"), ("hvp", "value")):
+                with self.subTest(method=method, product=product):
+                    args = (*common, "--method", method, *spin)
+                    query = (*args, "--property", product)
+                    packed = ("--cpu-packed-eri-budget-bytes", str(packed_size))
+                    dense = self.call(*query, operation="resources")
+                    plan = self.call(*query, *packed, operation="resources")
+                    self.assertEqual(dense.returncode, 0, dense.stderr or dense.stdout)
+                    self.assertEqual(plan.returncode, 0, plan.stderr or plan.stdout)
+                    inventory, baseline = (
+                        json.loads(plan.stdout),
+                        json.loads(dense.stdout),
+                    )
+                    self.assertEqual(
+                        inventory["packed_eri_inventory"],
+                        {"retained_bytes": packed_size, "cap_bytes": packed_size},
+                    )
+                    peak = inventory["peak_bytes"]["host"]
+                    self.assertEqual(peak + saving, baseline["peak_bytes"]["host"])
+                    self.assertEqual(
+                        inventory["item_inventory"]["setup_workspace"],
+                        baseline["item_inventory"]["setup_workspace"],
+                    )
+                    loose = self.call(
+                        *query,
+                        "--cpu-packed-eri-budget-bytes",
+                        str(1 << 20),
+                        operation="resources",
+                    )
+                    self.assertEqual(loose.returncode, 0, loose.stderr)
+                    self.assertEqual(
+                        json.loads(loose.stdout)["peak_bytes"]["host"], peak
+                    )
+
+                    trace = self.root / "packed-refused.jsonl"
+                    for provider_cap, host_cap, detail in (
+                        (
+                            packed_size - 1,
+                            peak,
+                            "packed spherical ERI capacity exceeded",
+                        ),
+                        (
+                            packed_size,
+                            peak - 1,
+                            "allocation inventory exceeds host budget",
+                        ),
+                    ):
+                        caps = (
+                            "--cpu-packed-eri-budget-bytes",
+                            str(provider_cap),
+                            "--host-bytes",
+                            str(host_cap),
+                        )
+                        refused = self.call(*query, *caps, operation="resources")
+                        self.assertEqual(refused.returncode, 2, refused.stderr)
+                        refusal = json.loads(refused.stdout)
+                        self.assertEqual(refusal["status"], "infeasible")
+                        self.assertIn(detail, refusal["diagnostic"])
+                        self.rejected(
+                            self.call(*args, *caps, operation=product, trace=trace),
+                            detail,
+                        )
+                        self.assertFalse(
+                            trace.exists(), "SCF ran before budget admission"
+                        )
+
+                    trace = self.root / f"{method}-{product}.jsonl"
+                    bounded = self.call(
+                        *args,
+                        *packed,
+                        "--host-bytes",
+                        str(peak),
+                        operation=product,
+                        trace=trace,
+                    )
+                    reference = self.call(*args, operation=product)
+                    self.assertEqual(bounded.returncode, 0, bounded.stderr)
+                    self.assertEqual(reference.returncode, 0, reference.stderr)
+                    actual, expected = (
+                        json.loads(bounded.stdout),
+                        json.loads(reference.stdout),
+                    )
+                    self.assertEqual(
+                        actual["method_ir_identity"], expected["method_ir_identity"]
+                    )
+                    self.assertEqual(
+                        actual["diagnostics"]["resource_admission"][
+                            "selected_host_peak_bytes"
+                        ],
+                        peak,
+                    )
+                    events = [
+                        json.loads(line) for line in trace.read_text().splitlines()
+                    ]
+                    self.assertEqual(
+                        [
+                            event["value"]
+                            for event in events
+                            if event.get("key") == "packed_eri_retained_bytes"
+                        ],
+                        [packed_size],
+                    )
+                    for actual_row, expected_row in zip(
+                        actual[panel], expected[panel], strict=True
+                    ):
+                        for value, ref in zip(actual_row, expected_row, strict=True):
+                            self.assertAlmostEqual(value, ref, delta=2e-8)
+
+    def test_packed_eri_host_budget_rejects_cartesian_representation(self) -> None:
+        if os.environ.get("GENERATIVEQC_TEST_HOST_HESSIAN") == "0":
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        self.rejected(
+            self.call(
+                "--backend",
+                "cpu",
+                "--method",
+                "pbe0-rks",
+                "--representation",
+                "cartesian",
+                "--host-bytes",
+                str(1 << 30),
+                "--cpu-packed-eri-budget-bytes",
+                str(1 << 20),
+            ),
+            "packed Coulomb ERIs require a real spherical s/p/d/f basis",
+        )
 
     def test_cpu_work_refusal_publishes_no_prefix_or_electronic_only_result(
         self,
@@ -395,7 +952,12 @@ class HessianCli(unittest.TestCase):
         path = self.root / "Method IR.json"
         path.write_text(json.dumps(self.range_payload()))
         flags = ("--method-ir", str(path))
-        self.rejected(self.call(*flags), "requires --backend cuda")
+        for operation in ("hessian", "hvp"):
+            with self.subTest(operation=operation):
+                self.rejected(
+                    self.call(*flags, "--backend", "cpu", operation=operation),
+                    "range-PBE MethodIR is not supported by native CPU hessian/hvp",
+                )
         self.rejected(self.call(*flags, "--method", "pbe-rks"), "mutually exclusive")
         self.rejected(self.call(*flags, *flags), "can only be specified once")
         self.rejected(

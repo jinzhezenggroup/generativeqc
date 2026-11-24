@@ -28,6 +28,7 @@
 #include "dft/dispersion/gcp_cuda.hpp"
 #endif
 #include "dft/grid.hpp"
+#include "dft/host_force_resources.hpp"
 #include "dft/ks_tile_policy.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -2732,9 +2733,8 @@ class KsPreparedState final : public KsSingleOwnerPort {
     std::array<std::uint64_t, 9> work{};
     // Bound owned source/weight buffers separately from the retained SCF owner
     // and DF response providers. This is not an allocator/recurrence census.
-    constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
     status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
-                                        kSourcePublicationBytes, work, detail);
+                                        dft::cpu_stationary_force_source_bytes, work, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
       throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
     runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
@@ -2759,7 +2759,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
       const auto response = dft::nlc::stationary_vv10_derivative(
           basis_, options_.nonlocal_grid ? *options_.nonlocal_grid : grid_, frame.density,
           *nonlocal_, options_.xc_tile_points, dft::nlc::Vv10DensityDomain::MolecularV1,
-          std::min(kSourcePublicationBytes,
+          std::min(dft::cpu_stationary_force_source_bytes,
                    static_cast<std::size_t>(execution_plan_.nonlocal_maximum_bytes)));
       for (std::size_t c = 0; c < ncoord; ++c) gradient[c] += response[c];
     }
