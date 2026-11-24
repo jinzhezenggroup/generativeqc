@@ -32,6 +32,8 @@ inline generativeqc_ks_host_hessian_receipt_v1 empty_host_hessian_receipt() {
  * response provider. Only C crosses the wire; no AO, Fock or grid is exported.
  * The reservation includes the detached verified frame, staged C and caller C,
  * but excludes the producer's verification/eigensolver scratch and Python copies.
+ * On a host-leased Hessian batch the declared derivative workspace independently
+ * bounds that producer and staging scratch under the shared workspace lock.
  */
 struct generativeqc_ks_host_orbitals_receipt_v1 {
   std::size_t struct_size{sizeof(generativeqc_ks_host_orbitals_receipt_v1)};
@@ -41,6 +43,21 @@ struct generativeqc_ks_host_orbitals_receipt_v1 {
 };
 
 extern "C" {
+/** Private saddle bridge: admit one force/Hessian frame and select a
+ * derivative reservation within [floor, ceiling] using its exclusive pool.
+ * ENABLE_WARM_STARTS also reserves CPU physical seed restore workspace and
+ * opens the adapter's separately qualified ECP force/restore path.
+ * A cold proposal prefix shares this lease; its separate cap still applies.
+ * On failure no batch or selected capacity is published. The caller separately
+ * accounts its frames, corrector, root work and output panels.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_saddle_prepare_cpu_host_batch_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_rks_cold_fock_options_v1* cold, generativeqc_batch_flags flags,
+    const generativeqc_host_resources* resources, std::uint64_t maximum_bytes, std::size_t floor,
+    std::size_t ceiling, generativeqc_batch** batch, std::size_t* selected_workspace);
+
 /** Same expected-geometry/charge/spin and owner gates as the Hessian bridge.
  * Only options' descriptor, expected geometry and numeric_bytes are consumed.
  * Null output/count=0 queries the bounded shape without exporting a frame.

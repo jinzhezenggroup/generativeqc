@@ -11,6 +11,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/ks_host_hessian.hpp"
+#include "api/ks_host_orbital_capacity.hpp"
 #include "methods/method.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/df_progress_trace.hpp"
@@ -954,10 +955,6 @@ extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(
   if (!batch || !batch->context || !batch->plan || !options || !receipt)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
-  if (batch->cpu_hessian_workspace_bytes) {
-    batch->context->last_detail = "orbital export is outside the admitted CPU Hessian host budget";
-    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  }
   if (!generativeqc::api::valid_descriptor(options) ||
       !generativeqc::api::valid_descriptor(receipt))
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
@@ -981,6 +978,8 @@ extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(
                     buffers[second].bytes))
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 #if GENERATIVEQC_HAS_HOST_HESSIAN
+    auto host_workspace = batch->host_lease ? batch->host_lease->use_workspace()
+                                             : std::unique_lock<std::mutex>{};
     dft::CudaKsFinalStateToken token;
     std::string detail;
     require(methods::detail::dft_final_state_token(*batch->plan, index, token, detail), detail);
@@ -1001,11 +1000,15 @@ extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(
     result.spins = spins;
     result.alpha_occupied = occupied[0];
     result.beta_occupied = spins == 2 ? occupied[1] : 0;
-    result.output_elements = size_mul(spins, size_mul(basis, basis));
-    result.numeric_reservation_bytes = size_mul(
-        size_add(size_mul(5, result.output_elements), size_mul(spins, basis)), sizeof(double));
+    const auto capacity = api::host_orbital_capacity(basis, spins);
+    result.output_elements = capacity.output_elements;
+    result.numeric_reservation_bytes = capacity.numeric_bytes;
     budget(result.numeric_reservation_bytes, options->numeric_bytes,
            "CPU orbital frame numerical reservation exceeds root overlap budget");
+    if (batch->cpu_hessian_workspace_bytes &&
+        api::host_orbital_workspace_bytes(basis, spins) > batch->cpu_hessian_workspace_bytes)
+      throw methods::MethodError(GENERATIVEQC_STATUS_RESOURCE_LIMIT,
+                                 "CPU orbital export exceeds admitted Hessian host workspace");
     if (output) {
       if (output_count != result.output_elements)
         throw std::invalid_argument("CPU orbital frame output shape disagrees with its owner");

@@ -6,16 +6,24 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <utility>
 
+#include "api/host_cross_overlap.hpp"
 #include "api/ks_batch_capabilities.hpp"
 #include "api/ks_host_hessian.hpp"
+#include "api/ks_host_orbital_capacity.hpp"
 #include "cli/molecular_system.hpp"
 #include "cli/saddle.hpp"
+#include "generativeqc/ks.hpp"
 #include "generativeqc/warm_seed.h"
+#include "methods/warm_seed_capacity.hpp"
+#include "molecule/basis.hpp"
+#include "runtime/bounded_workspace.hpp"
 #include "solver/cpu/symmetric_eigen.hpp"
 
 namespace generativeqc::cli {
@@ -91,6 +99,70 @@ class NativeMolecularEvaluator {
   generativeqc_basis_representation representation() const { return basis_.representation; }
 
   Json records = Json::array(), work;
+
+  /** Reserve externally owned panels outside the prepared electronic lease.
+   * Keep the two-frame envelope fixed so the first admission also covers a
+   * moved trial and no accepted frame has to be evicted to make room for it.
+   */
+  void configure_host_budget(std::uint64_t limit, std::size_t caller_bytes,
+                             std::size_t corrector_bytes, std::size_t harmonic_bytes) {
+    using runtime::size_add;
+    using runtime::size_mul;
+    const auto count = 3 * atoms_.size();
+    const auto basis = orbital_basis_dimension();
+    const auto orbitals = api::host_orbital_capacity(basis, program_.spin);
+    const auto seed_bytes =
+        invocation_.accepted_frame_warm_start
+            ? methods::warm_seed_item_capacity(orbitals.output_elements, atoms_.size()).total_bytes
+            : 0;
+    auto basis_bytes = size_mul(basis_.shells.capacity(), sizeof(generativeqc_shell));
+    basis_bytes = size_add(basis_bytes,
+                           size_mul(basis_.primitives.capacity(), sizeof(generativeqc_primitive)));
+    basis_bytes =
+        size_add(basis_bytes, size_mul(basis_.core_electrons.capacity(), sizeof(std::int32_t)));
+    basis_bytes =
+        size_add(basis_bytes, size_mul(basis_.ecp_terms.capacity(), sizeof(generativeqc_ecp_term)));
+    // Public frame handles own normalized shells independently of the native
+    // copy in the batch inventory. Normalization keeps primitive counts fixed.
+    auto system_bytes = size_mul(atoms_.size(), sizeof(core::Atom));
+    system_bytes = size_add(system_bytes, size_mul(basis_.shells.size(), sizeof(core::Shell)));
+    system_bytes = size_add(system_bytes, size_mul(basis_.ecp_terms.size(), sizeof(core::EcpTerm)));
+    for (const auto& shell : basis_.shells)
+      system_bytes =
+          size_add(system_bytes, size_mul(shell.primitive_count, sizeof(core::Primitive)));
+    const auto atoms_bytes = size_mul(atoms_.size(), sizeof(generativeqc_atom));
+    const auto position_bytes = size_mul(count, sizeof(double));
+    const auto frame_bytes =
+        size_add(size_add(system_bytes, atoms_bytes),
+                 size_add(position_bytes, size_mul(orbitals.output_elements, sizeof(double))));
+    auto common = size_add(caller_bytes, basis_bytes);
+    common = size_add(common, size_add(atoms_bytes, size_mul(masses_.size(), sizeof(double))));
+    // Capture publishes a distinct snapshot while the batch still owns its
+    // converged density. Keep room for it and the previous accepted seed.
+    common = size_add(common, size_mul(2, size_add(frame_bytes, seed_bytes)));
+    const auto harmonic_peak = size_add(common, harmonic_bytes);
+    // Use the existing conservative root algebra bound. The current C output
+    // and retained C are in the frames; physical export scratch is in the lease.
+    const auto root_algebra = size_mul(root_algebra_elements(basis), sizeof(double));
+    auto outside = size_add(common, size_add(corrector_bytes, root_algebra));
+    outside = size_add(outside, size_add(position_bytes, 2 * sizeof(double) * program_.spin));
+    if (harmonic_peak > limit || outside >= limit)
+      throw std::length_error(
+          "saddle --host-bytes cannot cover corrector, frame and harmonic panels");
+    host_.emplace(HostBudget{limit, outside, harmonic_peak, seed_bytes});
+  }
+
+  Json host_budget_receipt() const {
+    if (!host_) return nullptr;
+    return {{"effective_host_limit_bytes", host_->limit},
+            {"minimum_host_peak_bytes", host_->minimum ? Json(host_->minimum) : Json(nullptr)},
+            {"selected_host_peak_bytes", host_->peak ? Json(host_->peak) : Json(nullptr)},
+            {"harmonic_host_peak_bytes", host_->harmonic_peak},
+            {"warm_seed_snapshot_bytes_per_frame", host_->seed_bytes},
+            {"outside_electronic_lease_bytes", host_->outside_electronic_peak},
+            {"electronic_host_peak_bytes", host_->electronic_peak},
+            {"derivative_numeric_cap_bytes", host_->workspace}};
+  }
 
   bool uses_ecp() const {
     return !basis_.ecp_terms.empty() ||
@@ -215,6 +287,12 @@ class NativeMolecularEvaluator {
   }
 
  private:
+  struct HostBudget {
+    std::uint64_t limit;
+    std::size_t outside, harmonic_peak, seed_bytes;
+    std::size_t minimum{}, peak{}, outside_electronic_peak{}, electronic_peak{}, workspace{};
+  };
+
   struct Frame {
     std::unique_ptr<System> system;
     Batch batch{nullptr, generativeqc_batch_destroy};
@@ -297,7 +375,65 @@ class NativeMolecularEvaluator {
     return controls;
   }
 
-  std::vector<double> occupied_overlaps(const Frame& current, std::array<double, 3>& translation) {
+  /** Admit before native provider setup or SCF, using the same normalized
+   * system and exact MethodIR which the force/Hessian owner will consume.
+   */
+  void prepare_host_batch(Frame& frame, std::size_t basis, std::size_t overlap_workspace,
+                          const generativeqc_method_descriptor& method,
+                          const generativeqc_named_ks_descriptor& named,
+                          const generativeqc_rks_cold_fock_options_v1* cold) {
+    auto controls = derivative_controls(frame);
+    std::size_t derivative_floor{};
+    check(generativeqc_ks_hessian_cpu_minimum_bytes_v1(
+        context_.get(), frame.system->get(), named.identity, 1, &controls, &derivative_floor));
+    if (derivative_floor > controls.numeric_bytes)
+      throw std::length_error("saddle Hessian exceeds --numeric-budget-bytes");
+    const auto floor =
+        std::max(derivative_floor, api::host_orbital_workspace_bytes(basis, program_.spin));
+    const auto outside = runtime::size_add(host_->outside, overlap_workspace);
+    if (outside >= host_->limit || floor > host_->limit - outside)
+      throw std::length_error("saddle --host-bytes cannot cover callback and derivative panels");
+    const auto available = host_->limit - outside;
+    HostResources pool(available);
+    generativeqc_batch* prepared{};
+    std::size_t workspace{};
+    const auto ceiling = std::max(floor, static_cast<std::size_t>(controls.numeric_bytes));
+    const auto flags = invocation_.accepted_frame_warm_start
+                           ? generativeqc_batch_flags{GENERATIVEQC_BATCH_ENABLE_WARM_STARTS}
+                           : generativeqc_batch_flags{0};
+    const auto status = generativeqc_saddle_prepare_cpu_host_batch_v1(
+        context_.get(), frame.system->get(), &method, &named, cold, flags, pool.get(), available,
+        floor, ceiling, &prepared, &workspace);
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+      const char* detail = generativeqc_context_get_last_detail(context_.get());
+      throw Error(status, std::string("saddle --host-bytes preparation refused: ") + detail);
+    }
+    check(status);
+    frame.batch.reset(prepared);
+    if (flags) {
+      generativeqc_warm_seed_capacity_v1 seed{};
+      seed.struct_size = sizeof(seed);
+      seed.abi_version = GENERATIVEQC_ABI_VERSION;
+      check(generativeqc_batch_query_warm_seed_capacity_v1(frame.batch.get(), &seed));
+      if (seed.total_bytes != host_->seed_bytes)
+        throw std::logic_error("saddle host seed reservation disagrees with prepared dimensions");
+    }
+    const auto snapshot = pool.snapshot();
+    const auto electronic = runtime::size_add(snapshot.retained_bytes, snapshot.workspace_bytes);
+    const auto combined = runtime::size_add(outside, electronic);
+    const auto peak = std::max(combined, host_->harmonic_peak);
+    host_->minimum =
+        std::max({host_->minimum, host_->harmonic_peak, combined - (workspace - floor)});
+    if (peak >= host_->peak) {
+      host_->peak = peak;
+      host_->outside_electronic_peak = outside;
+      host_->electronic_peak = electronic;
+      host_->workspace = workspace;
+    }
+  }
+
+  std::vector<double> occupied_overlaps(const Frame& current, std::array<double, 3>& translation,
+                                        std::size_t cross_overlap_workspace) {
     const auto& shape = current.orbitals;
     std::vector<double> result(shape.spins, 1);
     if (!accepted_) return result;
@@ -317,26 +453,12 @@ class NativeMolecularEvaluator {
             weight * (current.positions[3 * atom + axis] - previous.positions[3 * atom + axis]);
     }
     for (double& component : translation) component /= total_weight;
-    auto registered_atoms = current.atoms;
-    for (auto& atom : registered_atoms) {
-      atom.x -= translation[0];
-      atom.y -= translation[1];
-      atom.z -= translation[2];
-    }
-    // Only the overlap diagnostic uses registered centres; no SCF or derivative
-    // is evaluated in this frame, and the finite angular-grid rotation stays fixed.
-    const generativeqc_system_descriptor geometry{
-        sizeof(geometry),         GENERATIVEQC_ABI_VERSION,
-        registered_atoms.data(),  static_cast<std::uint32_t>(registered_atoms.size()),
-        basis_.shells.data(),     static_cast<std::uint32_t>(basis_.shells.size()),
-        basis_.primitives.data(), static_cast<std::uint32_t>(basis_.primitives.size()),
-        options_.charge,          options_.multiplicity,
-        basis_.representation};
-    auto registered_system = make_molecular_system(context_, geometry, basis_);
+    // Registration belongs only to the overlap diagnostic. SCF and all
+    // derivatives continue to use the original trial system and angular grid.
     std::vector<double> metric(basis * basis);
-    check(generativeqc_system_cross_overlap_cpu(context_.get(), registered_system.get(),
-                                                previous.system->get(), metric.data(),
-                                                metric.size()));
+    check(generativeqc_system_cross_overlap_host_v1(
+        context_.get(), current.system->get(), previous.system->get(), cross_overlap_workspace,
+        metric.data(), metric.size(), nullptr, translation.data()));
     for (std::size_t spin = 0; spin < shape.spins; ++spin) {
       const std::size_t occupied = spin == 0 ? shape.alpha_occupied : shape.beta_occupied;
       if (!occupied) continue;
@@ -391,6 +513,19 @@ class NativeMolecularEvaluator {
         !std::all_of(positions.begin(), positions.end(),
                      [](double value) { return std::isfinite(value); }))
       throw std::invalid_argument("invalid molecular energy/gradient coordinate binding");
+    const auto basis_dimension = orbital_basis_dimension();
+    const auto orbital_capacity = api::host_orbital_capacity(basis_dimension, program_.spin);
+    // The immutable basis layout is shared across frames; mass registration
+    // moves only the centres. Use the accepted system to size both sides.
+    std::size_t cross_overlap_workspace{};
+    if (accepted_)
+      check(generativeqc_system_cross_overlap_host_v1(
+          context_.get(), accepted_->system->get(), accepted_->system->get(),
+          std::numeric_limits<std::size_t>::max(), nullptr, 0, &cross_overlap_workspace, nullptr));
+    const auto tracking_bytes = runtime::size_add(
+        root_tracking_bytes(basis_dimension, orbital_capacity), cross_overlap_workspace);
+    if (tracking_bytes > invocation_.root_bytes)
+      throw std::length_error("occupied-root tracking exceeds --root-budget-bytes");
     auto frame = std::make_shared<Frame>();
     frame->positions.assign(positions.begin(), positions.end());
     frame->atoms = atoms_;
@@ -438,19 +573,28 @@ class NativeMolecularEvaluator {
     named.dispersion_maximum_bytes = invocation_.derivatives.dispersion_bytes;
     named.cpu_packed_eri_maximum_bytes = invocation_.derivatives.cpu_packed_eri_bytes;
     const generativeqc_system* systems[]{frame->system->get()};
-    generativeqc_batch* prepared{};
     const auto* cold =
         invocation_.cold_fock_damping && !accepted_ ? &*invocation_.cold_fock_damping : nullptr;
     run_phase("batch_prepare", positions, [&] {
-      const auto flags =
-          invocation_.accepted_frame_warm_start ? GENERATIVEQC_BATCH_ENABLE_WARM_STARTS : 0;
-      if (cold)
-        check(generativeqc_batch_prepare_named_ks_cold_rks_v1(context_.get(), systems, 1, &method,
-                                                              &named, cold, flags, &prepared));
-      else
-        check(generativeqc_batch_prepare_named_ks_v1(context_.get(), systems, 1, &method, &named,
-                                                     flags, &prepared));
-      frame->batch.reset(prepared);
+      if (host_) {
+        auto aggregate_overlap = cross_overlap_workspace;
+        if (!accepted_)
+          check(generativeqc_system_cross_overlap_host_v1(
+              context_.get(), frame->system->get(), frame->system->get(),
+              std::numeric_limits<std::size_t>::max(), nullptr, 0, &aggregate_overlap, nullptr));
+        prepare_host_batch(*frame, basis_dimension, aggregate_overlap, method, named, cold);
+      } else {
+        generativeqc_batch* prepared{};
+        const auto flags =
+            invocation_.accepted_frame_warm_start ? GENERATIVEQC_BATCH_ENABLE_WARM_STARTS : 0;
+        if (cold)
+          check(generativeqc_batch_prepare_named_ks_cold_rks_v1(context_.get(), systems, 1, &method,
+                                                                &named, cold, flags, &prepared));
+        else
+          check(generativeqc_batch_prepare_named_ks_v1(context_.get(), systems, 1, &method, &named,
+                                                       flags, &prepared));
+        frame->batch.reset(prepared);
+      }
       if (invocation_.accepted_frame_warm_start && accepted_) {
         // Model, basis, charge and spin are immutable within this evaluator.
         if (!accepted_->seed) throw std::logic_error("accepted derivative frame has no seed");
@@ -495,18 +639,16 @@ class NativeMolecularEvaluator {
     check(generativeqc_ks_orbitals_cpu_v1(frame->batch.get(), 0, &controls, nullptr, 0,
                                           &frame->orbitals));
     const auto& shape = frame->orbitals;
-    const auto retained_elements = retained_root_elements();
-    const auto tracking_bytes = shape.numeric_reservation_bytes +
-                                sizeof(double) * retained_elements +
-                                8 * sizeof(double) * shape.basis * shape.basis;
-    if (tracking_bytes > invocation_.root_bytes)
-      throw std::length_error("occupied-root tracking exceeds --root-budget-bytes");
+    if (shape.basis != basis_dimension || shape.spins != program_.spin ||
+        shape.output_elements != orbital_capacity.output_elements ||
+        shape.numeric_reservation_bytes != orbital_capacity.numeric_bytes)
+      throw std::runtime_error("occupied-root capacity disagrees with the prepared frame");
     frame->coefficients.resize(shape.output_elements);
     check(generativeqc_ks_orbitals_cpu_v1(frame->batch.get(), 0, &controls,
                                           frame->coefficients.data(), frame->coefficients.size(),
                                           &frame->orbitals));
     std::array<double, 3> registration{};
-    const auto overlaps = occupied_overlaps(*frame, registration);
+    const auto overlaps = occupied_overlaps(*frame, registration, cross_overlap_workspace);
     std::vector<std::uint64_t> occupied_counts{shape.alpha_occupied};
     if (shape.spins == 2) occupied_counts.push_back(shape.beta_occupied);
     record("energy_gradient", "complete", positions,
@@ -520,6 +662,7 @@ class NativeMolecularEvaluator {
             {"root_registration_translation_bohr", registration},
             {"occupied_counts", occupied_counts},
             {"orbital_spin_channels", shape.spins},
+            {"root_cross_overlap_workspace_bytes", cross_overlap_workspace},
             {"root_numeric_reservation_bytes", tracking_bytes}});
     energy = primal.energy;
     for (std::size_t coordinate = 0; coordinate < positions.size(); ++coordinate)
@@ -570,8 +713,34 @@ class NativeMolecularEvaluator {
   }
 
  private:
+  /** Geometry changes do not change the basis layout or linked spin count. Use
+   * the same shell sizing as the native owner before preparing an SCF batch. */
+  std::size_t orbital_basis_dimension() const {
+    std::size_t dimension{};
+    for (const auto& shell : basis_.shells)
+      dimension = runtime::size_add(
+          dimension, molecule::shell_ao_count(shell.angular_momentum, basis_.representation));
+    return dimension;
+  }
+
+  /** Preserve the existing conservative overlap-panel allowance even on the
+   * first frame. The accepted frame's coefficients and seed remain live while
+   * the trial is being verified. Native seed capture applies its own bound. */
+  std::size_t root_tracking_bytes(std::size_t basis, api::HostOrbitalCapacity capacity) const {
+    const auto retained_and_overlap =
+        runtime::size_add(retained_root_elements(), root_algebra_elements(basis));
+    return runtime::size_add(capacity.numeric_bytes,
+                             runtime::size_mul(retained_and_overlap, sizeof(double)));
+  }
+
+  static std::size_t root_algebra_elements(std::size_t basis) {
+    return runtime::size_mul(8, runtime::size_mul(basis, basis));
+  }
+
   std::size_t retained_root_elements() const {
-    return accepted_ ? accepted_->coefficients.size() + accepted_->seed_bytes / sizeof(double) : 0;
+    return accepted_ ? runtime::size_add(accepted_->coefficients.size(),
+                                         accepted_->seed_bytes / sizeof(double))
+                     : 0;
   }
 
   /** Capture only a completed derivative frame. The accepted-frame pointer
@@ -581,7 +750,8 @@ class NativeMolecularEvaluator {
     const auto retained = retained_root_elements();
     if (retained > limit || frame.coefficients.size() > limit - retained)
       throw std::length_error("occupied tracking exceeds --root-budget-bytes");
-    const auto available = (limit - retained - frame.coefficients.size()) * sizeof(double);
+    auto available = (limit - retained - frame.coefficients.size()) * sizeof(double);
+    if (host_) available = std::min(available, host_->seed_bytes);
     generativeqc_warm_seed_snapshot_info_v1 info{};
     info.struct_size = sizeof(info);
     info.abi_version = GENERATIVEQC_ABI_VERSION;
@@ -607,6 +777,7 @@ class NativeMolecularEvaluator {
   NativeBasisData basis_;
   std::vector<generativeqc_atom> atoms_;
   std::vector<double> masses_;
+  std::optional<HostBudget> host_;
   std::shared_ptr<Frame> current_, accepted_;
   Clock::time_point started_{Clock::now()};
 };

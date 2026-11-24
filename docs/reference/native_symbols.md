@@ -2462,9 +2462,12 @@ derivative workspace against the local effective limit and the supplied shared h
 An explicit packed ERI request charges the actual packed value array and independently
 enforces the named descriptor's fleet-wide packed value cap.
 Admitted scalar ECP systems include their conservative setup workspace in the lease.
+For admitted all-electron methods, RESERVE_HOST_HESSIAN_FORCES additionally models
+the native force workspace and enables force replay on the same batch.
 
 **Inputs.** A live CPU context, named systems, a live host ledger, an effective
-local byte limit and a positive derivative workspace. Only warm-start batch flags are allowed.
+local byte limit and a positive derivative workspace. Only the warm-start and
+host-Hessian force-reservation batch flags are allowed.
 
 **Outputs.** Clears the output slot on entry; success publishes one owning batch.
 
@@ -2472,7 +2475,7 @@ local byte limit and a positive derivative workspace. Only warm-start batch flag
 
 **Errors.** Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
 
-**Execution.** Synchronous; energy replay and derivatives serialize on the same host lease.
+**Execution.** Synchronous; admitted primal replay and derivatives serialize on the same host lease.
 
 **Units.** Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
 
