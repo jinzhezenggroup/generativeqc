@@ -7,6 +7,7 @@
 
 #include "api/device_resources.hpp"
 #include "api/handles.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "api/provider_initialization_intent.hpp"
 #include "dft/grid.hpp"
 #include "methods/dft_method_preparation.hpp"
@@ -103,6 +104,18 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor&, scf::ScfOpt
 }
 }  // namespace detail
 }  // namespace generativeqc::methods
+
+namespace generativeqc::api {
+// The metadata publisher must not enter the scientific host-correction planner.
+void CpuKsHostAdmission::append_direct_d3(const core::System&) { std::abort(); }
+void validate_host_hessian_system(const core::System&, std::string_view) { std::abort(); }
+}  // namespace generativeqc::api
+
+extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
+                                                      std::size_t, std::size_t, int,
+                                                      std::uint64_t*) {
+  std::abort();
+}
 
 namespace generativeqc::scf {
 bool cpu_materialized_df_derivatives_requested() noexcept { std::abort(); }
