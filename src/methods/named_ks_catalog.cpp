@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "api/ks_dispersion.hpp"
+#include "dft/grid.hpp"
 #include "methods/method.hpp"
 #include "molecule/basis.hpp"
 #include "molecule/basis_geometry_identity.hpp"
@@ -156,6 +157,36 @@ extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
     binding.spin = entry->spin;
   }
   *output = binding;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+extern "C" generativeqc_status generativeqc_ks_catalog_grid_policy_v1(
+    const char* name, std::size_t name_size, const char* identity, std::size_t identity_size,
+    std::uint32_t tight, std::uint32_t explicit_version, std::uint32_t explicit_level,
+    generativeqc_ks_catalog_grid_policy_result_v1* output) {
+  if (!output || output->struct_size != sizeof(*output) ||
+      output->abi_version != GENERATIVEQC_ABI_VERSION || !name || !name_size || name_size > 256 ||
+      !identity || identity_size != 64 || tight > 1 || explicit_version > 4 ||
+      (explicit_version == 4 ? explicit_level > 9 : explicit_level != 0) ||
+      !disjoint(output, sizeof(*output), name, name_size) ||
+      !disjoint(output, sizeof(*output), identity, identity_size))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const std::string_view selector(name, name_size), digest(identity, identity_size);
+  if (selector.find('\0') != std::string_view::npos || !valid_method_identity(digest))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* entry = generativeqc::methods::named_ks::find_method(selector);
+  if (!entry || !entry->cpu || entry->identity != digest)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+  using generativeqc::dft::kDefaultTreutlerLevel;
+  using generativeqc::dft::kTightTreutlerLevel;
+  const auto default_level = tight ? kTightTreutlerLevel : kDefaultTreutlerLevel;
+  const auto level = explicit_version ? explicit_level : default_level;
+  const bool treutler = !explicit_version || explicit_version == 4;
+  const bool split = entry->nonlocal.variant && treutler && level != kDefaultTreutlerLevel;
+  *output = {sizeof(*output), GENERATIVEQC_ABI_VERSION,
+             explicit_version ? -1 : static_cast<std::int32_t>(level),
+             split ? static_cast<std::int32_t>(kDefaultTreutlerLevel) : -1};
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 

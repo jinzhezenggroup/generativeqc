@@ -23,12 +23,28 @@ struct generativeqc_ks_catalog_binding_v1 {
   uint32_t spin;
 };
 
+struct generativeqc_ks_catalog_grid_policy_result_v1 {
+  uint32_t struct_size, abi_version;
+  int32_t xc_level, vv10_level;
+};
+
 extern "C" {
 /** Query the same selector table used by SDK preparation and the CLI, without
  * opening a context. A successful miss clears all fields after the ABI tags. */
 GENERATIVEQC_API generativeqc_status
 generativeqc_ks_catalog_lookup_v1(const char* name, size_t name_size, generativeqc_backend backend,
                                   generativeqc_ks_catalog_binding_v1* output);
+/** Resolve omitted Python named-CPU grid prescriptions for the exact catalog
+ * selector and identity. Version zero means implicit XC; otherwise the input
+ * grid is not replaced, and explicit_level is used only for version 4.
+ * Nonnegative output levels describe version-4 grids; -1 preserves the
+ * caller's primary grid or shared-by-default secondary grid. An explicit
+ * secondary grid takes precedence at the caller. This does not change the
+ * C/C++ SDK's shared-by-omission grid contract. Failure is transactional. */
+GENERATIVEQC_API generativeqc_status generativeqc_ks_catalog_grid_policy_v1(
+    const char* name, size_t name_size, const char* identity, size_t identity_size, uint32_t tight,
+    uint32_t explicit_version, uint32_t explicit_level,
+    generativeqc_ks_catalog_grid_policy_result_v1* output);
 /** Backend-neutral method registry transport for compiled public named programs.
  * A successful miss writes zero; invalid inputs leave output
  * unchanged. A carrier identifies a registry row, not contextual admission. */

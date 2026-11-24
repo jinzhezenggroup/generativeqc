@@ -115,6 +115,13 @@ aliases. Python attaches a detached `MethodIR` view and verifies its identity;
 explicit functional or composition options on stable carriers still undergo
 their normal validation. A missing catalog entry retains the explicit
 compiler/compatibility route, but a selected catalog error does not retry it.
+For a default CPU named graph, the installed catalog also resolves implicit
+standard/tight XC quadrature and the default independent VV10 level when the
+primary Treutler level changes. Explicit primary and nonlocal prescriptions
+take precedence; explicit legacy tensor grids retain their shared default.
+This is Python facade policy, not a change to the SDK's shared-by-omission
+grid or to derivative admission. Older native libraries without the optional
+projection retain the compiler grid policy.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
 method-, basis- and backend-specific domain listed in [Supported methods](../user/hessians.md#supported-methods).

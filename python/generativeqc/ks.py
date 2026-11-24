@@ -1192,6 +1192,7 @@ def resolve_ks_options(
     options: typing.Any = None,
     *,
     _named_graph: MethodIR | None = None,
+    _named_grid_levels: tuple[int, int] | None = None,
 ) -> typing.Any:
     """Validate a MethodIR-resolved model before resource/native allocation."""
     if _named_graph is None:
@@ -1257,19 +1258,26 @@ def resolve_ks_options(
         _validate_named_ks_functional(resolved, expected)
 
     grid = options.grid
-    if grid is None:
-        grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
     nonlocal_grid = options.nonlocal_grid
-    if (
-        nonlocal_grid is None
-        and grid.version == 4
-        and grid.level != 3
-        and compile_ks_execution_plan(method_ir).nonlocal_correlation is not None
-    ):
-        # GPU4PySCF configures XC and nonlocal grids independently. Retain the
-        # level-3 VV10 default when XC selects a different Treutler level.
-        # Explicit legacy tensor grids preserve their established shared path.
-        nonlocal_grid = GridSpec.treutler(3)
+    if _named_grid_levels is not None:
+        xc_level, vv10_level = _named_grid_levels
+        if grid is None:
+            grid = GridSpec.treutler(xc_level)
+        if nonlocal_grid is None and vv10_level >= 0:
+            nonlocal_grid = GridSpec.treutler(vv10_level)
+    else:
+        if grid is None:
+            grid = GridPolicy(options.grid_accuracy).resolve(method, derivative_order=0)
+        if (
+            nonlocal_grid is None
+            and grid.version == 4
+            and grid.level != 3
+            and compile_ks_execution_plan(method_ir).nonlocal_correlation is not None
+        ):
+            # GPU4PySCF configures XC and nonlocal grids independently. Retain
+            # the level-3 VV10 default for a different Treutler XC level.
+            # Explicit tensor grids preserve their established shared path.
+            nonlocal_grid = GridSpec.treutler(3)
     domain = _scf_domain_for_ir(method_ir)
     if options.scf_domain not in (SCF_DOMAIN, domain):
         raise NotImplementedError(
