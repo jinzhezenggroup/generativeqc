@@ -266,7 +266,7 @@ class CpuKsHostAdmission {
   std::uint64_t spins_{}, diis_{}, iterations_{}, tile_{};
   bool first_ao_derivatives_{};
   bool force_has_exact_exchange_{};
-  std::uint64_t seed_restore_workspace_{};
+  std::size_t seed_restore_workspace_{};
   std::size_t damping_workspace_{};
   scf::CpuKsHostFleetResources fleet_;
 };
