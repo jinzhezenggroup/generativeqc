@@ -70,8 +70,8 @@ def install_registry_stub(
 
     Carrier IDs/families follow the public manifest. A property set, or a callable
     from carrier ID to a property set, controls the test's declared provider view.
-    The absent named-selector protocol deliberately exercises old-library numeric
-    compatibility; real named lookup/provenance is covered by compiled tests.
+    Both registry calls share the same manifest carriers; real native lookup
+    and provenance are covered by compiled tests.
     """
     families = {
         "hartree_fock": _native.METHOD_FAMILY_HARTREE_FOCK,
@@ -80,6 +80,18 @@ def install_registry_stub(
         "perturbation": _native.METHOD_FAMILY_PERTURBATION,
         "semiempirical": _native.METHOD_FAMILY_SEMIEMPIRICAL,
     }
+
+    by_name = {
+        name.encode("ascii"): method
+        for method, name in manifest.METHOD_ID_TO_NAME.items()
+    }
+
+    def lookup(name: bytes, output: Any) -> int:
+        method = by_name.get(name)
+        if method is None or output is None:
+            return _native.STATUS_INVALID_ARGUMENT
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_int32))[0] = method
+        return _native.STATUS_SUCCESS
 
     def query(method: int, output: Any) -> int:
         metadata = manifest.METHOD_METADATA[manifest.METHOD_ID_TO_NAME[method]]
@@ -96,7 +108,7 @@ def install_registry_stub(
         ) | (_native.PROPERTY_FORCES if "forces" in enabled else 0)
         return _native.STATUS_SUCCESS
 
-    library.generativeqc_method_from_name = None
+    library.generativeqc_method_from_name = lookup
     library.generativeqc_method_get_capabilities = query
     if not hasattr(library, "generativeqc_correlation_convergence_query_v1"):
         install_correlation_policy_stub(library)
