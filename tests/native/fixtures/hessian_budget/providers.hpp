@@ -194,9 +194,29 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch&, std::
   return impl_->allocate(1200, options.max_device_bytes, stub::Provider::induced);
 }
 CudaKsWb97mvResponseWork CudaKsWb97mvResponse::work() const noexcept { return impl_->work; }
-generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::string&) {
+generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, bool, std::string&) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
+cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t) noexcept {
+  return cudaSuccess;  // Decline optional residency without charging the mandatory budget.
+}
+struct CudaKsWb97mvNuclearJk::Impl : stub::Storage {
+  CudaWb97mvJkWork work;
+};
+CudaKsWb97mvNuclearJk::CudaKsWb97mvNuclearJk() = default;
+CudaKsWb97mvNuclearJk::~CudaKsWb97mvNuclearJk() = default;
+generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch&, std::size_t,
+                                                   const CudaKsFinalStateToken&,
+                                                   const CudaWb97mvJkOptions& options, std::string&,
+                                                   bool screened_frozen,
+                                                   CudaWb97mvJkAdmissionFailure* failure) {
+  assert(!screened_frozen);
+  if (failure) *failure = {};
+  impl_ = std::make_unique<Impl>();
+  impl_->work.workspace_bytes = 1700;
+  return impl_->allocate(1700, options.max_workspace_bytes, stub::Provider::exact);
+}
+const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept { return impl_->work; }
 #define STUB_PROVIDER(CLASS, OPTIONS, WORK, BYTES, ID, REF)                                \
   struct CLASS::Impl : stub::Storage {                                                     \
     WORK work;                                                                             \
@@ -211,8 +231,6 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::str
     return impl_->allocate(BYTES, options.max_workspace_bytes, ID);                        \
   }                                                                                        \
   WORK REF CLASS::work() const noexcept { return impl_->work; }
-STUB_PROVIDER(CudaKsWb97mvNuclearJk, CudaWb97mvJkOptions, CudaWb97mvJkWork, 1700,
-              stub::Provider::exact, const&)
 STUB_PROVIDER(CudaKsWb97mvDfNuclear, integrals::CudaDfNuclearOptions, integrals::CudaDfNuclearWork,
               700, options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df,
               const&)

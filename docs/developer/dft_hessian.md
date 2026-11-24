@@ -1944,6 +1944,17 @@ Exact J/K and LR actions use an independent, unscreened canonical Direct source
 on the borrowed producer stream, with caller-owned compensation and census
 planes. Geometry-only screening makes the operator linear for arbitrary signed
 directions. The primary SCF source's scratch/caches are not replayed or mutated.
+For a dense restricted Direct Hessian, repeated induced actions may lease
+row-major FP64 Coulomb and, for full-range hybrids, even exchange panels over
+unordered public AO pairs. Preparation first audits the reference Fock through
+the canonical route. The optional layout requires complete unscreened resident
+integrals, no AO projection, and enough byte and per-action product capacity.
+An antisymmetric density component contracts the complementary exchange term
+from the same Coulomb rows, so admission charges its worst case without storing
+a third panel. Byte, work, or allocation refusal keeps the canonical replay.
+This lease is not used by standalone HVPs, DF, UKS, range-separated exchange,
+or ordinary energy and forces. The CLI reports its retained bytes and aggregate
+product bound separately from exact integral evaluations.
 For admitted single-system DF sources, a read-only source seam borrows
 the immutable raw-integral source and actual whitening operator. Raw values are
 generated directly into separate response storage without device switching or

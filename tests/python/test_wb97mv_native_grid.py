@@ -36,7 +36,7 @@ if typing.TYPE_CHECKING:
 
 
 def _fixture(
-    spins: int = 2, points: int = 9, *, vacuum: bool = False, orbital_replicas: int = 1
+    spins: int = 2, points: int = 9, *, vacuum: bool = False, orbitals: int = 4
 ) -> dict:
     """Independent Gaussian polynomial jets, including real-spherical d/f.
 
@@ -52,7 +52,8 @@ def _fixture(
         [(1, (0, 1, 0))],
         [(-1, (2, 0, 0)), (-1, (0, 2, 0)), (2, (0, 0, 2))],
         [(2, (0, 0, 3)), (-3, (2, 0, 1)), (-3, (0, 2, 1))],
-    ] * orbital_replicas
+    ]
+    terms = (terms * ((orbitals + 3) // 4))[:orbitals]
     primitives = np.array([[0.7, 0.8], [1.1, -0.2]] * len(terms))
     records = np.zeros((len(terms), 16))
     for orbital, polynomial in enumerate(terms):
@@ -508,12 +509,12 @@ def test_native_failure_does_not_publish(probe: Path, mode: str) -> None:
     assert np.all(np.array(result["response"]) == 91.25)
 
 
-@pytest.mark.parametrize("orbital_replicas,points", ((1, 9), (9, 4096)))
+@pytest.mark.parametrize("orbitals,points", ((4, 9), (36, 4096), (35, 4097)))
 def test_private_response_propagates_failure_then_replays(
-    probe: Path, orbital_replicas: int, points: int
+    probe: Path, orbitals: int, points: int
 ) -> None:
-    """The wide private tile agrees with the checked response after a bad action."""
-    fixture = _fixture(1, points, orbital_replicas=orbital_replicas)
+    """Even and partial tiles agree with the checked response after a bad action."""
+    fixture = _fixture(1, points, orbitals=orbitals)
     fixture["weights"] /= points
     assert _native(probe, fixture, mode="private-replay", tile=128) == {
         "private_replay": True

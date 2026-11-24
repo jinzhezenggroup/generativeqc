@@ -718,6 +718,8 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
                                 : Json(nullptr)},
       {"induced_resident_integral_bytes", work.induced.resident_integral_bytes},
       {"induced_resident_source_evaluations", work.induced.resident_source_evaluations},
+      {"induced_resident_pair_bytes", work.induced.resident_pair_bytes},
+      {"induced_response_pair_product_bound", work.induced.response_pair_product_bound},
       {"induced_response_eris", work.induced.response_eris},
       {"induced_response_quartets", work.induced.response_quartets},
       {"exact_primitive_components", work.exact.component_evaluations},

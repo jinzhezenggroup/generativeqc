@@ -197,6 +197,18 @@ void launch_resident_canonical_jk_kernel(
     double* exchange_correction = nullptr, double screening = 0.0, const double* bounds = nullptr,
     std::size_t work_limit = std::numeric_limits<std::size_t>::max(), std::size_t work_begin = 0);
 
+/** Reorder an unscreened canonical bucket into public AO-pair rows. */
+void launch_store_coulomb_pair_rows(cudaStream_t stream, const std::int32_t* pairs,
+                                    CanonicalPairRows pair_rows, std::size_t first_begin,
+                                    std::size_t first_count, std::size_t second_begin,
+                                    std::size_t second_count, bool same_bucket, std::size_t count,
+                                    const double* source, double* rows, std::size_t stride);
+
+/** Apply an unscreened pair matrix to both orientations of a public density. */
+void launch_coulomb_pair_action(cudaStream_t stream, const double* rows, std::size_t stride,
+                                std::size_t nao, const double* density, double* packed_density,
+                                double* coulomb);
+
 /** Restricted replay of FP32 sources; products and compensated scatter are FP64. */
 void launch_mixed_resident_canonical_jk_kernel(
     cudaStream_t stream, DeviceBatch batch, std::int32_t system, const std::int32_t* pairs,

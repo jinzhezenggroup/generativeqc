@@ -39,6 +39,8 @@ struct CudaKsWb97mvResponseWork {
   std::uint64_t actions{};
   std::size_t resident_integral_bytes{};
   std::uint64_t resident_source_evaluations{};
+  std::size_t resident_pair_bytes{};
+  std::uint64_t response_pair_product_bound{};
   CudaWb97mvGridWork grid{}, separate_vv10{};
 };
 
@@ -78,8 +80,10 @@ class CudaKsWb97mvResponse {
   /** Optional post-preparation admission, before the first action. Composite
    * owners call this only after all mandatory consumers have reserved storage.
    * The additional-byte cap includes extra provider metadata, not just values.
-   * A resource refusal keeps the exact replay; numerical/device faults fail. */
-  generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, std::string& detail);
+   * Dense repeated-RHS callers can also admit an AO pair layout. A
+   * resource refusal keeps exact replay; numerical/device faults fail. */
+  generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, bool repeated_rhs,
+                                       std::string& detail);
   /** Spend only the remaining enclosing budget on fixed semilocal XC work. */
   cudaError_t retain_fixed_grid_points(std::size_t maximum_additional_bytes) noexcept;
   /** Enqueue into CPKS's private output; audit failure poisons the panel.

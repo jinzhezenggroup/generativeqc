@@ -4,7 +4,6 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
-#include <map>
 #include <new>
 #include <vector>
 
@@ -29,6 +28,7 @@ constexpr unsigned frozen_fields = 20;
 constexpr unsigned max_sp_quartets = 81;
 constexpr std::size_t closure_count =
     std::size(maps::radial) * angular_count * angular_count * angular_count * angular_count;
+constexpr std::size_t angular_closures = closure_count / std::size(maps::radial);
 constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
                                                                {{1, 0, 2, 3}},
                                                                {{0, 1, 3, 2}},
@@ -37,6 +37,43 @@ constexpr std::array<std::array<unsigned, 4>, 8> permutations{{{{0, 1, 2, 3}},
                                                                {{3, 2, 0, 1}},
                                                                {{2, 3, 1, 0}},
                                                                {{3, 2, 1, 0}}}};
+
+/** Sort within each pair and then sort the pairs, retaining the first orbit
+ * permutation for ties so both derivative incidence legs keep their order. */
+std::array<unsigned, 4> canonical_slots(const Quartet& quartet) {
+  std::array<unsigned, 4> slots{0, 1, 2, 3};
+  if (quartet[1] < quartet[0]) std::swap(slots[0], slots[1]);
+  if (quartet[3] < quartet[2]) std::swap(slots[2], slots[3]);
+  const auto first = quartet[slots[0]], second = quartet[slots[2]];
+  if (second < first || (second == first && quartet[slots[3]] < quartet[slots[1]])) {
+    std::swap(slots[0], slots[2]);
+    std::swap(slots[1], slots[3]);
+  }
+  return slots;
+}
+
+/** Index the immutable AOT inventory in registry order. Windows share only
+ * selectors, not bound omega values or mutable schedule metadata. */
+const auto& eri_program_index() {
+  static const auto index = [] {
+    std::array<std::vector<const aot::Program*>, closure_count> result;
+    for (const auto& program : aot::programs()) {
+      const auto& signature = program.signature;
+      if (program.kind != aot::Kind::integral || signature.family != "eri" ||
+          signature.angular.size() != 4 ||
+          std::ranges::any_of(signature.angular,
+                              [](unsigned order) { return order >= angular_count; }))
+        continue;
+      std::size_t angular{};
+      for (const auto order : signature.angular) angular = angular * angular_count + order;
+      for (std::size_t selector = 0; selector < std::size(maps::radial); ++selector)
+        if (signature.radial == maps::radial[selector])
+          result[selector * angular_closures + angular].push_back(&program);
+    }
+    return result;
+  }();
+  return index;
+}
 
 struct DeviceGroup {
   Shell shells[4];
@@ -83,7 +120,7 @@ struct Layout {
       radial_records{}, candidate_count{}, resident{}, resident_direction{}, resident_bytes{};
   std::uint64_t components{}, projections{}, reductions{};
   std::size_t batch_records{}, batch_raw{}, batch_inputs{}, batch_reductions{}, batch_projected{},
-      reduction_offsets{}, reduction_entries{}, batch_bytes{};
+      reduction_offsets{}, reduction_entries{}, batch_bytes{}, reduction_entry_count{};
   std::size_t frozen_entry_counts{}, frozen_value_offsets{};
   std::size_t retained_window_source_bytes{};
   std::size_t prepared_geometry{}, prepared_count{};
@@ -91,6 +128,7 @@ struct Layout {
   std::size_t window_radials{};
   bool packed_frozen_projection{}, single_cartesian_component{}, paired_radial_cache{};
 };
+enum class WindowMetadata { complete, sizes_only };
 struct RawBatch {
   std::size_t group{}, tile{}, begin{}, count{}, record{}, raw{};
 };
@@ -163,7 +201,7 @@ __host__ __device__ unsigned cartesian_count(unsigned angular) {
 unsigned blocks(std::size_t count) { return std::min<std::size_t>((count - 1) / 128 + 1, 65535); }
 
 void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& options,
-                    Schedule& schedule) {
+                    Schedule& schedule, WindowMetadata metadata) {
   auto& plan = schedule.plan;
   if (!plan.resident_bytes || !options.max_batch_workspace_bytes ||
       !options.max_batch_projection_bytes || schedule.groups.size() > UINT32_MAX)
@@ -250,6 +288,15 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
       !append(candidate, scratch_values, sizeof(double), candidate.batch_raw))
     return;
   candidate.batch_projected = candidate.batch_raw;
+  candidate.batch_bytes = candidate.bytes - plan.bytes;
+  candidate.window_radials = records / 5;
+  candidate.reduction_entry_count = entries;
+  // Certified replay rebuilds each window under the same layout. Admission
+  // only needs the extents; it never uploads these incidence lists.
+  if (metadata == WindowMetadata::sizes_only) {
+    plan = candidate;
+    return;
+  }
   // Projection and publication reduction consume one ordered group interval at
   // a time. Retaining a full public quartet tensor must not be a prerequisite
   // for batching the much smaller immutable integral source.
@@ -346,8 +393,6 @@ void batch_schedule(const CudaWb97mvJkShape& shape, const CudaWb97mvJkOptions& o
     schedule.reduction_entries.insert(schedule.reduction_entries.end(), owner.begin(), owner.end());
   }
   schedule.reduction_offsets.push_back(schedule.reduction_entries.size());
-  candidate.batch_bytes = candidate.bytes - plan.bytes;
-  candidate.window_radials = records / 5;
   plan = candidate;
 }
 
@@ -388,7 +433,8 @@ void retain_window_sources(Schedule& schedule, const CudaWb97mvJkOptions& option
 
 cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
                              const CudaWb97mvJkOptions& options, Schedule& result,
-                             std::span<const Quartet> selection = {}) {
+                             std::span<const Quartet> selection = {},
+                             WindowMetadata metadata = WindowMetadata::complete) {
   auto& plan = result.plan;
   if (options.part == CudaWb97mvJkPart::full_hybrid
           ? !(options.full_exchange_fraction > 0 && options.full_exchange_fraction <= 1)
@@ -466,21 +512,21 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
   }
   if (count > options.max_groups) return cudaErrorInvalidValue;
   result.groups.reserve(count);
-  // Complete ordered closure, not symmetry reconstruction. Each package is
-  // scanned once per selected angular tuple and method part, never per radial.
+  // Complete ordered closure, not symmetry reconstruction. Retain all
+  // component/omega checks when binding a bucket to the current window.
   const auto quartets = count / kernels.size();
+  const auto quartet_at = [&](std::size_t ordinal) {
+    if (!selection.empty()) return selection[ordinal];
+    Quartet indices{};
+    for (unsigned slot = 4; slot-- > 0;) {
+      indices[slot] = ordinal % shells.size();
+      ordinal /= shells.size();
+    }
+    return indices;
+  };
   for (std::size_t index = 0; index < quartets; ++index)
     for (const auto kernel : kernels) {
-      Quartet indices{};
-      if (selection.empty()) {
-        auto remaining = index;
-        for (unsigned slot = 4; slot-- > 0;) {
-          indices[slot] = remaining % shells.size();
-          remaining /= shells.size();
-        }
-      } else {
-        indices = selection[index];
-      }
+      const auto indices = quartet_at(index);
       Group group{{{shells[indices[0]], shells[indices[1]], shells[indices[2]], shells[indices[3]]},
                    {},
                    1,
@@ -511,15 +557,8 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
       auto& closure = result.closure[key];
       if (closure.empty()) {
         std::array<bool, 10000> covered{};
-        for (const auto& program : aot::programs()) {
-          const auto& signature = program.signature;
-          if (program.kind != aot::Kind::integral || signature.family != "eri" ||
-              signature.angular.size() != 4 || signature.radial != maps::radial[selected])
-            continue;
-          bool matches = true;
-          for (unsigned slot = 0; slot < 4; ++slot)
-            matches &= signature.angular[slot] == group.device.shells[slot].angular;
-          if (!matches) continue;
+        for (const auto* indexed : eri_program_index()[key]) {
+          const auto& program = *indexed;
           if (!program.accepts_omega(omega) || program.centers != 4 ||
               program.record_stride != 17 || program.outputs != 25 || program.components.empty() ||
               program.components.size() > 16)
@@ -582,25 +621,29 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
   auto resident_plan = plan;
   std::size_t fields{};
   bool representable = true;
-  std::map<std::array<std::size_t, 5>, std::size_t> sources;
   for (std::size_t index = 0; index < result.groups.size(); ++index) {
     auto& group = result.groups[index];
-    std::array<std::size_t, 5> key;
-    for (unsigned slot = 0; slot < 4; ++slot) key[slot] = group.device.shells[slot].primitive_begin;
-    key[4] = static_cast<std::size_t>(group.device.kernel);
-    auto selected = permutations.front();
-    for (const auto& permutation : permutations) {
-      auto candidate = key;
-      for (unsigned slot = 0; slot < 4; ++slot)
-        candidate[slot] = group.device.shells[permutation[slot]].primitive_begin;
-      if (candidate < key) {
-        key = candidate;
-        selected = permutation;
+    const auto ordinal = index / kernels.size();
+    const auto quartet = quartet_at(ordinal);
+    const auto selected = canonical_slots(quartet);
+    const Quartet canonical{quartet[selected[0]], quartet[selected[1]], quartet[selected[2]],
+                            quartet[selected[3]]};
+    auto source = ordinal;
+    if (canonical != quartet) {
+      if (selection.empty()) {
+        source = 0;
+        for (const auto shell : canonical) source = source * shells.size() + shell;
+      } else {
+        // Window selection is a sorted union of complete orbits. Match only
+        // the already constructed prefix, with no per-source map allocation.
+        const auto end = selection.begin() + ordinal;
+        const auto found = std::lower_bound(selection.begin(), end, canonical);
+        if (found == end || *found != canonical) return cudaErrorInvalidValue;
+        source = found - selection.begin();
       }
     }
-    const auto [position, inserted] = sources.try_emplace(key, index);
-    group.resident_source = position->second;
-    if (inserted) {
+    group.resident_source = source * kernels.size() + index % kernels.size();
+    if (group.resident_source == index) {
       group.resident_offset = fields;
       representable =
           representable && multiply(group.device.components, 25, count) && add(fields, count);
@@ -644,7 +687,7 @@ cudaError_t ordered_schedule(const CudaWb97mvJkShape& shape, std::span<const She
       }
     }
   }
-  batch_schedule(shape, options, result);
+  batch_schedule(shape, options, result, metadata);
   for (std::size_t index = 0; index < result.groups.size(); ++index)
     if (!plan.resident_bytes || result.groups[index].resident_source == index)
       ++result.source_groups;
@@ -671,7 +714,8 @@ template <class Visit>
 cudaError_t visit_canonical_windows(const CudaWb97mvJkShape& shape, std::span<const Shell> shells,
                                     const CudaWb97mvJkOptions& tile_options,
                                     std::span<const std::uint64_t> source_words,
-                                    const char*& refusal, Visit&& visit) {
+                                    const char*& refusal, Visit&& visit,
+                                    WindowMetadata metadata = WindowMetadata::complete) {
   std::vector<Quartet> pending;
   const auto flush = [&](auto&& self, std::span<const Quartet> canonical) -> cudaError_t {
     if (canonical.empty()) return cudaSuccess;
@@ -686,7 +730,7 @@ cudaError_t visit_canonical_windows(const CudaWb97mvJkShape& shape, std::span<co
     }
     std::sort(selected.begin(), selected.end());
     Schedule window;
-    auto error = ordered_schedule(shape, shells, tile_options, window, selected);
+    auto error = ordered_schedule(shape, shells, tile_options, window, selected, metadata);
     refusal = window.refusal;
     // A tile must reuse each canonical source. Never turn a capacity fallback
     // into eightfold primitive replay or hundreds of thousands of launches.
@@ -788,7 +832,23 @@ bool admits_compact_frozen(const Schedule& window) {
   const auto& last = window.groups.back().device;
   const auto bound = last.quartets * 41;
   return bound <= UINT32_MAX && last.projected_offset <= UINT32_MAX - bound &&
-         window.reduction_entries.size() <= UINT32_MAX;
+         window.plan.reduction_entry_count <= UINT32_MAX;
+}
+
+template <class Emit>
+bool visit_active_atoms(const Schedule& window, const DeviceGroup& group, Emit&& emit) {
+  for (unsigned slot = 0; slot < 4; ++slot) {
+    const auto atom = group.atoms[slot];
+    if (std::find(group.atoms, group.atoms + slot, atom) != group.atoms + slot ||
+        !aot::active_eri_centers(group.atoms, atom))
+      continue;
+    const auto position = std::lower_bound(window.frozen_atoms.begin(), window.frozen_atoms.end(),
+                                           static_cast<std::size_t>(atom));
+    if (position != window.frozen_atoms.end() && *position == static_cast<std::size_t>(atom) &&
+        !emit(position - window.frozen_atoms.begin()))
+      return false;
+  }
+  return true;
 }
 
 template <class Emit>
@@ -800,19 +860,27 @@ bool visit_active_batches(const Schedule& window, Emit&& emit) {
     const auto& tile = window.tiles[batch.tile].device;
     unsigned mask = 0;
     for (unsigned slot = 0; slot < 4; ++slot) mask |= group.shells[slot].angular << slot;
-    for (unsigned slot = 0; slot < 4; ++slot) {
-      const auto atom = group.atoms[slot];
-      if (std::find(group.atoms, group.atoms + slot, atom) != group.atoms + slot ||
-          !aot::active_eri_centers(group.atoms, atom))
-        continue;
-      const auto position = std::lower_bound(window.frozen_atoms.begin(), window.frozen_atoms.end(),
-                                             static_cast<std::size_t>(atom));
-      if (position == window.frozen_atoms.end() || *position != static_cast<std::size_t>(atom))
-        continue;
-      if (!emit(position - window.frozen_atoms.begin(), index, batch, tile, mask)) return false;
-    }
+    if (!visit_active_atoms(window, group,
+                            [&](auto atom) { return emit(atom, index, batch, tile, mask); }))
+      return false;
   }
   return true;
+}
+
+/** The paired writer visits every component in the disjoint closure once
+ * per active atom. Count those entries without constructing the tasks. */
+std::size_t replay_task_extent(const Schedule& window, std::size_t capacity) {
+  std::size_t tasks{};
+  for (const auto& group : window.groups) {
+    if (!group.device.source) continue;
+    if (!visit_active_atoms(window, group.device, [&](auto) {
+          if (group.device.components > capacity - tasks) return false;
+          tasks += group.device.components;
+          return true;
+        }))
+      return 0;
+  }
+  return tasks;
 }
 
 /** The radial cache fields have one writer per canonical component. Index
@@ -918,7 +986,8 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
   constexpr std::size_t max_task_slot = 4ULL << 20;
   std::vector<std::pair<std::size_t, std::size_t>> geometry_windows;
   const auto error = visit_canonical_windows(
-      shape, shells, tile_options, source_words, result.refusal, [&](Schedule&& window) {
+      shape, shells, tile_options, source_words, result.refusal,
+      [&](Schedule&& window) {
         if (!result.ordered_groups) {
           plan.matrix = window.plan.matrix;
           plan.panels = window.plan.panels;
@@ -939,15 +1008,9 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
         plan.bytes = std::max(plan.bytes, window.plan.bytes);
         plan.batch_bytes = std::max(plan.batch_bytes, window.plan.batch_bytes);
         if (admits_compact_frozen(window))
-          compact_entries = std::max(compact_entries, window.reduction_entries.size());
+          compact_entries = std::max(compact_entries, window.plan.reduction_entry_count);
         if (window.plan.paired_radial_cache && window.frozen_atoms.size() >= 2) {
-          std::size_t tasks{};
-          if (replay &&
-              !visit_active_batches(window, [&](auto, auto, const auto&, const auto& tile, auto) {
-                tasks += tile.count;
-                return tasks <= max_task_slot / sizeof(Task);
-              }))
-            tasks = 0;
+          const auto tasks = replay ? replay_task_extent(window, max_task_slot / sizeof(Task)) : 0;
           geometry_windows.emplace_back(window.plan.window_radials, tasks);
         }
         if (replay)
@@ -955,7 +1018,8 @@ cudaError_t canonical_schedule(const CudaWb97mvJkShape& shape, std::span<const S
         else
           result.windows.push_back(std::move(window));
         return cudaSuccess;
-      });
+      },
+      replay ? WindowMetadata::sizes_only : WindowMetadata::complete);
   if (error != cudaSuccess) return error;
   if (!result.ordered_groups) return cudaErrorInvalidValue;
   result.refusal = "aggregate tiled arena bound";

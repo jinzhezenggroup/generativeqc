@@ -499,6 +499,66 @@ __global__ void resident_canonical_jk_kernel(
     atomicAdd(reinterpret_cast<unsigned long long*>(work_census), candidates);
 }
 
+__device__ std::size_t public_pair_index(const std::int32_t* pair) {
+  const auto first = static_cast<std::size_t>(pair[0]);
+  return first * (first + 1) / 2 + static_cast<std::size_t>(pair[1]);
+}
+
+/** Each canonical source owns a pair-of-pairs and its transpose. */
+__global__ void store_coulomb_pair_rows(const std::int32_t* pairs, CanonicalPairRows pair_rows,
+                                        std::size_t first_begin, std::size_t first_count,
+                                        std::size_t second_begin, std::size_t second_count,
+                                        bool same_bucket, std::size_t count, const double* source,
+                                        double* rows, std::size_t stride) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    std::size_t first{}, second{};
+    canonical_pair_indices(index, first_count, second_count, same_bucket, pair_rows, first, second);
+    first += first_begin;
+    second += second_begin;
+    if (pair_rows.order) {
+      first = pair_rows.order[first];
+      second = pair_rows.order[second];
+    }
+    first = public_pair_index(pairs + 2 * first);
+    second = public_pair_index(pairs + 2 * second);
+    const auto value = source[index];
+    rows[first * stride + second] = value;
+    if (first != second) rows[second * stride + first] = value;
+  }
+}
+
+/** Fold both public density orientations without assuming symmetric input. */
+__global__ void pack_coulomb_pair_density(const double* density, std::size_t nao, std::size_t pairs,
+                                          double* packed) {
+  const auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (index >= pairs) return;
+  std::size_t first{}, second{};
+  decode_lower_triangle(index, first, second);
+  packed[index] =
+      density[first * nao + second] + (first == second ? 0.0 : density[second * nao + first]);
+}
+
+/** A warp owns a full symmetric output pair; no atoms contend for either AO. */
+__global__ void apply_coulomb_pair_rows(const double* rows, std::size_t stride, std::size_t nao,
+                                        std::size_t pairs, const double* density, double* output) {
+  const auto lane = threadIdx.x % warpSize;
+  const auto pair = (std::size_t(blockIdx.x) * blockDim.x + threadIdx.x) / warpSize;
+  if (pair >= pairs) return;
+  const auto* row = rows + pair * stride;
+  double sum{};
+  for (std::size_t column = lane; column < pairs; column += warpSize)
+    sum += row[column] * density[column];
+  for (unsigned offset = warpSize / 2; offset; offset /= 2)
+    sum += __shfl_down_sync(0xffffffffU, sum, offset);
+  if (lane == 0) {
+    std::size_t first{}, second{};
+    decode_lower_triangle(pair, first, second);
+    output[first * nao + second] = sum;
+    if (first != second) output[second * nao + first] = sum;
+  }
+}
+
 __global__ void independent_eri_tile_kernel(DeviceBatch batch, std::int32_t system, std::size_t b0,
                                             std::size_t b1, std::size_t b2, std::size_t b3,
                                             std::size_t c0, std::size_t c1, std::size_t c2,
@@ -1391,6 +1451,31 @@ void launch_resident_canonical_jk_kernel(
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,
         same_bucket, count, want_j, want_k, source_values, density, coulomb, exchange, work_census,
         coulomb_correction, exchange_correction, screening, bounds, work_begin);
+}
+
+void launch_store_coulomb_pair_rows(cudaStream_t stream, const std::int32_t* pairs,
+                                    CanonicalPairRows pair_rows, std::size_t first_begin,
+                                    std::size_t first_count, std::size_t second_begin,
+                                    std::size_t second_count, bool same_bucket, std::size_t count,
+                                    const double* source, double* rows, std::size_t stride) {
+  if (!count) return;
+  constexpr unsigned threads = 128;
+  const auto blocks =
+      static_cast<unsigned>(std::min<std::size_t>((count + threads - 1) / threads, 4096));
+  store_coulomb_pair_rows<<<blocks, threads, 0, stream>>>(pairs, pair_rows, first_begin,
+                                                          first_count, second_begin, second_count,
+                                                          same_bucket, count, source, rows, stride);
+}
+
+void launch_coulomb_pair_action(cudaStream_t stream, const double* rows, std::size_t stride,
+                                std::size_t nao, const double* density, double* packed_density,
+                                double* coulomb) {
+  const auto pairs = nao * (nao + 1) / 2;
+  constexpr unsigned threads = 128, warps = threads / 32;
+  pack_coulomb_pair_density<<<(pairs + threads - 1) / threads, threads, 0, stream>>>(
+      density, nao, pairs, packed_density);
+  apply_coulomb_pair_rows<<<(pairs + warps - 1) / warps, threads, 0, stream>>>(
+      rows, stride, nao, pairs, packed_density, coulomb);
 }
 
 void launch_canonical_mixed_resident_values_kernel(

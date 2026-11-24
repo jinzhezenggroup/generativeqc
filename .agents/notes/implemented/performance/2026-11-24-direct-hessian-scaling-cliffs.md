@@ -2074,6 +2074,225 @@ respectively. The source-matched deployment path, binary hashes and
 qualification log are `synced-cpks-n5.path`, `synced-cpks.sha256`, and
 `n5-synced-cpks.log` in the local evidence directory.
 
+## Follow-up: specialize the three-p-shell indexed jet
+
+Extend the prepared, indexed full-range jet to three p factors. Put the
+two factors from the same Hermite pair first. Permuting the axes and those
+two factors reduces the distinct stride-free scalar AD bodies to four.
+Use the same Wick expansion and Coulomb DAG; in the ket the derivative
+order contributes parity, but the same-axis covariance stays positive.
+Lift the three separation and three shift derivatives to the physical
+centers once. No change to the primitive census, the FP64 radial fold,
+the range-separated/general path or ordinary energy and forces.
+
+Slurm 2627, same card and moving grid, measures two warm fresh-SCF calls per
+arm against the previous draft binary. All 11 focused GPU J/K tests pass,
+including indexed/public replay with three distinct p centers and signed
+three-primitive contractions. The native raw Hessians differ by at most
+`3.58e-14 Ha/Bohr²`; no work receipts change. At 24 atoms each method still
+completes 72 columns with 784 physical Fock actions, 5,184 mixed grid
+contractions, 52,835,328 one-electron and 490,356,747 four-center primitive
+components. The 21-atom control retains 63 columns and 616 physical Fock
+actions.
+
+| Water atoms / XC | Hessian before -> after (s) | Complete before -> after (s) | Max raw error vs GPU4PySCF (Ha/Bohr²) |
+| --- | ---: | ---: | ---: |
+| 24 / PBE0 | 11.40 -> 11.21 | 11.58 -> 11.39 | 2.73e-8 |
+| 24 / r²SCAN | 10.81 -> 10.59 | 11.06 -> 10.83 | 3.79e-8 |
+| 21 / PBE | 6.86 -> 6.74 | 7.02 -> 6.89 | 7.02e-8 |
+
+The comparison uses the independent matrices already retained for the
+same geometries and settings (Slurm 2626/2619). Neither the 21-atom error
+gate nor the water Hessian speed gap is closed. Evidence: `triple-p-run.sh`,
+`n5-triple-p.log`, `triple-p-matrix.log`, binary and emitter digests, and
+compiler-cache receipts in the local evidence directory.
+
+## Follow-up: gather the repeated Coulomb response by AO-pair row
+
+For dense restricted Direct Hessians without exchange, repack the admitted
+complete FP64 Coulomb source once into public AO-pair rows. Each output
+pair has one warp owner; pack both orientations of the input density,
+including nonsymmetric directions. This eliminates the canonical bucket
+traversal, orbit scatter and global compensation on every induced action.
+The reference Fock audit still uses the incumbent schedule. The pair layout
+requires an unscreened, unprojected complete source, and its memory and
+per-action products must fit the existing response budgets. Capacity or
+allocation refusal retains that canonical route. Do not use this lease for
+exchange, density fitting, ordinary energy/forces or standalone HVP.
+
+Slurm 2628 compares against the three-p-shell binary on the same RTX 5090
+with two warm complete endpoints per arm. Three focused real-device cases
+pass, including an independent libcint AO contraction on a 32-AO general
+density and bounded allocation refusal. The largest raw Hessian change is
+`2.97e-14 Ha/Bohr²`. All measured physical Fock actions, nuclear columns,
+primitive derivative components and mixed XC contractions are unchanged.
+
+| System / XC | Hessian before -> after (s) | Complete before -> after (s) | Pair lease (bytes) | Max raw error vs GPU4PySCF (Ha/Bohr²) |
+| --- | ---: | ---: | ---: | ---: |
+| 24 water atoms / r²SCAN | 10.58 -> 9.81 | 10.82 -> 10.06 | 20,428,800 | 3.79e-8 |
+| 21 water atoms / PBE | 6.72 -> 6.39 | 6.88 -> 6.54 | 12,230,400 | 7.02e-8 |
+| 34 H / r²SCAN | 6.22 -> 6.15 | 6.38 -> 6.31 | 2,894,080 | 3.37e-9 |
+| 24 water atoms / PBE0 (control) | 11.16 -> 11.20 | 11.35 -> 11.38 | 0 | 2.73e-8 |
+
+The 21-water PBE profile shows 616 pair applications, 924,385,000 matrix
+products, no resident canonical replay kernels, and 4.70 ms combined pack
+and apply device time. The 24-water r²SCAN plan instead uses 2,547,216
+products for each of 784 induced actions. The new layout reduces ownership
+and scatter overhead, not the count of physical Fock actions. The shortcut
+does not address exchange, the remaining water speed gap, the 21-water
+cross-engine accuracy gate or larger default admission limits. Evidence:
+`pair-coulomb-run.sh`, `n5-pair-coulomb.log`, `pair-coulomb-matrix.log`,
+`pair-coulomb-profile-filter.log` and matching build/cache receipts. The
+outer job returned 127 only in its final text filter (`rg` unavailable on
+the node); the trace and complete matrices were retained and parsed offline.
+
+## Follow-up: extend the pair-row lease to full-range hybrids
+
+For eligible repeated restricted Direct response, reindex the Coulomb rows
+into an even-exchange panel. A general density is split into symmetric and
+antisymmetric pair weights. The antisymmetric exchange element can be formed
+from the existing Coulomb rows, so it needs no third stored plane and does no
+product for a zero antisymmetric weight. Charge the worst case anyway: for
+`P` AO pairs, admission bounds one/two padded FP64 planes and `P²`/`3P²`
+products per semilocal/hybrid action. Keep canonical replay when the lease is
+ineligible or refused. The generated Fock assembly, not the pair kernel,
+applies the functional's exchange coefficient. Range-separated, DF, UKS,
+standalone HVP, and ordinary energy/force schedules are unchanged.
+
+Slurm 2629 and 2631 compare hashed binaries against the Coulomb-only control
+on the same RTX 5090. The four focused GPU cases pass, including separate J
+and K checks against libcint on a nonsymmetric 32-AO density, refusal below
+the byte and product limits, and nonresident replay. Seventeen host emitter
+cases and the CUDA ownership/AOT audits also pass. Both native arms retain
+every column, no host fallback, and the same physical Fock actions, exact
+primitive components and mixed grid contractions. Native raw drift is at
+most `2.84e-14 Ha/Bohr²` across the matrix comparisons.
+
+| Water atoms / XC | Hessian control -> hybrid / GPU4PySCF (s) | Complete control -> hybrid / GPU4PySCF (s) | Max raw cross-engine error (Ha/Bohr²) |
+| --- | ---: | ---: | ---: |
+| 24 / PBE0 | 11.14 -> 10.21 / 6.23 | 11.32 -> 10.39 / 10.16 | 2.73e-8 |
+| 24 / B3LYP | 11.08 -> 10.07 / 6.21 | 11.25 -> 10.23 / 7.99 | 2.81e-8 |
+| 24 / r²SCAN | 9.85 -> 9.85 / 6.07 | 10.10 -> 10.11 / 9.22 | 3.79e-8 |
+| 21 / PBE | 6.46 -> 6.43 / 4.69 | 6.61 -> 6.58 / 6.22 | 7.02e-8 |
+
+Times are means of two warm calls except GPU4PySCF B3LYP, which has one
+successful warm sample. One SCF attempt hit 400 cycles; a fresh-process
+retry converged and contributes only to the raw matrix check. All 24-atom
+rows pass the unchanged `5e-8 Ha/Bohr²` gate. The 21-PBE accuracy and larger
+default-grid admission results are unchanged.
+
+The PBE0 trace (Slurm 2630) records all 784 hybrid J/K pair actions, with
+19.92 ms combined device time to pack and apply. Four-center derivative
+evaluation, frozen projection and owner compaction consume 2.42 s combined
+device time; fixed-grid features and potential tile reduction each consume
+about 0.64 s. This is a response algorithm win, not a compiler-flag gain
+or Hessian speed parity. Prioritize removing repeated derivative/projection
+work and coalescing grid sweeps rather than further optimizing pair rows.
+Source and binary digests, raw matrices, timing and profile logs are under
+`build/1905-gpu4pyscf/scaling/` (`pair-exchange-*` and `n5-pair-exchange-*`).
+
+## Rejected: tighter packed projection runs alone
+
+The frozen s/p projector writes only 12 center values plus the J/K AO-pair
+incidences. An experiment gave those values a separate tight offset and formed
+wider runs under the original scratch bound, leaving generic arbitrary-direction
+offsets intact. Slurm 2632 passed 15 focused GPU cases and retained columns,
+primitive counts, Fock actions, mixed XC contractions and workspace. The five
+same-card A/B cases (24-water PBE0/B3LYP/r²SCAN, 21-water PBE, 34-H r²SCAN)
+have at most `2.67e-14 Ha/Bohr²` raw native drift. No Hessian changes by more
+than 0.01 s and no complete endpoint by more than 0.02 s (two warm calls).
+The PBE0 trace (Slurm 2633) cuts projection launches from 12,336 to 10,875
+and projection device time from 448 to 422 ms, but owner compaction remains
+386 ms. Do not retain the separate layout for a kernel-only win. See
+`packed-projection-only.patch`, `packed-projection-compare.log` and
+`n5-packed-projection-profile.log` in the local scaling evidence directory.
+
+## Follow-up: index immutable ERI programs once instead of rescanning per window
+
+The 24-water PBE0 trace showed a 2.40 s gap after induced Fock preparation.
+The isolated host probe spends 0.085 s certifying 137,097 omissions but
+2.28 s building the screened plan. Each canonical window scanned the entire
+AOT inventory for each required angular tuple and radial selector. Build a
+process-local index in registry order instead. Keep per-window omega binding,
+stride, component closure, duplicate and completeness checks; no runtime
+compilation, GPU work, mutable plan data or scientific policy enters the
+index. The host plan drops to 1.18 s at the same 61,700,096 bytes, and the
+same-device trace's gap falls to 1.28 s (Slurm 2635). Replay also benefits
+when it rebuilds each window. GPU projection launches remain 12,336.
+
+Slurm 2634 passes 29 focused GPU cases including non-default omega, screened
+replay, resident/fallback and independent four-center and response checks.
+Same-device, two warm calls per arm; compare with the packed J/K binary:
+
+| System / XC | Hessian before -> after (s) | Complete before -> after (s) |
+| --- | ---: | ---: |
+| 24 water atoms / PBE0 | 10.22 -> 8.49 | 10.40 -> 8.68 |
+| 24 water atoms / B3LYP | 10.11 -> 8.43 | 10.27 -> 8.59 |
+| 24 water atoms / r²SCAN | 9.81 -> 8.19 | 10.06 -> 8.43 |
+| 21 water atoms / PBE | 6.42 -> 5.31 | 6.57 -> 5.46 |
+| 34 H / r²SCAN | 6.17 -> 5.99 | 6.33 -> 6.15 |
+
+The work receipts and device bytes match in each A/B. The largest raw
+native difference is `2.47e-14 Ha/Bohr²`, with bitwise equality on both
+hybrids; unmodified 24-atom GPU4PySCF matrix gates still pass. Neither the
+21-atom PBE cross-engine gate nor water Hessian speed parity is met. At
+the largest PBE cross-engine discrepancy (zero-based diagonal 59), the
+fine independent gradient difference is `1.03e-8` below native but
+`5.99e-8 Ha/Bohr²` above GPU4PySCF; do not tune the native result toward
+that comparator without identifying why they disagree. The default
+larger-size work limits do not change. Evidence: `eri-index-host-probe.log`,
+`eri-index-compare.log`, `eri-index-pbe0-host-gaps.log` and corresponding
+binary, compiler-cache and deployment receipts in the scaling directory.
+
+## Follow-up: bind canonical jet sources without a per-window tree
+
+The minimum ERI orbit representative sorts each pair, then sorts the two
+pairs. Leave equal indices in their original order to reproduce the first
+winning permutation, including repeated-shell derivative incidences. The
+ordered shell product gives the source ordinal directly; a canonical window
+is a sorted union of complete orbits, so search only its already-built prefix.
+Select the same operator slot and radial cache owner. This avoids allocating
+a tree and enumerating eight permutations for every group without changing
+producer order, either derivative incidence leg, or the fallback arena.
+
+The same 24-water host planner drops from 1.19 to 1.01 s at the same 61,700,096
+bytes. On the same GPU (Slurm 2636), two warm Hessian timings change from
+8.48 to 8.31 s (24-water PBE0), 8.40 to 8.22 s (B3LYP), 8.20 to 8.02 s
+(r²SCAN), 5.28 to 5.17 s (21-water PBE), and 6.01 to 5.76 s (34-H r²SCAN).
+The complete endpoints improve by 0.18/0.18/0.17/0.12/0.24 s, respectively.
+All 29 focused GPU cases pass. Device bytes and semantic work match; maximum
+raw native drift is `3.10e-14 Ha/Bohr²`. The precision and larger admission
+gates are unchanged. Evidence: `eri-orbit-host-probe.log`,
+`eri-orbit-compare.log`, `n5-eri-orbit.log`, and binary/cache receipts.
+
+## Follow-up: share fixed-point AO loads and size replay without task tables
+
+Reuse AO feature loads across a 2×2 tile of lower-triangular output pairs
+in the private fixed-grid response. Keep the pointwise and FP64 accumulation
+order for each pair, and leave the nonresident fallback unchanged. A 35-AO,
+4,097-point test exercises both tails and replay after a failed direction.
+On RTX 5090 (Slurm 2637–2638), fixed-grid PBE0 reduction device time fell
+from 0.638 to 0.577 s. Complete water endpoints improved by 0.06 s (21 PBE
+and 24 PBE0/B3LYP/r²SCAN); the 34-H r²SCAN endpoint was 0.02 s slower.
+The largest raw native A/B drift was `2.67e-14 Ha/Bohr²`; semantic work and
+device bytes were unchanged. Keep this small reuse for water-like systems;
+do not claim a speedup for 34 H.
+
+For certified window replay, admission counts compact projection entries
+and active tasks without emitting the execution-only vectors. Count one
+task per disjoint Cartesian component per active right atom, using the same
+incidence predicate and bounded slot as execution. Streaming and retained
+execution still construct the complete metadata. Do not change work caps or
+publish a derivative-only arena for arbitrary HVPs. See `grid-ao-pairs-compare.log`,
+`replay-sizing-compare.log`, and corresponding test/receipt logs in the
+scaling directory.
+
+On RTX 5090 (Slurm 2639), sizing-only admission saved 0.37–0.53 s on
+complete 24-water endpoints, 0.25 s on 21-water PBE and 0.24 s on 34-H
+r²SCAN. All 29 focused GPU cases passed. Work and device bytes were
+unchanged across all five A/B cases; raw drift was at most
+`3.11e-14 Ha/Bohr²`.
+
 ## References
 
 - #3134 and [the prior launch-cliff note](2026-11-22-cuda-direct-hessian-launch-cliffs.md).

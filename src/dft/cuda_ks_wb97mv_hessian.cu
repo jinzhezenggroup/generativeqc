@@ -1425,7 +1425,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       }
     }
     const auto induced_bytes = owner->induced.work().device_bytes;
-    status = owner->induced.retain_integrals(owner->remaining, detail);
+    status = owner->induced.retain_integrals(
+        owner->remaining, mode == CudaKsWb97mvHessianMode::dense_and_action, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps &&
         owner->remaining > owner->induced.work().device_bytes - induced_bytes) {

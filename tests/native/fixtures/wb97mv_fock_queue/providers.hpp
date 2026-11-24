@@ -319,6 +319,16 @@ inline generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPl
   return prepare_cuda_direct_jk_range_resident_values(plan, allowance, (1U << 28) - 1,
                                                       FockOperator::FullRange, 0, detail);
 }
+inline generativeqc_status prepare_cuda_direct_jk_response_pairs(CudaDirectJkPlan*, bool,
+                                                                 std::size_t, std::size_t,
+                                                                 std::size_t&, std::size_t&,
+                                                                 std::string&) {
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;  // This probe exercises the scalar queue.
+}
+inline cudaError_t enqueue_cuda_direct_jk_response_pairs(CudaDirectJkPlan*, const double*, double*,
+                                                         double*) noexcept {
+  std::abort();  // No pair-layout lease was admitted.
+}
 inline generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t count,
     double* coulomb, double* exchange, double*, std::size_t, int*, double, std::uint64_t* census,
@@ -416,7 +426,7 @@ struct CudaWb97mvGridOptions {
 };
 struct CudaWb97mvGridWork {
   bool pair_budget_exceeded{};
-  std::size_t active_nonlocal_points{}, response_actions{}, response_pairs{};
+  std::size_t active_nonlocal_points{}, response_actions{}, response_pairs{}, workspace_bytes{};
 };
 struct CudaWb97mvGridShape {
   std::size_t atoms{1}, primitives{1}, nao{2}, points{1};
@@ -440,6 +450,7 @@ inline cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&,
   return cudaSuccess;
 }
 struct CudaWb97mvGridResponse {
+  cudaError_t retain_fixed_point_linearization(std::size_t) { return cudaSuccess; }
   cudaError_t prepare(const CudaWb97mvGridShape&, const CudaWb97mvGridOptions&,
                       const CudaWb97mvGridReference&, void*, std::size_t) {
     return cudaSuccess;

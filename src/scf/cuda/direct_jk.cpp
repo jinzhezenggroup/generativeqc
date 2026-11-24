@@ -28,6 +28,7 @@
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/direct_jk_source_policy.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
+#include "scf/cuda/direct_response_pair_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -2589,6 +2590,98 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     plan->diagnostic.host_bytes += host_growth;
     plan->diagnostic.host_preparation_bytes += host_growth;
   });
+}
+
+generativeqc_status prepare_cuda_direct_jk_response_pairs(
+    CudaDirectJkPlan* plan, bool include_exchange, std::size_t maximum_bytes,
+    std::size_t maximum_products, std::size_t& bytes, std::size_t& product_bound,
+    std::string& detail) {
+  bytes = product_bound = 0;
+  detail.clear();
+  if (!plan || !plan->resident_values || plan->resident_coulomb_pairs ||
+      plan->resident_operator != FockOperator::FullRange || plan->resident_omega != 0.0 ||
+      plan->resident_bucket_mask != (1U << 28) - 1 || !plan->resident_bucket_offsets.empty() ||
+      plan->canonical_transform || plan->diagnostic.batch_size != 1 ||
+      plan->canonical_batch.nbf != plan->batch.nbf || plan->screening_tolerance != 0.0 ||
+      plan->diagnostic.nbf < 32 || plan->diagnostic.nbf > 96)
+    return GENERATIVEQC_STATUS_SUCCESS;
+  return direct_jk_guard(plan, detail, [&] {
+    const auto nao = plan->diagnostic.nbf;
+    const auto pairs = nao * (nao + 1) / 2;
+    const auto stride = (pairs + 31) / 32 * 32;
+    // This also bounds the odd exchange path for a fully asymmetric density.
+    const auto work = pairs * pairs * (include_exchange ? 3 : 1);
+    const auto plane = pairs * stride;
+    const auto required = plane * sizeof(double) * (include_exchange ? 2 : 1);
+    if (required > maximum_bytes || work > maximum_products) return;
+    direct_jk_require(plan->resident_value_count == pairs * (pairs + 1) / 2,
+                      "Coulomb pair layout requires a complete canonical source");
+    const auto total = direct_jk_sum(plan->device_bytes, required);
+    const auto diagnostic_total = direct_jk_sum(plan->diagnostic.device_bytes, required);
+    struct PairLease {
+      cudaStream_t stream;
+      double* data{};
+      ~PairLease() {
+        if (!data) return;
+        (void)cudaStreamSynchronize(stream);
+        (void)runtime::resource_cuda_free(data);
+      }
+    } lease{plan->stream};
+    const auto allocated =
+        runtime::resource_cuda_malloc(reinterpret_cast<void**>(&lease.data), required);
+    if (allocated == cudaErrorMemoryAllocation) {
+      const auto pending = cudaGetLastError();
+      if (pending != cudaErrorMemoryAllocation) direct_jk_check(pending);
+    }
+    direct_jk_check(allocated);
+    std::size_t value_offset = 0;
+    const auto& offsets = plan->canonical_pair_offsets[0];
+    for (unsigned first = 0; first < 7; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        const auto count = direct_jk_resident_bucket_count(plan, 0, first, second);
+        launch_store_coulomb_pair_rows(
+            plan->stream, plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
+            offsets[first], offsets[first + 1] - offsets[first], offsets[second],
+            offsets[second + 1] - offsets[second], first == second, count,
+            plan->resident_values + value_offset, lease.data, stride);
+        direct_jk_check(cudaGetLastError());
+        value_offset += count;
+      }
+    direct_jk_require(value_offset == plan->resident_value_count,
+                      "Coulomb pair layout did not consume the full canonical source");
+    auto* exchange = include_exchange ? lease.data + plane : nullptr;
+    if (exchange)
+      direct_jk_check(prepare_exchange_pair_rows(plan->stream, lease.data, exchange, stride, nao));
+    direct_jk_check(cudaStreamSynchronize(plan->stream));
+    const auto old_capacity = plan->allocations.capacity();
+    plan->allocations.push_back(lease.data);
+    plan->resident_coulomb_pairs = lease.data;
+    plan->resident_exchange_pairs = exchange;
+    plan->resident_pair_stride = stride;
+    lease.data = nullptr;
+    plan->device_bytes = total;
+    plan->diagnostic.device_bytes = diagnostic_total;
+    const auto host_growth = (plan->allocations.capacity() - old_capacity) * sizeof(void*);
+    plan->diagnostic.host_bytes += host_growth;
+    plan->diagnostic.host_preparation_bytes += host_growth;
+    bytes = required;
+    product_bound = work;
+  });
+}
+
+cudaError_t enqueue_cuda_direct_jk_response_pairs(CudaDirectJkPlan* plan, const double* density,
+                                                  double* coulomb, double* exchange) noexcept {
+  if (!plan || !plan->resident_coulomb_pairs || !density || !coulomb ||
+      static_cast<bool>(plan->resident_exchange_pairs) != static_cast<bool>(exchange))
+    return cudaErrorInvalidValue;
+  if (exchange)
+    return enqueue_hybrid_pair_rows(plan->stream, plan->resident_coulomb_pairs,
+                                    plan->resident_exchange_pairs, plan->resident_pair_stride,
+                                    plan->diagnostic.nbf, density, plan->canonical_density, coulomb,
+                                    exchange);
+  launch_coulomb_pair_action(plan->stream, plan->resident_coulomb_pairs, plan->resident_pair_stride,
+                             plan->diagnostic.nbf, density, plan->canonical_density, coulomb);
+  return cudaGetLastError();
 }
 
 generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(

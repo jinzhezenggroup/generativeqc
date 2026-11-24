@@ -115,6 +115,7 @@ macro(generativeqc_configure_cuda_backend target)
   # without coupling generated kernels or unrelated SCF/DF owners to its link.
   set(GENERATIVEQC_DIRECT_NATIVE_SOURCES
     src/scf/cuda/direct_jk_kernels.cu
+    src/scf/cuda/direct_response_pair_kernels.cu
     src/scf/cuda/direct_md_j.cu
     src/scf/cuda/direct_md_jk.cu
     src/scf/cuda/weighted_eri_kernels.cu

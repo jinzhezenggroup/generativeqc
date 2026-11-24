@@ -236,7 +236,7 @@ __global__ void audit(const double* value, const double* reference, std::size_t 
 }
 
 struct ActionCounts {
-  std::uint64_t quartets, eris, actions, grid_actions;
+  std::uint64_t quartets, eris, pair_product_bound, actions, grid_actions;
 };
 
 // These slots have independent owners: each Direct enqueue resets its own
@@ -246,7 +246,8 @@ constexpr unsigned status_count = 3;
 __device__ bool failed_action(const int* status) { return status[0] || status[1] || status[2]; }
 
 __global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
-                             std::uint64_t grid_bound, ActionCounts* total, int* status) {
+                             std::uint64_t grid_bound, std::uint64_t pair_products,
+                             ActionCounts* total, int* status) {
   if (total->grid_actions == grid_bound) {
     status[0] |= 8;
     return;
@@ -261,12 +262,13 @@ __global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
   }
   const auto quartets = counts[0] + counts[2], eris = counts[1] + counts[3];
   if (quartets > UINT64_MAX - total->quartets || eris > UINT64_MAX - total->eris ||
-      total->actions == UINT64_MAX) {
+      pair_products > UINT64_MAX - total->pair_product_bound || total->actions == UINT64_MAX) {
     status[0] |= 8;
     return;
   }
   total->quartets += quartets;
   total->eris += eris;
+  total->pair_product_bound += pair_products;
   ++total->actions;
 }
 
@@ -307,6 +309,7 @@ struct CudaKsWb97mvResponse::Impl {
   std::uint64_t *census{}, *range_census{};
   ActionCounts* action_counts{};
   std::uint64_t grid_actions{};
+  std::size_t pair_product_bound{};
   bool ready{}, used{};
   const char* failure_check{};
 
@@ -374,7 +377,7 @@ struct CudaKsWb97mvResponse::Impl {
     return failed[0] || failed[1] || failed[2] ? cudaErrorInvalidValue : cudaSuccess;
   }
 
-  generativeqc_status prepare_resident(std::string& detail) {
+  generativeqc_status prepare_resident(std::string& detail, bool repeated_rhs = false) {
     if (!direct) return GENERATIVEQC_STATUS_SUCCESS;
     const auto base_bytes = scf::cuda_direct_jk_plan_diagnostic(direct).device_bytes;
     auto remaining = std::min(options.max_resident_integral_bytes,
@@ -400,6 +403,22 @@ struct CudaKsWb97mvResponse::Impl {
     receipt.resident_integral_bytes = diagnostic.resident_value_bytes;
     receipt.resident_source_evaluations = diagnostic.resident_values_completed;
     receipt.device_bytes = arena_bytes + diagnostic.device_bytes;
+    const auto& spec = source.primary->strategy().spec;
+    if (repeated_rhs && !fitted && !source.correction && source.spins == 1 &&
+        spec.coulomb.present &&
+        (!spec.exchange.present || spec.exchange.op == scf::FockOperator::FullRange)) {
+      const auto allowance =
+          std::min(options.max_resident_integral_bytes - receipt.resident_integral_bytes,
+                   options.max_device_bytes - receipt.device_bytes);
+      const auto max_products = static_cast<std::size_t>(std::min<std::uint64_t>(
+          options.max_direct_eri_evaluations, std::numeric_limits<std::size_t>::max()));
+      result = scf::prepare_cuda_direct_jk_response_pairs(direct, spec.exchange.present, allowance,
+                                                          max_products, receipt.resident_pair_bytes,
+                                                          pair_product_bound, detail);
+      if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
+      receipt.device_bytes += receipt.resident_pair_bytes;
+      receipt.resident_integral_bytes += receipt.resident_pair_bytes;
+    }
     if (fitted || !source.correction || !receipt.resident_integral_bytes)
       return GENERATIVEQC_STATUS_SUCCESS;
     remaining = options.max_device_bytes - receipt.device_bytes;
@@ -456,11 +475,19 @@ struct CudaKsWb97mvResponse::Impl {
                      map_bytes, status, stream));
       }
     } else {
-      const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
-          direct, spec, density, matrix, coulomb, spec.exchange.present ? exchange : nullptr,
-          compensation, compensation_elements, status + 1, 0, census, detail, true, beta,
-          beta_exchange, false);
-      if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
+      if (response && pair_product_bound) {
+        // The incumbent reference reconstruction was audited before this
+        // optional layout was admitted. No canonical buckets run here.
+        check(cudaMemsetAsync(census, 0, 2 * sizeof(*census), stream));
+        check(scf::enqueue_cuda_direct_jk_response_pairs(
+            direct, density, coulomb, spec.exchange.present ? exchange : nullptr));
+      } else {
+        const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
+            direct, spec, density, matrix, coulomb, spec.exchange.present ? exchange : nullptr,
+            compensation, compensation_elements, status + 1, 0, census, detail, true, beta,
+            beta_exchange, false);
+        if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
+      }
       check(source.spins == 1
                 ? maps::launch_rks_exact(shape, coulomb, exchange, exchange_coefficient, primary,
                                          map_workspace, map_bytes, status, stream)
@@ -501,7 +528,7 @@ struct CudaKsWb97mvResponse::Impl {
       const auto pairs = static_cast<std::uint64_t>(max_points) * max_points;
       const auto grid_bound = pairs ? UINT64_MAX / pairs : UINT64_MAX;
       count_action<<<1, 1, 0, stream>>>(census, options.max_direct_eri_evaluations, grid_bound,
-                                        action_counts, status);
+                                        pair_product_bound, action_counts, status);
       return cudaGetLastError();
     }
     int failure_flags{};
@@ -917,7 +944,7 @@ const char* CudaKsWb97mvResponse::failure_check() const noexcept {
 }
 
 generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_additional_bytes,
-                                                           std::string& detail) {
+                                                           bool repeated_rhs, std::string& detail) {
   if (!impl_ || !impl_->ready || impl_->used || impl_->receipt.resident_integral_bytes) {
     detail = "optional integral admission requires an unused prepared response owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -928,7 +955,7 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_a
     const auto remaining = owner.options.max_device_bytes - owner.receipt.device_bytes;
     owner.options.max_device_bytes =
         owner.receipt.device_bytes + std::min(remaining, maximum_additional_bytes);
-    const auto result = owner.prepare_resident(detail);
+    const auto result = owner.prepare_resident(detail, repeated_rhs);
     if (result != GENERATIVEQC_STATUS_SUCCESS) {
       owner.ready = false;
       return result;
@@ -967,6 +994,7 @@ cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
   if (completed != cudaSuccess) return completed;
   owner.receipt.response_quartets = counts.quartets;
   owner.receipt.response_eris = counts.eris;
+  owner.receipt.response_pair_product_bound = counts.pair_product_bound;
   owner.receipt.actions = counts.actions;
   owner.grid_actions = counts.grid_actions;
   owner.failure_check = nullptr;

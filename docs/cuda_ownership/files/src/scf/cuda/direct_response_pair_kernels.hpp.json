@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_response_pair_kernels.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Borrowed-buffer launch ABI for full-range direct response pair contractions.",
+  "regions": []
+}

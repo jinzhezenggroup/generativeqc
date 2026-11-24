@@ -1,0 +1,14 @@
+{
+  "path": "src/scf/cuda/direct_response_pair_kernels.cu",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Contracts full-range FP64 J/K response using Coulomb integral permutations and even/odd density orientations. Both AO output orientations are preserved for nonsymmetric inputs.",
+  "regions": [
+    {
+      "start": "cudaError_t prepare_exchange_pair_rows(",
+      "stop": null,
+      "role": "runtime",
+      "reason": "Host launch forwarding and error propagation without scientific arithmetic."
+    }
+  ]
+}

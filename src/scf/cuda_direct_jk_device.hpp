@@ -76,6 +76,19 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
                                                            std::size_t maximum_bytes,
                                                            std::string& detail);
 
+/** Reorder the complete unscreened, unprojected FP64 full-range source for
+ * repeated J or J/K actions. Budget refusal leaves the canonical route intact.
+ * Nonzero bytes and an admitted product bound identify the published lease. */
+generativeqc_status prepare_cuda_direct_jk_response_pairs(
+    CudaDirectJkPlan* plan, bool include_exchange, std::size_t maximum_bytes,
+    std::size_t maximum_products, std::size_t& bytes, std::size_t& product_bound,
+    std::string& detail);
+
+/** Borrow the prepared pair layout and scratch on the owning stream. Density
+ * and output are disjoint public-AO buffers checked by the response owner. */
+cudaError_t enqueue_cuda_direct_jk_response_pairs(CudaDirectJkPlan* plan, const double* density,
+                                                  double* coulomb, double* exchange) noexcept;
+
 /** Replace a complete FP64 LR source by LR + full_scale * Full in place.
  * A bounded temporary source uses the same canonical rows and compiler-owned
  * producer; it is released before returning. The retained allocation does not

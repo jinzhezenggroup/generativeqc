@@ -284,18 +284,17 @@ __device__ __forceinline__ void accumulate_pair_product(Jet<4>& target,
 
 
 def _cuda_prepared_low_degree_source() -> str:
-    """Lower one and two p factors directly in their sparse affine coordinates.
+    """Lower up to three p factors in their sparse affine coordinates.
 
-    A low-degree component needs at most two pair shifts and the three product
-    separation coordinates. Specialize the zero pattern in a permuted Cartesian
-    frame, then lift the resulting derivatives to physical centers once. This
-    keeps the generic runtime-indexed Hermite jet arrays out of the hot path.
+    Each p factor depends on one pair shift and the common product separation.
+    Specialize the zero pattern in a permuted Cartesian frame, then lift the
+    derivatives to physical centers once, without runtime Hermite jet arrays.
     """
-    algebra = build_coulomb_derivative_algebra(2)
+    algebra = build_coulomb_derivative_algebra(3)
     graph = algebra.graph
     states = dict(algebra.roots)
-    differentiate = _eri_differentiate(graph, 4)
-    shifts = tuple(graph.variable(f"shift_{slot}") for slot in range(2))
+    differentiate = _eri_differentiate(graph, 5)
+    shifts = tuple(graph.variable(f"shift_{slot}") for slot in range(3))
     first_inverse = graph.variable("first_inverse")
     second_inverse = graph.variable("second_inverse")
     variables = {
@@ -303,15 +302,15 @@ def _cuda_prepared_low_degree_source() -> str:
         "first_product_scale": "1.0",
         "first_inverse": "first_inverse",
         "second_inverse": "second_inverse",
-        **{f"shift_{slot}": f"shift[{slot}]" for slot in range(2)},
+        **{f"shift_{slot}": f"shift[{slot}]" for slot in range(3)},
         **{
             f"difference_{axis}": f"difference[{index}]"
             for index, axis in enumerate("xyz")
         },
-        **{f"boys_{order}": f"geometry.boys[{order}]" for order in range(5)},
-        **{f"motion_{slot}": f"motion[{slot}]" for slot in range(5)},
+        **{f"boys_{order}": f"geometry.boys[{order}]" for order in range(6)},
+        **{f"motion_{slot}": f"motion[{slot}]" for slot in range(6)},
     }
-    motions = tuple(graph.variable(f"motion_{slot}") for slot in range(5))
+    motions = tuple(graph.variable(f"motion_{slot}") for slot in range(6))
 
     def partials(root: Expr, degree: int) -> tuple[Expr, ...]:
         return (
@@ -327,53 +326,51 @@ def _cuda_prepared_low_degree_source() -> str:
             )
         )
 
+    def signed_expansion(quantums: tuple, inverse: Expr, name: str) -> tuple:
+        # The signed inverse incorporates the ket parity for each selected
+        # Hermite derivative, but a same-axis covariance has no ket sign.
+        if len(quantums) != 2 or quantums[0][0] != quantums[1][0]:
+            return _pair_expansion(graph, quantums, inverse)
+        unsigned_inverse = graph.variable(f"unsigned_{name}")
+        sign = graph.variable(f"sign_{name}")
+        variables[f"unsigned_{name}"] = f"fabs({name})"
+        variables[f"sign_{name}"] = f"({name} < 0 ? -1.0 : 1.0)"
+        return tuple(
+            (orders, coefficient * sign if sum(orders) % 2 else coefficient)
+            for orders, coefficient in _pair_expansion(
+                graph, quantums, unsigned_inverse
+            )
+        )
+
     functions = []
-    for name, degree, split_axes, split_pairs in (
-        ("single", 1, False, False),
-        ("same_pair", 2, False, False),
-        ("different_pairs", 2, False, True),
-        ("different_axes", 2, True, True),
+    for name, axes, split in (
+        ("single", (0,), 1),
+        ("same_pair", (0, 0), 2),
+        ("different_pairs", (0, 0), 1),
+        ("different_axes", (0, 1), 1),
+        ("triple_parallel", (0, 0, 0), 2),
+        ("triple_parallel_pair", (0, 0, 1), 2),
+        ("triple_parallel_cross", (0, 1, 0), 2),
+        ("triple_distinct", (0, 1, 2), 2),
     ):
-        # The ket Hermite sign is absorbed into its signed inverse. For two
-        # factors on different axes the polynomial factorizes even within one
-        # pair. Only a same-axis, same-pair covariance needs an unsigned inverse.
-        first = ((0, shifts[0]),)
-        second = ((int(split_axes), shifts[1]),) if degree == 2 else ()
-        if split_pairs:
-            value = graph.sum(
-                left
-                * right
-                * states[
-                    (
-                        left_orders[0] + right_orders[0],
-                        left_orders[1] + right_orders[1],
-                        left_orders[2] + right_orders[2],
+        degree = len(axes)
+        factors = tuple(zip(axes, shifts[:degree], strict=True))
+        first = signed_expansion(factors[:split], first_inverse, "first_inverse")
+        second = signed_expansion(factors[split:], second_inverse, "second_inverse")
+        value = graph.sum(
+            left
+            * right
+            * states[
+                tuple(
+                    bra_order + ket_order
+                    for bra_order, ket_order in zip(
+                        left_orders, right_orders, strict=True
                     )
-                ]
-                for left_orders, left in _pair_expansion(graph, first, first_inverse)
-                for right_orders, right in _pair_expansion(
-                    graph, second, second_inverse
                 )
-            )
-        else:
-            inverse = (
-                graph.variable("unsigned_inverse") if degree == 2 else first_inverse
-            )
-            if degree == 2:
-                variables["unsigned_inverse"] = "fabs(first_inverse)"
-                variables["pair_sign"] = "(first_inverse < 0 ? -1.0 : 1.0)"
-            value = graph.sum(
-                coefficient
-                * (
-                    graph.variable("pair_sign")
-                    if degree == 2 and sum(orders) == 1
-                    else 1
-                )
-                * states[orders]
-                for orders, coefficient in _pair_expansion(
-                    graph, first + second, inverse
-                )
-            )
+            ]
+            for left_orders, left in first
+            for right_orders, right in second
+        )
 
         gradient = partials(value, degree)
         body = _jet_function(
@@ -393,10 +390,10 @@ def _cuda_prepared_low_degree_source() -> str:
             ),
         )
         functions.append(f"""
-__device__ __forceinline__ Jet<5> prepared_{name}(const Geometry& geometry,
+__device__ __forceinline__ Jet<{max(5, 3 + degree)}> prepared_{name}(const Geometry& geometry,
     const double* difference, const double* shift, const double* motion,
     double first_inverse, [[maybe_unused]] double second_inverse) {{
-  Jet<5> result{{}};
+  Jet<{max(5, 3 + degree)}> result{{}};
   {body}
   return result;
 }}
@@ -404,26 +401,75 @@ __device__ __forceinline__ Jet<5> prepared_{name}(const Geometry& geometry,
     return (
         "".join(functions)
         + r"""
+template<unsigned degree, unsigned dimension>
+__device__ __forceinline__ void lift_prepared_partials(const Geometry& geometry,
+    const double* direction, const unsigned (&slots)[degree], const unsigned (&axes)[degree],
+    unsigned axis0, unsigned next, const Jet<dimension>& partials, double* output) {
+  const auto prefactor=gaussian_prefactor(geometry,direction);
+  output[0]=prefactor.value*partials.value;
+#pragma unroll
+  for (unsigned center=0; center<4; ++center) {
+    const auto scale=geometry.product_scales[center];
+    const auto separation_scale=center<2 ? scale : -scale;
+#pragma unroll
+    for (unsigned axis=0; axis<3; ++axis) {
+      const unsigned index=3*center+axis;
+      const unsigned separation_axis=axis==axis0 ? 0 : axis==next ? 1 : 2;
+      auto gradient=separation_scale*partials.gradient[separation_axis];
+      auto jvp=separation_scale*partials.jvp[separation_axis];
+#pragma unroll
+      for (unsigned factor=0; factor<degree; ++factor) {
+        const auto incidence=axis==axes[factor] && (center&2)==(slots[factor]&2)
+            ? scale-(center==slots[factor]) : 0.0;
+        gradient+=incidence*partials.gradient[3+factor];
+        jvp+=incidence*partials.jvp[3+factor];
+      }
+      output[1+index]=prefactor.value*gradient+prefactor.gradient[index]*partials.value;
+      output[13+index]=prefactor.value*jvp+prefactor.directional*gradient+
+          prefactor.gradient[index]*partials.directional+prefactor.jvp[index]*partials.value;
+    }
+  }
+}
+
 template<unsigned degree>
 __device__ __noinline__ bool prepared_low_degree(const Geometry& geometry, const unsigned* angular,
     unsigned component, const double* direction, double* output) {
-  static_assert(degree==1 || degree==2);
+  static_assert(degree>=1 && degree<=3);
   // Component indices are in xyz order, with the rightmost p shell changing
   // fastest. Fixed scalar slots keep this dispatch independent of the radial count.
-  unsigned first=0, second=0, count=0;
+  unsigned slots[degree]{}, axes[degree]{}, count=0, extent=1;
   for (unsigned slot=0; slot<4; ++slot) if (angular[slot]) {
-    if (count++==0) first=slot;
-    else second=slot;
+    if (count==degree) return false;
+    slots[count++]=slot;
+    extent*=3;
   }
-  if (count!=degree || component>=(degree==1 ? 3 : 9)) return false;
-  const unsigned axis0=degree==1 ? component : component/3;
-  const unsigned axis1=degree==1 ? axis0 : component%3;
-  const unsigned next=axis0==axis1 ? (axis0+1)%3 : axis1;
+  if (count!=degree || component>=extent) return false;
+#pragma unroll
+  for (unsigned factor=degree; factor-- > 0;) {
+    axes[factor]=component%3;
+    component/=3;
+  }
+  if constexpr (degree==3) {
+    const auto swap_factors=[&](unsigned lhs,unsigned rhs) {
+      const auto slot=slots[lhs], axis=axes[lhs];
+      slots[lhs]=slots[rhs]; axes[lhs]=axes[rhs];
+      slots[rhs]=slot; axes[rhs]=axis;
+    };
+    // Put the two factors from the same pair first, including when both are
+    // in the ket. Of two distinct axes, prefer the one shared by the single p.
+    if ((slots[0]&2)!=(slots[1]&2)) {
+      swap_factors(0,1);
+      swap_factors(1,2);
+    }
+    if (axes[0]!=axes[1] && axes[1]==axes[2]) swap_factors(0,1);
+  }
+  const unsigned axis0=axes[0];
+  unsigned next=(axis0+1)%3;
+  if constexpr (degree>=2) if (axes[1]!=axis0) next=axes[1];
+  if constexpr (degree==3) if (axes[1]==axis0 && axes[2]!=axis0) next=axes[2];
   const unsigned last=3-axis0-next;
   const double difference[]={geometry.difference[axis0], geometry.difference[next],
                              geometry.difference[last]};
-  const double shift[]={geometry.shifts[first][axis0],
-                         degree==2 ? geometry.shifts[second][axis1] : 0};
   const auto signed_inverse=[&](unsigned slot) {
     return slot<2 ? geometry.inverse_two_p : -geometry.inverse_two_q;
   };
@@ -435,40 +481,36 @@ __device__ __noinline__ bool prepared_low_degree(const Geometry& geometry, const
   const auto shift_motion=[&](unsigned slot, unsigned axis) {
     return pair_motion(slot&2,axis)-direction[3*slot+axis];
   };
-  const double motion[]={separation(axis0),separation(next),separation(last),
-                         shift_motion(first,axis0),degree==2 ? shift_motion(second,axis1) : 0};
-  Jet<5> partials;
+  double shift[degree], motion[3+degree]={separation(axis0),separation(next),separation(last)};
+#pragma unroll
+  for (unsigned factor=0; factor<degree; ++factor) {
+    shift[factor]=geometry.shifts[slots[factor]][axes[factor]];
+    motion[3+factor]=shift_motion(slots[factor],axes[factor]);
+  }
+  Jet<(degree==3 ? 6 : 5)> partials;
+  const auto first_inverse=signed_inverse(slots[0]);
   if constexpr (degree==1) {
-    partials=prepared_single(geometry,difference,shift,motion,signed_inverse(first),0);
-  } else if (axis0!=axis1) {
-    partials=prepared_different_axes(geometry,difference,shift,motion,signed_inverse(first),signed_inverse(second));
-  } else if ((first&2)==(second&2)) {
-    partials=prepared_same_pair(geometry,difference,shift,motion,signed_inverse(first),0);
+    partials=prepared_single(geometry,difference,shift,motion,first_inverse,0);
+  } else if constexpr (degree==2) {
+    const auto second_inverse=signed_inverse(slots[1]);
+    if (axis0!=axes[1])
+      partials=prepared_different_axes(geometry,difference,shift,motion,first_inverse,second_inverse);
+    else if ((slots[0]&2)==(slots[1]&2))
+      partials=prepared_same_pair(geometry,difference,shift,motion,first_inverse,0);
+    else
+      partials=prepared_different_pairs(geometry,difference,shift,motion,first_inverse,second_inverse);
   } else {
-    partials=prepared_different_pairs(geometry,difference,shift,motion,signed_inverse(first),signed_inverse(second));
+    const auto second_inverse=signed_inverse(slots[2]);
+    if (axis0==axes[1] && axis0==axes[2])
+      partials=prepared_triple_parallel(geometry,difference,shift,motion,first_inverse,second_inverse);
+    else if (axis0==axes[1])
+      partials=prepared_triple_parallel_pair(geometry,difference,shift,motion,first_inverse,second_inverse);
+    else if (axis0==axes[2])
+      partials=prepared_triple_parallel_cross(geometry,difference,shift,motion,first_inverse,second_inverse);
+    else
+      partials=prepared_triple_distinct(geometry,difference,shift,motion,first_inverse,second_inverse);
   }
-  const auto prefactor=gaussian_prefactor(geometry,direction);
-  output[0]=prefactor.value*partials.value;
-#pragma unroll
-  for (unsigned center=0; center<4; ++center) {
-    const auto scale=geometry.product_scales[center];
-    const auto separation_scale=center<2 ? scale : -scale;
-#pragma unroll
-    for (unsigned axis=0; axis<3; ++axis) {
-      const unsigned index=3*center+axis;
-      const auto first_scale=axis==axis0 && (center&2)==(first&2) ? scale-(center==first) : 0.0;
-      const auto second_scale=degree==2 && axis==axis1 && (center&2)==(second&2) ? scale-(center==second) : 0.0;
-      const auto gradient=separation_scale*(axis==axis0 ? partials.gradient[0] :
-          axis==next ? partials.gradient[1] : partials.gradient[2])+
-          first_scale*partials.gradient[3]+second_scale*partials.gradient[4];
-      const auto jvp=separation_scale*(axis==axis0 ? partials.jvp[0] :
-          axis==next ? partials.jvp[1] : partials.jvp[2])+
-          first_scale*partials.jvp[3]+second_scale*partials.jvp[4];
-      output[1+index]=prefactor.value*gradient+prefactor.gradient[index]*partials.value;
-      output[13+index]=prefactor.value*jvp+prefactor.directional*gradient+
-          prefactor.gradient[index]*partials.directional+prefactor.jvp[index]*partials.value;
-    }
-  }
+  lift_prepared_partials(geometry,direction,slots,axes,axis0,next,partials,output);
   return true;
 }
 """
@@ -1072,7 +1114,7 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
       }
       double values[25]{};
       const auto* geometry=Prepared ? prepared+(records-window_records)/5+begin+threadIdx.x : nullptr;
-      if constexpr (Indexed && (sp_degree==1 || sp_degree==2)) {
+      if constexpr (Indexed && sp_degree>=1 && sp_degree<=3) {
         valid=generativeqc::scf::factorized_second::prepared_low_degree<sp_degree>(
             *geometry,angular,component,direction,values);
       } else {

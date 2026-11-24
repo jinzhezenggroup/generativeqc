@@ -126,13 +126,14 @@ def test_screened_frozen_jk_is_private_and_bounded(tmp_path: Path) -> None:
     _native(fixture, tmp_path, part="full_hybrid", cache_mode="screened-table")
 
 
-@pytest.mark.parametrize("primitives", (1, 3))
+@pytest.mark.parametrize("primitives,p_centers", ((1, 2), (3, 2), (3, 3)))
 def test_indexed_frozen_jk_matches_dense_replay(
-    tmp_path: Path, primitives: int
+    tmp_path: Path, primitives: int, p_centers: int
 ) -> None:
-    """Check indexed mixed shell masks for both short and two-chunk radial folds."""
+    """Cover short and two-chunk radial folds, including three distinct p centers."""
     fixture = _fixture(spins=1)
-    shells = [(0, 0, 0.8), (1, 1, 0.7), (2, 1, 0.6), (3, 0, 0.9)]
+    shells = [(0, int(p_centers == 3), 0.8), (1, 1, 0.7), (2, 1, 0.6), (3, 0, 0.9)]
+    nao = sum(3 if angular else 1 for _, angular, _ in shells)
     fixture.update(
         numbers=np.array([1, 8, 8, 1]),
         centers=np.array(
@@ -149,8 +150,8 @@ def test_indexed_frozen_jk_matches_dense_replay(
             )
             for atom, angular, exponent in shells
         ],
-        nao=8,
-        panels=np.stack([0.25 * np.eye(8) + 0.05, np.zeros((8, 8))]),
+        nao=nao,
+        panels=np.stack([0.25 * np.eye(nao) + 0.05, np.zeros((nao, nao))]),
         direction=np.zeros((4, 3)),
     )
     _native(fixture, tmp_path, part="full_hybrid", cache_mode="indexed-table")

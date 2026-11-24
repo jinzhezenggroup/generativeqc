@@ -1405,6 +1405,50 @@ __global__ void reduce_grid_potential_tile(std::size_t nao, const double* tile, 
   }
 }
 
+/** Reuse two AO rows and two transformed columns in registers. Keep the
+ * incumbent per-point and 128-lane FP64 sums for each published pair. */
+__global__ void reduce_fixed_potential_pair_tiles(std::size_t nao, const double* tile,
+                                                  std::size_t points, bool first, double* output,
+                                                  int* status) {
+  if (__syncthreads_or(threadIdx.x == 0 && atomicAdd(status, 0))) return;
+  const auto block = blockIdx.x;
+  const auto row_tile = static_cast<unsigned>((sqrt(8.0 * block + 1.0) - 1.0) * 0.5);
+  const auto row = 2 * row_tile;
+  const auto column = 2 * (block - row_tile * (row_tile + 1) / 2);
+  const auto size = points * nao;
+  constexpr auto fields = ad::FixedPotential::ao_count;
+  __shared__ double partial[4][128];
+  double sums[4]{};
+  for (auto point = std::size_t(threadIdx.x); point < points; point += blockDim.x) {
+    double terms[4]{};
+    for (unsigned field = 0; field < fields; ++field) {
+      const auto* left = tile + field * size + row * points;
+      const auto* right = tile + (fields + field) * size + column * points;
+      const auto left0 = left[point], left1 = row + 1 < nao ? left[points + point] : 0.0;
+      const auto right0 = right[point], right1 = column + 1 < nao ? right[points + point] : 0.0;
+      terms[0] += left0 * right0;
+      terms[1] += left0 * right1;
+      terms[2] += left1 * right0;
+      terms[3] += left1 * right1;
+    }
+    for (unsigned index = 0; index < 4; ++index) sums[index] += terms[index];
+  }
+  for (unsigned index = 0; index < 4; ++index) partial[index][threadIdx.x] = sums[index];
+  __syncthreads();
+  const auto pair = threadIdx.x / 32, lane = threadIdx.x % 32;
+  const auto i = row + pair / 2, j = column + pair % 2;
+  if (i >= nao || j >= nao || i < j) return;
+  const auto* values = partial[pair];
+  double sum = (values[lane] + values[lane + 64]) + (values[lane + 32] + values[lane + 96]);
+  for (unsigned stride = 16; stride; stride /= 2) sum += __shfl_down_sync(0xffffffffU, sum, stride);
+  if (!lane) {
+    const auto value = first ? sum : output[i * nao + j] + sum;
+    if (!isfinite(value)) atomicExch(status, 1);
+    output[i * nao + j] = value;
+    output[j * nao + i] = value;
+  }
+}
+
 std::size_t potential_tile_points(CudaWb97mvGridShape shape, const Layout& plan,
                                   bool private_fixed_response = false) {
   // Above one AO strip, amortize the weighted transform across the partners
@@ -1426,15 +1470,21 @@ cudaError_t launch_tiled_grid_potential(CudaWb97mvGridShape shape, std::size_t t
                                         const double* ao, const double* motion,
                                         const double* cotangent, const double* tangent,
                                         double* output, double* tile, int* status,
-                                        cudaStream_t stream) {
+                                        cudaStream_t stream, bool private_fixed = false) {
   for (std::size_t begin = 0; begin < shape.points;) {
     const auto points = std::min(tile_points, shape.points - begin);
     stage_grid_potential_tile<Product><<<maps::blocks(points * shape.nao), 128, 0, stream>>>(
         shape, ao, motion, cotangent, tangent, begin, points, tile, status);
     auto error = cudaGetLastError();
     if (error != cudaSuccess) return error;
-    reduce_grid_potential_tile<Product><<<shape.nao*(shape.nao + 1) / 2, 128, 0, stream>>>(
-        shape.nao, tile, points, begin == 0, output, status);
+    if (private_fixed) {
+      const auto ao_tiles = (shape.nao + 1) / 2;
+      reduce_fixed_potential_pair_tiles<<<ao_tiles*(ao_tiles + 1) / 2, 128, 0, stream>>>(
+          shape.nao, tile, points, begin == 0, output, status);
+    } else {
+      reduce_grid_potential_tile<Product><<<shape.nao*(shape.nao + 1) / 2, 128, 0, stream>>>(
+          shape.nao, tile, points, begin == 0, output, status);
+    }
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
     begin += points;
@@ -1718,7 +1768,7 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
     if (const auto tile = potential_tile_points(shape_, plan, response && defer_status))
       error = launch_tiled_grid_potential<ad::FixedPotential>(
           shape_, tile, arena + plan.ao, nullptr, coefficients, nullptr, output,
-          arena + plan.tensor, status, stream);
+          arena + plan.tensor, status, stream, response && defer_status);
     else if (use_fused_grid_potential(shape_))
       error = launch_fused_grid_potential<ad::FixedPotential>(
           shape_, arena + plan.ao, nullptr, coefficients, nullptr, output, status, stream);

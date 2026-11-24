@@ -111,7 +111,7 @@ void run_resident(unsigned spins, queue_test::ResidentFailure failure) {
     const auto mandatory_bytes = owner.work().device_bytes;
     expect(queue_test::live_plans == 1 && owner.work().resident_integral_bytes == 0,
            "deferred preparation retained optional integrals");
-    const auto result = owner.retain_integrals(1024, detail);
+    const auto result = owner.retain_integrals(1024, false, detail);
     const auto expected = failure == Failure::numerical     ? GENERATIVEQC_STATUS_NUMERICAL_FAILURE
                           : failure == Failure::unsupported ? GENERATIVEQC_STATUS_NOT_IMPLEMENTED
                           : failure == Failure::creation_device ? GENERATIVEQC_STATUS_CUDA_ERROR
@@ -125,7 +125,7 @@ void run_resident(unsigned spins, queue_test::ResidentFailure failure) {
                work.resident_source_evaluations == (complete ? 16 : 8),
            "optional refusal changed the retained primary source");
     expect(queue_test::live_plans == (complete ? 2 : 1), "optional plan was not retired");
-    expect(owner.retain_integrals(1024, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+    expect(owner.retain_integrals(1024, false, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
                owner.work().device_bytes == work.device_bytes,
            "repeated admission altered a retained or failed owner");
     queue_test::range_replays = queue_test::range_cached = 0;
