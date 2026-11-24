@@ -343,6 +343,7 @@ class Calculator:
         automatic_libxc_public_name = None
         automatic_libxc_transport = None
         discovered_native_graph = None
+        named_model = None
         selected_library = None
 
         from generativeqc_compiler.method import (
@@ -383,7 +384,7 @@ class Calculator:
                     carrier_id is None
                     or carrier_id in _method_manifest.NATIVE_DFT_METHOD_IDS
                 ):
-                    from ._named_ks import resolve_named_graph
+                    from ._named_ks import resolve_named_model
                     from .ks import (
                         KsOptions,
                         _validate_named_ks_functional,
@@ -417,11 +418,13 @@ class Calculator:
                     selected_library = _native.load_library(
                         device=device, device_id=int(device_id)
                     )
-                    native_graph = resolve_named_graph(
+                    named_model = resolve_named_model(
                         selected_library,
                         canonical_method,
                         _native.BACKEND_CPU_REFERENCE,
                     )
+                    if named_model is not None:
+                        native_graph = named_model.graph
                 if composite is not None:
                     identifier, spin = composite
                     method = (
@@ -434,8 +437,10 @@ class Calculator:
                     # options; only its default graph comes from discovery.
                     discovered_native_graph = native_graph
                 else:
+                    from ._named_ks import CorrectionRole
                     from .ks import (
                         KsOptions,
+                        _dispersion_electronic_projection,
                         _named_dft_carrier_for_ir,
                         resolve_ks_method,
                     )
@@ -448,33 +453,34 @@ class Calculator:
                             discovered_ir, _ = resolve_ks_method(canonical_method)
                         except ValueError as error:
                             raise ValueError(f"unknown method {method!r}") from error
-                    carrier = _named_dft_carrier_for_ir(discovered_ir)
-                    execution_ir = discovered_ir
-                    corrections = tuple(
-                        node
-                        for node in discovered_ir.primitives
-                        if isinstance(node, DispersionCorrectionPrimitive)
-                    )
-                    gcp_nodes = tuple(
-                        node
-                        for node in discovered_ir.primitives
-                        if isinstance(node, GeometricCounterpoisePrimitive)
-                    )
-                    if (
-                        carrier != "pbe-d4-rks"
-                        and len(corrections) == 1
-                        and isinstance(corrections[0].specification, (D3Spec, D4Spec))
-                        and not gcp_nodes
-                    ):
-                        execution_ir = replace(
-                            discovered_ir,
-                            identifier=f"{discovered_ir.identifier}/electronic",
-                            primitives=tuple(
-                                node
-                                for node in discovered_ir.primitives
-                                if not isinstance(node, DispersionCorrectionPrimitive)
-                            ),
+                    carrier = named_model.facade_carrier if named_model else None
+                    if carrier is None:
+                        carrier = _named_dft_carrier_for_ir(discovered_ir)
+                    role = named_model.correction_role if named_model else None
+                    if role is CorrectionRole.DETACHED:
+                        electronic_graph = _dispersion_electronic_projection(
+                            discovered_ir
                         )
+                        if electronic_graph is None:
+                            raise RuntimeError(
+                                "native KS catalog lacks its detached correction"
+                            )
+                    elif (
+                        role is None
+                        and carrier != "pbe-d4-rks"
+                        and not any(
+                            isinstance(node, GeometricCounterpoisePrimitive)
+                            for node in discovered_ir.primitives
+                        )
+                    ):
+                        electronic_graph = _dispersion_electronic_projection(
+                            discovered_ir
+                        )
+                    else:
+                        electronic_graph = None
+                    execution_ir = discovered_ir
+                    if electronic_graph is not None:
+                        execution_ir = electronic_graph
                         self._dispersion_method_ir = discovered_ir
                     if ks_options is None:
                         ks_options = KsOptions(composition=execution_ir)
@@ -858,26 +864,38 @@ class Calculator:
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
-            from ._named_ks import cuda_r2scan3c_resource_graph
+            from ._named_ks import CorrectionRole, cuda_r2scan3c_resource_graph
 
-            correction_nodes = tuple(
-                node
-                for node in self._dispersion_method_ir.primitives
-                if isinstance(node, DispersionCorrectionPrimitive)
-            )
             if (
-                len(correction_nodes) != 1
-                or not isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
-                or (
-                    any(
-                        isinstance(node, GeometricCounterpoisePrimitive)
-                        for node in self._dispersion_method_ir.primitives
-                    )
-                    and not cuda_r2scan3c_resource_graph(
-                        self._dispersion_method_ir, device
+                named_model is not None
+                and named_model.correction_role is not None
+                and self._dispersion_method_ir is named_model.graph
+            ):
+                # This is only the existing correction-shape gate, not a
+                # promise that a particular resource plan can be prepared.
+                correction_budget_supported = (
+                    named_model.correction_role is CorrectionRole.DETACHED
+                )
+            else:
+                correction_nodes = tuple(
+                    node
+                    for node in self._dispersion_method_ir.primitives
+                    if isinstance(node, DispersionCorrectionPrimitive)
+                )
+                correction_budget_supported = (
+                    len(correction_nodes) == 1
+                    and isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
+                    and (
+                        not any(
+                            isinstance(node, GeometricCounterpoisePrimitive)
+                            for node in self._dispersion_method_ir.primitives
+                        )
+                        or cuda_r2scan3c_resource_graph(
+                            self._dispersion_method_ir, device
+                        )
                     )
                 )
-            ):
+            if not correction_budget_supported:
                 raise NotImplementedError(
                     "global resource_budget supports individual D3/D4 corrections; "
                     "composite gCP planning remains unavailable"

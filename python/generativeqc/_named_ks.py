@@ -7,6 +7,8 @@ owner executes and combines all terms before publishing its result.
 from __future__ import annotations
 
 import ctypes as ct
+from dataclasses import dataclass
+from enum import IntEnum
 from typing import Any
 
 import numpy as np
@@ -39,6 +41,34 @@ class _CatalogBinding(ct.Structure):
     ]
 
 
+class CorrectionRole(IntEnum):
+    """Facade representation of a complete named program, not system admission."""
+
+    NONE = 1
+    DETACHED = 2
+    INTRINSIC = 3
+    BOUND = 4
+
+
+class _CatalogBindingV2(ct.Structure):
+    # The role occupies tail padding in v1 on some ABIs; ctypes inheritance
+    # would place it after that padding, disagreing with the native layout.
+    _fields_ = [
+        *_CatalogBinding._fields_,
+        ("correction_role", ct.c_uint32),
+        ("facade_carrier", ct.c_int32),
+    ]
+
+
+@dataclass(frozen=True)
+class NamedModel:
+    """Backend-bound role with the separately authenticated public graph view."""
+
+    graph: Any
+    correction_role: CorrectionRole | None
+    facade_carrier: str | None
+
+
 def registry_carrier(library: Any, selector: str) -> int | None:
     """Query a named KS carrier without constructing a MethodIR."""
     name = selector.encode("utf-8")
@@ -61,19 +91,40 @@ def registry_carrier(library: Any, selector: str) -> int | None:
     return carrier.value
 
 
-def resolve_named_graph(library: Any, selector: str, backend: int) -> Any:
-    """Use native name selection and authenticate the detached Python graph view."""
-    query = getattr(library, "generativeqc_ks_catalog_lookup_v1", None)
+def resolve_named_model(library: Any, selector: str, backend: int) -> NamedModel | None:
+    """Use native name/role selection and authenticate the public graph view.
+
+    Compatibility libraries report no role. A current library's miss is
+    explicit; its failures or malformed receipts never retry the old protocol.
+    """
+    query = getattr(library, "generativeqc_ks_catalog_lookup_v2", None)
+    binding_type = _CatalogBindingV2
+    if query is None:
+        query = getattr(library, "generativeqc_ks_catalog_lookup_v1", None)
+        binding_type = _CatalogBinding
     if query is None:
         return None
     name = selector.encode("utf-8")
     if not name or len(name) > 256 or b"\0" in name:
         return None
-    binding = _CatalogBinding(ct.sizeof(_CatalogBinding), _native.ABI_VERSION)
-    query.argtypes = [ct.c_char_p, ct.c_size_t, ct.c_int32, ct.POINTER(_CatalogBinding)]
+    binding = binding_type(ct.sizeof(binding_type), _native.ABI_VERSION)
+    query.argtypes = [ct.c_char_p, ct.c_size_t, ct.c_int32, ct.POINTER(binding_type)]
     query.restype = ct.c_int
     _native.check(library, query(name, len(name), backend, ct.byref(binding)))
-    if binding.identifier is None and binding.identity is None and binding.spin == 0:
+    if (
+        binding.struct_size != ct.sizeof(binding_type)
+        or binding.abi_version != _native.ABI_VERSION
+    ):
+        raise RuntimeError("invalid native KS catalog binding ABI")
+    role = getattr(binding, "correction_role", None)
+    carrier_id = getattr(binding, "facade_carrier", 0)
+    if (
+        binding.identifier is None
+        and binding.identity is None
+        and binding.spin == 0
+        and role in (None, 0)
+        and not carrier_id
+    ):
         return None
     if (
         binding.identifier is None
@@ -81,6 +132,20 @@ def resolve_named_graph(library: Any, selector: str, backend: int) -> Any:
         or binding.spin not in (1, 2)
     ):
         raise RuntimeError("incomplete native KS catalog binding")
+    if role is not None:
+        try:
+            role = CorrectionRole(role)
+        except ValueError as error:
+            raise RuntimeError("invalid native KS catalog correction role") from error
+    facade_carrier = None
+    if carrier_id:
+        if carrier_id not in _generated_methods.NATIVE_DFT_METHOD_IDS:
+            raise RuntimeError("invalid native KS facade carrier")
+        facade_carrier = _generated_methods.METHOD_ID_TO_NAME[carrier_id]
+        if facade_carrier.endswith("-uks") != (binding.spin == 2):
+            raise RuntimeError("native KS facade carrier disagrees with spin")
+    if (role is CorrectionRole.INTRINSIC) != (facade_carrier == "pbe-d4-rks"):
+        raise RuntimeError("native KS catalog correction role disagrees with carrier")
 
     from generativeqc_compiler.method import resolve_method
 
@@ -90,7 +155,7 @@ def resolve_named_graph(library: Any, selector: str, backend: int) -> Any:
     )
     if graph.identity.encode("ascii") != binding.identity:
         raise RuntimeError("native KS catalog identity disagrees with Python metadata")
-    return graph
+    return NamedModel(graph, role, facade_carrier)
 
 
 def select_named_program(library: Any, graph: Any, backend: int) -> bytes | None:

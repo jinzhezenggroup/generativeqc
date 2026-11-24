@@ -23,12 +23,37 @@ struct generativeqc_ks_catalog_binding_v1 {
   uint32_t spin;
 };
 
+/** How the facade presents a complete named model to its electronic owner.
+ * This is not a claim that the selected backend supports any derivative,
+ * provider layout, capacity, or basis for a particular system. */
+enum generativeqc_ks_catalog_correction_role : uint32_t {
+  GENERATIVEQC_KS_CATALOG_CORRECTION_MISS = 0,
+  GENERATIVEQC_KS_CATALOG_CORRECTION_NONE = 1,
+  GENERATIVEQC_KS_CATALOG_CORRECTION_DETACHED = 2,
+  GENERATIVEQC_KS_CATALOG_CORRECTION_INTRINSIC = 3,
+  GENERATIVEQC_KS_CATALOG_CORRECTION_BOUND = 4,
+};
+
+struct generativeqc_ks_catalog_binding_v2 {
+  uint32_t struct_size, abi_version;
+  const char* identifier;
+  const char* identity;
+  uint32_t spin;
+  generativeqc_ks_catalog_correction_role correction_role;
+  int32_t facade_carrier;
+};
+
 extern "C" {
 /** Query the same selector table used by SDK preparation and the CLI, without
  * opening a context. A successful miss clears all fields after the ABI tags. */
 GENERATIVEQC_API generativeqc_status
 generativeqc_ks_catalog_lookup_v1(const char* name, size_t name_size, generativeqc_backend backend,
                                   generativeqc_ks_catalog_binding_v1* output);
+/** The same backend-bound selection plus the complete program's correction role.
+ * A miss clears all fields after the ABI tags; errors leave output unchanged. */
+GENERATIVEQC_API generativeqc_status
+generativeqc_ks_catalog_lookup_v2(const char* name, size_t name_size, generativeqc_backend backend,
+                                  generativeqc_ks_catalog_binding_v2* output);
 /** Backend-neutral method registry transport for compiled public named programs.
  * A successful miss writes zero; invalid inputs leave output
  * unchanged. A carrier identifies a registry row, not contextual admission. */
