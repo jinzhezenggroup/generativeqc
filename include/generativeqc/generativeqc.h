@@ -3482,10 +3482,13 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     generativeqc_batch_flags flags, generativeqc_batch** batch);
 
 /** @native-contract generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1
- * @behavior Prepare a linked all-electron CPU Direct FP64 KS fleet for energy replay and
+ * @behavior Prepare a linked CPU Direct FP64 KS fleet for energy replay and
  * Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
  * derivative workspace against the local effective limit and the supplied shared host ledger.
- * @inputs A live CPU context, named all-electron systems, a live host ledger, an effective
+ * An explicit packed ERI request charges the actual packed value array and independently
+ * enforces the named descriptor's fleet-wide packed value cap.
+ * Admitted scalar ECP systems include their conservative setup workspace in the lease.
+ * @inputs A live CPU context, named systems, a live host ledger, an effective
  * local byte limit and a positive derivative workspace. Only warm-start batch flags are allowed.
  * @outputs Clears the output slot on entry; success publishes one owning batch.
  * @lifetime The batch outlives the borrowed resources handle; the context must outlive the batch.
