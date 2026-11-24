@@ -22,6 +22,8 @@ import numpy as np
 from . import _native
 from ._native_hessian import NativeKsHessianResult, NativeKsHVPResult, _capacity
 
+_DEFAULT_INTEGRAL_BYTES = 64 << 20
+
 if TYPE_CHECKING:
     from ._api_types import Atom
     from .batch import PreparedBatch
@@ -898,7 +900,7 @@ def run_native_cpu(
     multiplicity: int,
     direction: np.ndarray | None = None,
     directions: Any = None,
-    integral_budget_bytes: int = 64 << 20,
+    integral_budget_bytes: int = _DEFAULT_INTEGRAL_BYTES,
     grid_budget_bytes: int = 128 << 20,
     output_budget_bytes: int = 64 << 20,
     solver_options: GMRESOptions | None = None,
@@ -940,11 +942,18 @@ def run_native_cpu(
     if panel_bytes > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
     batch_controls = {}
+    # Size nondefault integral caps with the native mandatory-storage formula
+    # before SCF. Do not rebuild the normalized system for the default case, or
+    # require a new query from older libraries that still enforce caps in execute.
+    check_integral_cap = options.integral_bytes != _DEFAULT_INTEGRAL_BYTES and hasattr(
+        calculator._library, "generativeqc_ks_hessian_cpu_minimum_bytes_v1"
+    )
     if (
         calculator._resource_budget is not None
         or numeric_budget_bytes is not None
         or response_budget_bytes is not None
         or direction_count is not None
+        or check_integral_cap
     ):
         minimum = _minimum_bytes(
             calculator, atoms, charge, multiplicity, dense, options, direction_count
