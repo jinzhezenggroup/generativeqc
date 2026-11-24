@@ -1952,6 +1952,46 @@ GENERATIVEQC_API generativeqc_status generativeqc_cbs_extrapolation_query_v1(
     const generativeqc_cbs_extrapolation_descriptor_v1* descriptor,
     generativeqc_cbs_extrapolation_plan_v1* output);
 
+/** Stopping-policy inputs using a previously published extrapolation plan.
+ * correction_basis is 0 (low), 1 (high), or 2 (distinct). The caller declares
+ * basis identity. default_standard is 0 (strict) or 1 (routine Standard),
+ * used only when total_budget is NULL. */
+typedef struct generativeqc_cbs_convergence_descriptor_v1 {
+  uint32_t struct_size, abi_version, correction_basis, default_standard;
+  const generativeqc_cbs_extrapolation_plan_v1* extrapolation;
+  const generativeqc_correlation_budget_v1* total_budget;
+} generativeqc_cbs_convergence_descriptor_v1;
+
+/** Detached correlated stopping plan. Zero budget records mean no allowance.
+ * A positive budget can still select strict stopping if below the supported bracket. */
+typedef struct generativeqc_cbs_convergence_result_v1 {
+  uint32_t struct_size, abi_version;
+  double coefficient_l1;
+  generativeqc_correlation_budget_v1 total_budget, component_budget;
+  generativeqc_correlation_limits_v1 limits;
+} generativeqc_cbs_convergence_result_v1;
+
+/** @native-contract generativeqc_cbs_convergence_query_v1
+ * @behavior Use the rounded plan coefficients to allocate one observable
+ * allowance to each unique correlated component. Combine a reused MP2 role
+ * before computing the coefficient L1 amplification. Apply the existing
+ * correlated stopping policy to the resulting per-component allowance.
+ * @inputs Complete current-ABI input and output headers, a finite native
+ * extrapolation plan, and a declared correction basis role. A supplied total
+ * budget requires positive energy and max-force allowances; zero omits RMS.
+ * @outputs Publishes both budgets, amplification and stopping limits together.
+ * Not an observed error or a basis/scientific accuracy certificate.
+ * @errors Invalid arguments, unrepresentable amplification or allocation, and
+ * incompatible ABI headers reject without publishing any portion of the result.
+ * @lifetime Borrows pointers during this call only. Inputs may overlap outputs.
+ * @execution Constant-storage host policy query only; no solve, context, basis
+ * lookup, callback, compiler or device work.
+ * @units Allowances use Hartree and Hartree/Bohr; amplification is dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_cbs_convergence_query_v1(const generativeqc_cbs_convergence_descriptor_v1* descriptor,
+                                      generativeqc_cbs_convergence_result_v1* output);
+
 /** Optional cost metadata for numerical two-stage HF plan admission. */
 enum {
   GENERATIVEQC_HF_PLAN_SOURCE_COST_PRESENT = 1u << 0,

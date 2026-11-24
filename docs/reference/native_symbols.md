@@ -34,6 +34,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_scf_effort_verify_v1](#native-c-generativeqc-scf-effort-verify-v1)
 - [generativeqc_correlation_convergence_query_v1](#native-c-generativeqc-correlation-convergence-query-v1)
 - [generativeqc_cbs_extrapolation_query_v1](#native-c-generativeqc-cbs-extrapolation-query-v1)
+- [generativeqc_cbs_convergence_query_v1](#native-c-generativeqc-cbs-convergence-query-v1)
 - [generativeqc_hf_plan_query_v1](#native-c-generativeqc-hf-plan-query-v1)
 - [generativeqc_hf_verify_final_v1](#native-c-generativeqc-hf-verify-final-v1)
 - [generativeqc_response_recycle_capacity_v1_get](#native-c-generativeqc-response-recycle-capacity-v1-get)
@@ -873,6 +874,37 @@ solve, basis lookup, Python/compiler, device work, callback or implicit retry.
 
 **Units.** Exponents, cardinal numbers, weights and coefficients are dimensionless.
 Complete component energies/forces retain Hartree and Hartree/Bohr units.
+
+(native-c-generativeqc-cbs-convergence-query-v1)=
+## generativeqc_cbs_convergence_query_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_convergence_query_v1 ( const generativeqc_cbs_convergence_descriptor_v1 * descriptor , generativeqc_cbs_convergence_result_v1 * output ) ;
+```
+
+**Behavior.** Use the rounded plan coefficients to allocate one observable
+allowance to each unique correlated component. Combine a reused MP2 role
+before computing the coefficient L1 amplification. Apply the existing
+correlated stopping policy to the resulting per-component allowance.
+
+**Inputs.** Complete current-ABI input and output headers, a finite native
+extrapolation plan, and a declared correction basis role. A supplied total
+budget requires positive energy and max-force allowances; zero omits RMS.
+
+**Outputs.** Publishes both budgets, amplification and stopping limits together.
+Not an observed error or a basis/scientific accuracy certificate.
+
+**Errors.** Invalid arguments, unrepresentable amplification or allocation, and
+incompatible ABI headers reject without publishing any portion of the result.
+
+**Lifetime.** Borrows pointers during this call only. Inputs may overlap outputs.
+
+**Execution.** Constant-storage host policy query only; no solve, context, basis
+lookup, callback, compiler or device work.
+
+**Units.** Allowances use Hartree and Hartree/Bohr; amplification is dimensionless.
 
 (native-c-generativeqc-hf-plan-query-v1)=
 ## generativeqc_hf_plan_query_v1

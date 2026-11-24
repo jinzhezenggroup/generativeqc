@@ -200,15 +200,18 @@ import `PrecisionPolicy` and `TargetErrorBudget` and pass
 `policy=PrecisionPolicy("fast", budget=TargetErrorBudget(5e-6, 5e-5, 1.5e-5))`.
 
 The default composite allowance is `1e-5 Eh` energy, `1e-4 Eh/Bohr` maximum
-force error and `3e-5 Eh/Bohr` RMS force error. The workflow combines
-coefficients of repeated method/basis components, then divides each allowance
-by the sum of absolute combined coefficients. This accounts for extrapolation
+force error and `3e-5 Eh/Bohr` RMS force error. Explicit allowances take
+precedence, and an omitted RMS stays omitted. The native planner combines the
+coefficients of reused MP2 components, then divides each allowance by the L1
+norm of the resulting coefficients. This accounts for extrapolation
 amplification without assuming cancellation. For default DZ/TZ extrapolation
 with a DZ correction that sum is approximately `4.196866`.
 
-Python CBS planning queries `generativeqc_correlation_convergence_query_v1`,
-which uses the same stopping-policy owner as the native correlated solvers.
-Standalone `Calculator` validates CC ceilings using its selected library before
+Python CBS planning queries
+{ref}`generativeqc_cbs_convergence_query_v1 <native-c-generativeqc-cbs-convergence-query-v1>`,
+which allocates the budget and uses the same stopping-policy owner as the
+native correlated solvers. Standalone `Calculator` validates CC ceilings using
+`generativeqc_correlation_convergence_query_v1` on its selected library before
 creating a context. Planning also requires an installed native runtime: it uses
 the normal native loader and never computes stopping limits in Python. A library
 without this query must be rebuilt or updated; a refused query or malformed
@@ -586,10 +589,11 @@ Missing support, a native refusal or a malformed receipt rejects construction
 before electronic execution; Python does not reconstruct a fallback plan.
 This host metadata query neither executes nor admits a molecular backend.
 
-Python still owns basis-family/identity validation, method/basis grouping,
-coefficient-L1 budget allocation, sequential component execution and observable
-composition/publication. The native coefficient plan is not a complete native
-CBS endpoint or CLI method, a basis-error estimate, or a performance certificate.
+Python still owns basis-family/identity validation (including whether the
+correction shares one of the MP2 bases), method/basis grouping, sequential
+component execution and observable composition/publication. Native planning is
+not a complete native CBS endpoint or CLI method, a basis-error estimate, or a
+performance certificate.
 
 `CBSBasis` snapshots local records at construction. Modifying a file or the
 caller-owned options dictionary does not change an existing workflow. Keep the

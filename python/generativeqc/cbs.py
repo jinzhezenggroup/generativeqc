@@ -327,33 +327,26 @@ class CCSDTCBSCalculator:
         self.mp2_weights = self._plan.mp2_weights
         self.hf_weights = self._plan.hf_weights
 
-        from ._correlation_convergence import convergence_policy
-        from .force_aware_numerics import TargetErrorBudget
+        from ._correlation_convergence import cbs_convergence_policy
 
-        coefficients: dict[tuple[str, str], float] = {}
-        for _, method, basis, coefficient in self._terms():
-            key = (method, basis.identity)
-            coefficients[key] = coefficients.get(key, 0.0) + coefficient
-        amplification = math.fsum(abs(value) for value in coefficients.values())
-        # CBS owns its routine convergence contract. Do not change the shared
-        # HF/DFT Standard preset when promoting the previously explicit allowance.
-        # Explicit targets override presets; only an omitted Standard allowance
-        # receives this workflow's relaxed default. Tight/FP64 stay strict by default.
-        budget = policy.budget
-        if budget is None and policy.profile == "standard":
-            budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
-        component_budget = (
-            TargetErrorBudget(
-                budget.energy_abs / amplification,
-                budget.force_max_abs / amplification,
-                budget.force_rms / amplification
-                if budget.force_rms is not None
-                else None,
-            )
-            if budget is not None
-            else None
+        # Basis identity is a frontend fact; budget allocation is native policy.
+        correction_role = (
+            low.basis.identity,
+            high.basis.identity,
+            small.identity,
+        ).index(small.identity)
+        convergence = cbs_convergence_policy(
+            policy_library,
+            self._plan,
+            correction_role,
+            policy.budget,
+            default_standard=policy.profile == "standard",
         )
-        scale, limits = convergence_policy(component_budget, library=policy_library)
+        budget, component_budget = (
+            convergence.total_budget,
+            convergence.component_budget,
+        )
+        scale, limits = convergence.scale, convergence.limits
         if scale:
             for name in (
                 "energy_tolerance",
@@ -393,7 +386,7 @@ class CCSDTCBSCalculator:
             "component_budget": asdict(component_budget)
             if component_budget is not None
             else None,
-            "coefficient_l1": amplification,
+            "coefficient_l1": convergence.coefficient_l1,
             "scale": scale,
             "limits": {
                 **limits,
