@@ -358,6 +358,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::Calculation::Calculation-host-resources": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "b0af65a8f053e9d5b9575ec5bc18aaa05ebb92052e6a76df2412a68586b3c160",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::Calculation::Calculation-move": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -664,7 +679,7 @@
     },
     "generativeqc::HostResources": {
       "kind": "cpp-type",
-      "header": "include/generativeqc/ks.hpp",
+      "header": "include/generativeqc/generativeqc.hpp",
       "signature_sha256": "7942439510e3b2cda9f53266fc51ca5f9c33b33f1455845d5ed653b1c02732c6",
       "required_facets": [
         "behavior",
@@ -676,7 +691,7 @@
     },
     "generativeqc::HostResources::HostResources": {
       "kind": "cpp-operation",
-      "header": "include/generativeqc/ks.hpp",
+      "header": "include/generativeqc/generativeqc.hpp",
       "signature_sha256": "83c2b6d28bd10b08defb49d31578a328c5e6e0b20fa5841e39aa81a7643b0e7a",
       "required_facets": [
         "behavior",
@@ -689,7 +704,7 @@
     },
     "generativeqc::HostResources::get": {
       "kind": "cpp-operation",
-      "header": "include/generativeqc/ks.hpp",
+      "header": "include/generativeqc/generativeqc.hpp",
       "signature_sha256": "fcf2c0e2845eabc75d5ccea467ee824075f63fd42c2e51dce70535139be0e3f9",
       "required_facets": [
         "behavior",
@@ -701,7 +716,7 @@
     },
     "generativeqc::HostResources::snapshot": {
       "kind": "cpp-operation",
-      "header": "include/generativeqc/ks.hpp",
+      "header": "include/generativeqc/generativeqc.hpp",
       "signature_sha256": "4460674d096fbeade4a4cdbdc38ac45afd4897af791bf4f245b314aee2759e79",
       "required_facets": [
         "behavior",
@@ -2183,6 +2198,22 @@
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
       "signature_sha256": "a4ad153f75f7e6e0ea273dd7aaf9ff39f05999dcc722ae7625a7322c7329f3cd",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_calculation_prepare_with_host_resources_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "b1fbd6e593f8cb4cb25207706ad843af520e66705d30dc4adc4d33282b6a3e13",
       "required_facets": [
         "behavior",
         "errors",

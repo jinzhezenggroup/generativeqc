@@ -12,6 +12,23 @@ requirement of the installed C/C++ runtime.
 and `wb97m-v` are compiler-owned scientific compositions; they are not
 native ABI IDs. Do not guess an ABI number for them.
 
+## Shared host cap for Direct CPU HF
+
+For all-electron Direct FP64 RHF/UHF, pass a `generativeqc::HostResources`
+object as the fourth argument to `generativeqc::Calculation`. The C equivalent
+is `generativeqc_calculation_prepare_with_host_resources_v1`. Native preparation
+sizes the actual orbital system and reserves capacity before publishing the
+calculation; an insufficient cap fails without an uncapped retry.
+
+One cap shared by multiple calculations sums their retained reservations and
+uses the largest serialized workspace reservation, including across CPU
+contexts. Energy and force calls on a leased calculation use this workspace.
+`HostResources::snapshot()` reports the modeled charges and active owner count.
+Destroying the metadata handle does not revoke live leases; destroying a
+calculation releases its reservation. This is not allocator telemetry or an RSS
+bound. Fitting, ECP, preliminary guess providers, and CUDA are outside this
+Direct HF admission.
+
 ## Complete named KS programs
 
 Use `generativeqc::prepare_named_ks` for compiler catalog names. With an existing

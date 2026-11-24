@@ -3426,6 +3426,25 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
 
+/** @native-contract generativeqc_calculation_prepare_with_host_resources_v1
+ * @behavior Prepare one all-electron Direct FP64 CPU RHF/UHF provider with a shared
+ * modeled host lease covering energy and analytic force replay. Derive capacity from
+ * the actual system and method controls before preparing the provider.
+ * @inputs Follow generativeqc_calculation_prepare descriptor rules and provide a live
+ * shared host resource handle. V1 excludes fitting, ECP, and preliminary guess providers.
+ * @outputs Clears the output slot on entry; success publishes one owning calculation.
+ * @lifetime The calculation holds its lease until destruction, even if the host metadata
+ * handle is destroyed. No lease survives a failed preparation.
+ * @errors Unsupported contexts return NOT_IMPLEMENTED, an insufficient shared cap returns
+ * OUT_OF_MEMORY, and invalid input/ABI statuses follow the ordinary prepare contract.
+ * @execution Synchronous. Owners sharing a cap serialize numerical workspace across contexts.
+ * @units Bytes of modeled capacity, not an allocator, free-memory, or process RSS limit.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_host_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_host_resources* resources,
+    generativeqc_calculation** calculation);
+
 /** @native-contract generativeqc_system_create_named_ks_v1
  * @behavior Create a system with the immutable orbital basis defining a named composite.
  * @inputs context/input/name/output are required with current ABI headers. input supplies
