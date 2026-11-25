@@ -1,0 +1,74 @@
+{
+  "gqc-3168-22f72-ht": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.6280555555555556,
+    "container_start_to_finish_or_stop_gpu_hours": 0.6052777777777778,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.6280555555555556
+  },
+  "gqc-3168-22f72-nht": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.14194444444444446,
+    "container_start_to_finish_or_stop_gpu_hours": 0.1413888888888889,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.14194444444444446
+  },
+  "gqc-3168-22f72-shard": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": null,
+    "container_start_to_finish_or_stop_gpu_hours": null,
+    "estimated_cpu_hours": null,
+    "estimated_points": null
+  },
+  "gqc-3168-htbh38-1125a": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.03888888888888889,
+    "container_start_to_finish_or_stop_gpu_hours": 0.0033333333333333335,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.03888888888888889
+  },
+  "gqc-3168-htbh38-1125b": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.12,
+    "container_start_to_finish_or_stop_gpu_hours": 0.09722222222222222,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.12
+  },
+  "gqc-3168-nhtbh38-1125a": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.028888888888888888,
+    "container_start_to_finish_or_stop_gpu_hours": 0.005833333333333334,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.028888888888888888
+  },
+  "gqc-3168-nhtbh38-1125b": {
+    "project": "CQ-NexChem",
+    "workload": "H100",
+    "rate_points_per_gpu_hour": 1,
+    "scheduled_to_finish_or_stop_gpu_hours": 0.11472222222222223,
+    "container_start_to_finish_or_stop_gpu_hours": 0.0913888888888889,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.11472222222222223
+  },
+  "gqc-3168-ref-1125a": {
+    "project": "CQ-NexChem",
+    "workload": "CPU HPC",
+    "rate_points_per_gpu_hour": 0,
+    "scheduled_to_finish_or_stop_gpu_hours": null,
+    "container_start_to_finish_or_stop_gpu_hours": null,
+    "estimated_cpu_hours": null,
+    "estimated_points": 0.0
+  }
+}

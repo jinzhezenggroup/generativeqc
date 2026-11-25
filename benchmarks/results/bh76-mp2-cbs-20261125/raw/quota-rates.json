@@ -1,0 +1,29 @@
+[
+  {
+    "workspace": "分布式训练空间",
+    "compute_group": "开发区-H100-cuda13.2版本-183核",
+    "gpu_type": "NVIDIA H100 (80GB)",
+    "quota": "1,20,200",
+    "priority": "any",
+    "allowed_priority_levels": [],
+    "points_per_hour": 1.0
+  },
+  {
+    "workspace": "CPU资源空间",
+    "compute_group": "HPC-可上网区资源-2",
+    "gpu_type": "CPU",
+    "quota": "0,8,32",
+    "priority": "any",
+    "allowed_priority_levels": [],
+    "points_per_hour": 0.0
+  },
+  {
+    "workspace": "分布式训练空间",
+    "compute_group": "开发区-H100-cuda13.2版本-119核",
+    "gpu_type": "NVIDIA H100 (80GB)",
+    "quota": "4,55,900",
+    "priority": "any",
+    "allowed_priority_levels": [],
+    "points_per_hour": 4.0
+  }
+]

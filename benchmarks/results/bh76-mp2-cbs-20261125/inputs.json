@@ -1,0 +1,4707 @@
+{
+  "barriers": [
+    {
+      "direction": "Vf",
+      "index": 1,
+      "reaction": "H + HCl -> H2 + Cl",
+      "ref1_kcal_mol": 5.7,
+      "ref2_kcal_mol": 5.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H",
+        "HTBH38/HCl"
+      ],
+      "transition": "HTBH38/TS1"
+    },
+    {
+      "direction": "Vr",
+      "index": 2,
+      "reaction": "H + HCl -> H2 + Cl",
+      "ref1_kcal_mol": 7.86,
+      "ref2_kcal_mol": 8.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2",
+        "HTBH38/Cl"
+      ],
+      "transition": "HTBH38/TS1"
+    },
+    {
+      "direction": "Vf",
+      "index": 3,
+      "reaction": "OH + H2 -> H2O + H",
+      "ref1_kcal_mol": 4.9,
+      "ref2_kcal_mol": 5.1,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/H2"
+      ],
+      "transition": "HTBH38/TS2"
+    },
+    {
+      "direction": "Vr",
+      "index": 4,
+      "reaction": "OH + H2 -> H2O + H",
+      "ref1_kcal_mol": 21.2,
+      "ref2_kcal_mol": 21.2,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2O",
+        "HTBH38/H"
+      ],
+      "transition": "HTBH38/TS2"
+    },
+    {
+      "direction": "Vf",
+      "index": 5,
+      "reaction": "CH3 + H2 -> CH4 + H",
+      "ref1_kcal_mol": 12.1,
+      "ref2_kcal_mol": 12.1,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/CH3",
+        "HTBH38/H2"
+      ],
+      "transition": "HTBH38/TS3"
+    },
+    {
+      "direction": "Vr",
+      "index": 6,
+      "reaction": "CH3 + H2 -> CH4 + H",
+      "ref1_kcal_mol": 15.3,
+      "ref2_kcal_mol": 15.3,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/CH4",
+        "HTBH38/H"
+      ],
+      "transition": "HTBH38/TS3"
+    },
+    {
+      "direction": "Vf",
+      "index": 7,
+      "reaction": "OH + CH4 -> H2O + CH3",
+      "ref1_kcal_mol": 6.5,
+      "ref2_kcal_mol": 6.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/CH4"
+      ],
+      "transition": "HTBH38/TS4"
+    },
+    {
+      "direction": "Vr",
+      "index": 8,
+      "reaction": "OH + CH4 -> H2O + CH3",
+      "ref1_kcal_mol": 19.6,
+      "ref2_kcal_mol": 19.6,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2O",
+        "HTBH38/CH3"
+      ],
+      "transition": "HTBH38/TS4"
+    },
+    {
+      "direction": "Vf",
+      "index": 9,
+      "reaction": "H + H2 -> H2 + H",
+      "ref1_kcal_mol": 9.6,
+      "ref2_kcal_mol": 9.6,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H",
+        "HTBH38/H2"
+      ],
+      "transition": "HTBH38/TS5"
+    },
+    {
+      "direction": "Vr",
+      "index": 10,
+      "reaction": "H + H2 -> H2 + H",
+      "ref1_kcal_mol": 9.6,
+      "ref2_kcal_mol": 9.6,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2",
+        "HTBH38/H"
+      ],
+      "transition": "HTBH38/TS5"
+    },
+    {
+      "direction": "Vf",
+      "index": 11,
+      "reaction": "OH + NH3 -> H2O + NH2",
+      "ref1_kcal_mol": 3.0,
+      "ref2_kcal_mol": 3.2,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/NH3"
+      ],
+      "transition": "HTBH38/TS6"
+    },
+    {
+      "direction": "Vr",
+      "index": 12,
+      "reaction": "OH + NH3 -> H2O + NH2",
+      "ref1_kcal_mol": 12.7,
+      "ref2_kcal_mol": 12.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2O",
+        "HTBH38/NH2"
+      ],
+      "transition": "HTBH38/TS6"
+    },
+    {
+      "direction": "Vf",
+      "index": 13,
+      "reaction": "HCl + CH3 -> CH4 + Cl",
+      "ref1_kcal_mol": 1.7,
+      "ref2_kcal_mol": 1.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/HCl",
+        "HTBH38/CH3"
+      ],
+      "transition": "HTBH38/TS7"
+    },
+    {
+      "direction": "Vr",
+      "index": 14,
+      "reaction": "HCl + CH3 -> CH4 + Cl",
+      "ref1_kcal_mol": 7.06,
+      "ref2_kcal_mol": 7.9,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/CH4",
+        "HTBH38/Cl"
+      ],
+      "transition": "HTBH38/TS7"
+    },
+    {
+      "direction": "Vf",
+      "index": 15,
+      "reaction": "OH + C2H6 -> H2O + C2H5",
+      "ref1_kcal_mol": 3.2,
+      "ref2_kcal_mol": 3.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/C2H6"
+      ],
+      "transition": "HTBH38/TS8"
+    },
+    {
+      "direction": "Vr",
+      "index": 16,
+      "reaction": "OH + C2H6 -> H2O + C2H5",
+      "ref1_kcal_mol": 19.9,
+      "ref2_kcal_mol": 19.9,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2O",
+        "HTBH38/C2H5"
+      ],
+      "transition": "HTBH38/TS8"
+    },
+    {
+      "direction": "Vf",
+      "index": 17,
+      "reaction": "F + H2 -> HF + H",
+      "ref1_kcal_mol": 1.42,
+      "ref2_kcal_mol": 1.8,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/F",
+        "HTBH38/H2"
+      ],
+      "transition": "HTBH38/TS9"
+    },
+    {
+      "direction": "Vr",
+      "index": 18,
+      "reaction": "F + H2 -> HF + H",
+      "ref1_kcal_mol": 33.4,
+      "ref2_kcal_mol": 33.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/HF",
+        "HTBH38/H"
+      ],
+      "transition": "HTBH38/TS9"
+    },
+    {
+      "direction": "Vf",
+      "index": 19,
+      "reaction": "O + CH4 -> OH + CH3",
+      "ref1_kcal_mol": 13.47,
+      "ref2_kcal_mol": 13.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/O",
+        "HTBH38/CH4"
+      ],
+      "transition": "HTBH38/TS10"
+    },
+    {
+      "direction": "Vr",
+      "index": 20,
+      "reaction": "O + CH4 -> OH + CH3",
+      "ref1_kcal_mol": 7.9,
+      "ref2_kcal_mol": 8.1,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/CH3"
+      ],
+      "transition": "HTBH38/TS10"
+    },
+    {
+      "direction": "Vf",
+      "index": 21,
+      "reaction": "H + PH3 -> H2 + PH2",
+      "ref1_kcal_mol": 3.1,
+      "ref2_kcal_mol": 3.1,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H",
+        "HTBH38/PH3"
+      ],
+      "transition": "HTBH38/TS11"
+    },
+    {
+      "direction": "Vr",
+      "index": 22,
+      "reaction": "H + PH3 -> H2 + PH2",
+      "ref1_kcal_mol": 23.2,
+      "ref2_kcal_mol": 23.2,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2",
+        "HTBH38/PH2"
+      ],
+      "transition": "HTBH38/TS11"
+    },
+    {
+      "direction": "Vf",
+      "index": 23,
+      "reaction": "H + HO -> H2 + O",
+      "ref1_kcal_mol": 10.5,
+      "ref2_kcal_mol": 10.7,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H",
+        "HTBH38/OH"
+      ],
+      "transition": "HTBH38/TS12"
+    },
+    {
+      "direction": "Vr",
+      "index": 24,
+      "reaction": "H + HO -> H2 + O",
+      "ref1_kcal_mol": 12.87,
+      "ref2_kcal_mol": 13.1,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2",
+        "HTBH38/O"
+      ],
+      "transition": "HTBH38/TS12"
+    },
+    {
+      "direction": "Vf",
+      "index": 25,
+      "reaction": "H + H2S -> H2 + HS",
+      "ref1_kcal_mol": 3.5,
+      "ref2_kcal_mol": 3.5,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H",
+        "HTBH38/H2S"
+      ],
+      "transition": "HTBH38/TS13"
+    },
+    {
+      "direction": "Vr",
+      "index": 26,
+      "reaction": "H + H2S -> H2 + HS",
+      "ref1_kcal_mol": 16.76,
+      "ref2_kcal_mol": 17.3,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/H2",
+        "HTBH38/HS"
+      ],
+      "transition": "HTBH38/TS13"
+    },
+    {
+      "direction": "Vf",
+      "index": 27,
+      "reaction": "O + HCl -> OH + Cl",
+      "ref1_kcal_mol": 9.57,
+      "ref2_kcal_mol": 9.8,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/O",
+        "HTBH38/HCl"
+      ],
+      "transition": "HTBH38/TS14"
+    },
+    {
+      "direction": "Vr",
+      "index": 28,
+      "reaction": "O + HCl -> OH + Cl",
+      "ref1_kcal_mol": 9.36,
+      "ref2_kcal_mol": 10.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/OH",
+        "HTBH38/Cl"
+      ],
+      "transition": "HTBH38/TS14"
+    },
+    {
+      "direction": "Vf",
+      "index": 29,
+      "reaction": "CH3 + NH2 -> CH4 + NH",
+      "ref1_kcal_mol": 8.0,
+      "ref2_kcal_mol": 8.0,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/CH3",
+        "HTBH38/NH2"
+      ],
+      "transition": "HTBH38/TS15"
+    },
+    {
+      "direction": "Vr",
+      "index": 30,
+      "reaction": "CH3 + NH2 -> CH4 + NH",
+      "ref1_kcal_mol": 22.4,
+      "ref2_kcal_mol": 22.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/CH4",
+        "HTBH38/NH"
+      ],
+      "transition": "HTBH38/TS15"
+    },
+    {
+      "direction": "Vf",
+      "index": 31,
+      "reaction": "C2H5 + NH2 -> C2H6 + NH",
+      "ref1_kcal_mol": 7.5,
+      "ref2_kcal_mol": 7.5,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/C2H5",
+        "HTBH38/NH2"
+      ],
+      "transition": "HTBH38/TS16"
+    },
+    {
+      "direction": "Vr",
+      "index": 32,
+      "reaction": "C2H5 + NH2 -> C2H6 + NH",
+      "ref1_kcal_mol": 18.3,
+      "ref2_kcal_mol": 18.3,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/C2H6",
+        "HTBH38/NH"
+      ],
+      "transition": "HTBH38/TS16"
+    },
+    {
+      "direction": "Vf",
+      "index": 33,
+      "reaction": "NH2 + C2H6 -> NH3 + C2H5",
+      "ref1_kcal_mol": 10.4,
+      "ref2_kcal_mol": 10.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/NH2",
+        "HTBH38/C2H6"
+      ],
+      "transition": "HTBH38/TS17"
+    },
+    {
+      "direction": "Vr",
+      "index": 34,
+      "reaction": "NH2 + C2H6 -> NH3 + C2H5",
+      "ref1_kcal_mol": 17.4,
+      "ref2_kcal_mol": 17.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/NH3",
+        "HTBH38/C2H5"
+      ],
+      "transition": "HTBH38/TS17"
+    },
+    {
+      "direction": "Vf",
+      "index": 35,
+      "reaction": "NH2 + CH4 -> NH3 + CH3",
+      "ref1_kcal_mol": 14.5,
+      "ref2_kcal_mol": 14.5,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/NH2",
+        "HTBH38/CH4"
+      ],
+      "transition": "HTBH38/TS18"
+    },
+    {
+      "direction": "Vr",
+      "index": 36,
+      "reaction": "NH2 + CH4 -> NH3 + CH3",
+      "ref1_kcal_mol": 17.8,
+      "ref2_kcal_mol": 17.8,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/NH3",
+        "HTBH38/CH3"
+      ],
+      "transition": "HTBH38/TS18"
+    },
+    {
+      "direction": "Vf",
+      "index": 37,
+      "reaction": "s-trans cis-C5H8 -> s-trans cis-C5H8",
+      "ref1_kcal_mol": 38.4,
+      "ref2_kcal_mol": 38.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/C5H8"
+      ],
+      "transition": "HTBH38/TS19"
+    },
+    {
+      "direction": "Vr",
+      "index": 38,
+      "reaction": "s-trans cis-C5H8 -> s-trans cis-C5H8",
+      "ref1_kcal_mol": 38.4,
+      "ref2_kcal_mol": 38.4,
+      "set": "HTBH38",
+      "side": [
+        "HTBH38/C5H8"
+      ],
+      "transition": "HTBH38/TS19"
+    },
+    {
+      "direction": "Vf",
+      "index": 1,
+      "reaction": "H + N2O -> OH + N2",
+      "ref1_kcal_mol": 17.13,
+      "ref2_kcal_mol": 17.13,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/N2O"
+      ],
+      "transition": "NHTBH38/TS1"
+    },
+    {
+      "direction": "Vr",
+      "index": 2,
+      "reaction": "H + N2O -> OH + N2",
+      "ref1_kcal_mol": 82.27,
+      "ref2_kcal_mol": 82.47,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/OH",
+        "NHTBH38/N2"
+      ],
+      "transition": "NHTBH38/TS1"
+    },
+    {
+      "direction": "Vf",
+      "index": 3,
+      "reaction": "H + FH -> HF + H",
+      "ref1_kcal_mol": 42.18,
+      "ref2_kcal_mol": 42.18,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/HF"
+      ],
+      "transition": "NHTBH38/TS2"
+    },
+    {
+      "direction": "Vr",
+      "index": 4,
+      "reaction": "H + FH -> HF + H",
+      "ref1_kcal_mol": 42.18,
+      "ref2_kcal_mol": 42.18,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HF",
+        "NHTBH38/H"
+      ],
+      "transition": "NHTBH38/TS2"
+    },
+    {
+      "direction": "Vf",
+      "index": 5,
+      "reaction": "H + ClH -> HCl + H",
+      "ref1_kcal_mol": 18.0,
+      "ref2_kcal_mol": 18.0,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/HCl"
+      ],
+      "transition": "NHTBH38/TS3"
+    },
+    {
+      "direction": "Vr",
+      "index": 6,
+      "reaction": "H + ClH -> HCl + H",
+      "ref1_kcal_mol": 18.0,
+      "ref2_kcal_mol": 18.0,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HCl",
+        "NHTBH38/H"
+      ],
+      "transition": "NHTBH38/TS3"
+    },
+    {
+      "direction": "Vf",
+      "index": 7,
+      "reaction": "H + FCH3 -> HF + CH3",
+      "ref1_kcal_mol": 30.38,
+      "ref2_kcal_mol": 30.38,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/CH3F"
+      ],
+      "transition": "NHTBH38/TS4"
+    },
+    {
+      "direction": "Vr",
+      "index": 8,
+      "reaction": "H + FCH3 -> HF + CH3",
+      "ref1_kcal_mol": 57.02,
+      "ref2_kcal_mol": 57.02,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HF",
+        "NHTBH38/CH3"
+      ],
+      "transition": "NHTBH38/TS4"
+    },
+    {
+      "direction": "Vf",
+      "index": 9,
+      "reaction": "H + F2 -> HF + F",
+      "ref1_kcal_mol": 2.27,
+      "ref2_kcal_mol": 2.27,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/F2"
+      ],
+      "transition": "NHTBH38/TS5"
+    },
+    {
+      "direction": "Vr",
+      "index": 10,
+      "reaction": "H + F2 -> HF + F",
+      "ref1_kcal_mol": 105.8,
+      "ref2_kcal_mol": 105.8,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HF",
+        "NHTBH38/F"
+      ],
+      "transition": "NHTBH38/TS5"
+    },
+    {
+      "direction": "Vf",
+      "index": 11,
+      "reaction": "CH3 + FCl -> CH3F + Cl",
+      "ref1_kcal_mol": 6.75,
+      "ref2_kcal_mol": 6.75,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3",
+        "NHTBH38/FCl"
+      ],
+      "transition": "NHTBH38/TS6"
+    },
+    {
+      "direction": "Vr",
+      "index": 12,
+      "reaction": "CH3 + FCl -> CH3F + Cl",
+      "ref1_kcal_mol": 59.16,
+      "ref2_kcal_mol": 60.0,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3F",
+        "NHTBH38/Cl"
+      ],
+      "transition": "NHTBH38/TS6"
+    },
+    {
+      "direction": "Vf",
+      "index": 13,
+      "reaction": "F- + CH3F -> FCH3 + F-",
+      "ref1_kcal_mol": -0.34,
+      "ref2_kcal_mol": -0.34,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/F-@aug",
+        "NHTBH38/CH3F@aug"
+      ],
+      "transition": "NHTBH38/TS7@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 14,
+      "reaction": "F- + CH3F -> FCH3 + F-",
+      "ref1_kcal_mol": -0.34,
+      "ref2_kcal_mol": -0.34,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3F@aug",
+        "NHTBH38/F-@aug"
+      ],
+      "transition": "NHTBH38/TS7@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 15,
+      "reaction": "F-...CH3F -> FCH3...F-",
+      "ref1_kcal_mol": 13.38,
+      "ref2_kcal_mol": 13.38,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/FCH3Fcomp@aug"
+      ],
+      "transition": "NHTBH38/TS7@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 16,
+      "reaction": "F-...CH3F -> FCH3...F-",
+      "ref1_kcal_mol": 13.38,
+      "ref2_kcal_mol": 13.38,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/FCH3Fcomp@aug"
+      ],
+      "transition": "NHTBH38/TS7@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 17,
+      "reaction": "Cl- + CH3Cl -> ClCH3 + Cl-",
+      "ref1_kcal_mol": 3.1,
+      "ref2_kcal_mol": 3.1,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/Cl-@aug",
+        "NHTBH38/CH3Cl@aug"
+      ],
+      "transition": "NHTBH38/TS9@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 18,
+      "reaction": "Cl- + CH3Cl -> ClCH3 + Cl-",
+      "ref1_kcal_mol": 3.1,
+      "ref2_kcal_mol": 3.1,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3Cl@aug",
+        "NHTBH38/Cl-@aug"
+      ],
+      "transition": "NHTBH38/TS9@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 19,
+      "reaction": "Cl-...CH3Cl -> ClCH3...Cl-",
+      "ref1_kcal_mol": 13.41,
+      "ref2_kcal_mol": 13.41,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/ClCH3Clcomp@aug"
+      ],
+      "transition": "NHTBH38/TS9@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 20,
+      "reaction": "Cl-...CH3Cl -> ClCH3...Cl-",
+      "ref1_kcal_mol": 13.41,
+      "ref2_kcal_mol": 13.41,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/ClCH3Clcomp@aug"
+      ],
+      "transition": "NHTBH38/TS9@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 21,
+      "reaction": "F- + CH3Cl -> FCH3 + Cl-",
+      "ref1_kcal_mol": -12.54,
+      "ref2_kcal_mol": -12.54,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/F-@aug",
+        "NHTBH38/CH3Cl@aug"
+      ],
+      "transition": "NHTBH38/TS11@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 22,
+      "reaction": "F- + CH3Cl -> FCH3 + Cl-",
+      "ref1_kcal_mol": 20.11,
+      "ref2_kcal_mol": 20.11,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3F@aug",
+        "NHTBH38/Cl-@aug"
+      ],
+      "transition": "NHTBH38/TS11@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 23,
+      "reaction": "F-...CH3Cl -> FCH3...Cl-",
+      "ref1_kcal_mol": 3.44,
+      "ref2_kcal_mol": 3.44,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/FCH3Clcomp1@aug"
+      ],
+      "transition": "NHTBH38/TS11@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 24,
+      "reaction": "F-...CH3Cl -> FCH3...Cl-",
+      "ref1_kcal_mol": 29.42,
+      "ref2_kcal_mol": 29.42,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/FCH3Clcomp2@aug"
+      ],
+      "transition": "NHTBH38/TS11@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 25,
+      "reaction": "OH- + CH3F -> HOCH3 + F-",
+      "ref1_kcal_mol": -2.44,
+      "ref2_kcal_mol": -2.44,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/OH-@aug",
+        "NHTBH38/CH3F@aug"
+      ],
+      "transition": "NHTBH38/TS13@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 26,
+      "reaction": "OH- + CH3F -> HOCH3 + F-",
+      "ref1_kcal_mol": 17.66,
+      "ref2_kcal_mol": 17.66,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3OH@aug",
+        "NHTBH38/F-@aug"
+      ],
+      "transition": "NHTBH38/TS13@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 27,
+      "reaction": "OH-...CH3F -> HOCH3...F-",
+      "ref1_kcal_mol": 10.96,
+      "ref2_kcal_mol": 10.96,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HOCH3Fcomp2@aug"
+      ],
+      "transition": "NHTBH38/TS13@aug"
+    },
+    {
+      "direction": "Vr",
+      "index": 28,
+      "reaction": "OH-...CH3F -> HOCH3...F-",
+      "ref1_kcal_mol": 47.2,
+      "ref2_kcal_mol": 47.2,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HOCH3Fcomp1@aug"
+      ],
+      "transition": "NHTBH38/TS13@aug"
+    },
+    {
+      "direction": "Vf",
+      "index": 29,
+      "reaction": "H + N2 -> HN2",
+      "ref1_kcal_mol": 14.36,
+      "ref2_kcal_mol": 14.36,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/N2"
+      ],
+      "transition": "NHTBH38/TS15"
+    },
+    {
+      "direction": "Vr",
+      "index": 30,
+      "reaction": "H + N2 -> HN2",
+      "ref1_kcal_mol": 10.61,
+      "ref2_kcal_mol": 10.61,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HN2"
+      ],
+      "transition": "NHTBH38/TS15"
+    },
+    {
+      "direction": "Vf",
+      "index": 31,
+      "reaction": "H + CO -> HCO",
+      "ref1_kcal_mol": 3.17,
+      "ref2_kcal_mol": 3.17,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/CO"
+      ],
+      "transition": "NHTBH38/TS16"
+    },
+    {
+      "direction": "Vr",
+      "index": 32,
+      "reaction": "H + CO -> HCO",
+      "ref1_kcal_mol": 22.68,
+      "ref2_kcal_mol": 22.68,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HCO"
+      ],
+      "transition": "NHTBH38/TS16"
+    },
+    {
+      "direction": "Vf",
+      "index": 33,
+      "reaction": "H + C2H4 -> CH3CH2",
+      "ref1_kcal_mol": 1.72,
+      "ref2_kcal_mol": 1.72,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/H",
+        "NHTBH38/C2H4"
+      ],
+      "transition": "NHTBH38/TS17"
+    },
+    {
+      "direction": "Vr",
+      "index": 34,
+      "reaction": "H + C2H4 -> CH3CH2",
+      "ref1_kcal_mol": 41.75,
+      "ref2_kcal_mol": 41.75,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3CH2"
+      ],
+      "transition": "NHTBH38/TS17"
+    },
+    {
+      "direction": "Vf",
+      "index": 35,
+      "reaction": "CH3 + C2H4 -> CH3CH2CH2",
+      "ref1_kcal_mol": 6.85,
+      "ref2_kcal_mol": 6.85,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3",
+        "NHTBH38/C2H4"
+      ],
+      "transition": "NHTBH38/TS18"
+    },
+    {
+      "direction": "Vr",
+      "index": 36,
+      "reaction": "CH3 + C2H4 -> CH3CH2CH2",
+      "ref1_kcal_mol": 32.97,
+      "ref2_kcal_mol": 32.97,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/CH3CH2CH2"
+      ],
+      "transition": "NHTBH38/TS18"
+    },
+    {
+      "direction": "Vf",
+      "index": 37,
+      "reaction": "HCN -> HNC",
+      "ref1_kcal_mol": 48.07,
+      "ref2_kcal_mol": 48.07,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HCN"
+      ],
+      "transition": "NHTBH38/TS19"
+    },
+    {
+      "direction": "Vr",
+      "index": 38,
+      "reaction": "HCN -> HNC",
+      "ref1_kcal_mol": 32.82,
+      "ref2_kcal_mol": 32.82,
+      "set": "NHTBH38",
+      "side": [
+        "NHTBH38/HNC"
+      ],
+      "transition": "NHTBH38/TS19"
+    }
+  ],
+  "sources": {
+    "https://comp.chem.umn.edu/db/dbs/htbh38.html": "13858b6a67dbad852a2034fcd809af8fc998024cc297afc96a4f7541d68de092",
+    "https://comp.chem.umn.edu/db/dbs/nhtbh38.html": "a1f0a703216a2c8d1de54d67d580fc78dc28918d9f2b0f5d586d1bce0f40264f",
+    "https://comp.chem.umn.edu/db/dbs/tar/htbh38.tar.gz": "b07a55d7f8f4ecfe4ac0898694c733391c1cf580ff96855eae631579d18367c5",
+    "https://comp.chem.umn.edu/db/dbs/tar/htbh38_xyz.tar.gz": "29abab5ce5aeac9238023d403c1a0d424c3cf5e6e2cb4ee24266b0565febb2a5",
+    "https://comp.chem.umn.edu/db/dbs/tar/nhtbh38.tar.gz": "c1a5438b3ab7bc80416b929b75eb6a3145b24e64cdd96c07a6c3af25894d7d1b",
+    "https://comp.chem.umn.edu/db/dbs/tar/nhtbh38_xyz.tar.gz": "c746f3412b06af5611168c4bf0e033fbe7bd1bf660416ffaaf7c1f096de24309"
+  },
+  "systems": {
+    "HTBH38/C2H5": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            1.49014
+          ]
+        ],
+        [
+          "H",
+          [
+            1.01377,
+            0.0,
+            1.89114
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.84855,
+            0.37413,
+            -0.55287
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.50106,
+            -0.88768,
+            1.89585
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.52501,
+            0.86748,
+            1.89105
+          ]
+        ],
+        [
+          "H",
+          [
+            0.77218,
+            -0.5127,
+            -0.55357
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/C2H6": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            1.52618
+          ]
+        ],
+        [
+          "H",
+          [
+            1.01607,
+            0.0,
+            1.9214
+          ]
+        ],
+        [
+          "H",
+          [
+            0.5096,
+            -0.87904,
+            -0.39522
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.50803,
+            -0.87994,
+            1.9214
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.50804,
+            0.87994,
+            1.9214
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.01607,
+            -0.0018,
+            -0.39522
+          ]
+        ],
+        [
+          "H",
+          [
+            0.50647,
+            0.88084,
+            -0.39522
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/C5H8": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -2.05564,
+            -0.61227,
+            1e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            -1.2311,
+            0.64045,
+            5e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            0.10563,
+            0.73427,
+            3e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            1.05756,
+            -0.37441,
+            -4e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            2.38358,
+            -0.19894,
+            -4e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.70508,
+            -0.6416,
+            0.87713
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.70513,
+            -0.64151,
+            -0.87709
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.45133,
+            -1.51608,
+            -6e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.79367,
+            1.56759,
+            0.0001
+          ]
+        ],
+        [
+          "H",
+          [
+            0.54576,
+            1.72564,
+            6e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            0.66526,
+            -1.38324,
+            -0.00011
+          ]
+        ],
+        [
+          "H",
+          [
+            3.06469,
+            -1.03772,
+            -9e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            2.81928,
+            0.79229,
+            2e-05
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/CH3": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.07732
+          ]
+        ],
+        [
+          "H",
+          [
+            0.93298,
+            0.0,
+            -0.53866
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.93298,
+            0.0,
+            -0.53866
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/CH4": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.08744
+          ]
+        ],
+        [
+          "H",
+          [
+            1.02525,
+            0.0,
+            -0.36248
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.51263,
+            0.88789,
+            -0.36248
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.51263,
+            -0.88789,
+            -0.36248
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/Cl": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/F": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/H": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/H2": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.74188
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/H2O": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.95691
+          ]
+        ],
+        [
+          "H",
+          [
+            0.92636,
+            0.0,
+            -0.23987
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/H2S": {
+      "angstrom": [
+        [
+          "S",
+          [
+            0.0,
+            0.0,
+            0.10252
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.96625,
+            -0.82015
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            -0.96625,
+            -0.82015
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/HCl": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.27445
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/HF": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.91538
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/HS": {
+      "angstrom": [
+        [
+          "S",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.3402
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/NH": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.03673
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/NH2": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.02405
+          ]
+        ],
+        [
+          "H",
+          [
+            0.99716,
+            0.0,
+            -0.23314
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/NH3": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.11289
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.93802,
+            -0.26341
+          ]
+        ],
+        [
+          "H",
+          [
+            0.81235,
+            -0.46901,
+            -0.26341
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.81235,
+            -0.46901,
+            -0.26341
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/O": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/OH": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.9689
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/PH2": {
+      "angstrom": [
+        [
+          "P",
+          [
+            0.0,
+            0.0,
+            -0.11566
+          ]
+        ],
+        [
+          "H",
+          [
+            1.02013,
+            0.0,
+            0.86743
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.02013,
+            0.0,
+            0.86743
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/PH3": {
+      "angstrom": [
+        [
+          "P",
+          [
+            0.0,
+            0.0,
+            0.12641
+          ]
+        ],
+        [
+          "H",
+          [
+            1.19134,
+            0.0,
+            -0.63206
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.59567,
+            -1.03173,
+            -0.63206
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.59567,
+            1.03173,
+            -0.63206
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/TS1": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.00048,
+            -1.34063,
+            0.0
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.20325,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.00048,
+            -2.11466,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS10": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.00029,
+            -1.14229,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.05596,
+            -1.38474,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.52017,
+            -1.40739,
+            0.91245
+          ]
+        ],
+        [
+          "H",
+          [
+            0.52017,
+            -1.40739,
+            -0.91245
+          ]
+        ],
+        [
+          "H",
+          [
+            0.01156,
+            0.1601,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            0.00029,
+            1.36164,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/TS11": {
+      "angstrom": [
+        [
+          "P",
+          [
+            0.21743,
+            9e-05,
+            -0.11125
+          ]
+        ],
+        [
+          "H",
+          [
+            0.24661,
+            1.03467,
+            0.85216
+          ]
+        ],
+        [
+          "H",
+          [
+            0.26266,
+            -1.02506,
+            0.86162
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.26642,
+            -0.01095,
+            -0.15063
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.50429,
+            3e-05,
+            0.10558
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS12": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -0.86029
+          ]
+        ],
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.32902
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -1.77191
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/TS13": {
+      "angstrom": [
+        [
+          "H",
+          [
+            1.2621,
+            -0.2201,
+            0.0
+          ]
+        ],
+        [
+          "S",
+          [
+            0.0,
+            0.22315,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.50058,
+            -1.11545,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.76152,
+            -2.23491,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS14": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.01882,
+            -0.8173,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.47049,
+            0.56948,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            0.01882,
+            1.66558,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/TS15": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.19958,
+            -0.01113,
+            -3e-05
+          ]
+        ],
+        [
+          "N",
+          [
+            1.40071,
+            0.12986,
+            2e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.42666,
+            -0.51293,
+            0.93306
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.41991,
+            -0.59138,
+            -0.88814
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.52024,
+            1.02281,
+            -0.04578
+          ]
+        ],
+        [
+          "H",
+          [
+            0.18893,
+            0.1269,
+            0.001
+          ]
+        ],
+        [
+          "H",
+          [
+            1.57034,
+            -0.88767,
+            -5e-05
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/TS16": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.39498,
+            -0.44966,
+            0.0007
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.43575,
+            0.71406,
+            0.00203
+          ]
+        ],
+        [
+          "N",
+          [
+            1.92757,
+            -0.37835,
+            0.00304
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.20009,
+            -1.12095,
+            -0.83569
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.3221,
+            -1.02788,
+            0.92177
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.42871,
+            -0.10535,
+            -0.08933
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.41769,
+            1.30848,
+            -0.9072
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.44113,
+            1.32909,
+            0.89747
+          ]
+        ],
+        [
+          "H",
+          [
+            0.8285,
+            0.18059,
+            -0.02856
+          ]
+        ],
+        [
+          "H",
+          [
+            2.47259,
+            0.49807,
+            0.00391
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 3
+    },
+    "HTBH38/TS17": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.4857,
+            -0.44816,
+            -2e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.50504,
+            0.70174,
+            3e-05
+          ]
+        ],
+        [
+          "N",
+          [
+            1.86516,
+            -0.34017,
+            -6e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.35419,
+            -1.07651,
+            -0.8805
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.35416,
+            -1.07661,
+            0.88038
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.51702,
+            -0.08617,
+            3e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.52222,
+            1.31612,
+            -0.89722
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.52221,
+            1.31603,
+            0.89734
+          ]
+        ],
+        [
+          "H",
+          [
+            0.66505,
+            0.14796,
+            -3e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            2.24664,
+            0.15972,
+            -0.80481
+          ]
+        ],
+        [
+          "H",
+          [
+            2.24644,
+            0.15913,
+            0.80515
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS18": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.26075,
+            -1e-05,
+            0.01229
+          ]
+        ],
+        [
+          "N",
+          [
+            1.31326,
+            -1e-05,
+            -0.13678
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.58399,
+            0.90854,
+            -0.48474
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.46367,
+            -0.00457,
+            1.0773
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.58475,
+            -0.90388,
+            -0.4927
+          ]
+        ],
+        [
+          "H",
+          [
+            0.04311,
+            -6e-05,
+            -0.15169
+          ]
+        ],
+        [
+          "H",
+          [
+            1.48046,
+            0.80558,
+            0.46775
+          ]
+        ],
+        [
+          "H",
+          [
+            1.48056,
+            -0.80552,
+            0.46781
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS19": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.29962,
+            -0.90485,
+            -0.02015
+          ]
+        ],
+        [
+          "C",
+          [
+            -1.20595,
+            0.50582,
+            -0.01341
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            1.18336,
+            0.1533
+          ]
+        ],
+        [
+          "C",
+          [
+            1.20595,
+            0.50581,
+            -0.01342
+          ]
+        ],
+        [
+          "C",
+          [
+            1.29963,
+            -0.90485,
+            -0.02015
+          ]
+        ],
+        [
+          "H",
+          [
+            2.1688,
+            -1.32755,
+            -0.5157
+          ]
+        ],
+        [
+          "H",
+          [
+            1.03204,
+            -1.45439,
+            0.87317
+          ]
+        ],
+        [
+          "H",
+          [
+            2.03713,
+            1.08558,
+            -0.3985
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            2.26291,
+            0.0859
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.03713,
+            1.08559,
+            -0.39848
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.1688,
+            -1.32754,
+            -0.51572
+          ]
+        ],
+        [
+          "H",
+          [
+            -1e-05,
+            -1.18194,
+            -0.52081
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.03206,
+            -1.45439,
+            0.87316
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "HTBH38/TS2": {
+      "angstrom": [
+        [
+          "O",
+          [
+            -0.30106,
+            -0.10805,
+            -1e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.42795,
+            0.85157,
+            2e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            1.01549,
+            -0.10037,
+            0.00012
+          ]
+        ],
+        [
+          "H",
+          [
+            1.82097,
+            0.11319,
+            -7e-05
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS3": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.26481,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            1.05343,
+            0.51667,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.52663,
+            0.51702,
+            0.91225
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.52663,
+            0.51702,
+            -0.91225
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.00026,
+            -1.11777,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            8e-05,
+            -2.02183,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS4": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.21149,
+            0.00797,
+            0.00041
+          ]
+        ],
+        [
+          "O",
+          [
+            1.29397,
+            -0.10869,
+            0.00013
+          ]
+        ],
+        [
+          "H",
+          [
+            0.00948,
+            -0.11802,
+            0.0028
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.52553,
+            -0.23325,
+            1.01007
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.43067,
+            1.03323,
+            -0.27808
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.55271,
+            -0.71011,
+            -0.7377
+          ]
+        ],
+        [
+          "H",
+          [
+            1.41664,
+            0.84989,
+            -0.00059
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS5": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.92947
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -0.92947
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS6": {
+      "angstrom": [
+        [
+          "N",
+          [
+            -1.15082,
+            -0.04393,
+            -0.10256
+          ]
+        ],
+        [
+          "O",
+          [
+            1.17919,
+            -0.0927,
+            -0.01029
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.30319,
+            -0.54764,
+            0.76657
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.33891,
+            0.93581,
+            0.09185
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.03069,
+            -0.15383,
+            -0.35318
+          ]
+        ],
+        [
+          "H",
+          [
+            1.29501,
+            0.81475,
+            0.29499
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS7": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.24412,
+            0.59992,
+            1.70242
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.6756,
+            0.27848,
+            2.17294
+          ]
+        ],
+        [
+          "H",
+          [
+            0.35191,
+            1.66379,
+            1.53767
+          ]
+        ],
+        [
+          "H",
+          [
+            1.14069,
+            0.06579,
+            1.98782
+          ]
+        ],
+        [
+          "H",
+          [
+            0.05716,
+            0.13997,
+            0.39711
+          ]
+        ],
+        [
+          "Cl",
+          [
+            -0.13758,
+            -0.33809,
+            -0.95942
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS8": {
+      "angstrom": [
+        [
+          "C",
+          [
+            1.45833,
+            -0.44637,
+            0.02548
+          ]
+        ],
+        [
+          "C",
+          [
+            0.46942,
+            0.69742,
+            -0.02749
+          ]
+        ],
+        [
+          "O",
+          [
+            -1.85304,
+            -0.31466,
+            -0.05305
+          ]
+        ],
+        [
+          "H",
+          [
+            1.30176,
+            -1.06108,
+            0.91074
+          ]
+        ],
+        [
+          "H",
+          [
+            1.36658,
+            -1.08619,
+            -0.85112
+          ]
+        ],
+        [
+          "H",
+          [
+            2.48224,
+            -0.06688,
+            0.05715
+          ]
+        ],
+        [
+          "H",
+          [
+            0.47107,
+            1.32544,
+            0.86104
+          ]
+        ],
+        [
+          "H",
+          [
+            0.53352,
+            1.3035,
+            -0.92856
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.63023,
+            0.20782,
+            -0.07846
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.26721,
+            0.38832,
+            0.46575
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "HTBH38/TS9": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.14657,
+            -1.12839,
+            0.0
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.33042,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.14657,
+            -1.84541,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/C2H4": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.66559
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.66559
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.92149,
+            1.23167
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            -0.92149,
+            1.23167
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.92149,
+            -1.23167
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            -0.92149,
+            -1.23167
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/CH3": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.07732
+          ]
+        ],
+        [
+          "H",
+          [
+            0.93298,
+            0.0,
+            -0.53866
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.93298,
+            0.0,
+            -0.53866
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/CH3CH2": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.25872,
+            -0.81683,
+            0.0
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.25099,
+            0.67419,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.75883,
+            -1.22594,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.75883,
+            -1.21387,
+            0.88342
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.75883,
+            -1.21387,
+            -0.88342
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.17002,
+            1.22594,
+            -0.92432
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.17002,
+            1.22594,
+            0.92432
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/CH3CH2CH2": {
+      "angstrom": [
+        [
+          "C",
+          [
+            1.20844,
+            -0.28719,
+            6e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.06536,
+            0.57613,
+            -6e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            -1.31479,
+            -0.23952,
+            -1e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            1.24137,
+            -0.92839,
+            0.88123
+          ]
+        ],
+        [
+          "H",
+          [
+            1.24139,
+            -0.92859,
+            -0.88098
+          ]
+        ],
+        [
+          "H",
+          [
+            2.10187,
+            0.33873,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.04822,
+            1.22685,
+            -0.87709
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.04827,
+            1.22704,
+            0.87683
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.72915,
+            -0.61577,
+            0.92444
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.72876,
+            -0.61642,
+            -0.92437
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/CH3Cl@aug": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -1.12589
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.65683
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.02799,
+            -1.47026
+          ]
+        ],
+        [
+          "H",
+          [
+            0.89027,
+            -0.514,
+            -1.47026
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.89027,
+            -0.514,
+            -1.47026
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/CH3F": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.63207,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "F",
+          [
+            0.74912,
+            0.0,
+            -0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.98318,
+            -0.33849,
+            0.97262
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.98322,
+            1.01155,
+            -0.19317
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.9832,
+            -0.67308,
+            -0.77944
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/CH3F@aug": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.63207,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "F",
+          [
+            0.74912,
+            0.0,
+            -0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.98318,
+            -0.33849,
+            0.97262
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.98322,
+            1.01155,
+            -0.19317
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.9832,
+            -0.67308,
+            -0.77944
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/CH3OH@aug": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.04642,
+            0.66307,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            -0.04642,
+            -0.75506,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.08696,
+            0.97594,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.86059,
+            -1.05704,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.43815,
+            1.07159,
+            0.88954
+          ]
+        ],
+        [
+          "H",
+          [
+            0.43815,
+            1.07159,
+            -0.88954
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/CO": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            1.12961
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/Cl": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/Cl-@aug": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/ClCH3Clcomp@aug": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            -2.38474
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.56633
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.02507,
+            -0.22438
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.88773,
+            -0.51253,
+            -0.22438
+          ]
+        ],
+        [
+          "H",
+          [
+            0.88773,
+            -0.51253,
+            -0.22438
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            2.62421
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/F": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/F-@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/F2": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            1.3952
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/FCH3Clcomp1@aug": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            1.62314
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.22736
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.02632,
+            -0.55514
+          ]
+        ],
+        [
+          "H",
+          [
+            0.88882,
+            -0.51316,
+            -0.55514
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.88882,
+            -0.51316,
+            -0.55514
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            -2.72931
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/FCH3Clcomp2@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            -2.64854
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -1.24017
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.02472,
+            -0.88641
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.88743,
+            -0.51236,
+            -0.88641
+          ]
+        ],
+        [
+          "H",
+          [
+            0.88743,
+            -0.51236,
+            -0.88641
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            1.9963
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/FCH3Fcomp@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            -1.84763
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.42187
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.02358,
+            -0.07384
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.88645,
+            -0.51179,
+            -0.07384
+          ]
+        ],
+        [
+          "H",
+          [
+            0.88645,
+            -0.51179,
+            -0.07384
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            2.15349
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/FCl": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            1.63033
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/H": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/HCN": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.50036
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.65264
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -1.56629
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/HCO": {
+      "angstrom": [
+        [
+          "H",
+          [
+            -0.00906,
+            0.0,
+            -0.00709
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.00703,
+            0.0,
+            1.10968
+          ]
+        ],
+        [
+          "O",
+          [
+            0.95604,
+            0.0,
+            1.78566
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/HCl": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.27445
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/HF": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.91538
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/HN2": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            1.1782
+          ]
+        ],
+        [
+          "H",
+          [
+            0.93664,
+            0.0,
+            1.64497
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/HNC": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.73725
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.43209
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.42696
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/HOCH3Fcomp1@aug": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -1.298,
+            -0.38952,
+            -3e-05
+          ]
+        ],
+        [
+          "O",
+          [
+            -0.47722,
+            0.72802,
+            5e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.35192,
+            -0.08023,
+            -0.00864
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.14085,
+            -1.03582,
+            -0.8781
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.15318,
+            -1.02751,
+            0.88636
+          ]
+        ],
+        [
+          "H",
+          [
+            0.51058,
+            0.37116,
+            0.00024
+          ]
+        ],
+        [
+          "F",
+          [
+            1.74902,
+            -0.19052,
+            -1e-05
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/HOCH3Fcomp2@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.00037,
+            -2.46834,
+            0.02139
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.27664,
+            -1.07442,
+            -0.00269
+          ]
+        ],
+        [
+          "H",
+          [
+            0.64929,
+            -0.5165,
+            -0.00902
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.84199,
+            -0.84712,
+            -0.89707
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.85103,
+            -0.82659,
+            0.88142
+          ]
+        ],
+        [
+          "O",
+          [
+            -0.30171,
+            1.58252,
+            -0.20654
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.60511,
+            2.49243,
+            -0.16431
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/N2": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            1.09711
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/N2O": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            1.12056
+          ]
+        ],
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            2.30761
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/OH": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.9689
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/OH-@aug": {
+      "angstrom": [
+        [
+          "O",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            0.96204
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/TS1": {
+      "angstrom": [
+        [
+          "H",
+          [
+            -0.30329,
+            -1.93071,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            -0.86101,
+            -0.62153,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.25703,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            1.02733,
+            0.7291,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS11@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            -2.53793
+          ]
+        ],
+        [
+          "C",
+          [
+            0.0,
+            0.0,
+            -0.48837
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            1.06209,
+            -0.61497
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.9198,
+            -0.53104,
+            -0.61497
+          ]
+        ],
+        [
+          "H",
+          [
+            0.9198,
+            -0.53104,
+            -0.61497
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            1.6245
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/TS13@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.02254,
+            -0.00745,
+            0.00553
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.01842,
+            0.00504,
+            1.76493
+          ]
+        ],
+        [
+          "H",
+          [
+            1.04805,
+            0.00524,
+            1.85415
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.54782,
+            0.93471,
+            1.79222
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.54895,
+            -0.92343,
+            1.80576
+          ]
+        ],
+        [
+          "O",
+          [
+            0.00127,
+            0.0192,
+            3.7506
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.92676,
+            0.03161,
+            3.99758
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/TS15": {
+      "angstrom": [
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.0,
+            0.0,
+            1.12281
+          ]
+        ],
+        [
+          "H",
+          [
+            1.26845,
+            0.0,
+            1.78433
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS16": {
+      "angstrom": [
+        [
+          "H",
+          [
+            -1.52086,
+            1.38883,
+            0.0
+          ]
+        ],
+        [
+          "C",
+          [
+            0.10863,
+            0.54933,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            0.10863,
+            -0.5856,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS17": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.56788,
+            5e-05,
+            -0.21896
+          ]
+        ],
+        [
+          "C",
+          [
+            0.75114,
+            -4e-05,
+            0.04193
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.49388,
+            -0.00049,
+            1.53177
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.10169,
+            0.92065,
+            -0.40863
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.10202,
+            -0.92023,
+            -0.40911
+          ]
+        ],
+        [
+          "H",
+          [
+            1.29913,
+            -0.92234,
+            0.17376
+          ]
+        ],
+        [
+          "H",
+          [
+            1.2989,
+            0.92232,
+            0.17436
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS18": {
+      "angstrom": [
+        [
+          "C",
+          [
+            -0.47213,
+            0.64593,
+            -4e-05
+          ]
+        ],
+        [
+          "C",
+          [
+            -1.38262,
+            -0.36389,
+            -0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.23204,
+            1.16457,
+            -0.91726
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.23234,
+            1.16476,
+            0.91717
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.72713,
+            -0.80981,
+            0.92252
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.72694,
+            -0.81013,
+            -0.92244
+          ]
+        ],
+        [
+          "C",
+          [
+            1.61201,
+            -0.24219,
+            3e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            2.19518,
+            0.66867,
+            -0.00127
+          ]
+        ],
+        [
+          "H",
+          [
+            1.58942,
+            -0.80962,
+            -0.91863
+          ]
+        ],
+        [
+          "H",
+          [
+            1.59024,
+            -0.8076,
+            0.91997
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS19": {
+      "angstrom": [
+        [
+          "C",
+          [
+            0.08032,
+            0.62026,
+            0.0
+          ]
+        ],
+        [
+          "N",
+          [
+            0.08032,
+            -0.5681,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.04415,
+            0.25512,
+            0.0
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 1
+    },
+    "NHTBH38/TS2": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.13722
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -1.13722
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS3": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            1.4858
+          ]
+        ],
+        [
+          "Cl",
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -1.4858
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS4": {
+      "angstrom": [
+        [
+          "H",
+          [
+            -0.03976,
+            0.0,
+            0.04411
+          ]
+        ],
+        [
+          "F",
+          [
+            -0.04932,
+            0.0,
+            1.28255
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.06154,
+            0.0,
+            2.95116
+          ]
+        ],
+        [
+          "H",
+          [
+            0.9905,
+            0.0,
+            3.19428
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.59007,
+            0.91236,
+            3.18348
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.59007,
+            -0.91236,
+            3.18348
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS5": {
+      "angstrom": [
+        [
+          "H",
+          [
+            0.0,
+            0.0,
+            -2.23127
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            -0.61622
+          ]
+        ],
+        [
+          "F",
+          [
+            0.0,
+            0.0,
+            0.86414
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS6": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            1.45475,
+            -0.00124,
+            -4e-05
+          ]
+        ],
+        [
+          "F",
+          [
+            -0.32359,
+            0.00463,
+            0.00012
+          ]
+        ],
+        [
+          "C",
+          [
+            -2.38742,
+            -0.00215,
+            -7e-05
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.49509,
+            -0.85536,
+            -0.6494
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.49731,
+            -0.13867,
+            1.06314
+          ]
+        ],
+        [
+          "H",
+          [
+            -2.50154,
+            0.98627,
+            -0.41373
+          ]
+        ]
+      ],
+      "charge": 0,
+      "family": "plain",
+      "multiplicity": 2
+    },
+    "NHTBH38/TS7@aug": {
+      "angstrom": [
+        [
+          "F",
+          [
+            0.0031,
+            -0.01889,
+            -0.01546
+          ]
+        ],
+        [
+          "C",
+          [
+            -0.00015,
+            -0.00014,
+            1.80786
+          ]
+        ],
+        [
+          "H",
+          [
+            1.06945,
+            0.00171,
+            1.80976
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.53661,
+            0.92513,
+            1.79693
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.5326,
+            -0.92778,
+            1.81706
+          ]
+        ],
+        [
+          "F",
+          [
+            -0.00319,
+            0.01997,
+            3.63185
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    },
+    "NHTBH38/TS9@aug": {
+      "angstrom": [
+        [
+          "Cl",
+          [
+            2.32258,
+            -0.00013,
+            0.00014
+          ]
+        ],
+        [
+          "C",
+          [
+            -9e-05,
+            0.00049,
+            -0.00051
+          ]
+        ],
+        [
+          "H",
+          [
+            8e-05,
+            -0.74429,
+            -0.7676
+          ]
+        ],
+        [
+          "H",
+          [
+            -0.00032,
+            -0.29144,
+            1.02802
+          ]
+        ],
+        [
+          "H",
+          [
+            8e-05,
+            1.03722,
+            -0.26196
+          ]
+        ],
+        [
+          "Cl",
+          [
+            -2.32254,
+            -0.00013,
+            0.00013
+          ]
+        ]
+      ],
+      "charge": -1,
+      "family": "aug",
+      "multiplicity": 1
+    }
+  }
+}

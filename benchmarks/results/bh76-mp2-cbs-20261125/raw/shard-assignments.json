@@ -1,0 +1,666 @@
+[
+  [
+    {
+      "system": "HTBH38/C5H8",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS8",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/C2H5",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS6",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS13",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/PH2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/HS",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/H2O",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/NH",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/C5H8",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS8",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/C2H5",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS6",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS13",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/PH2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/HS",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/H2O",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/HF",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/O",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3CH2CH2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Clcomp1@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HOCH3Fcomp1@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS7@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS17",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS4",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HCN",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS15",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CO",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3CH2CH2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Clcomp1@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HOCH3Fcomp1@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS7@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS17",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS4",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HCN",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS15",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CO",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/F",
+      "recipe": "TQ_D"
+    }
+  ],
+  [
+    {
+      "system": "HTBH38/TS19",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/C2H6",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS15",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS14",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS1",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/NH3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/NH2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/OH",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS19",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/C2H6",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS15",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS14",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS1",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/NH3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/NH2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/NH",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS5",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/ClCH3Clcomp@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Clcomp2@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HOCH3Fcomp2@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3CH2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/C2H4",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3F",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HCO",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS16",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/F2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HCl",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/OH",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/ClCH3Clcomp@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Clcomp2@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HOCH3Fcomp2@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3CH2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/C2H4",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3F",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HCO",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS16",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/F2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HCl",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HF",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/F-@aug",
+      "recipe": "TQ_D"
+    }
+  ],
+  [
+    {
+      "system": "HTBH38/TS17",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS18",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS4",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS11",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/CH4",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/CH3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS12",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS17",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS18",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS4",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS11",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/CH4",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/CH3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS12",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/OH",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/H2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS18",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS11@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS13@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3Cl@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3OH@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/CH3F@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HN2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS19",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/N2",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/Cl",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/OH-@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS18",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS11@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS13@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3Cl@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3OH@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/CH3F@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HN2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS19",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/N2",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/Cl",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/OH",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/H",
+      "recipe": "TQ_D"
+    }
+  ],
+  [
+    {
+      "system": "HTBH38/TS16",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS7",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS10",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/PH3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/H2S",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/HCl",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/Cl",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS9",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "HTBH38/TS16",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS7",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS10",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/PH3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/H2S",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/HCl",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/Cl",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/TS9",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/F",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "HTBH38/H",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS9@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS6",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Fcomp@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS1",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/N2O",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/FCl",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/HNC",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS5",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS3",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/Cl-@aug",
+      "recipe": "DT_D"
+    },
+    {
+      "system": "NHTBH38/TS9@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS6",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/FCH3Fcomp@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS1",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/N2O",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/FCl",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/HNC",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS5",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/TS3",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/Cl-@aug",
+      "recipe": "TQ_D"
+    },
+    {
+      "system": "NHTBH38/OH-@aug",
+      "recipe": "TQ_D"
+    }
+  ]
+]

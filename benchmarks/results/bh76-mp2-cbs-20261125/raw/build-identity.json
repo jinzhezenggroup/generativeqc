@@ -1,0 +1,8 @@
+{
+  "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+  "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
+  "library_sha256": "2255aab1eb0b850ec32105a2711bb06e76615314b63a40391d06b0dbde9ea460",
+  "build_driver_sha256": "230e1dd36f0da8df2848bb50d5417a53b9748c8b06b0ae662e0fcac7a85d5785",
+  "cmake_cache_sha256": "7a551cff09583106b274b77c7200d8c2d93e07f8f84e81d63758033d39b338f9"
+}
