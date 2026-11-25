@@ -14,30 +14,35 @@ def capabilities(library: Any, public_name: str, method_id: int) -> MethodCapabi
     """Query one native carrier without discovering or loading another library.
 
     Python still owns public aliases, explicit compiler compositions and metadata
-    preflight. The existing native named selector verifies the expected carrier;
-    an older library without that optional ABI retains numeric-ID compatibility.
-    A selected lookup/query failure or inconsistent publication never falls back
-    to another library, cached public discovery or a Python capability table.
+    preflight. The selected library must resolve the expected canonical carrier
+    before its capability record is accepted. A missing or failed lookup/query
+    or inconsistent publication never falls back to another library, cached
+    public discovery or a Python capability table.
     This backend-neutral registry view is not per-system scientific admission.
     """
     lookup = getattr(library, "generativeqc_method_from_name", None)
-    if lookup is not None:
-        lookup.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_int32)]
-        lookup.restype = ctypes.c_int
-        resolved = ctypes.c_int32()
-        canonical = _manifest.METHOD_ID_TO_NAME[method_id].encode("ascii")
-        _native.check(library, lookup(canonical, ctypes.byref(resolved)))
-        if resolved.value != method_id:
-            raise RuntimeError(
-                "selected native method selector disagrees with ABI metadata"
-            )
-        method_id = resolved.value
+    if lookup is None:
+        raise RuntimeError(
+            "selected native library lacks the named method registry "
+            "(generativeqc_method_from_name); install a matching native library"
+        )
+    lookup.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_int32)]
+    lookup.restype = ctypes.c_int
+    resolved = ctypes.c_int32()
+    canonical = _manifest.METHOD_ID_TO_NAME[method_id].encode("ascii")
+    _native.check(library, lookup(canonical, ctypes.byref(resolved)))
+    if resolved.value != method_id:
+        raise RuntimeError(
+            "selected native method selector disagrees with ABI metadata"
+        )
     native = _native.MethodCapabilitiesDescriptor(
         ctypes.sizeof(_native.MethodCapabilitiesDescriptor), _native.ABI_VERSION
     )
     _native.check(
         library,
-        library.generativeqc_method_get_capabilities(method_id, ctypes.byref(native)),
+        library.generativeqc_method_get_capabilities(
+            resolved.value, ctypes.byref(native)
+        ),
     )
     families = {
         _native.METHOD_FAMILY_HARTREE_FOCK: "hartree_fock",
