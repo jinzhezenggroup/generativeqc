@@ -199,14 +199,15 @@ def test_cpu_constructor_cannot_retry_a_native_identity_mismatch(
     from generativeqc import _named_ks
 
     def mismatched(*args: Any) -> int:
-        binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBinding))
+        binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBindingV2))
         binding.contents.identifier = b"PBE0"
         binding.contents.identity = b"0" * 64
         binding.contents.spin = 1
+        binding.contents.correction_role = _named_ks.CorrectionRole.NONE
         return 0
 
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
-    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v1", mismatched)
+    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v2", mismatched)
     with pytest.raises(RuntimeError, match="native KS catalog identity disagrees"):
         Calculator(method=selector)
 
@@ -220,13 +221,100 @@ def test_cpu_constructor_preserves_older_catalog_compatibility(
 ) -> None:
     class PreviousLibrary:
         def __getattr__(self, name: str) -> Any:
-            if name == "generativeqc_ks_catalog_lookup_v1":
+            if name in (
+                "generativeqc_ks_catalog_lookup_v1",
+                "generativeqc_ks_catalog_lookup_v2",
+            ):
                 raise AttributeError(name)
             return getattr(library, name)
 
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: PreviousLibrary())
     calculator = Calculator(method=selector)
     assert calculator.method_ir.identity == resolve_method(canonical).identity
+
+
+@pytest.mark.parametrize(
+    ("selector", "role", "carrier"),
+    [
+        ("pbe-rks", "NONE", "pbe-rks"),
+        ("b3lyp-d3(bj)-rks", "DETACHED", "pbe-rks"),
+        ("b3lyp-d4(bj-eeq-atm)-uks", "DETACHED", "pbe-uks"),
+        ("pbe-d4-rks", "INTRINSIC", "pbe-d4-rks"),
+        ("r2scan-3c", "BOUND", "r2scan-rks"),
+    ],
+)
+def test_catalog_binds_the_facade_correction_role(
+    library: Any, selector: str, role: str, carrier: str
+) -> None:
+    from generativeqc._named_ks import CorrectionRole, resolve_named_model
+
+    binding = resolve_named_model(library, selector, _native.BACKEND_CPU_REFERENCE)
+    assert binding is not None
+    assert binding.correction_role is CorrectionRole[role]
+    assert binding.facade_carrier == carrier
+
+
+@pytest.mark.parametrize("selector", ["b3lyp-d3(bj)-rks", "b3lyp-d4(bj-eeq-atm)-rks"])
+def test_current_named_correction_uses_catalog_not_compiler_carrier(
+    library: Any, monkeypatch: pytest.MonkeyPatch, selector: str
+) -> None:
+    import numpy as np
+    from generativeqc import ks
+
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    options = KsOptions(grid=GridSpec(8, 4, 8))
+
+    class V1Catalog:
+        def __getattr__(self, name: str) -> Any:
+            if name == "generativeqc_ks_catalog_lookup_v2":
+                raise AttributeError(name)
+            return getattr(library, name)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(_native, "load_library", lambda **kwargs: V1Catalog())
+        legacy = Calculator(method=selector, ks_options=options)
+
+    def forbidden(*_args: Any) -> None:
+        pytest.fail("current catalog retried compiler carrier selection")
+
+    monkeypatch.setattr(ks, "_named_dft_carrier_for_ir", forbidden)
+    current = Calculator(method=selector, ks_options=options)
+    assert current.method_ir.identity == legacy.method_ir.identity
+    assert current.ks_options.method_ir.identity == legacy.ks_options.method_ir.identity
+    assert current.method_ir.identity != current.ks_options.method_ir.identity
+    expected = legacy.singlepoint(atoms, properties=("energy", "forces"))
+    actual = current.singlepoint(atoms, properties=("energy", "forces"))
+    assert actual.energy == expected.energy
+    np.testing.assert_array_equal(actual.forces, expected.forces)
+    assert actual.dispersion.energy == expected.dispersion.energy
+    np.testing.assert_array_equal(
+        actual.dispersion.gradient, expected.dispersion.gradient
+    )
+
+
+def test_bad_correction_role_cannot_retry_older_catalog(
+    library: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc import _named_ks
+
+    identifier = resolve_method("PBE").identity.encode("ascii")
+
+    def bad_role(*args: Any) -> int:
+        binding = ctypes.cast(args[-1], ctypes.POINTER(_named_ks._CatalogBindingV2))
+        binding.contents.identifier = b"PBE"
+        binding.contents.identity = identifier
+        binding.contents.spin = 1
+        binding.contents.correction_role = 112
+        return 0
+
+    def forbidden(*_args: Any) -> int:
+        pytest.fail("malformed current receipt fell back to the v1 catalog")
+
+    monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
+    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v2", bad_role)
+    monkeypatch.setattr(library, "generativeqc_ks_catalog_lookup_v1", forbidden)
+    with pytest.raises(RuntimeError, match="invalid native KS catalog correction role"):
+        Calculator(method="pbe-rks")
 
 
 def program(descriptor: Any) -> tuple:

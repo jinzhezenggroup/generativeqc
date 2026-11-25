@@ -251,6 +251,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_hessian_cuda_v2](#native-c-generativeqc-ks-hessian-cuda-v2)
 - [generativeqc_ks_hessian_cpu_version_v1](#native-c-generativeqc-ks-hessian-cpu-version-v1)
 - [generativeqc_ks_hessian_cpu_method_v1](#native-c-generativeqc-ks-hessian-cpu-method-v1)
+- [generativeqc_ks_hessian_cpu_model_match_v1](#native-c-generativeqc-ks-hessian-cpu-model-match-v1)
 - [generativeqc_ks_hessian_cpu_default_options_v1](#native-c-generativeqc-ks-hessian-cpu-default-options-v1)
 - [generativeqc_ks_hessian_cpu_minimum_bytes_v1](#native-c-generativeqc-ks-hessian-cpu-minimum-bytes-v1)
 - [generativeqc_ks_hessian_cpu_v1](#native-c-generativeqc-ks-hessian-cpu-v1)
@@ -2456,12 +2457,18 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_host_resources * resources , uint64_t maximum_bytes , uint64_t derivative_workspace_bytes , generativeqc_batch * * batch ) ;
 ```
 
-**Behavior.** Prepare a linked all-electron CPU Direct FP64 KS fleet for energy replay and
+**Behavior.** Prepare a linked CPU Direct FP64 KS fleet for energy replay and
 Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
 derivative workspace against the local effective limit and the supplied shared host ledger.
+An explicit packed ERI request charges the actual packed value array and independently
+enforces the named descriptor's fleet-wide packed value cap.
+Admitted scalar ECP systems include their conservative setup workspace in the lease.
+For admitted all-electron methods, RESERVE_HOST_HESSIAN_FORCES additionally models
+the native force workspace and enables force replay on the same batch.
 
-**Inputs.** A live CPU context, named all-electron systems, a live host ledger, an effective
-local byte limit and a positive derivative workspace. Only warm-start batch flags are allowed.
+**Inputs.** A live CPU context, named systems, a live host ledger, an effective
+local byte limit and a positive derivative workspace. Only the warm-start and
+host-Hessian force-reservation batch flags are allowed.
 
 **Outputs.** Clears the output slot on entry; success publishes one owning batch.
 
@@ -2469,7 +2476,7 @@ local byte limit and a positive derivative workspace. Only warm-start batch flag
 
 **Errors.** Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
 
-**Execution.** Synchronous; energy replay and derivatives serialize on the same host lease.
+**Execution.** Synchronous; admitted primal replay and derivatives serialize on the same host lease.
 
 **Units.** Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
 
@@ -6585,6 +6592,27 @@ GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_method_v1 ( const char * i
 **Outputs.** Returns 1 if linked for the identity, 0 for null, missing or unknown identity.
 
 **Execution.** Host metadata query; prepared state and capacity admission are separate.
+
+(native-c-generativeqc-ks-hessian-cpu-model-match-v1)=
+## generativeqc_ks_hessian_cpu_model_match_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_model_match_v1 ( const char * electronic_identity , const char * total_identity ) ;
+```
+
+**Behavior.** Authenticate a linked bare electronic Hessian closure and a total
+method that uses that same closure, with any correction resolved natively.
+
+**Inputs.** Two NUL-terminated MethodIR identities; use the same value for a
+bare method. The first identity must not carry a correction.
+
+**Outputs.** UNLINKED if the library cannot bind the electronic identity;
+ELECTRONIC_ONLY if it binds but the total method is missing or uses another
+closure; MATCHED if both identities select the same linked electronic owner.
+
+**Execution.** Host metadata only; no SCF, Hessian, capacity or system admission.
 
 (native-c-generativeqc-ks-hessian-cpu-default-options-v1)=
 ## generativeqc_ks_hessian_cpu_default_options_v1

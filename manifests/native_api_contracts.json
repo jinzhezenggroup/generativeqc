@@ -3101,6 +3101,19 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_ks_hessian_cpu_model_match_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/ks_hessian.h",
+      "signature_sha256": "0eb2b0145ec388e3240e39eadae61b96daaf107506626a46b1e773709b61a07e",
+      "required_facets": [
+        "behavior",
+        "execution",
+        "inputs",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_ks_hessian_cpu_recycled_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/ks_hessian.h",

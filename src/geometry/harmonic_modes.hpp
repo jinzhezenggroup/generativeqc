@@ -12,6 +12,11 @@
 
 namespace generativeqc::geometry {
 
+/** Bound the dense harmonic analysis, once the coordinate count is validated (at most 300). */
+inline constexpr std::size_t harmonic_numeric_bytes(std::size_t coordinates) noexcept {
+  return sizeof(double) * (16 * coordinates * coordinates + 32 * coordinates);
+}
+
 /** Supplied-Hessian analysis only: no electronic or stationary-point claim.
  * Inputs are raw Hartree/Bohr^2, Bohr, and positive physical/isotopic dalton
  * masses. Geometry-derived mass-weighted rigid motions are projected out;
@@ -37,7 +42,7 @@ inline HarmonicModes harmonic_modes(std::span<const double> hessian,
       masses.size() != count / 3 || !std::isfinite(raw_symmetry_tolerance) ||
       raw_symmetry_tolerance <= 0)
     throw std::invalid_argument("invalid harmonic analysis dimensions or symmetry gate");
-  const auto reservation = sizeof(double) * (16 * count * count + 32 * count);
+  const auto reservation = harmonic_numeric_bytes(count);
   if (reservation > maximum_numeric_bytes)
     throw std::length_error("harmonic analysis exceeds its numeric budget");
   HarmonicModes result;
