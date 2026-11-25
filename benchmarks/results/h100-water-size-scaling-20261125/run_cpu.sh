@@ -3,6 +3,10 @@
 set -eu
 root="$(cd -- "$1" && pwd -P)"
 python="$2"
+case "$python" in
+    /*) ;;
+    */*) python="$PWD/$python" ;;
+esac
 output="$root/cpu"
 mkdir "$output"
 mkdir "$output/scratch"

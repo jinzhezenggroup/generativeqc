@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 import platform
@@ -81,7 +82,14 @@ def observe_reference(engine_type, mode):
     engine_type.density_fit = fit
 
 
-def cpu_oracle(args, geometry, record):
+def cpu_oracle(args, geometry, record, source):
+    spec = importlib.util.find_spec("benchmarks.readme_defaults_accuracy")
+    if spec is None or spec.origin is None:
+        raise ValueError("cannot locate the pinned CPU oracle driver")
+    digest = paper.digest(Path(spec.origin))
+    record["cpu_oracle_driver_sha256"] = digest
+    if digest != source["cpu_oracle_driver_sha256"]:
+        raise ValueError("CPU oracle driver differs from the frozen source manifest")
     from pyscf import lib
 
     from benchmarks.readme_defaults_accuracy import solve
@@ -155,8 +163,14 @@ def main():
 
     try:
         if args.arm == "cpu":
-            cpu_oracle(args, geometry, record)
+            cpu_oracle(args, geometry, record, source)
         else:
+            if args.mode == "df":
+                relative = f"inputs/{args.method}-auxiliary.json"
+                digest = paper.digest(args.root / relative)
+                record["auxiliary_input_sha256"] = digest
+                if digest != source["inputs_sha256"][relative]:
+                    raise ValueError("DF auxiliary basis differs from the frozen input")
             import cupy as cp
 
             record["allocation"] = paper.allocation_metadata(
@@ -164,10 +178,6 @@ def main():
             )
             record["accelerator"] = cuda_accelerator_metadata(cp)
             record["packages"]["cupy"] = cp.__version__
-            if args.mode == "df":
-                record["auxiliary_input_sha256"] = paper.digest(
-                    args.inputs / f"{args.method}-auxiliary.json"
-                )
             if args.arm == "standard":
                 observe_native()
                 mark("native_setup")

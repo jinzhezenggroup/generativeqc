@@ -34,8 +34,10 @@ def pack(root, output, arm):
         )
         return
     files = endpoint_files(root)
+    run_log = root / "gpu-run.txt"
+    launcher_logs = [run_log] if run_log.is_file() else []
     if arm in ("pilot", "legacy"):
-        write(output / f"gpu-{arm}.json.xz", raw([root / "gpu-run.txt", *files]))
+        write(output / f"gpu-{arm}.json.xz", raw([*launcher_logs, *files]))
         if arm == "legacy":
             cpu_files = root / "cpu"
             write(
@@ -50,7 +52,7 @@ def pack(root, output, arm):
         )
         key = match[2] if match else "journal"
         groups.setdefault(key, []).append(path)
-    groups["journal"].append(root / "gpu-run.txt")
+    groups["journal"].extend(launcher_logs)
     for key, paths in sorted(groups.items()):
         write(output / f"gpu-{arm}-{key}.json.xz", raw(paths))
 

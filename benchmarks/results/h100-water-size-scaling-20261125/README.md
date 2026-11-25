@@ -137,6 +137,8 @@ beside the main `libgenerativeqc.so`. Run `acquire.py --root <second-stage>
 `paper-config.json` records the interpreter and environment paths from that
 qz installation. Other installations need equivalent dependencies at their
 own paths. Run `run_cpu.sh` under an allocated Slurm step with CPU PySCF 2.14.0.
+A failed acquisition preflight leaves its own `campaign.json`. Use
+`acquire.py --output <fresh-receipts>` to retry while retaining that journal.
 
 [replay.py](replay.py) checks the full planned H100 population and raw-file
 hashes and regenerates the timing and accuracy tables.

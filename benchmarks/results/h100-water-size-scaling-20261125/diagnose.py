@@ -3,18 +3,22 @@
 import argparse
 import json
 import signal
-import subprocess
 from pathlib import Path
 
-from acquire import TIMEOUT, environment, interrupt, stop_process, verify
+from acquire import TIMEOUT, environment, interrupt, save, verify
+from nsys_probe import parse_case, run
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--acquisition", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("cases", nargs="+", help="case as n-atoms:method:mode")
+    parser.add_argument(
+        "cases", nargs="+", type=parse_case, help="case as atoms:method:mode"
+    )
     args = parser.parse_args()
+    if len(set(args.cases)) != len(args.cases):
+        parser.error("diagnostic cases must be unique")
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
     root = args.acquisition.resolve()
@@ -27,9 +31,9 @@ def main():
     env["GENERATIVEQC_JIT_SCCACHE_ROOT"] = str(output / "jit-owners")
     _, hardware = verify(root, config, {"standard": env})
     receipt = {"diagnostic_only": True, "hardware": hardware, "rows": []}
-    for case in args.cases:
-        atoms, method, mode = case.split(":")
-        label = case.replace(":", "-")
+    destination = output / "diagnostic.json"
+    for atoms, method, mode in args.cases:
+        label = f"{atoms}-{method}-{mode}"
         trace = output / f"{label}-trace.jsonl"
         argv = [
             config["interpreters"]["standard"],
@@ -38,31 +42,25 @@ def main():
             "standard",
             method,
             mode,
-            atoms,
+            str(atoms),
             str(output / f"{label}.json"),
             "--root",
             str(root),
         ]
-        with (output / f"{label}.txt").open("xb") as log:
-            child = subprocess.Popen(
+        entry = {"case": f"{atoms}:{method}:{mode}", "status": "starting"}
+        receipt["rows"].append(entry)
+        save(destination, receipt)
+        try:
+            run(
                 argv,
-                cwd=root / "source",
-                env={**env, "GENERATIVEQC_DF_TRACE": str(trace)},
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+                output / f"{label}.txt",
+                root / "source",
+                {**env, "GENERATIVEQC_DF_TRACE": str(trace)},
+                TIMEOUT,
+                entry,
             )
-            timeout = False
-            try:
-                child.wait(timeout=TIMEOUT)
-            except subprocess.TimeoutExpired:
-                timeout = True
-            finally:
-                stop_process(child)
-        receipt["rows"].append(
-            {"case": case, "timeout": timeout, "returncode": child.returncode}
-        )
-        (output / "diagnostic.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        finally:
+            save(destination, receipt)
 
 
 if __name__ == "__main__":

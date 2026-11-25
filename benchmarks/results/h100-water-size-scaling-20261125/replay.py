@@ -45,7 +45,7 @@ def errors(sample, reference, atoms):
         "energy_per_atom_Eh": abs(sample["energy"] - reference["energy"]) / atoms,
         "force_max_Eh_per_bohr": max(map(abs, delta)),
         "force_rms_Eh_per_bohr": math.sqrt(
-            sum(value * value for value in delta) / len(delta)
+            math.fsum(value * value for value in delta) / len(delta)
         ),
     }
 
@@ -71,6 +71,11 @@ def oracle(files, atoms, method, source):
         or "9462" not in record["cpu"]["model"]
     ):
         raise ValueError("oracle provenance differs from the accepted contract")
+    if (
+        "cpu_oracle_driver_sha256" in record
+        and record["cpu_oracle_driver_sha256"] != source["cpu_oracle_driver_sha256"]
+    ):
+        raise ValueError("CPU oracle driver differs from the source pin")
     samples = record["samples"]
     if method != "hf":
         if [sample["level"] for sample in samples] != [4, 5]:
@@ -131,6 +136,12 @@ def read_attempt(files, formal, source, geometry_digest, build_text=None):
             or any(raw[k] != row[k] for k in ("atoms", "method", "mode", "arm"))
         ):
             raise ValueError(f"invalid completed outcome {name}")
+        if formal and raw["mode"] == "df":
+            auxiliary = f"inputs/{raw['method']}-auxiliary.json"
+            if raw["auxiliary_input_sha256"] != source["inputs_sha256"][auxiliary]:
+                raise ValueError(
+                    f"DF auxiliary basis differs from the source pin: {name}"
+                )
         if raw["arm"] == "gpu4pyscf":
             if (
                 raw["packages"]["gpu4pyscf"] != "1.9.0"
@@ -290,6 +301,8 @@ def main():
     geometry_digest = hashlib.sha256(
         lzma.decompress((directory / "geometries.json.xz").read_bytes())
     ).hexdigest()
+    if geometry_digest != source["geometry_sha256"]:
+        raise ValueError("geometry archive differs from the frozen source manifest")
     legacy_source = json.loads((directory / "source-legacy.json").read_text())
     for name in ("gpu-pilot.json.xz", "gpu-legacy.json.xz"):
         path = directory / name

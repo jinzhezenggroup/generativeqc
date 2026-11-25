@@ -29,8 +29,11 @@ def save(path, receipt):
 
 
 def digest(path):
+    checksum = hashlib.sha256()
     with path.open("rb") as file:
-        return hashlib.file_digest(file, "sha256").hexdigest()
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 
 def interrupt(signum, frame):
@@ -57,11 +60,16 @@ class DeviceMemory:
         self.library = ctypes.CDLL("libnvidia-ml.so.1")
         self.handle = ctypes.c_void_p()
         self.check(self.library.nvmlInit_v2())
-        self.check(
-            self.library.nvmlDeviceGetHandleByPciBusId_v2(
-                pci.encode("ascii"), ctypes.byref(self.handle)
+        try:
+            self.check(
+                self.library.nvmlDeviceGetHandleByPciBusId_v2(
+                    pci.encode("ascii"), ctypes.byref(self.handle)
+                )
             )
-        )
+        except BaseException:
+            with suppress(RuntimeError):
+                self.close()
+            raise
 
     def check(self, code):
         if code != 0:
@@ -174,7 +182,7 @@ def classify(code, raw, output, timeout):
     return "failed"
 
 
-def run(root, output, config, env, memory, row, remaining):
+def run(root, output, config, env, memory, row, deadline):
     name = row["name"]
     path = output / (name + ".json")
     logfile = output / (name + ".txt")
@@ -200,6 +208,11 @@ def run(root, output, config, env, memory, row, remaining):
         baseline = peak = memory.used()
         samples = 1
         with logfile.open("xb") as log:
+            launch = time.monotonic()
+            if launch >= deadline:
+                row.update(status="unattempted_deadline", log_sha256=digest(logfile))
+                return
+            cutoff = min(deadline, launch + TIMEOUT)
             child = subprocess.Popen(
                 argv,
                 cwd=root / "source",
@@ -209,12 +222,17 @@ def run(root, output, config, env, memory, row, remaining):
                 start_new_session=True,
             )
             try:
-                while child.poll() is None:
-                    peak = max(peak, memory.used())
-                    samples += 1
-                    if time.monotonic() - begin >= min(TIMEOUT, remaining):
+                while True:
+                    code = child.poll()
+                    # Process exit time is unavailable. Use the parent's
+                    # observation time consistently at the cutoff.
+                    if time.monotonic() >= cutoff:
                         timed_out = True
                         break
+                    if code is not None:
+                        break
+                    peak = max(peak, memory.used())
+                    samples += 1
                     time.sleep(0.05)
             finally:
                 stop_process(child)
@@ -254,35 +272,38 @@ def run(root, output, config, env, memory, row, remaining):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument(
+        "--output", type=Path, help="fresh receipt directory for a retry"
+    )
     parser.add_argument("--deadline-seconds", type=int, default=28200)
     parser.add_argument("--sizes", type=int, choices=SIZES, nargs="+", default=SIZES)
     args = parser.parse_args()
     if len(set(args.sizes)) != len(args.sizes):
         parser.error("--sizes must be unique")
     root = args.root.resolve()
-    output = root / "gpu"
+    output = args.output.resolve() if args.output else root / "gpu"
     output.mkdir()
     deadline = time.monotonic() + args.deadline_seconds
     receipt = {"status": "preflight", "rows": [], "timeout_seconds": TIMEOUT}
     destination = output / "campaign.json"
     save(destination, receipt)
-    config = json.loads((root / "paper-config.json").read_text())
-    envs = {arm: environment(config, root, arm) for arm in ARMS}
-    pci, identity = verify(root, config, envs)
-    memory = DeviceMemory(pci)
-    receipt.update(
-        status="running",
-        hardware=identity,
-        job_name=os.environ["GQC_QZ_JOB_NAME"],
-        project=os.environ["GQC_QZ_PROJECT"],
-    )
-    save(destination, receipt)
-
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
-    population = list(itertools.product(args.sizes, METHODS, MODES))
-    prewarm_status = {}
+    memory = None
     try:
+        config = json.loads((root / "paper-config.json").read_text())
+        envs = {arm: environment(config, root, arm) for arm in ARMS}
+        pci, identity = verify(root, config, envs)
+        memory = DeviceMemory(pci)
+        receipt.update(
+            status="running",
+            hardware=identity,
+            job_name=os.environ["GQC_QZ_JOB_NAME"],
+            project=os.environ["GQC_QZ_PROJECT"],
+        )
+        save(destination, receipt)
+        population = list(itertools.product(args.sizes, METHODS, MODES))
+        prewarm_status = {}
         for repeat in range(REPEATS):
             for index, (atoms, method, mode) in enumerate(population):
                 ordered = ARMS if (index + repeat) % 2 == 0 else ARMS[::-1]
@@ -301,25 +322,30 @@ def main():
                             status="running",
                         )
                         receipt["rows"].append(row)
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
+                        if time.monotonic() >= deadline:
                             row["status"] = "unattempted_deadline"
                         elif stage == "formal" and prewarm_status[key] != "complete":
                             row["status"] = "unattempted_failed_prewarm"
                         else:
                             save(destination, receipt)
-                            run(root, output, config, envs[arm], memory, row, remaining)
-                            print(name, row["status"], row["last_stage"], flush=True)
+                            run(root, output, config, envs[arm], memory, row, deadline)
+                            print(
+                                name, row["status"], row.get("last_stage"), flush=True
+                            )
                         if stage == "prewarm":
                             prewarm_status[key] = row["status"]
                         save(destination, receipt)
         receipt["status"] = "finished"
     except BaseException as error:
-        receipt.update(status="interrupted", error=f"{type(error).__name__}: {error}")
+        status = (
+            "preflight_failed" if receipt["status"] == "preflight" else "interrupted"
+        )
+        receipt.update(status=status, error=f"{type(error).__name__}: {error}")
         raise
     finally:
         try:
-            memory.close()
+            if memory is not None:
+                memory.close()
         except RuntimeError as error:
             receipt["nvml_shutdown_error"] = str(error)
             if receipt["status"] == "finished":

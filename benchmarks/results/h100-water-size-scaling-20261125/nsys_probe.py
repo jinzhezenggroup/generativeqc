@@ -23,28 +23,37 @@ CAPTURE_SHA256 = "67620bee0161e0296db2807ae8b5895fe433feb4dddc17543e712c744e2d40
 CASES = ((240, "hf", "direct"), (96, "wb97m-v", "direct"))
 
 
-def run(argv, logfile, cwd, env, timeout):
-    timed_out = False
-    with logfile.open("xb") as log:
-        child = subprocess.Popen(
-            argv,
-            cwd=cwd,
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        try:
-            child.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-        finally:
-            stop_process(child)
-    return {
-        "argv": list(map(str, argv)),
-        "returncode": child.returncode,
-        "timeout": timed_out,
-    }
+def run(argv, logfile, cwd, env, timeout, result):
+    result.update(argv=list(map(str, argv)), status="running", timeout=False)
+    child = None
+    try:
+        with logfile.open("xb") as log:
+            child = subprocess.Popen(
+                argv,
+                cwd=cwd,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            try:
+                child.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                result["timeout"] = True
+            finally:
+                stop_process(child)
+    except (KeyboardInterrupt, SystemExit):
+        result["status"] = "interrupted"
+        raise
+    except Exception as error:
+        result.update(status="failed", error=f"{type(error).__name__}: {error}")
+        raise
+    finally:
+        result["returncode"] = child.returncode if child is not None else None
+    if result["timeout"]:
+        result["status"] = "timeout"
+    else:
+        result["status"] = "complete" if result["returncode"] == 0 else "failed"
 
 
 def kernel_census(path):
@@ -89,6 +98,9 @@ def main():
     parser.add_argument("--nsys", type=Path, required=True)
     parser.add_argument("--case", action="append", type=parse_case)
     args = parser.parse_args()
+    cases = args.case or CASES
+    if len(set(cases)) != len(cases):
+        parser.error("profile cases must be unique")
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
     root = args.root.resolve()
@@ -112,7 +124,7 @@ def main():
     }
     destination = output / "nsys.json"
     save(destination, report)
-    for atoms, method, mode in args.case or CASES:
+    for atoms, method, mode in cases:
         folder = output / f"{atoms}-{method}-{mode}"
         folder.mkdir()
         prefix = folder / "capture"
@@ -137,12 +149,20 @@ def main():
             "--root",
             root,
         ]
-        entry = {"case": folder.name}
+        entry = {"case": folder.name, "profile": {"status": "starting"}}
         report["cases"].append(entry)
-        entry["profile"] = run(
-            profile, folder / "profile.txt", root / "source", env, 720
-        )
         save(destination, report)
+        try:
+            run(
+                profile,
+                folder / "profile.txt",
+                root / "source",
+                env,
+                720,
+                entry["profile"],
+            )
+        finally:
+            save(destination, report)
         capture = prefix.with_suffix(".nsys-rep")
         if capture.is_file():
             entry["capture"] = {
@@ -159,16 +179,32 @@ def main():
                 sqlite,
                 capture,
             ]
-            entry["export"] = run(
-                export, folder / "export.txt", root / "source", env, 240
-            )
-            if entry["export"]["returncode"] == 0:
-                entry["sqlite"] = {
-                    "bytes": sqlite.stat().st_size,
-                    "sha256": digest(sqlite),
-                }
-                save(folder / "kernels.json", kernel_census(sqlite))
+            entry["export"] = {"status": "starting"}
             save(destination, report)
+            try:
+                run(
+                    export,
+                    folder / "export.txt",
+                    root / "source",
+                    env,
+                    240,
+                    entry["export"],
+                )
+            finally:
+                save(destination, report)
+            if entry["export"]["status"] != "complete":
+                continue
+            if not sqlite.is_file():
+                entry["census_error"] = "missing SQLite output"
+                save(destination, report)
+                continue
+            entry["sqlite"] = {"bytes": sqlite.stat().st_size, "sha256": digest(sqlite)}
+            save(destination, report)
+            try:
+                save(folder / "kernels.json", kernel_census(sqlite))
+            except sqlite3.Error as error:
+                entry["census_error"] = f"{type(error).__name__}: {error}"
+                save(destination, report)
 
 
 if __name__ == "__main__":
