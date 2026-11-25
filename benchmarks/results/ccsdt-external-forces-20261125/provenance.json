@@ -327,7 +327,7 @@
       "primary": {
         "status": {
           "name": "gqc-3167-ccsdt-22f72-h100-1125",
-          "status": "RUNNING",
+          "status": "CANCELLED",
           "project": "CQ-NexChem",
           "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
           "resource": {
@@ -344,7 +344,8 @@
           "priority": 20,
           "priority_level": "NORMAL",
           "public_path_mount_mode": 0,
-          "created_at": "1795596576000"
+          "created_at": "1795596576000",
+          "finished_at": "1795602531000"
         },
         "point_rate_per_hour": 1.0,
         "last_scheduling_diagnostics": [
@@ -353,7 +354,18 @@
             "reason": "FailedScheduling",
             "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu058, once resource is released and minAvailable is satisfied"
           }
-        ]
+        ],
+        "scheduled_utc": "2026-11-25T08:49:56+00:00",
+        "finished_utc": "2026-11-25T10:28:51+00:00",
+        "allocated_card_hours": 1.648611111111111,
+        "estimated_points": 1.648611111111111,
+        "cleanup": {
+          "success": true,
+          "data": {
+            "name": "gqc-3167-ccsdt-22f72-h100-1125",
+            "status": "deleted"
+          }
+        }
       },
       "conventional_controls": {
         "status": {
@@ -395,6 +407,103 @@
           }
         }
       },
+      "extended_conventional_C5": {
+        "status": {
+          "name": "gqc-3167-ccsdt-conv-c5-h100-1125",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795602553000",
+          "finished_at": "1795602919000"
+        },
+        "point_rate_per_hour": 1.0,
+        "last_scheduling_diagnostics": [
+          {
+            "time": "2026-11-25 02:29:31",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu188, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 02:29:35",
+            "reason": "FailedScheduling",
+            "message": "0/696 nodes are unavailable: 19 Insufficient rdma/hca_shared_devices, 255 Insufficient nvidia.com/gpu, 37 Insufficient cpu, 373 Insufficient memory, 5 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+          }
+        ],
+        "scheduled_utc": "2026-11-25T10:29:37+00:00",
+        "finished_utc": "2026-11-25T10:35:19+00:00",
+        "allocated_card_hours": 0.095,
+        "estimated_points": 0.095,
+        "scientific_outcome": "One attempted endpoint failed simultaneous host admission at the 32 GiB application budget.",
+        "cleanup": {
+          "success": true,
+          "data": {
+            "name": "gqc-3167-ccsdt-conv-c5-h100-1125",
+            "status": "deleted"
+          }
+        }
+      },
+      "C5_memory_retry": {
+        "status": {
+          "name": "gqc-3167-ccsdt-conv-c5-m72-h100-1125",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795603264000",
+          "finished_at": "1795606978000"
+        },
+        "point_rate_per_hour": 1.0,
+        "last_scheduling_diagnostics": [
+          {
+            "time": "2026-11-25 02:41:22",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu164, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 02:41:26",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu005, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 02:41:35",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu162, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "scheduled_utc": "2026-11-25T10:41:46+00:00",
+        "finished_utc": "2026-11-25T11:42:58+00:00",
+        "allocated_card_hours": 1.02,
+        "estimated_points": 1.02,
+        "retry_contract": "CPU/GPU numerical methods, fixtures and binary unchanged. Correlation budget increased from 32 to 72 GiB for the single C5 endpoint.",
+        "cleanup": {
+          "success": true,
+          "data": {
+            "name": "gqc-3167-ccsdt-conv-c5-m72-h100-1125",
+            "status": "deleted"
+          }
+        }
+      },
       "superseded": {
         "status": {
           "name": "gqc-3167-ccsdt-h100-1125",
@@ -429,7 +538,14 @@
           }
         }
       },
-      "requested_priority": 4
+      "requested_priority": 4,
+      "single_card_rate_receipt": {
+        "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "gpu_type": "NVIDIA H100 (80GB)",
+        "quota": "1,20,200",
+        "points_per_hour": 1.0
+      }
     },
     "CPU": {
       "jobs": {
@@ -452,7 +568,11 @@
             "created_at": "2026-11-25 16:55:58"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T08:56:20+00:00",
+          "worker_release_utc": "2026-11-25T09:08:16+00:00",
+          "estimated_allocated_core_hours": 0.7955555555555556,
+          "estimated_points": 0.0
         },
         "gqc-3167-cpu-small-1125-a": {
           "status": {
@@ -490,13 +610,17 @@
               "reason": "FailedScheduling",
               "message": "0/1350 nodes are unavailable: 17 Insufficient memory, 332 node(s) didn't match Pod's node affinity/selector, 35 node(s) were unschedulable, 966 Insufficient cpu."
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T09:08:40+00:00",
+          "worker_release_utc": "2026-11-25T09:38:45+00:00",
+          "estimated_allocated_core_hours": 4.011111111111111,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-conv-100g-1125-a": {
           "status": {
             "name": "gqc-3167-psi4-conv-100g-1125-a",
-            "status": "RUNNING",
-            "steps": "0/1",
+            "status": "SUCCEEDED",
+            "steps": "1/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
             "resource": {
@@ -506,12 +630,10 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute315"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
-            "created_at": "2026-11-25 16:59:47"
+            "created_at": "2026-11-25 16:59:47",
+            "finished_at": "2026-11-25 19:09:06"
           },
           "point_rate_per_hour": 0.0,
           "last_scheduling_diagnostics": [
@@ -530,7 +652,11 @@
               "reason": "FailedScheduling",
               "message": "0/1350 nodes are unavailable: 110 Insufficient memory, 1108 Insufficient cpu, 33 node(s) were unschedulable, 99 node(s) didn't match Pod's node affinity/selector."
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T09:21:43+00:00",
+          "worker_release_utc": "2026-11-25T11:09:06+00:00",
+          "estimated_allocated_core_hours": 35.794444444444444,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-conv-1125-a": {
           "status": {
@@ -567,7 +693,9 @@
               "reason": "FailedScheduling",
               "message": "0/1350 nodes are unavailable: 109 Insufficient memory, 1109 Insufficient cpu, 34 node(s) were unschedulable, 98 node(s) didn't match Pod's node affinity/selector."
             }
-          ]
+          ],
+          "estimated_allocated_core_hours": 0.0,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-conv-1125-b": {
           "status": {
@@ -599,7 +727,11 @@
               "reason": "FailedScheduling",
               "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to hpc-compute400, once resource is released and minAvailable is satisfied"
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T08:41:46+00:00",
+          "worker_release_utc": "2026-11-25T09:08:20+00:00",
+          "estimated_allocated_core_hours": 3.542222222222222,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-conv-tail-1125-a": {
           "status": {
@@ -626,7 +758,11 @@
               "reason": "FailedScheduling",
               "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to hpc-compute523, once resource is released and minAvailable is satisfied"
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T08:52:18+00:00",
+          "worker_release_utc": "2026-11-25T09:08:18+00:00",
+          "estimated_allocated_core_hours": 2.1333333333333333,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-df-1125-a": {
           "status": {
@@ -663,7 +799,9 @@
               "reason": "FailedScheduling",
               "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to hpc-compute202, once minAvailable is satisfied"
             }
-          ]
+          ],
+          "estimated_allocated_core_hours": 0.0,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-df-1125-b": {
           "status": {
@@ -684,7 +822,11 @@
             "created_at": "2026-11-25 16:41:17"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T08:41:46+00:00",
+          "worker_release_utc": "2026-11-25T09:31:47+00:00",
+          "estimated_allocated_core_hours": 6.668888888888889,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-df-fd-1125-a": {
           "status": {
@@ -706,7 +848,11 @@
             "finished_at": "2026-11-25 17:06:34"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T09:02:19+00:00",
+          "worker_release_utc": "2026-11-25T09:06:34+00:00",
+          "estimated_allocated_core_hours": 0.2833333333333333,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-df-middle-1125-a": {
           "status": {
@@ -728,12 +874,16 @@
             "finished_at": "2026-11-25 18:00:02"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T09:31:55+00:00",
+          "worker_release_utc": "2026-11-25T10:00:02+00:00",
+          "estimated_allocated_core_hours": 3.7488888888888887,
+          "estimated_points": 0.0
         },
         "gqc-3167-psi4-df-tail-1125-a": {
           "status": {
             "name": "gqc-3167-psi4-df-tail-1125-a",
-            "status": "RUNNING",
+            "status": "STOPPED",
             "steps": "0/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
@@ -744,9 +894,6 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute457"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
             "created_at": "2026-11-25 16:51:39"
@@ -763,7 +910,11 @@
               "reason": "FailedScheduling",
               "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to hpc-compute457, once resource is released and minAvailable is satisfied"
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T08:52:18+00:00",
+          "worker_release_utc": "2026-11-25T11:20:37+00:00",
+          "estimated_allocated_core_hours": 19.775555555555556,
+          "estimated_points": 0.0
         },
         "gqc-3167-pyscf-conv-1125-a": {
           "status": {
@@ -800,7 +951,9 @@
               "reason": "FailedScheduling",
               "message": "0/1350 nodes are unavailable: 109 Insufficient memory, 1109 Insufficient cpu, 34 node(s) were unschedulable, 98 node(s) didn't match Pod's node affinity/selector."
             }
-          ]
+          ],
+          "estimated_allocated_core_hours": 0.0,
+          "estimated_points": 0.0
         },
         "gqc-3167-pyscf-conv-1125-b": {
           "status": {
@@ -832,7 +985,11 @@
               "reason": "FailedScheduling",
               "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to hpc-compute227, once resource is released and minAvailable is satisfied"
             }
-          ]
+          ],
+          "worker_scheduled_utc": "2026-11-25T08:41:46+00:00",
+          "worker_release_utc": "2026-11-25T10:23:32+00:00",
+          "estimated_allocated_core_hours": 13.568888888888889,
+          "estimated_points": 0.0
         },
         "gqc-3167-pyscf-conv-fd-1125-a": {
           "status": {
@@ -854,12 +1011,16 @@
             "finished_at": "2026-11-25 16:54:03"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T08:51:57+00:00",
+          "worker_release_utc": "2026-11-25T08:54:03+00:00",
+          "estimated_allocated_core_hours": 0.14,
+          "estimated_points": 0.0
         },
         "gqc-3167-pyscf-conv-tail-1125-a": {
           "status": {
             "name": "gqc-3167-pyscf-conv-tail-1125-a",
-            "status": "RUNNING",
+            "status": "STOPPED",
             "steps": "0/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
@@ -870,19 +1031,43 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute457"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
             "created_at": "2026-11-25 16:51:43"
           },
           "point_rate_per_hour": 0.0,
-          "last_scheduling_diagnostics": []
+          "last_scheduling_diagnostics": [],
+          "worker_scheduled_utc": "2026-11-25T08:52:18+00:00",
+          "worker_release_utc": "2026-11-25T11:53:06+00:00",
+          "estimated_allocated_core_hours": 24.106666666666666,
+          "estimated_points": 0.0
         }
       },
-      "requested_priority": 10
+      "requested_priority": 10,
+      "rate_receipts": [
+        {
+          "workspace": "CPU\u8d44\u6e90\u7a7a\u95f4",
+          "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
+          "gpu_type": "CPU",
+          "quota": "0,20,100",
+          "points_per_hour": 0.0
+        },
+        {
+          "workspace": "CPU\u8d44\u6e90\u7a7a\u95f4",
+          "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
+          "gpu_type": "CPU",
+          "quota": "0,4,16",
+          "points_per_hour": 0.0
+        },
+        {
+          "workspace": "CPU\u8d44\u6e90\u7a7a\u95f4",
+          "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
+          "gpu_type": "CPU",
+          "quota": "0,8,32",
+          "points_per_hour": 0.0
+        }
+      ]
     },
-    "accounting": "GPU card-hours use first Scheduled event through terminal timestamp. Point estimates use the live quota rate. Per-job invoice was unavailable."
+    "accounting": "GPU card-hours use first Scheduled event through terminal timestamp. GPU point estimates use the live quota rate. CPU allocated core-hour estimates use the compute worker Scheduled event through the stop or cluster-release event and exclude Slurm control-plane resources. Per-job invoice was unavailable."
   }
 }

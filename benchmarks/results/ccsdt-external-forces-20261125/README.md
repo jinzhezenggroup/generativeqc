@@ -17,10 +17,10 @@ complete trials in every arm and checks all four pairings.
 
 | Comparison | Cases observed | Two-trial passes | Worst energy (Eh) | Worst max force (Eh/Bohr) | Worst force RMS (Eh/Bohr) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| GenerativeQC conv. / Psi4 conv. | 6/10 | 6/10 | 9.07e-12 | 5.06e-07 | 1.98e-07 |
-| GenerativeQC conv. / PySCF conv. | 6/10 | 6/10 | 5.23e-12 | 4.64e-08 | 2.67e-08 |
+| GenerativeQC conv. / Psi4 conv. | 8/10 | 6/10 | 3.02e-11 | 1.74e-06 | 5.88e-07 |
+| GenerativeQC conv. / PySCF conv. | 7/10 | 6/10 | 5.23e-12 | 4.64e-08 | 2.67e-08 |
 | Psi4 conv. / PySCF conv. | 7/10 | 6/10 | 1.37e-11 | 5.59e-07 | 2.21e-07 |
-| GenerativeQC full DF / Psi4 full DF | 10/10 | 8/10 | 1.45e-10 | 3.07e-10 | 8.26e-11 |
+| GenerativeQC full DF / Psi4 full DF | 10/10 | 10/10 | 1.45e-10 | 3.11e-10 | 8.35e-11 |
 
 ### Complete endpoint wall times
 
@@ -35,10 +35,10 @@ cross-hardware configurations.
 | C1 | 4.478 [4.279–4.678] | 6.093 [2.627–9.560] | 6.181 [4.698–7.664] | 1.523 [1.412–1.635] | 11.066 [5.835–16.297] |
 | C2 | 30.280 [29.962–30.598] | 22.476 [22.192–22.760] | 65.083 [64.316–65.851] | 2.600 [2.573–2.628] | 14.850 [13.228–16.471] |
 | C3 | 184.990 [184.808–185.172] | 146.434 [138.486–154.381] | 469.428 [464.511–474.345] | 6.873 [6.864–6.883] | 56.271 [53.012–59.530] |
-| C4 | — | 642.701 (1) | 2360.793 (1) | 19.542 [19.475–19.609] | 190.397 [189.975–190.818] |
-| C5 | — | 2427.486 (1) | — | 50.444 [50.352–50.536] | 643.288 [616.384–670.193] |
-| C6 | — | — | — | 121.690 [121.646–121.734] | 1844.806 (1) |
-| C7 | — | — | — | 273.638 [273.585–273.691] | 3694.958 (1) |
+| C4 | 972.055 (1) | 648.870 [642.701–655.038] | 2360.793 (1) | 19.542 [19.475–19.609] | 190.397 [189.975–190.818] |
+| C5 | 3633.460 (1) | 2495.795 [2427.486–2564.104] | — | 50.444 [50.352–50.536] | 643.288 [616.384–670.193] |
+| C6 | — | — | — | 121.690 [121.646–121.734] | 1637.015 [1429.223–1844.806] |
+| C7 | — | — | — | 273.638 [273.585–273.691] | 3656.906 [3618.855–3694.958] |
 | water | 2.965 [2.772–3.157] | 2.975 [1.777–4.173] | 3.669 [1.920–5.417] | 1.316 [1.309–1.324] | 5.633 [5.481–5.784] |
 | ammonia | 3.268 [3.232–3.304] | 2.197 [2.159–2.234] | 3.049 [3.029–3.069] | 1.353 [1.349–1.356] | 5.848 [5.671–6.024] |
 | formaldehyde | 7.920 [7.891–7.949] | 5.351 [5.215–5.487] | 15.142 [14.956–15.329] | 1.797 [1.793–1.801] | 7.286 [7.231–7.341] |
@@ -62,7 +62,10 @@ cross-hardware configurations.
   implementations consume the same orbital basis decimals. The two fitted
   implementations consume the same auxiliary basis decimals. All are
   spherical, neutral singlets with zero frozen orbitals. Forces are the
-  negative gradients in the original Cartesian frame.
+  negative gradients in the original Cartesian frame. A separate PySCF/libcint
+  check of the diagonal-normalized auxiliary Coulomb metrics gives a smallest
+  relative eigenvalue of about `4.57e-8` at C7, above the fit cutoff setting
+  of `1e-10`. Solver arithmetic and stopping-rule definitions still differ.
 - SCF and coupled-cluster convergence controls are pinned in the measured
   drivers. PySCF explicitly checks the RHF, CCSD and CCSD(T) Lambda convergence
   flags. Psi4 exceptions and native failures are retained. Engine residual
@@ -115,29 +118,56 @@ solver threads with a 24-GiB application budget inside an 8-CPU, 32-GiB
 qz allocation. The two energy-difference batches use a single solver
 thread and an 8-GiB application budget in separate four-CPU allocations.
 The per-attempt CPU model and resource receipts are in `execution.json`.
+The two primary Psi4 full-DF C6 observations came from separate eight-thread
+hosts with the same Xeon CPU Max 9462 model, memory allocation and solver
+settings. Each producer numbered its own C6 trial zero. The replay uses
+the origin labels and original per-record hashes to verify both observations.
+A separate one-thread PySCF C3 diagnostic returned in 588.198 s. Its raw
+record and the cancelled single-thread Psi4 C4 probe are kept outside the
+eight-thread timing cohort.
 
 At C4, Psi4's conventional path printed a CCSD(T) total energy before
 raising `dpd_block_matrix: No memory left` while forming the triples-gradient
 intermediates. The v1.10.2 RHF implementation allocates an `E[Gij]` DPD
 buffer inside its virtual-triple loop. The closing frees for that loop omit
-the buffer. The failed 24-GiB attempt and resource-capped larger attempts are
-retained. The separate 100-GiB allocation request tests a larger application
-budget on C4 and C5. This resource constraint affects the pinned Psi4
-implementation, and a completed energy row alone yields no analytic-force
-comparison. [Psi4 v1.10.2 RHF triples-gradient source](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/cc/cctriples/T3_grad_RHF.cc#L950-L955).
+the buffer. The failed 24-GiB attempt and cancelled larger attempts are
+retained. C4 and C5 subsequently returned complete Psi4 conventional endpoints
+with a 92-GiB application budget in a 100-GiB allocation. This resource
+constraint affects the pinned Psi4 implementation. A completed energy row
+alone yields no analytic-force comparison. [Psi4 v1.10.2 RHF triples-gradient source](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/cc/cctriples/T3_grad_RHF.cc#L950-L955).
+
+PySCF conventional returned C4 in one of the planned trials. C5 reached the
+2700 s cap and C6/C7 reached the 5400 s cap without returning full forces.
+The C6 log reports converged CCSD and the perturbative triples energy correction.
+After both 5400 s timeouts, the unfinished larger-case repeats were stopped.
 
 Initial software probes exposed a Psi4 ABI mismatch with Einsums 1.1.6, a
 LibXC 7.1.2 alias mismatch, and a PySCF 2.11.0 incompatibility with NumPy
 2.4.6's einsum planner. Probe outcomes and the compatible package pins are
 retained in `provenance.json`.
 
+The fresh native build acquired both full-DF trials, then conventional C1–C4.
+A separate H100 allocation reused the verified binary for the two conventional
+C1–C3 and polar trials. The original job was stopped after C4 to give the
+conventional C5 endpoint a dedicated, longer time window. C5 first failed
+the simultaneous host-memory admission check with a 32-GiB application
+correlation budget. With a 72-GiB budget, the same binary returned one complete
+C5 endpoint in 3633.460 s. Its host-memory plan reported 65,988,191,372 bytes.
+The maximum force difference across the two independent Psi4 observations
+was `1.74e-6 Eh/Bohr`. Conventional C6 and C7 were left outside that H100
+follow-up after the larger independent reference runs became resource-limited.
+The allocation receipts include the stop and cleanup outcomes.
+
 ## Replay
 
 Use Python 3.11 or newer to recompute the comparison.
 
 ```bash
-python benchmarks/results/ccsdt-external-forces-20261125/replay.py --require-passed
+python benchmarks/results/ccsdt-external-forces-20261125/replay.py
 ```
+
+The optional `--require-passed` exit check requires a complete passing cohort.
+Per-comparison verdicts remain available when any planned comparison is incomplete.
 
 `records.json` retains measured total energies, full host force vectors, wall
 times, convergence/work metadata and displaced energies. `execution.json`
@@ -146,8 +176,17 @@ records. `provenance.json` contains source, package and platform provenance.
 
 `run.py` is the readable shared driver. Apply `gpu-measured-driver.patch`
 or `cpu-measured-driver.patch` to a copy in the same directory as
-`fixtures.json` and `basis/` to recover the exact measured bytes.
+`fixtures.json` and `basis/` to recover the exact measured bytes for the
+original H100 acquisitions or the standalone CPU references. `run.py` itself
+is the measured driver for the 72-GiB C5 recovery.
 The superseded driver can be recovered from the measured CPU copy by
 reversing `old-gpu-driver.patch`. The qz shell launchers record the build and
 worker commands. Install each CPU environment from its explicit Conda lock
 file, then run the recovered CPU driver on the appropriate allocation.
+For the conventional C5 recovery, run from the staged source workspace
+containing the built library, inputs and recovery driver.
+
+```bash
+GQC_BENCHMARK_DRIVER=run.py bash qz-gpu-conventional-controls.sh run-c5-replay \
+  --cases C5 --repeats 1 --timeout 7200 --correlation-budget-gib 72
+```

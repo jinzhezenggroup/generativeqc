@@ -34,18 +34,22 @@
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def native(atoms, fitted, forces, args, fixture):
+@@ -85 +69 @@
+-        correlation_memory_budget_bytes=args.correlation_budget_gib << 30,
++        correlation_memory_budget_bytes=32 << 30,
 @@ -88,3 +72 @@
 -        atoms,
 -        charge=0,
 -        multiplicity=1,
 +        atoms, charge=0, multiplicity=1,
-@@ -96,15 +78,6 @@
+@@ -96,16 +78,6 @@
 -    return (
 -        value.energy,
 -        value.forces,
 -        elapsed,
 -        {
 -            "correlation": asdict(value.correlation),
+-            "correlation_budget_gib": args.correlation_budget_gib,
 -            "cc_performance": asdict(value.cc_performance)
 -            if value.cc_performance
 -            else None,
@@ -61,15 +65,15 @@
 +        "rhf_energy": value.correlation.reference_energy, "hf_cycles": value.iterations,
 +        "hf_density_rms": value.density_rms, "executed_backend": value.executed_backend,
 +    }
-@@ -113 +86 @@
+@@ -114 +86 @@
 -def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
 +def shells(fixture, role):
-@@ -118,3 +91 @@
+@@ -119,3 +91 @@
 -def psi4_basis(
 -    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
 -) -> None:
 +def psi4_basis(psi4, fixture, role, name, option):
-@@ -128,8 +99,3 @@
+@@ -129,8 +99,3 @@
 -                lines.extend(
 -                    f"{Decimal(e):f} {Decimal(c):f}"
 -                    for e, c in zip(
@@ -81,10 +85,10 @@
 +                lines.extend(f"{Decimal(e):f} {Decimal(c):f}" for e, c in zip(
 +                    shell["exponents"], contraction, strict=True,
 +                ))
-@@ -140 +106 @@
+@@ -141 +106 @@
 -def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
 +def pyscf_basis(fixture):
-@@ -143,11 +109,4 @@
+@@ -144,11 +109,4 @@
 -            [
 -                shell["angular_momentum"],
 -                *[
@@ -100,20 +104,20 @@
 +                [float(e), *map(float, c)]
 +                for e, c in zip(shell["exponents"], zip(*shell["coefficients"]), strict=True)
 +            ]]
-@@ -160,3 +119 @@
+@@ -161,3 +119 @@
 -def psi4_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def psi4_endpoint(atoms, fitted, forces, args, fixture):
-@@ -171,2 +128 @@
+@@ -172,2 +128 @@
 -        "0 1\n"
 -        + "\n".join(
 +        "0 1\n" + "\n".join(
-@@ -175,2 +131 @@
+@@ -176,2 +131 @@
 -        )
 -        + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
 +        ) + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
-@@ -179,5 +134,2 @@
+@@ -180,5 +134,2 @@
 -        "basis": orbital_name,
 -        "puream": True,
 -        "reference": "rhf",
@@ -121,7 +125,7 @@
 -        "scf_type": "disk_df" if fitted else "pk",
 +        "basis": orbital_name, "puream": True, "reference": "rhf",
 +        "freeze_core": False, "scf_type": "disk_df" if fitted else "pk",
-@@ -186,6 +138,3 @@
+@@ -187,6 +138,3 @@
 -        "e_convergence": 1e-12,
 -        "d_convergence": 1e-10,
 -        "maxiter": 200,
@@ -131,11 +135,11 @@
 +        "e_convergence": 1e-12, "d_convergence": 1e-10,
 +        "maxiter": 200, "ints_tolerance": 1e-14,
 +        "ccenergy__e_convergence": 1e-12, "ccenergy__r_convergence": 1e-10,
-@@ -193,2 +142 @@
+@@ -194,2 +142 @@
 -        "dfocc__e_convergence": 1e-12,
 -        "dfocc__r_convergence": 1e-10,
 +        "dfocc__e_convergence": 1e-12, "dfocc__r_convergence": 1e-10,
-@@ -197,5 +145,2 @@
+@@ -198,5 +145,2 @@
 -        settings.update(
 -            df_basis_scf=auxiliary_name,
 -            df_basis_cc=auxiliary_name,
@@ -143,12 +147,12 @@
 -        )
 +        settings.update(df_basis_scf=auxiliary_name, df_basis_cc=auxiliary_name,
 +                        df_fitting_condition=1e-10)
-@@ -204,3 +149 @@
+@@ -205,3 +149 @@
 -        gradient, wfn = psi4.gradient(
 -            "ccsd(t)", molecule=molecule, dertype=1, return_wfn=True
 -        )
 +        gradient, wfn = psi4.gradient("ccsd(t)", molecule=molecule, dertype=1, return_wfn=True)
-@@ -214,5 +157,2 @@
+@@ -215,5 +157,2 @@
 -    if any(
 -        abs(actual_geometry[i, a] - x) > 1e-12
 -        for i, (_, xyz) in enumerate(atoms)
@@ -156,7 +160,7 @@
 -    ):
 +    if any(abs(actual_geometry[i, a] - x) > 1e-12
 +           for i, (_, xyz) in enumerate(atoms) for a, x in enumerate(xyz)):
-@@ -229,12 +169,4 @@
+@@ -230,12 +169,4 @@
 -    return (
 -        energy,
 -        force,
@@ -173,12 +177,12 @@
 +        "settings": settings, "nao": nbf, "auxiliary_counts": auxiliary_counts,
 +        "electrons": wfn.nalpha() + wfn.nbeta(), "rhf_energy": psi4.variable("SCF TOTAL ENERGY"),
 +    }
-@@ -243,3 +175 @@
+@@ -244,3 +175 @@
 -def pyscf_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def pyscf_endpoint(atoms, fitted, forces, args, fixture):
-@@ -252,11 +182,2 @@
+@@ -253,11 +182,2 @@
 -    mol = gto.M(
 -        atom=atoms,
 -        unit="Bohr",
@@ -192,13 +196,13 @@
 -    )
 +    mol = gto.M(atom=atoms, unit="Bohr", basis=orbitals, cart=False, symmetry=False,
 +                charge=0, spin=0, max_memory=args.memory_mib, verbose=4)
-@@ -282,4 +203 @@
+@@ -283,4 +203 @@
 -            solver,
 -            eris=eris,
 -            max_cycle=150,
 -            tol=1e-10,
 +            solver, eris=eris, max_cycle=150, tol=1e-10,
-@@ -291,15 +209,7 @@
+@@ -292,15 +209,7 @@
 -    return (
 -        energy,
 -        force,
@@ -221,14 +225,14 @@
 +        "ccsd_cycles": getattr(solver, "cycles", None),
 +        "ccsdt_lambda_converged": True if forces else None,
 +    }
-@@ -308 +218 @@
+@@ -309 +218 @@
 -def native_provenance(source: Path) -> Record:
 +def native_provenance(source):
-@@ -317,2 +227 @@
+@@ -318,2 +227 @@
 -    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
 -    receipt_sha = digest(library)
 +    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
-@@ -324,6 +233,2 @@
+@@ -325,6 +233,2 @@
 -    return {
 -        "source_revision": REVISION,
 -        "source_identity": found,
@@ -237,21 +241,21 @@
 -    }
 +    return {"source_revision": REVISION, "source_identity": found,
 +            "library_sha256": digest(library), "native_input_count": len(inputs)}
-@@ -332 +237 @@
+@@ -333 +237 @@
 -def worker(args: argparse.Namespace, label: str) -> None:
 +def worker(args, label):
-@@ -348 +252,0 @@
+@@ -349 +252,0 @@
 -
-@@ -371,3 +275 @@
+@@ -372,3 +275 @@
 -        energy, force, elapsed, work = endpoint(
 -            atoms, model == "df", not move, args, fixture
 -        )
 +        energy, force, elapsed, work = endpoint(atoms, model == "df", not move, args, fixture)
-@@ -378,2 +280 @@
+@@ -379,2 +280 @@
 -            force is None
 -            or len(force) != len(atoms)
 +            force is None or len(force) != len(atoms)
-@@ -383,9 +284,4 @@
+@@ -384,9 +284,4 @@
 -        record = {
 -            "status": "completed",
 -            "energy_hartree": float(energy),
@@ -265,7 +269,7 @@
 +                  "force_hartree_per_bohr": force, "endpoint_seconds": elapsed,
 +                  "versions": versions, "work": work}
 +    except Exception as exc:
-@@ -394,10 +290,2 @@
+@@ -395,10 +290,2 @@
 -    write(
 -        output,
 -        {
@@ -278,17 +282,17 @@
 -    )
 +    write(output, {**record, "case": case, "trial": trial, "arm": args.arm,
 +                   "displacement": diagnostic or None})
-@@ -406 +294 @@
+@@ -407 +294 @@
 -def cpu_model() -> str:
 +def cpu_model():
-@@ -413 +301 @@
+@@ -414 +301 @@
 -def hardware(args: argparse.Namespace) -> Record:
 +def hardware(args):
-@@ -415,2 +303 @@
+@@ -416,2 +303 @@
 -        "cpu_model": cpu_model(),
 -        "affinity": sorted(os.sched_getaffinity(0)),
 +        "cpu_model": cpu_model(), "affinity": sorted(os.sched_getaffinity(0)),
-@@ -419,24 +306,10 @@
+@@ -420,24 +306,10 @@
 -        "cgroup_memory": {
 -            str(path): path.read_text().strip()
 -            for path in (
@@ -323,7 +327,7 @@
 +            "SLURM_JOB_ID", "SLURM_STEP_ID", "SLURM_CPUS_PER_TASK", "GQC_QZ_JOB_NAME",
 +            "GQC_QZ_PROJECT", "CUDA_VISIBLE_DEVICES", "CUBLAS_WORKSPACE_CONFIG",
 +        )},
-@@ -446,8 +319,3 @@
+@@ -447,8 +319,3 @@
 -        info["gpu"] = subprocess.check_output(
 -            [
 -                "nvidia-smi",
@@ -335,10 +339,10 @@
 +        info["gpu"] = subprocess.check_output([
 +            "nvidia-smi", "--query-gpu=name,memory.total,driver_version,uuid",
 +            "--format=csv,noheader"], text=True).strip()
-@@ -460 +328 @@
+@@ -461 +328 @@
 -def run(args: argparse.Namespace) -> None:
 +def run(args):
-@@ -467,16 +335,4 @@
+@@ -468,16 +335,4 @@
 -        raise RuntimeError(
 -            f"Requested CPU {args.expected_cpu}, found {info['cpu_model']}"
 -        )
@@ -359,23 +363,23 @@
 +    env = {**os.environ, **{key: str(args.threads) for key in (
 +        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
 +    )}, "PYTHONNOUSERSITE": "1"}
-@@ -484,3 +340 @@
+@@ -485,3 +340 @@
 -    labels = (
 -        [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
 -    )
 +    labels = [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
-@@ -491,3 +345 @@
+@@ -492,3 +345 @@
 -            for atom in range(5)
 -            for axis in range(3)
 -            for sign in (-1, 1)
 +            for atom in range(5) for axis in range(3) for sign in (-1, 1)
-@@ -495,4 +347 @@
+@@ -496,4 +347 @@
 -    write(
 -        args.output / "plan.json",
 -        {"labels": labels, "trial_timeout_seconds": args.timeout},
 -    )
 +    write(args.output / "plan.json", {"labels": labels, "trial_timeout_seconds": args.timeout})
-@@ -504,34 +353,7 @@
+@@ -505,34 +353,7 @@
 -        argv = [
 -            sys.executable,
 -            "-u",
@@ -417,7 +421,7 @@
 +                process = subprocess.Popen(
 +                    argv, env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
 +                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-@@ -538,0 +361,7 @@
+@@ -539,0 +361,7 @@
 +                try:
 +                    process.wait(timeout=args.timeout)
 +                except subprocess.TimeoutExpired:
@@ -425,7 +429,7 @@
 +                    process.wait()
 +                    write(record, {"status": "timeout", "label": label,
 +                                   "arm": args.arm, "timeout_seconds": args.timeout})
-@@ -540,9 +369,2 @@
+@@ -541,9 +369,2 @@
 -            write(
 -                record,
 -                {
@@ -437,7 +441,7 @@
 -            )
 +            write(record, {"status": "worker_exit", "label": label,
 +                           "arm": args.arm, "returncode": process.returncode})
-@@ -551,8 +373 @@
+@@ -552,8 +373 @@
 -        print(
 -            "END",
 -            args.arm,
@@ -447,9 +451,13 @@
 -            flush=True,
 -        )
 +        print("END", args.arm, label, status, round(time.perf_counter() - start, 3), flush=True)
-@@ -562 +377 @@
+@@ -563 +377 @@
 -def main() -> None:
 +def main():
-@@ -576 +391 @@
+@@ -569,3 +382,0 @@
+-    p.add_argument(
+-        "--correlation-budget-gib", type=int, choices=range(1, 81), default=32
+-    )
+@@ -580 +391 @@
 -    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
 +    p.add_argument("--scratch", type=Path, default=Path("/tmp"))

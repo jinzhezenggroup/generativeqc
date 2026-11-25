@@ -30,51 +30,56 @@
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def native(atoms, fitted, forces, args, fixture):
-@@ -113 +98 @@
+@@ -85 +70 @@
+-        correlation_memory_budget_bytes=args.correlation_budget_gib << 30,
++        correlation_memory_budget_bytes=32 << 30,
+@@ -102 +86,0 @@
+-            "correlation_budget_gib": args.correlation_budget_gib,
+@@ -114 +98 @@
 -def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
 +def shells(fixture, role):
-@@ -118,3 +103 @@
+@@ -119,3 +103 @@
 -def psi4_basis(
 -    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
 -) -> None:
 +def psi4_basis(psi4, fixture, role, name, option):
-@@ -140 +123 @@
+@@ -141 +123 @@
 -def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
 +def pyscf_basis(fixture):
-@@ -148,3 +131 @@
+@@ -149,3 +131 @@
 -                        shell["exponents"],
 -                        zip(*shell["coefficients"], strict=True),
 -                        strict=True,
 +                        shell["exponents"], zip(*shell["coefficients"]), strict=True
-@@ -160,3 +141 @@
+@@ -161,3 +141 @@
 -def psi4_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def psi4_endpoint(atoms, fitted, forces, args, fixture):
-@@ -243,3 +222 @@
+@@ -244,3 +222 @@
 -def pyscf_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def pyscf_endpoint(atoms, fitted, forces, args, fixture):
-@@ -308 +285 @@
+@@ -309 +285 @@
 -def native_provenance(source: Path) -> Record:
 +def native_provenance(source):
-@@ -332 +309 @@
+@@ -333 +309 @@
 -def worker(args: argparse.Namespace, label: str) -> None:
 +def worker(args, label):
-@@ -391 +368 @@
+@@ -392 +368 @@
 -    except Exception as exc:  # noqa: BLE001 - retain worker failure details
 +    except Exception as exc:
-@@ -406 +383 @@
+@@ -407 +383 @@
 -def cpu_model() -> str:
 +def cpu_model():
-@@ -413 +390 @@
+@@ -414 +390 @@
 -def hardware(args: argparse.Namespace) -> Record:
 +def hardware(args):
-@@ -460 +437 @@
+@@ -461 +437 @@
 -def run(args: argparse.Namespace) -> None:
 +def run(args):
-@@ -512,26 +489,10 @@
+@@ -513,26 +489,10 @@
 -        with (
 -            tempfile.TemporaryDirectory(
 -                prefix="gqc-3167-", dir=args.scratch
@@ -111,7 +116,7 @@
 +                    stdout=log,
 +                    stderr=subprocess.STDOUT,
 +                    start_new_session=True,
-@@ -538,0 +500,14 @@
+@@ -539,0 +500,14 @@
 +                try:
 +                    process.wait(timeout=args.timeout)
 +                except subprocess.TimeoutExpired:
@@ -126,9 +131,13 @@
 +                            "timeout_seconds": args.timeout,
 +                        },
 +                    )
-@@ -562 +537 @@
+@@ -563 +537 @@
 -def main() -> None:
 +def main():
-@@ -576 +551 @@
+@@ -569,3 +542,0 @@
+-    p.add_argument(
+-        "--correlation-budget-gib", type=int, choices=range(1, 81), default=32
+-    )
+@@ -580 +551 @@
 -    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
 +    p.add_argument("--scratch", type=Path, default=Path("/tmp"))

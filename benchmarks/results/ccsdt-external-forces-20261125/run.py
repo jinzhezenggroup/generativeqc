@@ -82,7 +82,7 @@ def native(
         ccsd_max_iterations=150,
         ccsd_energy_tolerance=1e-12,
         ccsd_residual_tolerance=1e-10,
-        correlation_memory_budget_bytes=32 << 30,
+        correlation_memory_budget_bytes=args.correlation_budget_gib << 30,
     )
     value = calc.singlepoint(
         atoms,
@@ -99,6 +99,7 @@ def native(
         elapsed,
         {
             "correlation": asdict(value.correlation),
+            "correlation_budget_gib": args.correlation_budget_gib,
             "cc_performance": asdict(value.cc_performance)
             if value.cc_performance
             else None,
@@ -565,6 +566,9 @@ def main() -> None:
     p.add_argument("--output", required=True, type=Path)
     p.add_argument("--threads", required=True, type=int)
     p.add_argument("--memory-mib", type=int, default=76800)
+    p.add_argument(
+        "--correlation-budget-gib", type=int, choices=range(1, 81), default=32
+    )
     p.add_argument("--timeout", type=int, default=1800)
     p.add_argument("--repeats", type=int, default=2)
     p.add_argument("--cases", nargs="+")

@@ -942,6 +942,396 @@
       "arm": "native-conv",
       "displacement": null
     },
+    "C4.0": {
+      "status": "completed",
+      "energy_hartree": -157.98872109251377,
+      "force_hartree_per_bohr": [
+        [
+          -5.914367936447625e-05,
+          -0.005388278678308287,
+          5.749784478083505e-05
+        ],
+        [
+          -0.0071986142384947785,
+          0.008290169503757099,
+          0.00022114836953397433
+        ],
+        [
+          0.007059014392243949,
+          -0.00825014054664454,
+          -0.00010514185169708231
+        ],
+        [
+          -0.0002442074761181539,
+          0.005361147292460338,
+          0.00010758058865716324
+        ],
+        [
+          -0.00481648319250358,
+          -0.006585223775679007,
+          -0.00013015139031345295
+        ],
+        [
+          -0.003306811540270769,
+          0.003771393161962205,
+          -0.005692215459112904
+        ],
+        [
+          -0.003357520904738892,
+          0.0036762121921344233,
+          0.005858615664992084
+        ],
+        [
+          0.004805622194097589,
+          -0.003513368729305767,
+          -0.006262037638753052
+        ],
+        [
+          0.004694388812472576,
+          -0.0035614234696472336,
+          0.0059204563998683105
+        ],
+        [
+          -0.00464797370291616,
+          0.0034171756643200913,
+          0.006110765084409149
+        ],
+        [
+          -0.004705818684115879,
+          0.0036075844393892924,
+          -0.005998651794609449
+        ],
+        [
+          0.0034554344061644778,
+          -0.00382823417538859,
+          0.0058057035372982065
+        ],
+        [
+          0.0049067207442879375,
+          0.0066644282715313495,
+          7.205663214016938e-05
+        ],
+        [
+          0.0034153928693764816,
+          -0.0036614411504137688,
+          -0.005965625987282484
+        ]
+      ],
+      "endpoint_seconds": 972.0547893098556,
+      "versions": {
+        "generativeqc": "0.1.0"
+      },
+      "work": {
+        "correlation": {
+          "reference_energy": -157.30934205539893,
+          "opposite_spin_energy": 0.0,
+          "same_spin_energy": 0.0,
+          "minimum_absolute_denominator": 0.6343279326667742,
+          "reference_residual": 5.131117752910086e-12,
+          "numeric_capacity_bytes": 29352069297,
+          "energy_tile_count": 0,
+          "mo_host_staging": true,
+          "correlation_owned_device_bytes": 14385204736,
+          "correlation_provider_retained_bytes": 656919992,
+          "mo_transfer_bytes": 658178424,
+          "host_to_device_ms": 0.453247994184494,
+          "device_to_host_ms": 196.07827758789062,
+          "transform_library_ms": 5.513344049453735,
+          "tensor_kernel_ms": 0.7918079793453217,
+          "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+          "response_iterations": 14,
+          "response_restarts": 0,
+          "response_absolute_residual": 3.305163626857581e-13,
+          "response_relative_residual": 9.136679187841136e-11,
+          "response_workspace_bytes": 879896,
+          "derivative_workspace_bytes": 0,
+          "planned_endpoint_peak_bytes": 29352069297,
+          "measured_endpoint_peak_bytes": 0,
+          "force_provenance_flags": 15,
+          "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+          "measured_response_workspace_peak_bytes": 867792,
+          "response_workspace_allocation_count": 17,
+          "ccsd_iterations": 20,
+          "ccsd_diis_restarts": 0,
+          "ccsd_correlation_energy": -0.661131748335185,
+          "ccsd_energy_change": 3.679279103607769e-13,
+          "ccsd_singles_residual_max": 4.3836968689587165e-12,
+          "ccsd_doubles_residual_max": 1.0610895842533274e-12,
+          "ccsd_replay_singles_residual_max": 4.383696868965334e-12,
+          "ccsd_replay_doubles_residual_max": 1.0610826453594235e-12,
+          "ccsd_setup_h2d_bytes": 675336184,
+          "ccsd_scalar_d2h_bytes": 884,
+          "ccsd_amplitude_d2h_bytes": 18325456,
+          "ccsd_synchronizations": 61,
+          "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+          "ccsd_t_triples_energy": -0.018247288779651556,
+          "ccsd_t_virtual_triples": 121485,
+          "ccsd_t_workspace_bytes": 136551680,
+          "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+          "reference_execution_plan_reused": false,
+          "reference_execution_plan_owned_device_bytes": 297541320
+        },
+        "cc_performance": {
+          "reference_seconds": 1.473674714,
+          "problem_seconds": 26.088391083,
+          "provider_seconds": 26.037359926,
+          "source_seconds": 0.007371593,
+          "solver_seconds": 17.144940774,
+          "iteration_seconds": 15.503026841404296,
+          "replay_seconds": 1.401430583,
+          "update_seconds": 0.001295799,
+          "diis_seconds": 0.03806633259570302,
+          "triples_seconds": 10.594367878,
+          "source_scans": 2,
+          "source_reads": 2,
+          "source_values": 252495392,
+          "transform_fmas": 43733936754,
+          "transform_stages": 17,
+          "mo_blocks": 7,
+          "cuda_transform_calls": 7,
+          "cuda_batch_calls": 2,
+          "iteration_graph_calls": 38,
+          "replay_graph_calls": 1,
+          "update_calls": 19,
+          "generated_error_checks": 20,
+          "diis_gram_calls": 19,
+          "diis_coefficient_calls": 18,
+          "diis_combine_calls": 36,
+          "ccsd_fp32_requested": false,
+          "ccsd_fp32_executed": false,
+          "ccsd_fp32_refused": false,
+          "ccsd_fp32_evaluations": 0,
+          "ccsd_fp32_gemm_calls": 0,
+          "ccsd_fp32_cast_elements": 0,
+          "lambda_seconds": null,
+          "source_response_seconds": null,
+          "orbital_seconds": null,
+          "lambda_fp32_requested": null,
+          "lambda_fp32_executed": null,
+          "lambda_fp32_refused": null,
+          "lambda_fp32_iterations": null,
+          "lambda_fp64_iterations": null,
+          "lambda_fp32_actions": null,
+          "lambda_fp64_actions": null,
+          "lambda_fp32_gemm_calls": null,
+          "lambda_fp32_cast_elements": null,
+          "lambda_auxiliary_batch_size": null,
+          "lambda_numeric_capacity_bytes": null,
+          "lambda_owned_device_bytes": null
+        },
+        "rhf_energy": -157.30934205539893,
+        "hf_cycles": 20,
+        "hf_density_rms": 4.3836968689587165e-12,
+        "executed_backend": "cuda"
+      },
+      "case": "C4",
+      "trial": "0",
+      "arm": "native-conv",
+      "displacement": null
+    },
+    "C5.0": {
+      "status": "completed",
+      "energy_hartree": -197.1894328072819,
+      "force_hartree_per_bohr": [
+        [
+          7.05114225518834e-05,
+          -0.0055581850997370565,
+          0.0001899517420031099
+        ],
+        [
+          -0.0072466906395253885,
+          0.008673059031641592,
+          -0.0007240978706143453
+        ],
+        [
+          0.0095737553898101,
+          -0.013161005251085336,
+          0.00040397200529361695
+        ],
+        [
+          -0.0048879914141385546,
+          0.008415624037356951,
+          9.9973470319585e-05
+        ],
+        [
+          0.0045080683689979984,
+          -0.0021096927536345894,
+          6.497917602098777e-05
+        ],
+        [
+          -0.004991660504679542,
+          -0.006398238769488715,
+          0.00016942349575268061
+        ],
+        [
+          -0.00328179533739613,
+          0.0036134242726525013,
+          -0.0059827549156657315
+        ],
+        [
+          -0.003403465073501903,
+          0.003966595234258555,
+          0.005729872833457876
+        ],
+        [
+          0.00459600816824969,
+          -0.0038109175201440416,
+          -0.005843211212969202
+        ],
+        [
+          0.004635183453023224,
+          -0.0036915907106403246,
+          0.006485320136801079
+        ],
+        [
+          -0.0030962102079062884,
+          0.004434851856031566,
+          0.006228266679181545
+        ],
+        [
+          -0.003128923218010381,
+          0.004063449689262763,
+          -0.006504429330347034
+        ],
+        [
+          0.0017654371438449428,
+          -0.005323147953087246,
+          -0.005512426383777051
+        ],
+        [
+          0.0016643564765575426,
+          -0.004905792812409621,
+          0.005483936115431224
+        ],
+        [
+          -0.002525085654041635,
+          0.004443530901540351,
+          -0.006139542472424347
+        ],
+        [
+          0.008248514130361704,
+          0.002624048451885594,
+          -7.190437866537483e-05
+        ],
+        [
+          -0.002500012504125006,
+          0.004723987395858859,
+          0.005922670910201861
+        ]
+      ],
+      "endpoint_seconds": 3633.4600099865347,
+      "versions": {
+        "generativeqc": "0.1.0"
+      },
+      "work": {
+        "correlation": {
+          "reference_energy": -196.34648947665588,
+          "opposite_spin_energy": 0.0,
+          "same_spin_energy": 0.0,
+          "minimum_absolute_denominator": 0.6220041277689223,
+          "reference_residual": 2.8031466037248265e-12,
+          "numeric_capacity_bytes": 65988191372,
+          "energy_tile_count": 0,
+          "mo_host_staging": true,
+          "correlation_owned_device_bytes": 32533547008,
+          "correlation_provider_retained_bytes": 1482210104,
+          "mo_transfer_bytes": 1484102904,
+          "host_to_device_ms": 0.9094719886779785,
+          "device_to_host_ms": 358.3606414794922,
+          "transform_library_ms": 14.689088344573975,
+          "tensor_kernel_ms": 8.871327996253967,
+          "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+          "response_iterations": 15,
+          "response_restarts": 0,
+          "response_absolute_residual": 2.772287529325483e-13,
+          "response_relative_residual": 6.598614446657561e-11,
+          "response_workspace_bytes": 1326872,
+          "derivative_workspace_bytes": 0,
+          "planned_endpoint_peak_bytes": 65988191372,
+          "measured_endpoint_peak_bytes": 0,
+          "force_provenance_flags": 15,
+          "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+          "measured_response_workspace_peak_bytes": 1308560,
+          "response_workspace_allocation_count": 17,
+          "ccsd_iterations": 21,
+          "ccsd_diis_restarts": 0,
+          "ccsd_correlation_energy": -0.8196984721124584,
+          "ccsd_energy_change": 1.0247358517290195e-13,
+          "ccsd_singles_residual_max": 2.268535649158546e-12,
+          "ccsd_doubles_residual_max": 6.266176813540802e-13,
+          "ccsd_replay_singles_residual_max": 2.2685355949484373e-12,
+          "ccsd_replay_doubles_residual_max": 6.266237528862462e-13,
+          "ccsd_setup_h2d_bytes": 1524280824,
+          "ccsd_scalar_d2h_bytes": 928,
+          "ccsd_amplitude_d2h_bytes": 41934480,
+          "ccsd_synchronizations": 64,
+          "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+          "ccsd_t_triples_energy": -0.023244858513559365,
+          "ccsd_t_virtual_triples": 221815,
+          "ccsd_t_workspace_bytes": 310036736,
+          "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+          "reference_execution_plan_reused": false,
+          "reference_execution_plan_owned_device_bytes": 442594640
+        },
+        "correlation_budget_gib": 72,
+        "cc_performance": {
+          "reference_seconds": 2.109845817,
+          "problem_seconds": 56.824260012,
+          "provider_seconds": 56.708324045,
+          "source_seconds": 0.008366690999999999,
+          "solver_seconds": 49.351303615,
+          "iteration_seconds": 43.83175383515625,
+          "replay_seconds": 4.90159416,
+          "update_seconds": 0.0024011550000000003,
+          "diis_seconds": 0.09235643184374931,
+          "triples_seconds": 166.788679625,
+          "source_scans": 2,
+          "source_reads": 2,
+          "source_values": 571220000,
+          "transform_fmas": 121199381290,
+          "transform_stages": 17,
+          "mo_blocks": 7,
+          "cuda_transform_calls": 7,
+          "cuda_batch_calls": 2,
+          "iteration_graph_calls": 40,
+          "replay_graph_calls": 1,
+          "update_calls": 20,
+          "generated_error_checks": 21,
+          "diis_gram_calls": 20,
+          "diis_coefficient_calls": 19,
+          "diis_combine_calls": 38,
+          "ccsd_fp32_requested": false,
+          "ccsd_fp32_executed": false,
+          "ccsd_fp32_refused": false,
+          "ccsd_fp32_evaluations": 0,
+          "ccsd_fp32_gemm_calls": 0,
+          "ccsd_fp32_cast_elements": 0,
+          "lambda_seconds": null,
+          "source_response_seconds": null,
+          "orbital_seconds": null,
+          "lambda_fp32_requested": null,
+          "lambda_fp32_executed": null,
+          "lambda_fp32_refused": null,
+          "lambda_fp32_iterations": null,
+          "lambda_fp64_iterations": null,
+          "lambda_fp32_actions": null,
+          "lambda_fp64_actions": null,
+          "lambda_fp32_gemm_calls": null,
+          "lambda_fp32_cast_elements": null,
+          "lambda_auxiliary_batch_size": null,
+          "lambda_numeric_capacity_bytes": null,
+          "lambda_owned_device_bytes": null
+        },
+        "rhf_energy": -196.34648947665588,
+        "hf_cycles": 21,
+        "hf_density_rms": 2.268535649158546e-12,
+        "executed_backend": "cuda"
+      },
+      "case": "C5",
+      "trial": "0",
+      "arm": "native-conv",
+      "displacement": null
+    },
     "ammonia.0": {
       "status": "completed",
       "energy_hartree": -56.40247309829178,
@@ -5764,6 +6154,114 @@
       "arm": "psi4-conv",
       "displacement": null
     },
+    "C4.1": {
+      "status": "completed",
+      "energy_hartree": -157.9887210925195,
+      "force_hartree_per_bohr": [
+        [
+          -5.90405281704065e-05,
+          -0.005388059574776172,
+          5.791025979401485e-05
+        ],
+        [
+          -0.007198312069055746,
+          0.008290353881970525,
+          0.00022078262240136926
+        ],
+        [
+          0.007058617704063019,
+          -0.008250358547027936,
+          -0.00010458302232597971
+        ],
+        [
+          -0.0002444168313280315,
+          0.00536097704696159,
+          0.00010738360043370141
+        ],
+        [
+          -0.0048164532832806195,
+          -0.006585184748281403,
+          -0.0001302701360011982
+        ],
+        [
+          -0.003306796948054913,
+          0.0037712895059345275,
+          -0.005692222123120594
+        ],
+        [
+          -0.0033574006378689347,
+          0.0036762102450980105,
+          0.005858494069896469
+        ],
+        [
+          0.0048057468595678055,
+          -0.0035137508992917343,
+          -0.00626176875084572
+        ],
+        [
+          0.004694315532501991,
+          -0.0035618221357121005,
+          0.005920288260081286
+        ],
+        [
+          -0.004648081794268677,
+          0.003417548026060091,
+          0.006110518457687286
+        ],
+        [
+          -0.004705704155491874,
+          0.0036080497298944803,
+          -0.005998597701824204
+        ],
+        [
+          0.0034553793902192265,
+          -0.0038282707457498732,
+          0.0058057102287631945
+        ],
+        [
+          0.0049067454972371305,
+          0.006664433957696225,
+          7.197103631180826e-05
+        ],
+        [
+          0.003415401264153628,
+          -0.003661415742518437,
+          -0.005965616800926554
+        ]
+      ],
+      "endpoint_seconds": 655.0382802467793,
+      "versions": {
+        "psi4": "1.10.2"
+      },
+      "work": {
+        "settings": {
+          "basis": "issue3167orb",
+          "puream": true,
+          "reference": "rhf",
+          "freeze_core": false,
+          "scf_type": "pk",
+          "cc_type": "conv",
+          "qc_module": "ccenergy",
+          "e_convergence": 1e-12,
+          "d_convergence": 1e-10,
+          "maxiter": 200,
+          "ints_tolerance": 1e-14,
+          "ccenergy__e_convergence": 1e-12,
+          "ccenergy__r_convergence": 1e-10,
+          "cclambda__r_convergence": 1e-10,
+          "dfocc__e_convergence": 1e-12,
+          "dfocc__r_convergence": 1e-10
+        },
+        "nao": 106,
+        "auxiliary_counts": {},
+        "electrons": 34,
+        "rhf_energy": -157.309342055399
+      },
+      "case": "C4",
+      "trial": "1",
+      "arm": "psi4-conv",
+      "displacement": null
+    },
     "C5.0": {
       "status": "completed",
       "energy_hartree": -197.18943280731202,
@@ -5884,6 +6382,129 @@
       },
       "case": "C5",
       "trial": "0",
+      "arm": "psi4-conv",
+      "displacement": null
+    },
+    "C5.1": {
+      "status": "completed",
+      "energy_hartree": -197.18943280731213,
+      "force_hartree_per_bohr": [
+        [
+          6.969562620895431e-05,
+          -0.0055584019326655465,
+          0.0001896962934188071
+        ],
+        [
+          -0.007246863807206516,
+          0.008674799535421052,
+          -0.0007243228726803164
+        ],
+        [
+          0.009573550534129893,
+          -0.01316075585817078,
+          0.00040430721791530344
+        ],
+        [
+          -0.004889295424511886,
+          0.008416771335824969,
+          9.919571368860458e-05
+        ],
+        [
+          0.0045069649721036775,
+          -0.00211051596419054,
+          6.537446899473887e-05
+        ],
+        [
+          -0.004991442047175054,
+          -0.006398704156962198,
+          0.00016982217145818101
+        ],
+        [
+          -0.0032817901355570722,
+          0.003613983859234504,
+          -0.005983794673470433
+        ],
+        [
+          -0.003403244387929494,
+          0.003966564784743665,
+          0.0057305005159862255
+        ],
+        [
+          0.004596167611329083,
+          -0.003811488586451528,
+          -0.0058438175943194
+        ],
+        [
+          0.00463562953939578,
+          -0.0036920646868841,
+          0.006486329473421204
+        ],
+        [
+          -0.0030960962372891254,
+          0.00443445289810751,
+          0.0062274229453698204
+        ],
+        [
+          -0.003128524252625775,
+          0.004063225626047551,
+          -0.0065035055027335975
+        ],
+        [
+          0.001766058375257229,
+          -0.005323570628842145,
+          -0.005512618299394312
+        ],
+        [
+          0.0016649687670264868,
+          -0.004906010045830023,
+          0.005484322497405492
+        ],
+        [
+          -0.0025247372427348314,
+          0.004443491856359172,
+          -0.006139434663463117
+        ],
+        [
+          0.008248748939092554,
+          0.0026241513481446987,
+          -7.21357867911783e-05
+        ],
+        [
+          -0.0024997908295260607,
+          0.004724070616715537,
+          0.005922658094956734
+        ]
+      ],
+      "endpoint_seconds": 2564.1044597923756,
+      "versions": {
+        "psi4": "1.10.2"
+      },
+      "work": {
+        "settings": {
+          "basis": "issue3167orb",
+          "puream": true,
+          "reference": "rhf",
+          "freeze_core": false,
+          "scf_type": "pk",
+          "cc_type": "conv",
+          "qc_module": "ccenergy",
+          "e_convergence": 1e-12,
+          "d_convergence": 1e-10,
+          "maxiter": 200,
+          "ints_tolerance": 1e-14,
+          "ccenergy__e_convergence": 1e-12,
+          "ccenergy__r_convergence": 1e-10,
+          "cclambda__r_convergence": 1e-10,
+          "dfocc__e_convergence": 1e-12,
+          "dfocc__r_convergence": 1e-10
+        },
+        "nao": 130,
+        "auxiliary_counts": {},
+        "electrons": 42,
+        "rhf_energy": -196.34648947665568
+      },
+      "case": "C5",
+      "trial": "1",
       "arm": "psi4-conv",
       "displacement": null
     },
@@ -10400,6 +11021,165 @@
       "arm": "psi4-df",
       "displacement": null
     },
+    "C7.1": {
+      "status": "completed",
+      "energy_hartree": -275.5908320136544,
+      "force_hartree_per_bohr": [
+        [
+          -0.00019272095069489126,
+          -0.005468110427015116,
+          5.389911393761937e-05
+        ],
+        [
+          -0.007167618115589719,
+          0.008317677739506202,
+          -0.0002920193258515863
+        ],
+        [
+          0.00973197097557188,
+          -0.013376019279249807,
+          0.0005626140457475753
+        ],
+        [
+          -0.009471845389384725,
+          0.013542881155876874,
+          -0.0003433502928168186
+        ],
+        [
+          0.009463560345330135,
+          -0.013653261449934728,
+          0.00024708050472650733
+        ],
+        [
+          -0.005583525628247266,
+          0.009422655337394836,
+          -1.3334784574133354e-05
+        ],
+        [
+          0.005055870011368313,
+          -0.0016316300950940388,
+          0.00012212604526708887
+        ],
+        [
+          -0.004994624365019629,
+          -0.006410845968691792,
+          9.439713509895586e-05
+        ],
+        [
+          -0.0031974754595029964,
+          0.003580529732643223,
+          -0.005921451021774438
+        ],
+        [
+          -0.003422007280780903,
+          0.003939749063512243,
+          0.005620722837523573
+        ],
+        [
+          0.004662830505319349,
+          -0.0037736092084874606,
+          -0.005841533049442127
+        ],
+        [
+          0.004429493041576471,
+          -0.0034731995816432715,
+          0.006190337722675299
+        ],
+        [
+          -0.003185645846358165,
+          0.004285958575731552,
+          0.006124710350035922
+        ],
+        [
+          -0.0031053046470832513,
+          0.0040445186281576895,
+          -0.00651179318920958
+        ],
+        [
+          0.003083063623172899,
+          -0.004282158517753931,
+          -0.006118839525203423
+        ],
+        [
+          0.0028825512157053534,
+          -0.0041813670788801716,
+          0.006337116156705402
+        ],
+        [
+          -0.0028856914371566678,
+          0.004401915570468873,
+          0.006234122718448809
+        ],
+        [
+          -0.0029064595272474403,
+          0.004311076947848047,
+          -0.006413229326805325
+        ],
+        [
+          0.0019565053365862006,
+          -0.005502431349792447,
+          -0.006017749027485753
+        ],
+        [
+          0.001858782926420055,
+          -0.005446246048248726,
+          0.005972828455544921
+        ],
+        [
+          -0.0024516057931064372,
+          0.004401585190434432,
+          -0.005824678741805922
+        ],
+        [
+          0.007866658022830375,
+          0.002582689644423708,
+          -1.1130659309637955e-05
+        ],
+        [
+          -0.0024267615641960782,
+          0.004367641419018575,
+          0.005749153858622069
+        ]
+      ],
+      "endpoint_seconds": 3618.854795243591,
+      "versions": {
+        "psi4": "1.10.2"
+      },
+      "work": {
+        "settings": {
+          "basis": "issue3167orb",
+          "puream": true,
+          "reference": "rhf",
+          "freeze_core": false,
+          "scf_type": "disk_df",
+          "cc_type": "df",
+          "qc_module": "occ",
+          "e_convergence": 1e-12,
+          "d_convergence": 1e-10,
+          "maxiter": 200,
+          "ints_tolerance": 1e-14,
+          "ccenergy__e_convergence": 1e-12,
+          "ccenergy__r_convergence": 1e-10,
+          "cclambda__r_convergence": 1e-10,
+          "dfocc__e_convergence": 1e-12,
+          "dfocc__r_convergence": 1e-10,
+          "df_basis_scf": "issue3167aux",
+          "df_basis_cc": "issue3167aux",
+          "df_fitting_condition": 1e-10
+        },
+        "nao": 178,
+        "auxiliary_counts": {
+          "DF_BASIS_SCF": 858,
+          "DF_BASIS_CC": 858
+        },
+        "electrons": 58,
+        "rhf_energy": -274.42060477399366
+      },
+      "case": "C7",
+      "trial": "1",
+      "arm": "psi4-df",
+      "displacement": null
+    },
     "ammonia.0": {
       "status": "completed",
       "energy_hartree": -56.40250700805247,
@@ -10771,6 +11551,150 @@
       },
       "case": "water",
       "trial": "1",
+      "arm": "psi4-df",
+      "displacement": null
+    },
+    "C6.1": {
+      "status": "completed",
+      "energy_hartree": -236.39015941787616,
+      "force_hartree_per_bohr": [
+        [
+          -0.0022866598517765624,
+          -0.0048368682028487875,
+          0.000698694931938304
+        ],
+        [
+          -0.002065322625446342,
+          0.010533419407601663,
+          0.00028006690311505045
+        ],
+        [
+          0.002025750094228229,
+          -0.016297454019559066,
+          -5.233798233580944e-05
+        ],
+        [
+          -0.0023211567681498124,
+          0.0161451482537065,
+          7.74767723538683e-05
+        ],
+        [
+          0.0025342395281018337,
+          -0.01066656742017269,
+          -0.00028411923287441354
+        ],
+        [
+          0.002265225132189741,
+          0.004880493293722088,
+          -0.0007101965256290921
+        ],
+        [
+          -0.007353993112123369,
+          -0.0035271734570305746,
+          0.0017798524810790362
+        ],
+        [
+          -0.0026123504305382017,
+          0.004888624934705543,
+          -0.005564683506466661
+        ],
+        [
+          0.00014171473270552237,
+          0.005015251705610346,
+          0.005945158965410702
+        ],
+        [
+          0.0008493397504745204,
+          -0.005357087436324015,
+          -0.006190920296518243
+        ],
+        [
+          0.0036421285300831663,
+          -0.005108945270245524,
+          0.005280197074875481
+        ],
+        [
+          0.0006013102983737362,
+          0.005268876807589251,
+          0.0061903499013507
+        ],
+        [
+          -0.0022109875013209823,
+          0.00500288475740307,
+          -0.006054085417421362
+        ],
+        [
+          -0.0005968865839148796,
+          -0.0052973936347728845,
+          -0.006143517144098443
+        ],
+        [
+          0.0022748864377473144,
+          -0.004918980703119136,
+          0.006040661828705662
+        ],
+        [
+          -0.0009816557824591232,
+          0.005506376338206831,
+          0.006204184363081566
+        ],
+        [
+          -0.00363840407033289,
+          0.005110523497533048,
+          -0.005484594868185422
+        ],
+        [
+          0.002555369396077367,
+          -0.004705432320449621,
+          0.0056102193308738
+        ],
+        [
+          0.0072624378123467,
+          0.0034727502090370344,
+          -0.001812796896458968
+        ],
+        [
+          -8.498498654874176e-05,
+          -0.005108446740670125,
+          -0.00580961068286312
+        ]
+      ],
+      "endpoint_seconds": 1429.2230940889567,
+      "versions": {
+        "psi4": "1.10.2"
+      },
+      "work": {
+        "settings": {
+          "basis": "issue3167orb",
+          "puream": true,
+          "reference": "rhf",
+          "freeze_core": false,
+          "scf_type": "disk_df",
+          "cc_type": "df",
+          "qc_module": "occ",
+          "e_convergence": 1e-12,
+          "d_convergence": 1e-10,
+          "maxiter": 200,
+          "ints_tolerance": 1e-14,
+          "ccenergy__e_convergence": 1e-12,
+          "ccenergy__r_convergence": 1e-10,
+          "cclambda__r_convergence": 1e-10,
+          "dfocc__e_convergence": 1e-12,
+          "dfocc__r_convergence": 1e-10,
+          "df_basis_scf": "issue3167aux",
+          "df_basis_cc": "issue3167aux",
+          "df_fitting_condition": 1e-10
+        },
+        "nao": 154,
+        "auxiliary_counts": {
+          "DF_BASIS_SCF": 742,
+          "DF_BASIS_CC": 742
+        },
+        "electrons": 50,
+        "rhf_energy": -235.38351722975537
+      },
+      "case": "C6",
+      "trial": "0",
       "arm": "psi4-df",
       "displacement": null
     }
@@ -12939,6 +13863,12 @@
       "label": "C5.0",
       "arm": "pyscf-conv",
       "timeout_seconds": 2700
+    },
+    "C6.0": {
+      "status": "timeout",
+      "label": "C6.0",
+      "arm": "pyscf-conv",
+      "timeout_seconds": 5400
     },
     "C7.0": {
       "status": "timeout",

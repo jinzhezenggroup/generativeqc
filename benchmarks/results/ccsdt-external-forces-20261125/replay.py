@@ -51,6 +51,7 @@ def check_record(
         return
     if (
         row["displacement"] is not None
+        or force is None
         or len(force) != n_atoms
         or any(len(xyz) != 3 or not all(map(math.isfinite, xyz)) for xyz in force)
     ):
@@ -64,27 +65,40 @@ def difference(a: Force, b: Force) -> tuple[float, float]:
     return max(map(abs, diffs)), math.sqrt(statistics.mean(d * d for d in diffs))
 
 
-def summarize(data: Dataset, cases: dict[str, Record]) -> tuple[list[Record], Record]:
-    def completed(arm: str, case: str) -> list[Record]:
+def summarize(
+    data: Dataset,
+    cases: dict[str, Record],
+    source_labels: dict[str, dict[str, str]] | None = None,
+) -> tuple[list[Record], Record]:
+    source_labels = source_labels or {}
+
+    def completed(arm: str, case: str) -> list[tuple[str, Record]]:
         out = []
         for trial in REPEATS:
-            row = data.get(arm, {}).get(f"{case}.{trial}", {})
+            label = f"{case}.{trial}"
+            row = data.get(arm, {}).get(label, {})
             if row.get("status") == "completed":
-                check_record(row, case, arm, trial, len(cases[case]["atoms_bohr"]))
-                out.append(row)
+                original = source_labels.get(arm, {}).get(label, label)
+                raw_case, raw_trial = original.split(".")
+                if raw_case != case or raw_trial not in REPEATS:
+                    raise ValueError(f"Invalid source label for {arm}/{label}")
+                check_record(row, case, arm, raw_trial, len(cases[case]["atoms_bohr"]))
+                out.append((trial, row))
         return out
 
     def pair_rows(case: str, left: str, right: str) -> list[Record]:
         errors = []
-        for a, b in itertools.product(completed(left, case), completed(right, case)):
+        for (trial_left, a), (trial_right, b) in itertools.product(
+            completed(left, case), completed(right, case)
+        ):
             energy = abs(a["energy_hartree"] - b["energy_hartree"])
             mx, rms = difference(
                 a["force_hartree_per_bohr"], b["force_hartree_per_bohr"]
             )
             errors.append(
                 {
-                    "trial_left": a["trial"],
-                    "trial_right": b["trial"],
+                    "trial_left": trial_left,
+                    "trial_right": trial_right,
                     "energy": energy,
                     "max_force": mx,
                     "rms_force": rms,
@@ -97,7 +111,7 @@ def summarize(data: Dataset, cases: dict[str, Record]) -> tuple[list[Record], Re
     for case in cases:
         timings[case] = {}
         for arm in dict.fromkeys(arm for pair in PAIRS for arm in pair):
-            times = [row["endpoint_seconds"] for row in completed(arm, case)]
+            times = [row["endpoint_seconds"] for _, row in completed(arm, case)]
             timings[case][arm] = {
                 "samples": times,
                 "median": statistics.median(times)
@@ -115,13 +129,10 @@ def summarize(data: Dataset, cases: dict[str, Record]) -> tuple[list[Record], Re
                 else {}
             )
             complete = len(errors) == len(REPEATS) ** 2
-            outcomes = "incomplete"
-            if complete:
-                outcomes = (
-                    "passed"
-                    if all(value <= LIMITS[key] for key, value in worst.items())
-                    else "failed"
-                )
+            if any(value > LIMITS[key] for key, value in worst.items()):
+                outcomes = "failed"
+            else:
+                outcomes = "passed" if complete else "incomplete"
             comparisons.append(
                 {
                     "case": case,
@@ -210,6 +221,7 @@ def finite_differences(data: Dataset, cases: dict[str, Record]) -> list[Record]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--records", type=Path, default=HERE / "records.json")
+    parser.add_argument("--execution", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--require-passed", action="store_true")
     args = parser.parse_args()
@@ -232,14 +244,26 @@ def main() -> int:
             ):
                 raise ValueError(f"Basis payload mismatch for {case}/{role}")
     data = read(args.records)
-    if args.records.resolve() == HERE / "records.json":
-        execution = read(HERE / "execution.json")
+    execution_file = args.execution
+    if execution_file is None and args.records.resolve() == HERE / "records.json":
+        execution_file = HERE / "execution.json"
+    source_labels = {}
+    if execution_file is not None:
+        execution = read(execution_file)
+        source_labels = execution.get("primary_row_source_labels", {})
+        seen = set()
         for arm, rows in data.items():
             locations = execution["primary_row_locations"][arm]
             if set(rows) != set(locations):
                 raise ValueError(f"Primary row locations differ for {arm}")
             for label, row in rows.items():
-                origin = execution["executions"][f"{arm}/{locations[label]}"]
+                location = locations[label]
+                source_label = source_labels.get(arm, {}).get(label, label)
+                identity = (arm, location, source_label)
+                if identity in seen:
+                    raise ValueError(f"Primary sample reused for {arm}/{label}")
+                seen.add(identity)
+                origin = execution["executions"][f"{arm}/{location}"]
                 if arm.startswith("native") and origin["hardware"][
                     "source_revision"
                 ] != ("22f72d0692a760c2892cd7791022584d9ae1c3e5"):
@@ -247,11 +271,11 @@ def main() -> int:
                         "A primary native row is from a different revision"
                     )
                 raw = (json.dumps(row, indent=2, allow_nan=False) + "\n").encode()
-                if hashlib.sha256(raw).hexdigest() != origin["row_shas"][label]:
+                if hashlib.sha256(raw).hexdigest() != origin["row_shas"][source_label]:
                     raise ValueError(
                         f"Primary sample checksum differs for {arm}/{label}"
                     )
-    comparisons, timings = summarize(data, cases)
+    comparisons, timings = summarize(data, cases, source_labels)
     fd = finite_differences(data, cases)
     status = (
         "passed"
