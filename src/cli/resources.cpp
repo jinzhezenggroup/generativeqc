@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "api/host_resources.hpp"
 #include "cli/hessian.hpp"
 #include "cli/json.hpp"
 #include "cli/molecular_system.hpp"
@@ -37,9 +38,6 @@ extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::s
                                                 std::size_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t, std::uint64_t*);
 extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t, std::uint64_t*);
-extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
-                                                      std::size_t, std::size_t, int,
-                                                      std::uint64_t*);
 extern "C" generativeqc_status generativeqc_resource_preliminary_cpu_v1(
     generativeqc_context*, const generativeqc_system*, const generativeqc_initial_guess_options*,
     std::uint32_t, std::uint64_t*, std::size_t);

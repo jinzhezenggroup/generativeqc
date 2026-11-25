@@ -11,6 +11,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/ks_host_hessian.hpp"
+#include "methods/method.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/host_resource_ledger.hpp"
@@ -660,6 +661,22 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
 }
 #endif
 }  // namespace
+
+void generativeqc::api::validate_host_hessian_system(const core::System& system,
+                                                     std::string_view identity) {
+#if GENERATIVEQC_HAS_HOST_HESSIAN
+  methods::named_ks::Dispersion correction;
+  if (const auto* binding = linked_program(identity, correction)) {
+    validate_linked_system(system, *binding, correction);
+    return;
+  }
+#else
+  (void)system;
+  (void)identity;
+#endif
+  throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                             "CPU Hessian has no exact linked MethodIR");
+}
 
 extern "C" std::uint32_t generativeqc_ks_hessian_cpu_version_v1() {
   return GENERATIVEQC_HAS_HOST_HESSIAN ? 1 : 0;

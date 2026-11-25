@@ -2,10 +2,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "generativeqc/ks_hessian.h"
 
+namespace generativeqc::core {
+struct System;
+}
+
 namespace generativeqc::api {
+/** Authenticate the prepared system with the same gate as derivative execution. */
+void validate_host_hessian_system(const core::System& system, std::string_view identity);
+
 inline generativeqc_ks_host_hessian_options_v1 default_host_hessian_options() {
   generativeqc_ks_host_hessian_options_v1 options{};
   generativeqc_ks_hessian_cpu_default_options_v1(&options);

@@ -3,10 +3,11 @@
 #include <algorithm>
 #include <limits>
 #include <optional>
+#include <string_view>
 
 #include "api/host_resources.hpp"
+#include "api/ks_host_hessian.hpp"
 #include "api/named_ks_inputs.hpp"
-#include "generativeqc/ks_hessian.h"
 #include "methods/dft_method_preparation.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -60,14 +61,16 @@ class CpuKsHostAdmission {
         properties_(GENERATIVEQC_PROPERTY_ENERGY),
         shared_(resources.ledger),
         derivative_workspace_(derivative_workspace),
-        direct_d3_(named.program->dispersion.kind != 0) {
+        hessian_identity_(named.program->identity),
+        direct_d3_(named.program->dispersion.kind != 0),
+        packed_(named.selection.cpu_packed_eri_maximum_bytes != 0),
+        remaining_packed_bytes_(named.selection.cpu_packed_eri_maximum_bytes) {
     const auto& method = named.method.base;
     if (!shared_ || !derivative_workspace_ || named.selection.cpu_df_host_properties ||
         limit_ > std::numeric_limits<std::int64_t>::max())
       throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                                  "invalid CPU Direct Hessian host admission controls");
-    if (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-        named.selection.cpu_packed_eri_maximum_bytes || named.program->dispersion.kind == 3 ||
+    if (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || named.program->dispersion.kind == 3 ||
         !generativeqc_ks_hessian_cpu_method_v1(named.program->identity.data()))
       throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                                  "host admission requires a linked ordinary Direct CPU Hessian");
@@ -90,13 +93,42 @@ class CpuKsHostAdmission {
 
   void append(const core::System& system, const core::System* auxiliary) {
     const auto orbital = describe(system);
+    std::uint64_t ecp_workspace{};
+    if (has_ecp(system)) {
+      if (!derivative_workspace_)
+        throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                   "CPU DF KS host admission excludes effective core potentials");
+      validate_host_hessian_system(system, hessian_identity_);
+      if (generativeqc_resource_ecp_workspace_v1(orbital.aos, orbital.cartesian_aos,
+                                                 system.atoms.size(), orbital.primitives,
+                                                 system.ecp_terms.size(), 0, &ecp_workspace))
+        throw methods::MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                   "ECP setup inventory exceeds native capacity");
+    }
+    if (packed_) {
+      if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL ||
+          orbital.maximum_angular > 3)
+        throw methods::MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                                   "packed Coulomb ERIs require a real spherical s/p/d/f basis");
+      // Enforce the independent fleet ceiling before staging any retained values.
+      const auto values = scf::cpu_ks_packed_value_bytes(orbital.aos);
+      if (values > remaining_packed_bytes_)
+        throw methods::MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                   "packed spherical ERI capacity exceeded for retained KS batch");
+      remaining_packed_bytes_ -= values;
+    }
     std::optional<scf::CpuKsDfHostShape> fit;
-    if (!derivative_workspace_) fit = auxiliary ? describe(*auxiliary) : orbital;
+    if (!derivative_workspace_) {
+      if (auxiliary && has_ecp(*auxiliary))
+        throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                                   "CPU DF KS host admission excludes auxiliary ECPs");
+      fit = auxiliary ? describe(*auxiliary) : orbital;
+    }
     fleet_.append({system.atoms.size(), orbital.aos, orbital.cartesian_aos, orbital.shells,
-                   orbital.primitives, spins_, orbital.maximum_angular, 0,
+                   orbital.primitives, spins_, orbital.maximum_angular, system.ecp_terms.size(),
                    dft::grid_point_count(system, grid_), grid_.radial_points, grid_.angular_polar,
-                   tile_, diis_, iterations_, first_ao_derivatives_, false, 0, fit},
-                  1, scf::cpu_ks_host_execution(false, forces()));
+                   tile_, diis_, iterations_, first_ao_derivatives_, false, ecp_workspace, fit},
+                  1, scf::cpu_ks_host_execution(packed_, forces()));
     if (direct_d3_) append_direct_d3(system);
     const auto inventory = fleet_.inventory();
     if (runtime::size_add(inventory[12], workspace_bytes(inventory[13])) > limit_)
@@ -135,11 +167,12 @@ class CpuKsHostAdmission {
 
   void append_direct_d3(const core::System& system);
 
+  static bool has_ecp(const core::System& system) {
+    return !system.ecp_terms.empty() ||
+           std::ranges::any_of(system.atoms, [](const auto& atom) { return atom.ecp_core != 0; });
+  }
+
   static scf::CpuKsDfHostShape describe(const core::System& system) {
-    if (!system.ecp_terms.empty() ||
-        std::ranges::any_of(system.atoms, [](const auto& atom) { return atom.ecp_core != 0; }))
-      throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                                 "CPU KS host admission excludes effective core potentials");
     scf::CpuKsDfHostShape shape{molecule::ao_count(system), molecule::cartesian_ao_count(system),
                                 system.shells.size(), 0, 0};
     for (const auto& shell : system.shells) {
@@ -154,7 +187,10 @@ class CpuKsHostAdmission {
   generativeqc_property_flags properties_;
   std::shared_ptr<runtime::HostResourceLedger> shared_;
   std::uint64_t derivative_workspace_{};
+  std::string_view hessian_identity_;
   bool direct_d3_{};
+  bool packed_{};
+  std::uint64_t remaining_packed_bytes_{};
   dft::GridSpec grid_;
   std::uint64_t spins_{}, diis_{}, iterations_{}, tile_{};
   bool first_ao_derivatives_{};

@@ -2456,11 +2456,14 @@ Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
 GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_host_resources * resources , uint64_t maximum_bytes , uint64_t derivative_workspace_bytes , generativeqc_batch * * batch ) ;
 ```
 
-**Behavior.** Prepare a linked all-electron CPU Direct FP64 KS fleet for energy replay and
+**Behavior.** Prepare a linked CPU Direct FP64 KS fleet for energy replay and
 Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
 derivative workspace against the local effective limit and the supplied shared host ledger.
+An explicit packed ERI request charges the actual packed value array and independently
+enforces the named descriptor's fleet-wide packed value cap.
+Admitted scalar ECP systems include their conservative setup workspace in the lease.
 
-**Inputs.** A live CPU context, named all-electron systems, a live host ledger, an effective
+**Inputs.** A live CPU context, named systems, a live host ledger, an effective
 local byte limit and a positive derivative workspace. Only warm-start batch flags are allowed.
 
 **Outputs.** Clears the output slot on entry; success publishes one owning batch.

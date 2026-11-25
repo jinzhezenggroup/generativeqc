@@ -18,6 +18,7 @@ from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
+from generativeqc import import_bse
 from generativeqc_compiler.method import resolve_method
 from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 
@@ -947,6 +948,63 @@ class HessianCli(unittest.TestCase):
                     ),
                     "CPU Hessian aggregate numerical reservation exceeded",
                 )
+
+    def test_def2_ecp_hvp_enforces_combined_native_host_lease(self) -> None:
+        data = Path(__file__).resolve().parents[1] / "data" / "global_hybrid_ecp"
+        manifest = json.loads((data / "manifest.json").read_text())
+        basis = self.root / "Canonical def2 ECP.json"
+        record = import_bse(
+            data / manifest["file"],
+            source=manifest["source_repository"],
+            source_version=manifest["source_commit"],
+            license=manifest["license"],
+            representation="spherical",
+        )
+        replace(
+            record,
+            elements=tuple(
+                element
+                for element in record.elements
+                if element.atomic_number in (1, 55)
+            ),
+        ).write(basis)
+        self.xyz.write_text("2\nBohr\nCs 0.03 -0.02 0.01\nH 0.17 0.11 3.4\n")
+        arguments = (
+            "--backend",
+            "cpu",
+            "--method",
+            "b3lyp-rks",
+            "--basis",
+            str(basis),
+            "--grid-radial-points",
+            "12",
+            "--grid-polar-points",
+            "4",
+            "--grid-azimuth-points",
+            "8",
+        )
+        planned = self.call(*arguments, "--property", "hvp", operation="resources")
+        if planned.returncode and "no exact linked" in planned.stdout + planned.stderr:
+            self.skipTest("this build explicitly omits the CPU Hessian AOT closure")
+        self.assertEqual(planned.returncode, 0, planned.stderr or planned.stdout)
+        plan = json.loads(planned.stdout)
+        peak = plan["peak_bytes"]["host"]
+        self.assertGreater(plan["ecp_workspace"], 0)
+        trace = self.root / "ecp-short.jsonl"
+        self.rejected(
+            self.call(*arguments, "--host-bytes", str(peak - 1), trace=trace),
+            "allocation inventory exceeds host budget",
+        )
+        self.assertFalse(trace.exists())
+        accepted = self.call(*arguments, "--host-bytes", str(peak))
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        admission = json.loads(accepted.stdout)["diagnostics"]["resource_admission"]
+        lease = admission["native_host_lease"]
+        self.assertEqual(lease["owner_count"], 1)
+        self.assertEqual(admission["selected_host_peak_bytes"], peak)
+        self.assertEqual(
+            lease["retained_bytes"] + lease["workspace_bytes"] + 6 * 8, peak
+        )
 
     def test_method_ir_is_validated_before_device_initialization(self) -> None:
         path = self.root / "Method IR.json"
