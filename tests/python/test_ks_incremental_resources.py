@@ -128,7 +128,11 @@ def test_disabled_spellings_preserve_ordinary_plan_and_ignore_inactive_tuning(
     generic: str,
     legacy: str,
 ) -> None:
-    library = _inventory_library(monkeypatch)
+    library = (
+        _native.load_library(device="cpu")
+        if backend == "cpu"
+        else _inventory_library(monkeypatch)
+    )
     options = {"backend": backend, "precision": precision, "library": library}
     ordinary = estimate_ks_resources([H2], **options).require_feasible()
     monkeypatch.setenv(SELECTORS[0], generic)
