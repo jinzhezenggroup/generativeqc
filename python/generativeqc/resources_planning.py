@@ -43,6 +43,7 @@ def _native_composition(
     budget: ResourceBudget,
     query: typing.Any,
     maximum_combinations: int,
+    host_workspace: tuple[int, int] | None = None,
 ) -> dict[str, typing.Any]:
     """Marshal caller-labelled spaces; never infer a device or alter a policy.
 
@@ -107,12 +108,16 @@ def _native_composition(
         (ctypes.c_uint64 * len(values))(*values)
         for values in (request_counts, candidates, buffers, limits)
     ]
-    output = (ctypes.c_uint64 * (2 + len(requests) + 8 * len(spaces)))()
+    output = (
+        ctypes.c_uint64
+        * (2 + len(requests) + 8 * len(spaces) + (2 if host_workspace else 0))
+    )()
     pointer = ctypes.POINTER(ctypes.c_uint64)
     query.argtypes = [pointer, ctypes.c_size_t] * 4 + [
         ctypes.c_size_t,
         ctypes.c_double,
         ctypes.c_uint64,
+        *([ctypes.c_uint64] * 2 if host_workspace else []),
         pointer,
         ctypes.c_size_t,
     ]
@@ -123,6 +128,7 @@ def _native_composition(
         len(spaces),
         budget.headroom_fraction,
         maximum_combinations,
+        *(host_workspace or ()),
         output,
         len(output),
     )
@@ -195,6 +201,19 @@ def _native_composition(
         raise ValueError(
             "native resource composition returned an inconsistent budget status"
         )
+    if host_workspace and result["status"] == 0:
+        floor, ceiling = host_workspace
+        capacity, peak = (int(value) for value in output[-2:])
+        checked_bytes(peak, "native selected host peak")
+        if (
+            not floor <= capacity <= ceiling
+            or peak - result["peak_bytes"]["host"] != capacity - floor
+            or peak > result["limits"].get("host", MAX_BYTES)
+        ):
+            raise ValueError(
+                "native resource composition returned an invalid workspace cap"
+            )
+        result["host_workspace_bytes"] = capacity
     return result
 
 
@@ -217,6 +236,48 @@ def plan_resources(
         return _portable_plan_resources(
             requests, budget, maximum_combinations=maximum_combinations
         )
+    plan, _ = _plan_native_resources(
+        requests, budget, lambda: _require_composition(library), maximum_combinations
+    )
+    return plan
+
+
+def plan_native_host_workspace(
+    requests: tuple[ResourceRequest, ...],
+    budget: ResourceBudget,
+    *,
+    floor: int,
+    ceiling: int,
+    library: typing.Any,
+) -> tuple[ResourcePlan, int]:
+    """Quote a pageable workspace already charged at its floor in every phase.
+
+    The plan describes the mandatory inventory; the caller substitutes the
+    returned cap in that workspace estimate without changing providers.
+    """
+    query = getattr(library, "generativeqc_resource_compose_host_workspace_v1", None)
+    if query is None:
+        raise NotImplementedError(
+            "native CPU Hessian lacks shared ResourceBudget planning"
+        )
+    checked_bytes(floor, "mandatory host workspace")
+    checked_bytes(ceiling, "host workspace ceiling")
+    plan, capacity = _plan_native_resources(
+        requests, budget, lambda: query, 65536, (floor, ceiling)
+    )
+    plan.require_feasible()
+    assert capacity is not None
+    return plan, capacity
+
+
+def _plan_native_resources(
+    requests: typing.Any,
+    budget: ResourceBudget,
+    resolve_query: typing.Callable[[], typing.Any],
+    maximum_combinations: int,
+    host_workspace: tuple[int, int] | None = None,
+) -> tuple[ResourcePlan, int | None]:
+    """Diagnose unsupported inventory before invoking its native composer."""
     if not isinstance(budget, ResourceBudget):
         raise TypeError("a ResourceBudget is required")
     requests = tuple(sorted(requests, key=lambda request: request.name))
@@ -236,10 +297,11 @@ def plan_resources(
             if getattr(request, attribute)
         ]
         if reasons:
-            return ResourcePlan(budget, requests, (), status, "; ".join(reasons))
+            return ResourcePlan(budget, requests, (), status, "; ".join(reasons)), None
     checked_bytes(maximum_combinations, "planning search limit")
-    query = _require_composition(library)
-    result = _native_composition(requests, budget, query, maximum_combinations)
+    result = _native_composition(
+        requests, budget, resolve_query(), maximum_combinations, host_workspace
+    )
     if result["status"] == 2:
         combinations = math.prod(len(request.candidates) for request in requests)
         return ResourcePlan(
@@ -248,13 +310,15 @@ def plan_resources(
             (),
             "unsupported",
             f"{combinations} provider combinations exceed planning search limit {maximum_combinations}",
-        )
+        ), None
     selections = tuple(
         (request.name, request.candidates[selection].name)
         for request, selection in zip(requests, result["selections"], strict=True)
     )
     if result["status"] == 0:
-        return ResourcePlan(budget, requests, selections, "feasible")
+        return ResourcePlan(budget, requests, selections, "feasible"), result.get(
+            "host_workspace_bytes"
+        )
     failures = {
         space: {
             "peak": result["peak_bytes"].get(space, 0),
@@ -285,7 +349,7 @@ def plan_resources(
             f"{estimate.name}={estimate.bytes} {estimate.space}"
             for estimate in dominant
         ),
-    )
+    ), None
 
 
 def _fixed_selection_fits(plan: ResourcePlan, library: typing.Any) -> bool:

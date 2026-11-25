@@ -14,7 +14,7 @@ from generativeqc_compiler.common.resources import (
     byte_product,
 )
 
-from .resources_planning import plan_resources
+from .resources_planning import plan_native_host_workspace, plan_resources
 
 if TYPE_CHECKING:
     from generativeqc_compiler.common.resources import ResourceBudget, ResourcePlan
@@ -57,10 +57,6 @@ def plan_cpu_hessian(
 ) -> tuple[ResourcePlan, ResourceRequest]:
     """Compose the native mandatory byte floor with all live primal owners."""
     library = calculator._library
-    if not hasattr(library, "generativeqc_resource_compose_v1"):
-        raise NotImplementedError(
-            "native CPU Hessian lacks shared ResourceBudget planning"
-        )
     systems, charges, multiplicities = (atoms,), (charge,), (multiplicity,)
     ks_options = calculator._effective_ks_options(
         systems, charges=charges, multiplicities=multiplicities
@@ -148,10 +144,6 @@ def _compose_cpu_hessian(
     direction_count: int | None,
 ) -> tuple[ResourcePlan, ResourceRequest]:
     """Use the same native composition for a new or already prepared owner."""
-    if not hasattr(library, "generativeqc_resource_compose_v1"):
-        raise NotImplementedError(
-            "native CPU Hessian lacks shared ResourceBudget planning"
-        )
     last_phase = _last_phase(prerequisites)
     if direction_count is not None:
         topology["directions"] = direction_count
@@ -208,12 +200,13 @@ def _compose_cpu_hessian(
             ),
         )
 
-    provisional = plan_resources(
-        (*prerequisites, request(minimum)), budget, library=library
-    ).require_feasible()
-    capacity = options.numeric_bytes
-    if (limit := budget.limits().get("host")) is not None:
-        capacity = min(capacity, minimum + limit - provisional.peak_bytes["host"])
+    provisional, capacity = plan_native_host_workspace(
+        (*prerequisites, request(minimum)),
+        budget,
+        floor=minimum,
+        ceiling=options.numeric_bytes,
+        library=library,
+    )
     response = request(capacity)
     plan = replace(
         provisional,

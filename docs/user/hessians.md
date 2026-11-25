@@ -93,12 +93,15 @@ both spin densities and their coupled response. Python retains the previous
 PBE0 RKS route when the package lacks the linked binding; PBE0 UKS requires
 the linked owner. For linked CPU endpoints, a Python
 `ResourceBudget` composes the declared SCF and correction peaks with the
-native derivative reservation. It rejects a host budget below the native
-mandatory floor before SCF. Explicit derivative numerical caps are also checked
-against that floor before SCF. Optional schedules and solver/work limits can
-still refuse after SCF. A resource refusal does not select the Python derivative.
-Export scratch, implicit BLAS workspace, caller storage and process RSS are
-outside this accounting.
+native derivative reservation. The native planner rejects a host budget below
+the mandatory peak before SCF and selects optional derivative capacity from the
+effective host headroom, up to the derivative numerical cap. A prepared HVP
+uses the admitted fleet inventory without changing its providers. Explicit
+derivative numerical caps are checked against the floor before SCF. Optional
+schedules and solver/work limits can still refuse after SCF. A resource refusal
+does not select the Python derivative. This is a modeled admission bound, not a
+shared host lease. Export scratch, implicit BLAS workspace, caller storage and
+process RSS are outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
