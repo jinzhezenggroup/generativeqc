@@ -70,8 +70,9 @@ constructor uses the same expansion and existing normalization/validation owner.
 `generativeqc_builtin_basis_resolve_name_v1` resolves a byte-counted selector
 without atoms or a context. The CLI and installed Python `Calculator` use the
 same case and underscore aliases. Python checks the native catalog checksum
-before attaching its packaged reproducibility metadata; an older library
-without the resolver retains portable name lookup.
+before attaching its packaged reproducibility metadata. A library lacking the
+installed resolver or constructor is refused for bundled execution; offline
+basis metadata lookup stays independent of native loading.
 These paths read no basis files, import no Python and invoke no compiler at
 runtime in the native SDK and CLI. They do not broaden any method/backend capability.
 

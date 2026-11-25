@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "api/host_resources.hpp"
 #include "cli/hessian.hpp"
 #include "cli/json.hpp"
 #include "cli/molecular_system.hpp"
@@ -37,9 +38,6 @@ extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::s
                                                 std::size_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t, std::uint64_t*);
 extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t, std::uint64_t*);
-extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
-                                                      std::size_t, std::size_t, int,
-                                                      std::uint64_t*);
 extern "C" generativeqc_status generativeqc_resource_preliminary_cpu_v1(
     generativeqc_context*, const generativeqc_system*, const generativeqc_initial_guess_options*,
     std::uint32_t, std::uint64_t*, std::size_t);
@@ -1001,13 +999,11 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   }
   if (derivative_program && plan["status"] == "feasible" && options.host_bytes) {
     auto& inventory = plan["derivative_inventory"];
-    const auto floor = inventory.at("minimum_numeric_bytes").get<Bytes>();
-    const auto minimum_peak = plan["peak_bytes"].at("host").get<Bytes>();
-    const auto limit = limits.at("host").get<Bytes>();
-    // Only the slack beyond the full mandatory peak can fund optional derivative storage.
-    const auto optional = std::min(derivative->numeric_bytes - floor, limit - minimum_peak);
-    inventory["selected_numeric_cap_bytes"] = floor + optional;
-    inventory["selected_host_peak_bytes"] = minimum_peak + optional;
+    const auto selected = resource::select_overlapped_host_workspace(
+        composition, inventory.at("minimum_numeric_bytes").get<Bytes>(),
+        inventory.at("numeric_bytes").get<Bytes>());
+    inventory["selected_numeric_cap_bytes"] = selected.workspace_bytes;
+    inventory["selected_host_peak_bytes"] = selected.host_peak_bytes;
   }
   return finish();
 }

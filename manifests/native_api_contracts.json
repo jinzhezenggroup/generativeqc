@@ -1705,6 +1705,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "6b947f1cd76f1e16fb20ee97d05e17fc2345b5b815d08cb18f9b82f100f8a6f2",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_batch_prepare_with_device_resources": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

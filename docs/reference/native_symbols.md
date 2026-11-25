@@ -89,6 +89,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1](#native-c-generativeqc-batch-prepare-named-ks-with-host-hessian-resources-v1)
 - [generativeqc_batch_prepare_named_ks_cold_rks_v1](#native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)
 - [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
 - [generativeqc_ks_d4_resource_query_v1](#native-c-generativeqc-ks-d4-resource-query-v1)
@@ -2446,6 +2447,38 @@ covers the aggregate retained fleet plus the largest serialized workspace.
 **Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-with-host-hessian-resources-v1)=
+## generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_host_resources * resources , uint64_t maximum_bytes , uint64_t derivative_workspace_bytes , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare a linked CPU Direct FP64 KS fleet for energy replay and
+Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
+derivative workspace against the local effective limit and the supplied shared host ledger.
+An explicit packed ERI request charges the actual packed value array and independently
+enforces the named descriptor's fleet-wide packed value cap.
+Admitted scalar ECP systems include their conservative setup workspace in the lease.
+For admitted all-electron methods, RESERVE_HOST_HESSIAN_FORCES additionally models
+the native force workspace and enables force replay on the same batch.
+
+**Inputs.** A live CPU context, named systems, a live host ledger, an effective
+local byte limit and a positive derivative workspace. Only the warm-start and
+host-Hessian force-reservation batch flags are allowed.
+
+**Outputs.** Clears the output slot on entry; success publishes one owning batch.
+
+**Lifetime.** The batch outlives the borrowed resources handle; the context must outlive the batch.
+
+**Errors.** Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
+
+**Execution.** Synchronous; admitted primal replay and derivatives serialize on the same host lease.
+
+**Units.** Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
 
 (native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)=
 ## generativeqc_batch_prepare_named_ks_cold_rks_v1
