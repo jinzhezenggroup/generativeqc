@@ -121,6 +121,17 @@ shape for later budget planning; it does not admit provider layouts, derivatives
 or a particular capacity. Intrinsic PBE-D4 and basis-bound r2SCAN-3c remain
 distinct. A missing catalog entry retains the explicit compiler/compatibility
 route, but a selected catalog error does not retry it.
+
+For a default CPU named graph, the installed catalog also resolves implicit
+standard/tight XC quadrature and the default independent VV10 level when the
+primary Treutler level changes. Explicit primary and nonlocal prescriptions
+take precedence; explicit legacy tensor grids retain their shared default.
+The same exact binding provides the SCF tail/spin domain and reports whether
+the nonlocal memory allowance applies. A conflicting explicit domain is still
+rejected. This metadata is not a new method or resource-capability grant.
+This is Python facade policy, not a change to the SDK's shared-by-omission
+grid or to derivative admission. Older native libraries without the optional
+projection retain the compiler grid policy.
 Neither record bypasses per-system or convergence checks. `second_order_capabilities`
 is distinct from first-order properties. Public `hessian`/HVP admission is the
 method-, basis- and backend-specific domain listed in [Supported methods](../user/hessians.md#supported-methods).

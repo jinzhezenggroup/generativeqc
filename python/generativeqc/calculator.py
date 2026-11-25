@@ -335,6 +335,7 @@ class Calculator:
                 "cpu_packed_eri_maximum_bytes must be a nonnegative uint64 integer"
             )
         self._cpu_packed_eri_maximum_bytes = cpu_packed_eri_maximum_bytes
+        requested_ks_options = ks_options
         self._dispersion_method_ir = None
         if device not in {"cpu", "cuda"}:
             raise ValueError("device must be 'cpu' or 'cuda'")
@@ -851,8 +852,29 @@ class Calculator:
                 if self._automatic_libxc_name is not None
                 else self._method_name
             )
+            named_policy = None
+            if discovered_native_graph is not None and (
+                requested_ks_options is None
+                or (
+                    isinstance(requested_ks_options, KsOptions)
+                    and requested_ks_options.composition is None
+                    and requested_ks_options.functional is None
+                    and requested_ks_options._method_ir is None
+                )
+            ):
+                from ._named_ks import select_execution_policy
+
+                named_policy = select_execution_policy(
+                    selected_library,
+                    canonical_method,
+                    discovered_native_graph.identity,
+                    requested_ks_options,
+                )
             self._ks_options = resolve_ks_options(
-                ks_resolution_name, ks_options, _named_graph=discovered_native_graph
+                ks_resolution_name,
+                ks_options,
+                _named_graph=discovered_native_graph,
+                _named_policy=named_policy,
             )
             from .ks import _automatic_semilocal_name
 

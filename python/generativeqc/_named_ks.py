@@ -60,6 +60,17 @@ class _CatalogBindingV2(ct.Structure):
     ]
 
 
+class _ExecutionPolicyResult(ct.Structure):
+    _fields_ = [
+        ("struct_size", ct.c_uint32),
+        ("abi_version", ct.c_uint32),
+        ("xc_level", ct.c_int32),
+        ("vv10_level", ct.c_int32),
+        ("scf_domain", ct.c_char_p),
+        ("has_nonlocal_correlation", ct.c_uint32),
+    ]
+
+
 @dataclass(frozen=True)
 class NamedModel:
     """Backend-bound role with the separately authenticated public graph view."""
@@ -67,6 +78,78 @@ class NamedModel:
     graph: Any
     correction_role: CorrectionRole | None
     facade_carrier: str | None
+
+
+@dataclass(frozen=True)
+class NamedExecutionPolicy:
+    """Detached controls and metadata of an authenticated named CPU program."""
+
+    xc_level: int
+    vv10_level: int
+    scf_domain: str
+    has_nonlocal_correlation: bool
+
+
+def select_execution_policy(
+    library: Any, selector: str, identity: str, options: Any
+) -> NamedExecutionPolicy | None:
+    """Read the native defaults for a previously authenticated named CPU model.
+
+    An older library with no query retains the existing resolver. A present
+    query cannot silently refuse a confirmed binding or change explicit grids.
+    """
+    query = getattr(library, "generativeqc_ks_catalog_execution_policy_v1", None)
+    if query is None:
+        return None
+    name, digest = selector.encode("utf-8"), identity.encode("ascii")
+    grid = None if options is None else options.grid
+    output = _ExecutionPolicyResult(
+        ct.sizeof(_ExecutionPolicyResult), _native.ABI_VERSION, -2, -2
+    )
+    query.argtypes = [
+        ct.c_char_p,
+        ct.c_size_t,
+        ct.c_char_p,
+        ct.c_size_t,
+        ct.c_uint32,
+        ct.c_uint32,
+        ct.c_uint32,
+        ct.POINTER(_ExecutionPolicyResult),
+    ]
+    query.restype = ct.c_int
+    _native.check(
+        library,
+        query(
+            name,
+            len(name),
+            digest,
+            len(digest),
+            options is not None and options.grid_accuracy == "tight",
+            0 if grid is None else grid.version,
+            grid.level if grid is not None and grid.version == 4 else 0,
+            ct.byref(output),
+        ),
+    )
+    if (
+        output.struct_size != ct.sizeof(_ExecutionPolicyResult)
+        or output.abi_version != _native.ABI_VERSION
+        or (
+            output.xc_level != -1 if grid is not None else not 0 <= output.xc_level <= 9
+        )
+        or not -1 <= output.vv10_level <= 9
+        or (grid is not None and grid.version != 4 and output.vv10_level != -1)
+        or output.has_nonlocal_correlation not in (0, 1)
+        or (output.vv10_level >= 0 and not output.has_nonlocal_correlation)
+        or not output.scf_domain
+        or not output.scf_domain.isascii()
+    ):
+        raise RuntimeError("invalid native KS execution policy receipt")
+    return NamedExecutionPolicy(
+        output.xc_level,
+        output.vv10_level,
+        output.scf_domain.decode("ascii"),
+        bool(output.has_nonlocal_correlation),
+    )
 
 
 def registry_carrier(library: Any, selector: str) -> int | None:
