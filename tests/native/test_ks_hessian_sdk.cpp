@@ -3,12 +3,13 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
 
-#include "generativeqc/generativeqc.hpp"
+#include "generativeqc/ks.hpp"
 
 namespace {
 void require(bool condition, const char* message) {
@@ -219,6 +220,63 @@ void run_linked_cpu(const char* selector) {
               solved[0].executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
           "named SDK batch did not solve on CPU");
   const auto hvp = batch.ks_cpu_hvp(0, direction, action, options);
+  if (method_name == "pbe-d3(bj)-rks") {
+    const auto prepare = [&](const generativeqc::HostResources& pool, std::uint64_t limit,
+                             std::uint64_t workspace, generativeqc_batch** output) {
+      const generativeqc_system* inputs[]{system.get()};
+      return generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+          context.get(), inputs, 1, &method, &named, 0, pool.get(), limit, workspace, output);
+    };
+    std::uint64_t exact{};
+    {
+      generativeqc::HostResources probe(1ULL << 32);
+      generativeqc_batch* raw{};
+      generativeqc::check(prepare(probe, 1ULL << 32, hvp_floor, &raw));
+      const std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> owned(
+          raw, generativeqc_batch_destroy);
+      const auto leased = probe.snapshot();
+      require(
+          leased.owner_count == 1 && leased.retained_bytes && leased.workspace_bytes > hvp_floor,
+          "CPU Direct Hessian did not reserve primal and derivative capacity");
+      exact = leased.retained_bytes + leased.workspace_bytes;
+    }
+    std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> leased(
+        nullptr, generativeqc_batch_destroy);
+    {
+      generativeqc::HostResources pool(exact);
+      generativeqc_batch* raw{};
+      require(prepare(pool, exact - 1, hvp_floor, &raw) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                  !raw && pool.snapshot().owner_count == 0,
+              "short local limit left a live Direct Hessian lease");
+      generativeqc::check(prepare(pool, exact, hvp_floor, &raw));
+      leased.reset(raw);
+      require(prepare(pool, exact, hvp_floor, &raw) == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !raw &&
+                  pool.snapshot().owner_count == 1,
+              "shared cap overcommitted the retained D3 provider");
+    }
+    generativeqc_batch_item_result_descriptor item{};
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+    generativeqc::check(generativeqc_batch_execute(leased.get(), nullptr, 0, &item, 1));
+    require(item.converged, "metadata handle close revoked the live batch's lease");
+    auto leased_action = sentinel;
+    auto receipt = hvp;
+    receipt.completed_directions = 999;
+    auto short_options = options;
+    short_options.numeric_bytes = hvp_floor - 1;
+    require(
+        generativeqc_ks_hessian_cpu_v1(leased.get(), 0, &short_options, direction.data(),
+                                       direction.size(), leased_action.data(), leased_action.size(),
+                                       &receipt) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+            leased_action == sentinel && receipt.completed_directions == 999,
+        "rejected leased HVP modified the output transaction");
+    generativeqc::check(generativeqc_ks_hessian_cpu_v1(leased.get(), 0, &options, direction.data(),
+                                                       direction.size(), leased_action.data(),
+                                                       leased_action.size(), &receipt));
+    require(leased_action == action && receipt.numeric_reservation_bytes == hvp_floor &&
+                receipt.d3_pair_visits == hvp.d3_pair_visits && hvp.d3_pair_visits > 0,
+            "leased D3 HVP failed to replay at its reserved floor");
+  }
   std::array<double, 12> seeds{}, actions{};
   for (std::size_t index = 0; index < direction.size(); ++index) {
     seeds[index] = direction[index];

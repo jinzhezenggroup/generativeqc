@@ -3481,6 +3481,25 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
     generativeqc_batch_flags flags, generativeqc_batch** batch);
 
+/** @native-contract generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1
+ * @behavior Prepare a linked all-electron CPU Direct FP64 KS fleet for energy replay and
+ * Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
+ * derivative workspace against the local effective limit and the supplied shared host ledger.
+ * @inputs A live CPU context, named all-electron systems, a live host ledger, an effective
+ * local byte limit and a positive derivative workspace. Only warm-start batch flags are allowed.
+ * @outputs Clears the output slot on entry; success publishes one owning batch.
+ * @lifetime The batch outlives the borrowed resources handle; the context must outlive the batch.
+ * @errors Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
+ * @execution Synchronous; energy replay and derivatives serialize on the same host lease.
+ * @units Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_host_resources* resources,
+    uint64_t maximum_bytes, uint64_t derivative_workspace_bytes, generativeqc_batch** batch);
+
 /** Bounded cold B3LYP RKS orbital proposal policy. The prefix includes the
  * first, unmixed proposal and counts against the ordinary iteration limit.
  * Set struct_size and abi_version as for other versioned descriptors, and

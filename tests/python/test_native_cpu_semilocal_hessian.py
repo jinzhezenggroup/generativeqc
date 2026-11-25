@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
-from generativeqc import Atom, Calculator, GridSpec, KsOptions, ResourceBudget
+from generativeqc import (
+    Atom,
+    Calculator,
+    GridSpec,
+    HostResources,
+    KsOptions,
+    ResourceBudget,
+)
 from generativeqc._dft_gradient import StationaryKsState
 from generativeqc._native_cpu_hessian import linked_method
 from generativeqc.response_solver import GMRESOptions
@@ -227,6 +234,87 @@ def test_prepared_hvp_admits_exact_fleet_budget() -> None:
         assert smaller.diagnostics["scf_fock_builds"] == 0
         np.testing.assert_allclose(smaller.value, full.value[:1], atol=2e-8, rtol=0)
         assert batch.resource_plan is plan
+
+
+@pytest.mark.parametrize("method", ("pbe-rks", "pbe-d3(bj)-rks"))
+def test_prepared_hvp_shared_host_lease_exact_and_rollback(method: str) -> None:
+    calculator = Calculator(
+        method=method,
+        ks_options=KsOptions(grid=GridSpec(12, 6, 12)),
+        initial_guess=None,
+    )
+    if not linked_method(calculator._library, calculator.method_ir.identity):
+        pytest.skip("linked CPU Hessian is unavailable")
+    directions = np.stack((MOTION, -MOTION))
+    with calculator.prepare_batch([ATOMS]) as unleased:
+        unleased.execute(strict=True, properties=("energy",))
+        reference = unleased.hessian_vector_products(0, directions)
+    floor = reference.diagnostics["minimum_numeric_bytes"]
+
+    def prepare(pool: HostResources, capacity: int = floor) -> PreparedBatch:
+        return calculator.prepare_batch(
+            [ATOMS],
+            host_resources=pool,
+            host_hessian_workspace_bytes=capacity,
+        )
+
+    with HostResources(1 << 32) as pool:
+        with prepare(pool) as batch:
+            snapshot = pool.snapshot()
+            assert snapshot.owner_count == 1
+            assert snapshot.retained_bytes > 0
+            assert snapshot.workspace_bytes > floor
+        assert pool.snapshot().owner_count == 0
+    exact = snapshot.retained_bytes + snapshot.workspace_bytes
+    with HostResources(exact - 1) as pool:
+        with pytest.raises(MemoryError, match="shared host capacity"):
+            prepare(pool)
+        assert pool.snapshot().owner_count == 0
+        with prepare(pool, floor - 1) as batch:
+            batch.execute(strict=True, properties=("energy",))
+            with pytest.raises(MemoryError, match="aggregate numerical reservation"):
+                batch.hessian_vector_products(0, directions)
+            smaller = batch.hessian_vector_products(0, directions[:1])
+            np.testing.assert_array_equal(smaller.value, reference.value[:1])
+        assert pool.snapshot().owner_count == 0
+    with HostResources(exact) as pool, prepare(pool) as batch:
+        before = pool.snapshot()
+        with pytest.raises(MemoryError, match="shared host capacity"):
+            prepare(pool)
+        assert pool.snapshot() == before
+        batch.execute(strict=True)
+        with pytest.raises(NotImplementedError, match="force replay"):
+            batch.execute(properties=("energy", "forces"))
+        pool.close()
+        result = batch.hessian_vector_products(0, directions)
+        np.testing.assert_array_equal(result.value, reference.value)
+        assert (
+            result.diagnostics["resource_admission"]["derivative_host_cap_bytes"]
+            == floor
+        )
+        assert (
+            result.diagnostics["d3_pair_visits"]
+            == reference.diagnostics["d3_pair_visits"]
+        )
+        assert bool(result.diagnostics["d3_pair_visits"]) == ("d3" in method)
+        assert result.diagnostics["scf_fock_builds"] == 0
+        moved = np.asarray([position for _, position in ATOMS]) + 0.1 * MOTION
+        batch.execute([moved], strict=True)
+        with pytest.raises(RuntimeError, match="geometry disagrees"):
+            batch.hessian_vector_products(0, directions)
+        moved_reference = calculator.hessian_vector_products(
+            tuple(
+                (atom, position)
+                for (atom, _), position in zip(ATOMS, moved, strict=True)
+            ),
+            directions,
+        )
+        np.testing.assert_allclose(
+            batch.hessian_vector_products(0, directions, coordinates=moved).value,
+            moved_reference.value,
+            atol=2e-8,
+            rtol=0,
+        )
 
 
 @pytest.mark.parametrize(

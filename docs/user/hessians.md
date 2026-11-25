@@ -99,9 +99,17 @@ effective host headroom, up to the derivative numerical cap. A prepared HVP
 uses the admitted fleet inventory without changing its providers. Explicit
 derivative numerical caps are checked against the floor before SCF. Optional
 schedules and solver/work limits can still refuse after SCF. A resource refusal
-does not select the Python derivative. This is a modeled admission bound, not a
-shared host lease. Export scratch, implicit BLAS workspace, caller storage and
-process RSS are outside this accounting.
+does not select the Python derivative. This plan alone is not a shared lease.
+To share a host pool for an admitted prepared all-electron Direct FP64 batch,
+pass `host_resources=pool` and a positive `host_hessian_workspace_bytes` to
+`Calculator.prepare_batch`. The linked named calculation must not use a
+preliminary guess, packed integrals, or incremental J/K. The lease includes
+retained providers and serialized workspace; execution applies the smaller of
+the lease's derivative capacity and the call's numerical limit. The leased
+batch supports energy replay and prepared HVP, not force replay or standalone
+orbital export. Closing the pool handle does not revoke the batch's lease.
+Export scratch, implicit BLAS workspace, caller storage and process RSS are
+outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
