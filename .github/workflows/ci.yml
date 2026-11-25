@@ -233,7 +233,7 @@ jobs:
     # build and full CTest execution, skipping the ownership receipt. Give
     # both compilers finite headroom for complete build/test/receipt work;
     # cache availability must not determine whether qualification can finish.
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.compiler == 'clang' && 35 || 30 }}
     strategy:
       fail-fast: false
       matrix:
