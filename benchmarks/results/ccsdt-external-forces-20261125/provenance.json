@@ -22,22 +22,37 @@
         "bytes": 1115,
         "contents": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"/inspire/hdd/global_user/<account>/projects/GenerativeQC/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB\n"
       },
+      "library-sha256.txt": {
+        "sha256": "fe09e4f9e6c84e892dd8e65ebba94b451249ddf5598257c76cd92838337c73de",
+        "bytes": 202
+      },
       "driver.log": {
-        "sha256": "92e0c400f25d8a2942e8366e2ec27fe426a132d3fb828dfe6033dce473effbab",
-        "bytes": 85,
+        "sha256": "f46d84fe840535389377160644468a6591da6736e93ffc7319bfe83917593d2b",
+        "bytes": 121,
         "stage_markers": [
           "START 2026-11-25T08:51:19Z",
           "sccache 0.16.0",
-          "Verified compiler launcher on 640 commands"
+          "Verified compiler launcher on 640 commands",
+          "BUILD_COMPLETE 2026-11-25T09:49:47Z"
         ]
       },
       "compiler-commands.txt": {
         "sha256": "9de8c5ddb25f0db9f390d81c842e71af19b9717dfaaed1c71c64e335d86b40dd",
         "bytes": 1983269
       },
+      "cuda-version.txt": {
+        "sha256": "77d7ef23109cd2437a8b9cf5efbc4e89996b816276077edb86143ee04f6d5269",
+        "bytes": 208,
+        "contents": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0\n"
+      },
+      "cache-after.txt": {
+        "sha256": "eccdecaff98c4160b77f4faf79803660bbec75d693d50c8016aa35fb386885dd",
+        "bytes": 1875,
+        "contents": "Compile requests                          640\nCompile requests executed                1684\nCache hits                                 88\nCache hits (CUBIN)                         63\nCache hits (CUDA)                          25\nCache misses                             1335\nCache misses (C/C++)                      379\nCache misses (CUBIN)                      198\nCache misses (CUDA)                       236\nCache misses (CUDA (Device code))         261\nCache misses (PTX)                        261\nCache hits rate                          6.18 %\nCache hits rate (C/C++)                  0.00 %\nCache hits rate (CUBIN)                 24.14 %\nCache hits rate (CUDA)                   9.58 %\nCache hits rate (CUDA (Device code))     0.00 %\nCache hits rate (PTX)                    0.00 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                             1596\nCompilation failures                        0\nNon-cacheable compilations                261\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.009 s\nAverage compiler                       14.171 s\nAverage cache read hit                  0.006 s\nFailed distributed compilations             0\nCache location                       Local disk: \"/inspire/hdd/global_user/<account>/projects/GenerativeQC/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB\n"
+      },
       "build.log": {
-        "sha256": "4ed03ca1ff073f0aaf343a12468a620bb448de8334f562d829c19d089c93909b",
-        "bytes": 2504830
+        "sha256": "175974ed089cb53f70c6e1cd5787f4a100dc8af7926ab3c440b8b3317f44f948",
+        "bytes": 3176233
       }
     },
     "gpu_image": "generativeqc-science-py311-cuda129:20261015"
@@ -340,6 +355,46 @@
           }
         ]
       },
+      "conventional_controls": {
+        "status": {
+          "name": "gqc-3167-ccsdt-conv-ctrl-h100-1125",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795601481000",
+          "finished_at": "1795602127000"
+        },
+        "point_rate_per_hour": 1.0,
+        "last_scheduling_diagnostics": [
+          {
+            "time": "2026-11-25 02:11:40",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu510, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "scheduled_utc": "2026-11-25T10:11:58+00:00",
+        "finished_utc": "2026-11-25T10:22:07+00:00",
+        "allocated_card_hours": 0.16916666666666666,
+        "estimated_points": 0.16916666666666666,
+        "cleanup": {
+          "success": true,
+          "data": {
+            "name": "gqc-3167-ccsdt-conv-ctrl-h100-1125",
+            "status": "deleted"
+          }
+        }
+      },
       "superseded": {
         "status": {
           "name": "gqc-3167-ccsdt-h100-1125",
@@ -402,8 +457,8 @@
         "gqc-3167-cpu-small-1125-a": {
           "status": {
             "name": "gqc-3167-cpu-small-1125-a",
-            "status": "RUNNING",
-            "steps": "0/1",
+            "status": "SUCCEEDED",
+            "steps": "1/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
             "resource": {
@@ -413,12 +468,10 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute523"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
-            "created_at": "2026-11-25 17:04:01"
+            "created_at": "2026-11-25 17:04:01",
+            "finished_at": "2026-11-25 17:38:45"
           },
           "point_rate_per_hour": 0.0,
           "last_scheduling_diagnostics": [
@@ -442,8 +495,8 @@
         "gqc-3167-psi4-conv-100g-1125-a": {
           "status": {
             "name": "gqc-3167-psi4-conv-100g-1125-a",
-            "status": "QUEUEING",
-            "steps": "-/1",
+            "status": "RUNNING",
+            "steps": "0/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
             "resource": {
@@ -453,6 +506,9 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
+            "nodes": [
+              "hpc-compute315"
+            ],
             "priority": 35,
             "priority_level": "HIGH",
             "created_at": "2026-11-25 16:59:47"
@@ -460,19 +516,19 @@
           "point_rate_per_hour": 0.0,
           "last_scheduling_diagnostics": [
             {
-              "time": "2026-11-25 01:18:55",
+              "time": "2026-11-25 01:20:08",
               "reason": "FailedScheduling",
-              "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to hpc-compute356, once minAvailable is satisfied"
+              "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to hpc-compute731, once minAvailable is satisfied"
             },
             {
-              "time": "2026-11-25 01:18:55",
+              "time": "2026-11-25 01:20:08",
               "reason": "FailedScheduling",
-              "message": "0/1350 nodes are unavailable: 1108 Insufficient cpu, 112 Insufficient memory, 33 node(s) were unschedulable, 97 node(s) didn't match Pod's node affinity/selector."
+              "message": "0/1350 nodes are unavailable: 102 node(s) didn't match Pod's node affinity/selector, 109 Insufficient memory, 1106 Insufficient cpu, 33 node(s) were unschedulable."
             },
             {
-              "time": "2026-11-25 01:19:14",
+              "time": "2026-11-25 01:20:28",
               "reason": "FailedScheduling",
-              "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to hpc-compute286, once minAvailable is satisfied"
+              "message": "0/1350 nodes are unavailable: 110 Insufficient memory, 1108 Insufficient cpu, 33 node(s) were unschedulable, 99 node(s) didn't match Pod's node affinity/selector."
             }
           ]
         },
@@ -612,7 +668,7 @@
         "gqc-3167-psi4-df-1125-b": {
           "status": {
             "name": "gqc-3167-psi4-df-1125-b",
-            "status": "RUNNING",
+            "status": "STOPPED",
             "steps": "0/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
@@ -623,9 +679,6 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute793"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
             "created_at": "2026-11-25 16:41:17"
@@ -651,6 +704,28 @@
             "priority_level": "HIGH",
             "created_at": "2026-11-25 17:01:39",
             "finished_at": "2026-11-25 17:06:34"
+          },
+          "point_rate_per_hour": 0.0,
+          "last_scheduling_diagnostics": []
+        },
+        "gqc-3167-psi4-df-middle-1125-a": {
+          "status": {
+            "name": "gqc-3167-psi4-df-middle-1125-a",
+            "status": "SUCCEEDED",
+            "steps": "1/1",
+            "project": "cq-nex-chem",
+            "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
+            "resource": {
+              "cpu": 8,
+              "memory_gib": 32,
+              "gpu": 0,
+              "nodes": 1,
+              "gpu_type": "CPU"
+            },
+            "priority": 35,
+            "priority_level": "HIGH",
+            "created_at": "2026-11-25 17:31:49",
+            "finished_at": "2026-11-25 18:00:02"
           },
           "point_rate_per_hour": 0.0,
           "last_scheduling_diagnostics": []
@@ -730,7 +805,7 @@
         "gqc-3167-pyscf-conv-1125-b": {
           "status": {
             "name": "gqc-3167-pyscf-conv-1125-b",
-            "status": "RUNNING",
+            "status": "STOPPED",
             "steps": "0/1",
             "project": "cq-nex-chem",
             "compute_group": "HPC-\u53ef\u4e0a\u7f51\u533a\u8d44\u6e90-2",
@@ -741,9 +816,6 @@
               "nodes": 1,
               "gpu_type": "CPU"
             },
-            "nodes": [
-              "hpc-compute227"
-            ],
             "priority": 35,
             "priority_level": "HIGH",
             "created_at": "2026-11-25 16:41:17"

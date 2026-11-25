@@ -10,16 +10,16 @@
       "family": "ccsdt-external-forces-20261125",
       "classification": "required-compact-accepted-evidence",
       "role": "Immutable hardware and driver identities, acquisition plans and per-record hashes required to audit provenance and missing trials.",
-      "bytes": 136265,
-      "sha256": "52a38bf3ad87471c9314304a1811fec0d7afa7ef43f1c124479e6addd08a4967"
+      "bytes": 187390,
+      "sha256": "3604907992a04132a843e2c6d485855c367c5d3ea254e3bfef03f0db17e5cf6a"
     },
     {
       "path": "benchmarks/results/ccsdt-external-forces-20261125/records.json",
       "family": "ccsdt-external-forces-20261125",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact endpoint energies, full analytic force vectors, timings, work metadata and finite-difference energies used for independent replay.",
-      "bytes": 186776,
-      "sha256": "e7f9be6cf416000f2fe6b8179050c96f349922d384c51f668208069c271d7dc0"
+      "bytes": 402983,
+      "sha256": "8df92c7b0d1d8205be681a9a03fc82e550d5a192350f9784602ef557897aad43"
     }
   ]
 }

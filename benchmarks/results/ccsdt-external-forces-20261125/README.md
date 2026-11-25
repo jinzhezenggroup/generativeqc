@@ -9,13 +9,44 @@ formaldehyde) from the
 The benchmark measures single-basis CCSD(T) endpoints. The CBS extrapolation
 and MP2 components are outside this experiment.
 
-## Acquisition status
+## Observed results
 
-The initial snapshot retains the standalone CPU reference and finite-difference
-energy records. Three polar control groups pass the two-trial conventional
-Psi4/PySCF comparison. The `22f72d069` H100 build is still active at this
-snapshot, and the primary native comparisons stay incomplete. The superseded
-CUDA records are retained separately below.
+The figures below come from the retained raw records. An observed case has at
+least one complete cross-program comparison. The two-trial gate requires both
+complete trials in every arm and checks all four pairings.
+
+| Comparison | Cases observed | Two-trial passes | Worst energy (Eh) | Worst max force (Eh/Bohr) | Worst force RMS (Eh/Bohr) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GenerativeQC conv. / Psi4 conv. | 6/10 | 6/10 | 9.07e-12 | 5.06e-07 | 1.98e-07 |
+| GenerativeQC conv. / PySCF conv. | 6/10 | 6/10 | 5.23e-12 | 4.64e-08 | 2.67e-08 |
+| Psi4 conv. / PySCF conv. | 7/10 | 6/10 | 1.37e-11 | 5.59e-07 | 2.21e-07 |
+| GenerativeQC full DF / Psi4 full DF | 10/10 | 8/10 | 1.45e-10 | 3.07e-10 | 8.26e-11 |
+
+### Complete endpoint wall times
+
+Values are in seconds. Two samples are summarized by their median and range.
+A single available sample is marked with its count. A dash indicates a missing
+complete endpoint. The C4/C5 Psi4 conventional memory-control rows use the
+larger allocation when available. CPU and GPU times describe the recorded
+cross-hardware configurations.
+
+| Case | GenerativeQC conv. | Psi4 conv. | PySCF conv. | GenerativeQC full DF | Psi4 full DF |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| C1 | 4.478 [4.279–4.678] | 6.093 [2.627–9.560] | 6.181 [4.698–7.664] | 1.523 [1.412–1.635] | 11.066 [5.835–16.297] |
+| C2 | 30.280 [29.962–30.598] | 22.476 [22.192–22.760] | 65.083 [64.316–65.851] | 2.600 [2.573–2.628] | 14.850 [13.228–16.471] |
+| C3 | 184.990 [184.808–185.172] | 146.434 [138.486–154.381] | 469.428 [464.511–474.345] | 6.873 [6.864–6.883] | 56.271 [53.012–59.530] |
+| C4 | — | 642.701 (1) | 2360.793 (1) | 19.542 [19.475–19.609] | 190.397 [189.975–190.818] |
+| C5 | — | 2427.486 (1) | — | 50.444 [50.352–50.536] | 643.288 [616.384–670.193] |
+| C6 | — | — | — | 121.690 [121.646–121.734] | 1844.806 (1) |
+| C7 | — | — | — | 273.638 [273.585–273.691] | 3694.958 (1) |
+| water | 2.965 [2.772–3.157] | 2.975 [1.777–4.173] | 3.669 [1.920–5.417] | 1.316 [1.309–1.324] | 5.633 [5.481–5.784] |
+| ammonia | 3.268 [3.232–3.304] | 2.197 [2.159–2.234] | 3.049 [3.029–3.069] | 1.353 [1.349–1.356] | 5.848 [5.671–6.024] |
+| formaldehyde | 7.920 [7.891–7.949] | 5.351 [5.215–5.487] | 15.142 [14.956–15.329] | 1.797 [1.793–1.801] | 7.286 [7.231–7.341] |
+
+### Methane finite differences
+
+- PySCF conv. gives a maximum step-to-step change of 1.91e-07 Eh/Bohr. Across the available analytic endpoints, the worst finer-step difference is 5.08e-07 Eh/Bohr.
+- Psi4 full DF gives a maximum step-to-step change of 1.86e-07 Eh/Bohr. Across the available analytic endpoints, the worst finer-step difference is 6.55e-08 Eh/Bohr.
 
 ## Scientific inputs and gates
 
