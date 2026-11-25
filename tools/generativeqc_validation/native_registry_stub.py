@@ -63,6 +63,26 @@ def install_scf_defaults_stub(
     library.generativeqc_scf_defaults_query_v1 = query
 
 
+def install_basis_name_stub(library: Any) -> None:
+    """Declare bundled-name metadata on a test double without constructing systems."""
+    from generativeqc._model_resolution import _basis_pack
+    from generativeqc.profiles import canonical_hash
+
+    pack = _basis_pack()
+    digest = canonical_hash(pack).encode("ascii")
+    names = {name.encode("ascii") for name in pack["bases"]}
+
+    def resolve(selector: bytes, count: int) -> bytes | None:
+        canonical = selector[:count].lower().replace(b"_", b"-")
+        return canonical if canonical in names else None
+
+    def checksum() -> bytes:
+        return digest
+
+    library.generativeqc_builtin_basis_resolve_name_v1 = resolve
+    library.generativeqc_bundled_basis_catalog_sha256 = checksum
+
+
 def install_registry_stub(
     library: Any, properties: Any, *, supports_batch: bool = True
 ) -> None:
@@ -108,6 +128,8 @@ def install_registry_stub(
         ) | (_native.PROPERTY_FORCES if "forces" in enabled else 0)
         return _native.STATUS_SUCCESS
 
+    if not hasattr(library, "generativeqc_builtin_basis_resolve_name_v1"):
+        install_basis_name_stub(library)
     library.generativeqc_method_from_name = lookup
     library.generativeqc_method_get_capabilities = query
     if not hasattr(library, "generativeqc_correlation_convergence_query_v1"):

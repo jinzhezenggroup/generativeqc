@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <mutex>
@@ -6,7 +7,9 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/host_cross_overlap.hpp"
 #include "generativeqc/generativeqc.h"
+#include "integrals/cross_overlap_registration.hpp"
 #include "integrals/s_integrals.hpp"
 #include "scf/occupied_projection.hpp"
 #include "scf/system_projection.hpp"
@@ -172,6 +175,38 @@ extern "C" generativeqc_status generativeqc_system_cross_overlap_cpu(
   }
   try {
     generativeqc::integrals::cross_overlap(target->data, source->data, {output, output_count});
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&context->last_detail);
+  }
+}
+
+extern "C" generativeqc_status generativeqc_system_cross_overlap_host_v1(
+    generativeqc_context* context, const generativeqc_system* target,
+    const generativeqc_system* source, std::size_t maximum_bytes, double* output,
+    std::size_t output_count, std::size_t* required_bytes, const double* subtract_from_target) {
+  if (!context || !target || !source ||
+      (output ? required_bytes != nullptr
+              : !required_bytes || output_count || subtract_from_target))
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard lock(context->mutex);
+  try {
+    const auto bytes =
+        generativeqc::integrals::cross_overlap_workspace_bytes(target->data, source->data);
+    if (bytes > maximum_bytes) {
+      context->last_detail = "CPU cross-overlap exceeds modeled host workspace";
+      return GENERATIVEQC_STATUS_RESOURCE_LIMIT;
+    }
+    if (output) {
+      std::array<double, 3> translation{};
+      if (subtract_from_target)
+        std::copy_n(subtract_from_target, translation.size(), translation.begin());
+      generativeqc::integrals::cross_overlap_registered(
+          target->data, source->data, {output, output_count},
+          subtract_from_target ? &translation : nullptr);
+    } else {
+      *required_bytes = bytes;
+    }
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (...) {
     return generativeqc::api::map_exception(&context->last_detail);
