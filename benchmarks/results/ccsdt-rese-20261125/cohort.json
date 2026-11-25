@@ -1,0 +1,1645 @@
+{
+  "molecules": [
+    {
+      "id": "hf",
+      "symbols": [
+        "H",
+        "F"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.94,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "H-F",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 0.9169,
+          "cc-pcvtz": 0.9167,
+          "cc-pcvqz": 0.9158
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "h2o",
+      "symbols": [
+        "O",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.6167339832,
+          0.7616030422,
+          0
+        ],
+        [
+          0.6167339832,
+          -0.7616030422,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "O-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 0.9575,
+          "cc-pcvtz": 0.9584,
+          "cc-pcvqz": 0.9571
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-O-H",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 104.51,
+          "cc-pcvqz": 104.22
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "co",
+      "symbols": [
+        "C",
+        "O"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.15,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "C-O",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.1284,
+          "cc-pcvtz": 1.1326,
+          "cc-pcvqz": 1.1289
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "n2",
+      "symbols": [
+        "N",
+        "N"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.12,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "N-N",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0977,
+          "cc-pcvtz": 1.1006,
+          "cc-pcvqz": 1.0981
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "f2",
+      "symbols": [
+        "F",
+        "F"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.39,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "F-F",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.4124,
+          "cc-pcvtz": 1.4133,
+          "cc-pcvqz": 1.4113
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "hcn",
+      "symbols": [
+        "H",
+        "C",
+        "N"
+      ],
+      "seed_angstrom": [
+        [
+          -1.08,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.17,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "H-C",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0653,
+          "cc-pcvtz": 1.0668,
+          "cc-pcvqz": 1.0655
+        },
+        {
+          "label": "C-N",
+          "atoms": [
+            1,
+            2
+          ],
+          "re_se": 1.1534,
+          "cc-pcvtz": 1.1569,
+          "cc-pcvqz": 1.1538
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      },
+      "source_note": "Table VII uses 106.52 pm for H-C and Table II uses 106.53 pm. Each comparison uses its own source column."
+    },
+    {
+      "id": "hnc",
+      "symbols": [
+        "H",
+        "N",
+        "C"
+      ],
+      "seed_angstrom": [
+        [
+          -1.01,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.19,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "H-N",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 0.9949,
+          "cc-pcvtz": 0.9957,
+          "cc-pcvqz": 0.9953
+        },
+        {
+          "label": "N-C",
+          "atoms": [
+            1,
+            2
+          ],
+          "re_se": 1.1687,
+          "cc-pcvtz": 1.1723,
+          "cc-pcvqz": 1.1693
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "ch4",
+      "symbols": [
+        "C",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.6350852961,
+          0.6350852961,
+          0.6350852961
+        ],
+        [
+          0.6350852961,
+          -0.6350852961,
+          -0.6350852961
+        ],
+        [
+          -0.6350852961,
+          0.6350852961,
+          -0.6350852961
+        ],
+        [
+          -0.6350852961,
+          -0.6350852961,
+          0.6350852961
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column, footnote n"
+      },
+      "bonds": [
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0859,
+          "cc-pcvtz": 1.0875,
+          "cc-pcvqz": 1.0864
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      },
+      "source_note": "Methane value follows Bak et al., citing Stanton (10.1080/00268979909482885)."
+    },
+    {
+      "id": "nh3",
+      "symbols": [
+        "N",
+        "H",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.9849938986,
+          0.0,
+          0.3011428559
+        ],
+        [
+          -0.4924969493,
+          0.8530297388,
+          0.3011428559
+        ],
+        [
+          -0.4924969493,
+          -0.8530297388,
+          0.3011428559
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "N-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0116,
+          "cc-pcvtz": 1.0126,
+          "cc-pcvqz": 1.0112
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-N-H",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 107.25,
+          "cc-pcvqz": 106.36
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      },
+      "source_note": "Table II's R_NN label is a typographical error for R_NH, as confirmed by Table VII."
+    },
+    {
+      "id": "hno",
+      "symbols": [
+        "N",
+        "H",
+        "O"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          -0.3659615534,
+          1.0054711042,
+          0
+        ],
+        [
+          1.23,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "N-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0517,
+          "cc-pcvtz": 1.0542,
+          "cc-pcvqz": 1.0524
+        },
+        {
+          "label": "N-O",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.2086,
+          "cc-pcvtz": 1.2118,
+          "cc-pcvqz": 1.2085
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-N-O",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 108.27,
+          "cc-pcvqz": 108.08
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "hof",
+      "symbols": [
+        "O",
+        "H",
+        "F"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          -0.1701752141,
+          0.965111598,
+          0
+        ],
+        [
+          1.45,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "O-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 0.9678,
+          "cc-pcvtz": 0.9666,
+          "cc-pcvqz": 0.9657
+        },
+        {
+          "label": "O-F",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.4344,
+          "cc-pcvtz": 1.4353,
+          "cc-pcvqz": 1.4326
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-O-F",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 97.94,
+          "cc-pcvqz": 97.85
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "co2",
+      "symbols": [
+        "O",
+        "C",
+        "O"
+      ],
+      "seed_angstrom": [
+        [
+          -1.18,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.18,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "C-O",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.1601,
+          "cc-pcvtz": 1.1637,
+          "cc-pcvqz": 1.1604
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "c2h2",
+      "symbols": [
+        "H",
+        "C",
+        "C",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          -1.69,
+          0,
+          0
+        ],
+        [
+          -0.61,
+          0,
+          0
+        ],
+        [
+          0.61,
+          0,
+          0
+        ],
+        [
+          1.69,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.0613,
+          "cc-pcvtz": 1.0633,
+          "cc-pcvqz": 1.0621
+        },
+        {
+          "label": "C-C",
+          "atoms": [
+            1,
+            2
+          ],
+          "re_se": 1.2037,
+          "cc-pcvtz": 1.2067,
+          "cc-pcvqz": 1.2037
+        }
+      ],
+      "angles": [],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      },
+      "source_note": "Table VII and Table II Emp. entries differ for both bonds. Each comparison uses the value from its own table."
+    },
+    {
+      "id": "ch2o",
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.22,
+          0,
+          0
+        ],
+        [
+          -0.5882103833,
+          0.9413333867,
+          0
+        ],
+        [
+          -0.5882103833,
+          -0.9413333867,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.1007,
+          "cc-pcvtz": 1.1022,
+          "cc-pcvqz": 1.1008
+        },
+        {
+          "label": "C-O",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.2047,
+          "cc-pcvtz": 1.2071,
+          "cc-pcvqz": 1.2043
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-C-H",
+          "atoms": [
+            2,
+            0,
+            3
+          ],
+          "re_se": 116.74,
+          "cc-pcvqz": 116.44
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "trans-n2h2",
+      "symbols": [
+        "N",
+        "N",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.27,
+          0,
+          0
+        ],
+        [
+          -0.3213776741,
+          0.9890987769,
+          0
+        ],
+        [
+          1.5913776741,
+          -0.9890987769,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "N-H",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.0286,
+          "cc-pcvtz": 1.0298,
+          "cc-pcvqz": 1.0284
+        },
+        {
+          "label": "N-N",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.2457,
+          "cc-pcvtz": 1.2506,
+          "cc-pcvqz": 1.2467
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-N-N",
+          "atoms": [
+            2,
+            0,
+            1
+          ],
+          "re_se": 106.36,
+          "cc-pcvqz": 106.17
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "c2h4",
+      "symbols": [
+        "C",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.35,
+          0,
+          0
+        ],
+        [
+          -0.55,
+          0.9526279442,
+          0
+        ],
+        [
+          -0.55,
+          -0.9526279442,
+          0
+        ],
+        [
+          1.9,
+          0.9526279442,
+          0
+        ],
+        [
+          1.9,
+          -0.9526279442,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "bonds": [
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.0807,
+          "cc-pcvtz": 1.082,
+          "cc-pcvqz": 1.0809
+        },
+        {
+          "label": "C-C",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.3307,
+          "cc-pcvtz": 1.3339,
+          "cc-pcvqz": 1.3312
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-C-H",
+          "atoms": [
+            2,
+            0,
+            3
+          ],
+          "re_se": 117.14,
+          "cc-pcvqz": 117.1
+        }
+      ],
+      "theory_source": {
+        "doi": "10.1063/1.1357225",
+        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
+      }
+    },
+    {
+      "id": "fno",
+      "symbols": [
+        "N",
+        "F",
+        "O"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          -0.5768941539,
+          1.427863136,
+          0
+        ],
+        [
+          1.15,
+          0,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp064769v",
+        "location": "4, r_e^SE row"
+      },
+      "bonds": [
+        {
+          "label": "N-F",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.51681
+        },
+        {
+          "label": "N-O",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.13176
+        }
+      ],
+      "angles": [
+        {
+          "label": "F-N-O",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 109.9361
+        }
+      ],
+      "source_note": "Uses the authors' semi-experimental fit rather than their separately tabulated experimental equilibrium entry."
+    },
+    {
+      "id": "trans-hono",
+      "symbols": [
+        "N",
+        "O",
+        "O",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.19,
+          0,
+          0
+        ],
+        [
+          -0.4925090064,
+          1.3531573739,
+          0
+        ],
+        [
+          -1.3235961406,
+          0.833836495,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp064769v",
+        "location": "1, r_e^SE footnote d (all-electron CCSD(T)/cc-pVTZ cubic force field)"
+      },
+      "bonds": [
+        {
+          "label": "N=O",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.1689
+        },
+        {
+          "label": "N-O",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.425
+        },
+        {
+          "label": "O-H",
+          "atoms": [
+            2,
+            3
+          ],
+          "re_se": 0.9647
+        }
+      ],
+      "angles": [
+        {
+          "label": "O-N-O",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 110.691
+        },
+        {
+          "label": "H-O-N",
+          "atoms": [
+            3,
+            2,
+            0
+          ],
+          "re_se": 102.086
+        }
+      ]
+    },
+    {
+      "id": "ch2f2",
+      "symbols": [
+        "C",
+        "F",
+        "F",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.7915354822,
+          1.1304298211,
+          0
+        ],
+        [
+          0.7915354822,
+          -1.1304298211,
+          0
+        ],
+        [
+          -0.61,
+          0,
+          0.91
+        ],
+        [
+          -0.61,
+          0,
+          -0.91
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "bonds": [
+        {
+          "label": "C-F",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.3533
+        },
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            3
+          ],
+          "re_se": 1.0867
+        }
+      ],
+      "angles": [
+        {
+          "label": "F-C-F",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 108.29
+        },
+        {
+          "label": "H-C-H",
+          "atoms": [
+            3,
+            0,
+            4
+          ],
+          "re_se": 113.48
+        },
+        {
+          "label": "H-C-F",
+          "atoms": [
+            3,
+            0,
+            1
+          ],
+          "re_se": 108.74
+        }
+      ]
+    },
+    {
+      "id": "syn-ethenol",
+      "symbols": [
+        "C",
+        "C",
+        "O",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1.35,
+          0,
+          0
+        ],
+        [
+          2.1552657956,
+          1.1083532823,
+          0
+        ],
+        [
+          1.9302615943,
+          -0.9286126653,
+          0
+        ],
+        [
+          -0.5644817301,
+          0.9394553616,
+          0
+        ],
+        [
+          -0.5294121053,
+          -0.9550847202,
+          0
+        ],
+        [
+          1.593160888,
+          1.9111222857,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "bonds": [
+        {
+          "label": "O-H",
+          "atoms": [
+            2,
+            6
+          ],
+          "re_se": 0.9605
+        },
+        {
+          "label": "C2-O",
+          "atoms": [
+            1,
+            2
+          ],
+          "re_se": 1.3598
+        },
+        {
+          "label": "C2-H",
+          "atoms": [
+            1,
+            3
+          ],
+          "re_se": 1.0789
+        },
+        {
+          "label": "C1=C2",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.3316
+        },
+        {
+          "label": "C1-Hcis",
+          "atoms": [
+            0,
+            4
+          ],
+          "re_se": 1.0812
+        },
+        {
+          "label": "C1-Htrans",
+          "atoms": [
+            0,
+            5
+          ],
+          "re_se": 1.077
+        }
+      ],
+      "angles": [
+        {
+          "label": "C2-O-H",
+          "atoms": [
+            1,
+            2,
+            6
+          ],
+          "re_se": 108.7
+        },
+        {
+          "label": "C1=C2-H",
+          "atoms": [
+            0,
+            1,
+            3
+          ],
+          "re_se": 122.58
+        },
+        {
+          "label": "C1=C2-O",
+          "atoms": [
+            0,
+            1,
+            2
+          ],
+          "re_se": 126.26
+        },
+        {
+          "label": "C2=C1-Hcis",
+          "atoms": [
+            1,
+            0,
+            4
+          ],
+          "re_se": 121.87
+        },
+        {
+          "label": "C2=C1-Htrans",
+          "atoms": [
+            1,
+            0,
+            5
+          ],
+          "re_se": 119.58
+        }
+      ],
+      "source_note": "Hcis and Htrans are assigned relative to the oxygen across C=C."
+    },
+    {
+      "id": "trans-formic-acid",
+      "symbols": [
+        "C",
+        "O",
+        "O",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          -0.6822153422,
+          1.0114258385,
+          0
+        ],
+        [
+          1.36,
+          0,
+          0
+        ],
+        [
+          -0.3779322584,
+          -1.038360346,
+          0
+        ],
+        [
+          1.6465242706,
+          0.9371786608,
+          0
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "bonds": [
+        {
+          "label": "C-H",
+          "atoms": [
+            0,
+            3
+          ],
+          "re_se": 1.0918
+        },
+        {
+          "label": "C=O",
+          "atoms": [
+            0,
+            1
+          ],
+          "re_se": 1.1973
+        },
+        {
+          "label": "C-O",
+          "atoms": [
+            0,
+            2
+          ],
+          "re_se": 1.3417
+        },
+        {
+          "label": "O-H",
+          "atoms": [
+            2,
+            4
+          ],
+          "re_se": 0.9656
+        }
+      ],
+      "angles": [
+        {
+          "label": "H-C=O",
+          "atoms": [
+            3,
+            0,
+            1
+          ],
+          "re_se": 125.38
+        },
+        {
+          "label": "O-C=O",
+          "atoms": [
+            2,
+            0,
+            1
+          ],
+          "re_se": 124.78
+        },
+        {
+          "label": "C-O-H",
+          "atoms": [
+            0,
+            2,
+            4
+          ],
+          "re_se": 106.78
+        }
+      ]
+    },
+    {
+      "id": "aziridine",
+      "symbols": [
+        "N",
+        "C",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "seed_angstrom": [
+        [
+          0,
+          1.29,
+          0
+        ],
+        [
+          -0.75,
+          0,
+          0
+        ],
+        [
+          0.75,
+          0,
+          0
+        ],
+        [
+          0,
+          1.66,
+          0.96
+        ],
+        [
+          -1.25,
+          -0.49,
+          0.84
+        ],
+        [
+          -1.28,
+          -0.42,
+          -0.84
+        ],
+        [
+          1.25,
+          -0.49,
+          0.84
+        ],
+        [
+          1.28,
+          -0.42,
+          -0.84
+        ]
+      ],
+      "charge": 0,
+      "multiplicity": 1,
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "bonds": [
+        {
+          "label": "C-N",
+          "atoms": [
+            1,
+            0
+          ],
+          "re_se": 1.4714
+        },
+        {
+          "label": "C-C",
+          "atoms": [
+            1,
+            2
+          ],
+          "re_se": 1.4777
+        },
+        {
+          "label": "N-H",
+          "atoms": [
+            0,
+            3
+          ],
+          "re_se": 1.0126
+        },
+        {
+          "label": "C-Hcis",
+          "atoms": [
+            1,
+            4
+          ],
+          "re_se": 1.0805
+        },
+        {
+          "label": "C-Htrans",
+          "atoms": [
+            1,
+            5
+          ],
+          "re_se": 1.0791
+        }
+      ],
+      "angles": [
+        {
+          "label": "C-N-H",
+          "atoms": [
+            1,
+            0,
+            3
+          ],
+          "re_se": 109.16
+        },
+        {
+          "label": "C-N-C",
+          "atoms": [
+            1,
+            0,
+            2
+          ],
+          "re_se": 60.28
+        },
+        {
+          "label": "N-C-C",
+          "atoms": [
+            0,
+            1,
+            2
+          ],
+          "re_se": 59.86
+        },
+        {
+          "label": "N-C-Hcis",
+          "atoms": [
+            0,
+            1,
+            4
+          ],
+          "re_se": 118.19
+        },
+        {
+          "label": "N-C-Htrans",
+          "atoms": [
+            0,
+            1,
+            5
+          ],
+          "re_se": 114.38
+        },
+        {
+          "label": "C-C-Hcis",
+          "atoms": [
+            2,
+            1,
+            4
+          ],
+          "re_se": 117.81
+        },
+        {
+          "label": "C-C-Htrans",
+          "atoms": [
+            2,
+            1,
+            5
+          ],
+          "re_se": 119.49
+        }
+      ],
+      "source_note": "Hcis and Htrans are assigned relative to N-H and the heavy-atom ring plane."
+    }
+  ],
+  "qz_controls": [
+    "hf",
+    "co"
+  ]
+}

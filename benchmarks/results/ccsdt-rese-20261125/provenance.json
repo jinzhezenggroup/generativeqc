@@ -1,0 +1,1245 @@
+{
+  "schema": "generativeqc.ccsdt-rese.provenance.v1",
+  "issue": 3166,
+  "source": {
+    "revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+    "tree": "5b587f68163deeb5ae767591fa75512998040935",
+    "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+    "dirty": false,
+    "staging": {
+      "base_archive_commit": "d154546d2d6629ab8c865ca08f680002d68b4152",
+      "base_archive_sha256": "68ef4c067d334eb21c82a61bfd8a7320881f8340af6ca85dc48202a2a9302d1c",
+      "binary_git_delta_gzip": {
+        "sha256": "39bde6fc57fc039aa7c2e3b25cd40f82e6a60648f904a52f3cc4923fe8130453",
+        "bytes": 932842
+      },
+      "audit": "Apply the binary delta to an extracted clean archive; index into a fresh sidecar git directory and assert git write-tree equals the pinned full tree. Compute native identity again at build and check the loaded library."
+    },
+    "revision_choice": "Use origin/master 22f72d069 as requested on 2026-11-25 for #3166–#3171."
+  },
+  "payload_sha256": {
+    "run.py": "05d4e48711e5aca301be02d0f6eb09de8a2ac88586eb1066397cadaca30c2d14",
+    "cohort.json": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
+    "cc-pvdz.json": "37d504cb0ee120317f3b9d19b41db971ea520b84cf663157192022deebb957c3",
+    "cc-pcvtz.json": "73c9b0b0f813d906f15143cf68583f670f051e9ce7318d2362e5f20114e67549",
+    "cc-pcvqz.json": "db1757631be7321ed41ad3320fac7b1f9fb18dd1d953421d7a4a0eb496819051",
+    "cc-pwcvtz-rifit.json": "591404d35e1856778703f8eb28015fab17ecdd8adeca5c97723b939f10d1c592"
+  },
+  "payload_tar_gz": {
+    "sha256": "c44534d42eefc4aba1a6963ea130908d20714321a9fdd8489be3650c564b0881",
+    "bytes": 12965
+  },
+  "retry_payload_sha256": {
+    "run.py": "3e1ae8fc67d9dcea224a9b36b3809936ac0cf306a7c7a8e36a2933b4602a56c8",
+    "cohort.json": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
+    "cc-pvdz.json": "37d504cb0ee120317f3b9d19b41db971ea520b84cf663157192022deebb957c3",
+    "cc-pcvtz.json": "73c9b0b0f813d906f15143cf68583f670f051e9ce7318d2362e5f20114e67549",
+    "cc-pcvqz.json": "db1757631be7321ed41ad3320fac7b1f9fb18dd1d953421d7a4a0eb496819051",
+    "cc-pwcvtz-rifit.json": "591404d35e1856778703f8eb28015fab17ecdd8adeca5c97723b939f10d1c592"
+  },
+  "retry_payload_tar_gz": {
+    "sha256": "001b5489660ac85f208757aab7d107e14f8c0e9adc46ec08df22fe795c245686",
+    "bytes": 13017
+  },
+  "conventional_payload_hashes": {
+    "run.py": "3bbcb86f3f50cc37631daad87272ad1b148cbf6bfcf29652afd915ec6de7c169",
+    "cohort.json": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
+    "cc-pvdz.json": "37d504cb0ee120317f3b9d19b41db971ea520b84cf663157192022deebb957c3",
+    "cc-pcvtz.json": "73c9b0b0f813d906f15143cf68583f670f051e9ce7318d2362e5f20114e67549",
+    "cc-pcvqz.json": "db1757631be7321ed41ad3320fac7b1f9fb18dd1d953421d7a4a0eb496819051"
+  },
+  "conventional_driver": {
+    "sha256": "3bbcb86f3f50cc37631daad87272ad1b148cbf6bfcf29652afd915ec6de7c169",
+    "bytes": 8043
+  },
+  "df_batch_splits": {
+    "f": [
+      "n2",
+      "ch4",
+      "hnc",
+      "hno",
+      "hof",
+      "trans-n2h2",
+      "fno",
+      "c2h4",
+      "trans-formic-acid",
+      "aziridine"
+    ],
+    "g": [
+      "nh3",
+      "f2",
+      "hcn",
+      "c2h2",
+      "ch2o",
+      "co2",
+      "trans-hono",
+      "ch2f2",
+      "syn-ethenol"
+    ]
+  },
+  "initial_cpu_rhf_attempt_driver": {
+    "sha256": "2f168ac783d8af04092d3731b6aa806f09f91fb995944d26dadd9e4c9317b877",
+    "bytes": 7920
+  },
+  "basis_inputs": {
+    "dz": {
+      "url": "https://www.basissetexchange.org/api/basis/cc-pvdz/format/json/?elements=1,6,7,8,9",
+      "bse_data_version": "1",
+      "sha256": "d280a6367f02783705f69a38a2cddd205d55f0b61afe0ade079614140ea44c1a",
+      "bytes": 17280
+    },
+    "tz": {
+      "url": "https://www.basissetexchange.org/api/basis/cc-pcvtz/format/json/?elements=6,7,8,9",
+      "bse_data_version": "0",
+      "sha256": "15e1735598e110b49b9f4824a56eab0ed1b4498a41a61d2258a6d63e1cee742e",
+      "bytes": 31803
+    },
+    "qz": {
+      "url": "https://www.basissetexchange.org/api/basis/cc-pcvqz/format/json/?elements=6,7,8,9",
+      "bse_data_version": "0",
+      "sha256": "16039c533587a7c416d90a0972cee9f0bde0b0aeec58056a33863fcdb7469ade",
+      "bytes": 48655
+    },
+    "h-tz": {
+      "url": "https://www.basissetexchange.org/api/basis/cc-pvtz/format/json/?elements=1",
+      "bse_data_version": "1",
+      "sha256": "9e4270bcb741828d87398c4e976c04833d6bf713668479a9156a740e404fba51",
+      "bytes": 3370
+    },
+    "h-qz": {
+      "url": "https://www.basissetexchange.org/api/basis/cc-pvqz/format/json/?elements=1",
+      "bse_data_version": "1",
+      "sha256": "519ad9a16fa099e0112af7eba77d8db7612282025fbd3a8d28a0b4374be4f105",
+      "bytes": 4862
+    }
+  },
+  "basis_conversion": {
+    "tool": "tools/import_basis.py",
+    "contractions": "Spherical. For TZ and QZ, add element 1 from the matching valence basis, union function_types, then import the merged JSON.",
+    "original_basis_references": [
+      "https://doi.org/10.1063/1.456153",
+      "https://doi.org/10.1063/1.470645"
+    ],
+    "df_auxiliary": {
+      "source": "Basis Set Exchange 0.12, data version 1 for each set",
+      "cc-pwCVTZ-RIFIT_C-N-O-F": {
+        "sha256": "bb3848c9554a3a44cb09fc9d99b9295af286b2c3592dc7cde9043cebe9fad15e",
+        "bytes": 19632
+      },
+      "cc-pVTZ-RIFIT_H": {
+        "sha256": "9c9090cd591e82f11cc5cd089c208531ee00651456ac9ed99ffd401144c6b081",
+        "bytes": 1885
+      },
+      "references": [
+        "https://doi.org/10.1039/b415208e",
+        "https://doi.org/10.1063/1.1445115"
+      ]
+    }
+  },
+  "literature": [
+    {
+      "doi": "10.1063/1.1357225",
+      "tables": [
+        "II",
+        "III",
+        "VII"
+      ],
+      "author_pdf": {
+        "sha256": "cd3d0a61f4c7926e62c49b7e211034267f6bd235962f9e1903696a8295b04db1",
+        "bytes": 175033
+      }
+    },
+    {
+      "doi": "10.1021/jp511432m",
+      "tables": [
+        "4"
+      ],
+      "postprint_pdf": {
+        "sha256": "e582772c48a22a4733921363ae14e61442ea09281736baa853f607787510d5d3",
+        "bytes": 2335503
+      }
+    },
+    {
+      "doi": "10.1021/jp064769v",
+      "tables": [
+        "1",
+        "4"
+      ]
+    }
+  ],
+  "compute": {
+    "accounting": "GPU allocation from scheduler Scheduled to SuccessfulDeletePod, with ExitedWithCode or measured program duration as fallback. Published quota rate times the interval estimates points. Per-job billed totals were unavailable. Entry-point wall times are listed separately.",
+    "gpu_attempts": [
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-a",
+          "status": "FAILED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795595594000",
+          "finished_at": "1795595723000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_failed",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125'\\'' && bash launch.sh a'"
+        },
+        "entrypoint_utc": "2026-11-25T08:34:54Z",
+        "end_utc": "2026-11-25T08:35:17Z",
+        "entrypoint_to_exit_seconds": 23.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 00:33:35"
+          ],
+          "Started": [
+            "2026-11-25 00:34:54",
+            "2026-11-25 00:34:54"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 00:35:23"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 00:35:28"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 00:33:33",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu190, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 113.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.03138888888888889,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.03138888888888889,
+        "exit_code": 1,
+        "interpretation": "Withdrawn source. CLI configuration rejected missing OpenSSL development dependency. No molecule was launched.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-a"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-b",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795596000000",
+          "finished_at": "1795596233000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125'\\'' && bash launch-qz.sh b'"
+        },
+        "entrypoint_utc": "2026-11-25T08:41:38Z",
+        "end_utc": "2026-11-25T08:43:47Z",
+        "entrypoint_to_exit_seconds": 129.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 00:40:15"
+          ],
+          "Started": [
+            "2026-11-25 00:41:38",
+            "2026-11-25 00:41:39"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 00:43:53"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 00:43:58"
+          ]
+        },
+        "scheduling_events": [],
+        "allocation_estimate_seconds": 223.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.06194444444444445,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.06194444444444445,
+        "exit_code": 0,
+        "interpretation": "Withdrawn source. CLI build against native-identical core built from 471ea1a0a passed. All 22 RHF preliminary requests rejected the unbundled cc-pVDZ name. No CCSD(T) stage was launched despite platform SUCCEEDED.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-b"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-c",
+          "status": "CANCELLED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795596831000",
+          "finished_at": "1795599885000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_failed",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-qz.sh c'"
+        },
+        "entrypoint_utc": "2026-11-25T08:55:03Z",
+        "end_utc": null,
+        "entrypoint_to_exit_seconds": null,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 00:54:59"
+          ],
+          "Started": [
+            "2026-11-25 00:55:03",
+            "2026-11-25 00:55:03"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 01:44:45"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 00:54:09",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu058, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 00:54:50",
+            "reason": "Unschedulable",
+            "message": "Error pod <redacted>-worker-0 condition message: Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu058, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 2986.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.8294444444444444,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.8294444444444444,
+        "exit_code": null,
+        "interpretation": "Built 22f72d069. The HF CPU RHF preliminary stage timed out at 180 seconds. Stopped during H2O CPU RHF; neither reached CCSD(T).",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-c"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-d",
+          "status": "CANCELLED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795599934000",
+          "finished_at": "1795602076000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_failed",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz.sh d c payload-d'"
+        },
+        "entrypoint_utc": "2026-11-25T09:45:55Z",
+        "end_utc": null,
+        "entrypoint_to_exit_seconds": null,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 01:45:53"
+          ],
+          "Started": [
+            "2026-11-25 01:45:55",
+            "2026-11-25 01:45:56"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 02:21:16"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 01:45:52",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu038, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 2123.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.5897222222222223,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.5897222222222223,
+        "exit_code": null,
+        "interpretation": "Conventional CCSD(T) allocation at 22f72d069. HF and H2O converged; CO hit the 1200-second limit. Stopped during N2 after retaining the three intended control outcomes. The QZ controls were unattempted.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-d"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-e",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795600248000",
+          "finished_at": "1795600662000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh e c payload-e --molecule hf --molecule h2o --molecule co --df-auxiliary-basis payload-e/cc-pwcvtz-rifit.json'"
+        },
+        "entrypoint_utc": "2026-11-25T09:51:11Z",
+        "end_utc": "2026-11-25T09:57:29Z",
+        "entrypoint_to_exit_seconds": 378.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 01:51:09"
+          ],
+          "Started": [
+            "2026-11-25 01:51:11",
+            "2026-11-25 01:51:11"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 01:57:34",
+            "2026-11-25 01:57:42"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 01:57:46"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 01:51:07",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu038, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 397.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.11027777777777778,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.11027777777777778,
+        "exit_code": 0,
+        "interpretation": "DF-CCSD(T) pilot on HF, H2O and CO at 22f72d069.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-e"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-f",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795600463000",
+          "finished_at": "1795606143000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh f c payload-e --molecule n2 --molecule ch4 --molecule hnc --molecule hno --molecule hof --molecule trans-n2h2 --molecule fno --molecule c2h4 --molecule trans-formic-acid --molecule aziridine --df-auxiliary-basis payload-e/cc-pwcvtz-rifit.json'"
+        },
+        "entrypoint_utc": "2026-11-25T09:54:55Z",
+        "end_utc": "2026-11-25T11:28:54Z",
+        "entrypoint_to_exit_seconds": 5639.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 01:54:53"
+          ],
+          "Started": [
+            "2026-11-25 01:54:55",
+            "2026-11-25 01:54:55"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 03:28:59",
+            "2026-11-25 03:29:03"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 01:54:43",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu038, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 01:54:51",
+            "reason": "FailedScheduling",
+            "message": "0/696 nodes are unavailable: 16 Insufficient rdma/hca_shared_devices, 255 Insufficient nvidia.com/gpu, 375 Insufficient memory, 38 Insufficient cpu, 5 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+          }
+        ],
+        "allocation_estimate_seconds": 5650.0,
+        "allocation_estimate_basis": "Scheduled to ExitedWithCode",
+        "estimated_card_hours": 1.5694444444444444,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 1.5694444444444444,
+        "exit_code": 0,
+        "interpretation": "First disjoint DF-CCSD(T) production batch at 22f72d069.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-f"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-g",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 16,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795600490000",
+          "finished_at": "1795605847000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh g c payload-e --molecule nh3 --molecule f2 --molecule hcn --molecule c2h2 --molecule ch2o --molecule co2 --molecule trans-hono --molecule ch2f2 --molecule syn-ethenol --df-auxiliary-basis payload-e/cc-pwcvtz-rifit.json'"
+        },
+        "entrypoint_utc": "2026-11-25T09:55:12Z",
+        "end_utc": "2026-11-25T11:24:00Z",
+        "entrypoint_to_exit_seconds": 5328.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 01:55:10"
+          ],
+          "Started": [
+            "2026-11-25 01:55:12",
+            "2026-11-25 01:55:12"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 03:24:07"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 03:24:12"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 01:55:08",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu162, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 5342.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 1.4838888888888888,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 1.4838888888888888,
+        "exit_code": 0,
+        "interpretation": "Second disjoint DF-CCSD(T) production batch at 22f72d069.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-g"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-h",
+          "status": "CANCELLED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H200-3号机房",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 0,
+            "gpu_type": "NVIDIA H200 (141GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795603636000",
+          "finished_at": "1795604059000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_creating",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd ${GQC_SHARED}/issue-3166-20261125-master22f && bash launch-reuse-qz-e.sh h c payload-rescue --molecule trans-hono --df-auxiliary-basis payload-rescue/cc-pwcvtz-rifit.json --target-timeout 2400'"
+        },
+        "entrypoint_utc": null,
+        "end_utc": null,
+        "entrypoint_to_exit_seconds": null,
+        "platform_event_times_local": {
+          "SuccessfulDeletePod": [
+            "2026-11-25 02:54:19"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 02:48:16",
+            "reason": "FailedScheduling",
+            "message": "0/1489 nodes are unavailable: 26 Insufficient rdma/hca_shared_devices, 297 Insufficient memory, 31 node(s) didn't match Pod's node affinity/selector, 5 node(s) were unschedulable, 504 Insufficient cpu, 626 Insufficient nvidia.com/gpu."
+          },
+          {
+            "time": "2026-11-25 02:54:12",
+            "reason": "Unschedulable",
+            "message": "(combined from similar events): Error pod <redacted>-worker-0 condition message: 0/1489 nodes are unavailable: 2 Insufficient rdma/hca_shared_devices, 296 Insufficient memory, 34 node(s) didn't match Pod's node affinity/selector, 5 node(s) were unschedulable, 504 Insufficient cpu, 648 Insufficient nvidia.com/gpu."
+          }
+        ],
+        "allocation_estimate_seconds": 0,
+        "allocation_estimate_basis": "unscheduled before cancellation",
+        "estimated_card_hours": 0.0,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.0,
+        "exit_code": null,
+        "interpretation": "Requested an extended H200 retry of trans-HONO. Scheduling repeatedly failed; stopped and deleted before any GPU allocation.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-h"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-i",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 0,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795604096000",
+          "finished_at": "1795605847000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd ${GQC_SHARED}/issue-3166-20261125-master22f && bash launch-reuse-qz-e.sh i c payload-rescue --molecule trans-hono --df-auxiliary-basis payload-rescue/cc-pwcvtz-rifit.json --target-timeout 2400'"
+        },
+        "entrypoint_utc": "2026-11-25T10:55:25Z",
+        "end_utc": "2026-11-25T11:23:54Z",
+        "entrypoint_to_exit_seconds": 1709.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 02:55:23"
+          ],
+          "Started": [
+            "2026-11-25 02:55:25",
+            "2026-11-25 02:55:25"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 03:23:59",
+            "2026-11-25 03:24:07"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 03:24:12"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 02:55:13",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu510, once resource is released and minAvailable is satisfied"
+          },
+          {
+            "time": "2026-11-25 02:55:21",
+            "reason": "FailedScheduling",
+            "message": "0/696 nodes are unavailable: 132 Insufficient nvidia.com/gpu, 141 Insufficient rdma/hca_shared_devices, 36 Insufficient cpu, 373 Insufficient memory, 7 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+          }
+        ],
+        "allocation_estimate_seconds": 1729.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.4802777777777778,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.4802777777777778,
+        "exit_code": 0,
+        "interpretation": "Bounded H100 retry of trans-HONO after the first 1200-second DF timeout and the H200 scheduling failure. Reused the same binaries and basis and raised the time limit to 2400 seconds.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-i"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-j",
+          "status": "SUCCEEDED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 0,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795604972000",
+          "finished_at": "1795607277000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_success",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh '\\''j'\\'' c payload-rescue --molecule '\\''trans-formic-acid'\\'' --df-auxiliary-basis payload-rescue/cc-pwcvtz-rifit.json --target-timeout 2400'"
+        },
+        "entrypoint_utc": "2026-11-25T11:11:10Z",
+        "end_utc": "2026-11-25T11:47:52Z",
+        "entrypoint_to_exit_seconds": 2202.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 03:09:48"
+          ],
+          "Started": [
+            "2026-11-25 03:11:10",
+            "2026-11-25 03:11:10"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 03:47:57"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 03:48:00"
+          ]
+        },
+        "scheduling_events": [],
+        "allocation_estimate_seconds": 2292.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.6366666666666667,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.6366666666666667,
+        "exit_code": 0,
+        "interpretation": "Bounded H100 retry of trans-formic acid after the first 1200-second DF timeout. Reused the same binaries and basis and raised the time limit to 2400 seconds.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-j"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-k",
+          "status": "FAILED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 0,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795605899000",
+          "finished_at": "1795608359000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_failed",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh '\\''k'\\'' c payload-rescue --molecule '\\''syn-ethenol'\\'' --df-auxiliary-basis payload-rescue/cc-pwcvtz-rifit.json --target-timeout 2400'"
+        },
+        "entrypoint_utc": "2026-11-25T11:25:23Z",
+        "end_utc": "2026-11-25T12:05:50Z",
+        "entrypoint_to_exit_seconds": 2427.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 03:25:21"
+          ],
+          "Started": [
+            "2026-11-25 03:25:23",
+            "2026-11-25 03:25:23"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 04:05:55",
+            "2026-11-25 04:05:59"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 04:06:02"
+          ]
+        },
+        "scheduling_events": [
+          {
+            "time": "2026-11-25 03:25:19",
+            "reason": "FailedScheduling",
+            "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu523, once resource is released and minAvailable is satisfied"
+          }
+        ],
+        "allocation_estimate_seconds": 2441.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.6780555555555555,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.6780555555555555,
+        "exit_code": 1,
+        "interpretation": "Bounded H100 retry of syn-ethenol after the first 1200-second DF timeout. Reused the same binaries and basis and raised the time limit to 2400 seconds.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-k"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-l",
+          "status": "FAILED",
+          "project": "CQ-NexChem",
+          "compute_group": "开发区-H100-cuda13.2版本-183核",
+          "resource": {
+            "cpu": 20,
+            "memory_gib": 200,
+            "gpu": 1,
+            "nodes": 1,
+            "shared_memory_gib": 0,
+            "gpu_type": "NVIDIA H100 (80GB)"
+          },
+          "priority": 20,
+          "priority_level": "NORMAL",
+          "public_path_mount_mode": 0,
+          "created_at": "1795606173000",
+          "finished_at": "1795608616000"
+        },
+        "requested_priority": 4,
+        "image": "generativeqc-science-py311-cuda129:20261015",
+        "worker_status": [
+          {
+            "rank": 0,
+            "status": "instance_failed",
+            "type": "instance_type_worker"
+          }
+        ],
+        "command": {
+          "command": "bash -c 'cd '\\''${GQC_SHARED}/issue-3166-20261125-master22f'\\'' && bash launch-reuse-qz-e.sh '\\''l'\\'' c payload-rescue --molecule '\\''aziridine'\\'' --df-auxiliary-basis payload-rescue/cc-pwcvtz-rifit.json --target-timeout 2400'"
+        },
+        "entrypoint_utc": "2026-11-25T11:29:52Z",
+        "end_utc": "2026-11-25T12:10:10Z",
+        "entrypoint_to_exit_seconds": 2418.0,
+        "platform_event_times_local": {
+          "Scheduled": [
+            "2026-11-25 03:29:50"
+          ],
+          "Started": [
+            "2026-11-25 03:29:52",
+            "2026-11-25 03:29:52"
+          ],
+          "ExitedWithCode": [
+            "2026-11-25 04:10:16"
+          ],
+          "SuccessfulDeletePod": [
+            "2026-11-25 04:10:19"
+          ]
+        },
+        "scheduling_events": [],
+        "allocation_estimate_seconds": 2429.0,
+        "allocation_estimate_basis": "Scheduled to SuccessfulDeletePod",
+        "estimated_card_hours": 0.6747222222222222,
+        "rate_points_per_hour_per_instance": 1.0,
+        "estimated_points": 0.6747222222222222,
+        "exit_code": 1,
+        "interpretation": "Bounded H100 retry of aziridine after the first 1200-second DF timeout. Reused the same binaries and basis and raised the time limit to 2400 seconds.",
+        "cleanup": "OK Job deleted: gqc-3166-rese-1125-22f-l"
+      }
+    ],
+    "cpu": [
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-min-hf",
+          "status": "SUCCEEDED",
+          "steps": "1/1",
+          "project": "cq-nex-chem",
+          "compute_group": "HPC-可上网区资源-2",
+          "resource": {
+            "cpu": 4,
+            "memory_gib": 16,
+            "gpu": 0,
+            "nodes": 1,
+            "gpu_type": "CPU"
+          },
+          "priority": 35,
+          "priority_level": "HIGH",
+          "created_at": "2026-11-25 17:53:06",
+          "finished_at": "2026-11-25 17:56:16"
+        },
+        "project_requested": "CQ-NexChem",
+        "request_priority": 10,
+        "cpu_model": "Intel(R) Xeon(R) CPU Max 9462",
+        "image": "docker.sii.shaipower.online/infly-dev/slurm-k8s-cluster:20250101841",
+        "entrypoint_utc": "2026-11-25T09:53:49Z",
+        "exit_utc": "2026-11-25T09:55:47Z",
+        "entrypoint_seconds": 118.0,
+        "allocated_cpu_hours_over_entrypoint": 0.13111111111111112,
+        "points_per_hour": 0,
+        "estimated_points": 0,
+        "srun_cpus_per_task": 1,
+        "bundled_packages": [
+          "h5py==3.14.0",
+          "numpy==2.2.6",
+          "pyscf==2.14.0",
+          "scipy==1.15.3",
+          "setuptools==84.2.1"
+        ],
+        "cleanup": "OK HPC deleted: gqc-3166-rese-1125-22f-min-hf"
+      },
+      {
+        "job": {
+          "name": "gqc-3166-rese-1125-22f-min-df",
+          "status": "SUCCEEDED",
+          "steps": "1/1",
+          "project": "cq-nex-chem",
+          "compute_group": "HPC-可上网区资源-2",
+          "resource": {
+            "cpu": 4,
+            "memory_gib": 16,
+            "gpu": 0,
+            "nodes": 1,
+            "gpu_type": "CPU"
+          },
+          "priority": 35,
+          "priority_level": "HIGH",
+          "created_at": "2026-11-25 17:58:02",
+          "finished_at": "2026-11-25 18:18:20"
+        },
+        "project_requested": "CQ-NexChem",
+        "request_priority": 10,
+        "cpu_model": "Intel(R) Xeon(R) CPU Max 9462",
+        "image": "docker.sii.shaipower.online/infly-dev/slurm-k8s-cluster:20250101841",
+        "entrypoint_utc": "2026-11-25T09:58:52Z",
+        "exit_utc": "2026-11-25T10:17:57Z",
+        "entrypoint_seconds": 1145.0,
+        "allocated_cpu_hours_over_entrypoint": 1.2722222222222221,
+        "points_per_hour": 0,
+        "estimated_points": 0,
+        "srun_cpus_per_task": 1,
+        "bundled_packages": [
+          "h5py==3.14.0",
+          "numpy==2.2.6",
+          "pyscf==2.14.0",
+          "scipy==1.15.3",
+          "setuptools==84.2.1"
+        ],
+        "cleanup": "OK HPC deleted: gqc-3166-rese-1125-22f-min-df"
+      }
+    ]
+  },
+  "build": {
+    "production": {
+      "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+      "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+      "nvcc.txt": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+      "host-compiler.txt": "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "python.txt": "Python 3.11.16",
+      "launcher.txt": "sccache 0.16.0",
+      "source-identity.txt": "staged: 3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2\nloaded: 3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+      "cache-before.txt": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"${GQC_SHARED}/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB",
+      "cache-after.txt": "Compile requests                          628\nCompile requests executed                1592\nCache hits                                 87\nCache hits (CUBIN)                         62\nCache hits (CUDA)                          25\nCache misses                             1264\nCache misses (C/C++)                      387\nCache misses (CUBIN)                      179\nCache misses (CUDA)                       216\nCache misses (CUDA (Device code))         241\nCache misses (PTX)                        241\nCache hits rate                          6.44 %\nCache hits rate (C/C++)                  0.00 %\nCache hits rate (CUBIN)                 25.73 %\nCache hits rate (CUDA)                  10.37 %\nCache hits rate (CUDA (Device code))     0.00 %\nCache hits rate (PTX)                    0.00 %\nCache timeouts                              0\nCache read errors                           0\nForced recaches                             0\nCache write errors                          0\nCache errors                                0\nCompilations                             1505\nCompilation failures                        0\nNon-cacheable compilations                241\nNon-cacheable calls                         0\nNon-compilation calls                       0\nUnsupported compiler calls                  0\nAverage cache write                     0.011 s\nAverage compiler                       14.149 s\nAverage cache read hit                  0.017 s\nFailed distributed compilations             0\nCache location                       Local disk: \"${GQC_SHARED}/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                     (none)\nUse direct/preprocessor mode?        yes\nVersion (client)                     0.16.0\nCache size                                 10 GiB\nMax cache size                             10 GiB",
+      "binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  build/libgenerativeqc.so",
+      "configure-command.txt": "${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -m cmake -S ${GQC_SHARED}/issue-3166-20261125-master22f/source -B ${GQC_SHARED}/issue-3166-20261125-master22f/c/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/g++-12 -DCMAKE_CUDA_COMPILER=/opt/generativeqc-reuse/cuda-12.9/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12 -DCMAKE_CXX_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DCMAKE_CUDA_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DPython3_EXECUTABLE=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -DOpenBLAS_DIR=${GQC_SHARED}/h100-portability/20261027-fd06/env/lib/python3.11/site-packages/scipy_openblas32/lib/cmake/openblas -Dnlohmann_json_DIR=/tmp/gqc-3166.aix3itpG/json -DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas -DOPENSSL_INCLUDE_DIR=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include -DOPENSSL_CRYPTO_LIBRARY=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/lib/x86_64-linux-gnu/libcrypto.so -DLibArchive_INCLUDE_DIR=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include -DLibArchive_LIBRARY=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/lib/x86_64-linux-gnu/libarchive.so -DCMAKE_CXX_FLAGS=-isystem\\ ${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include/x86_64-linux-gnu -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=OFF -DCMAKE_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_ENABLE_AOT_SHELLS=ON -DGENERATIVEQC_AOT_PROFILE=portable_cuda -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF -DGENERATIVEQC_BUILD_CLI=ON -DGENERATIVEQC_BUILD_TESTS=OFF -DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON -DGENERATIVEQC_CUDA_COMPILE_JOBS=6 -DGENERATIVEQC_AOT_COMPILE_JOBS=6 -DGENERATIVEQC_AOT_SHARDS=8",
+      "cli-dependency-packages.sha256": "4db2c64ec74f673ed022e92cce7b83d0cbe0b779e02ca60a56ba59ae07754e05  libacl1_2.3.1-1_amd64.deb\n43b7717405d10f60a8dd50b1c566b754b59a2f418a4ee23a077a37dc2bba0081  libarchive-dev_3.6.0-1ubuntu1.9_amd64.deb\n979865c53912b227b8d65d208cd5810bcc3c535a042203a68eb1337dadd6d6c4  libarchive13_3.6.0-1ubuntu1.9_amd64.deb\n3bfeaf4259eadbb7faa09feee86cd6cad172cd95907d7465afd0eb5aebb5433f  libbz2-1.0_1.0.8-5build1_amd64.deb\n4883114ed51508d27e06030d78ac8348e01c92d50fcf1069bb5582786ff82633  libext2fs2_1.46.5-2ubuntu1.2_amd64.deb\n58a154f6307289813da2276f900498ef536ae7c0522d2cf31a3c3c5cf62dfd9a  libicu70_70.1-2_amd64.deb\nac9b54d0feb840345060c74fb687675c5e1eb2b195effafae38c5f9991041e98  liblz4-1_1.9.3-2build2_amd64.deb\n8f1c46e7d3f5102a5e4fdca7c949728a343ba71c2a7c124118df2c13d4c444f7  liblzma5_5.2.5-2ubuntu1_amd64.deb\n8a47dfa7f9bd4d54ac9dc9a1db14891a9133841bf44f12c3db086f2d4321bac6  libssl-dev_3.0.2-0ubuntu1.30_amd64.deb\nd1b4636e32ac6d3b95d583ac05ac548b1aa248414bae1c51b14f54be0f8fd7bc  libssl3_3.0.2-0ubuntu1.30_amd64.deb\n16e395b2c52d6ab232053468febc69f0876956ec2fae357a941a2a8dab36574f  libxml2_2.9.13+dfsg-1ubuntu0.14_amd64.deb\nae7db00ce8b093e50c994518b90203544e063b4bc574836a048bb142b950b2c9  libzstd1_1.4.8+dfsg-3build1_amd64.deb",
+      "original_stream_hashes": {
+        "configure.log": {
+          "sha256": "ebc4160a1477f3e5701742853233308b91195c49ef93116e4e65c63c2d6bb639",
+          "bytes": 2488
+        },
+        "build.log": {
+          "sha256": "107bd1ce355cfc5e04ecf1fecdb28fa76e1b00891e7909620fb96ed32f2624a2",
+          "bytes": 2943637
+        },
+        "compiler-commands.txt": {
+          "sha256": "85ccd92d59291671f778cc4ff36938897a598681975e2ce7958bd502e3137682",
+          "bytes": 1900932
+        },
+        "linkage.txt": {
+          "sha256": "df402b2616484ed08053ddd8e9a41b41c2586a3670eb5e22c0bcfaeac79566cf",
+          "bytes": 3660
+        }
+      }
+    },
+    "frozen_gpu_package_versions": {
+      "cmake": "3.31.10",
+      "ninja": "1.13.2",
+      "nlohmann_json": "3.11.3",
+      "sccache": "0.16.0",
+      "scipy_openblas32": "0.3.34.0.0"
+    },
+    "acquisition_hardware": {
+      "d": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "e": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "f": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "g": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           INTEL(R) XEON(R) PLATINUM 8558\nCPU family:                           6\nModel:                                207\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             2\nCPU max MHz:                          4000.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             520 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "i": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           INTEL(R) XEON(R) PLATINUM 8558\nCPU family:                           6\nModel:                                207\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             2\nCPU max MHz:                          4000.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             520 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "j": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "k": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "l": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3800.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "loaded-binaries.sha256": "974891f5c629d8dc0a4f7d25a3ac6b794ebb8038c5a167c489d547b28c0b295b  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      }
+    },
+    "withdrawn_a": {
+      "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+      "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nFrequency boost:                      enabled\nCPU max MHz:                          2101.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS; IBPB conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+      "nvcc.txt": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+      "host-compiler.txt": "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "python.txt": "Python 3.11.16",
+      "launcher.txt": "sccache 0.16.0",
+      "cache-before.txt": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"${GQC_SHARED}/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB",
+      "configure-command.txt": "${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -m cmake -S ${GQC_SHARED}/issue-3166-20261125/source -B ${GQC_SHARED}/issue-3166-20261125/a/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/g++-12 -DCMAKE_CUDA_COMPILER=/opt/generativeqc-reuse/cuda-12.9/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12 -DCMAKE_CXX_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DCMAKE_CUDA_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DPython3_EXECUTABLE=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -DOpenBLAS_DIR=${GQC_SHARED}/h100-portability/20261027-fd06/env/lib/python3.11/site-packages/scipy_openblas32/lib/cmake/openblas -Dnlohmann_json_DIR=/tmp/gqc-3166.v7hvIvAY/json -DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas -DCMAKE_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_ENABLE_AOT_SHELLS=ON -DGENERATIVEQC_AOT_PROFILE=portable_cuda -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=OFF -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF -DGENERATIVEQC_BUILD_CLI=ON -DGENERATIVEQC_BUILD_TESTS=OFF -DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON -DGENERATIVEQC_CUDA_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_SHARDS=8",
+      "original_stream_hashes": {
+        "configure.log": {
+          "sha256": "3739d253dd8e3dd2baff755bd4e477b1c5ca4cfd65cd1ec9c64f76f0d4dab15d",
+          "bytes": 2898
+        }
+      }
+    },
+    "withdrawn_a_configure_error": "Could NOT find OpenSSL (missing: OPENSSL_CRYPTO_LIBRARY OPENSSL_INCLUDE_DIR Crypto)",
+    "withdrawn_b": {
+      "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+      "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           INTEL(R) XEON(R) PLATINUM 8558\nCPU family:                           6\nModel:                                207\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             2\nCPU max MHz:                          4000.0000\nCPU min MHz:                          800.0000\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             520 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+      "nvcc.txt": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0",
+      "host-compiler.txt": "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0\nCopyright (C) 2022 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "python.txt": "Python 3.11.16",
+      "launcher.txt": "sccache 0.16.0",
+      "source-identity.txt": "staged: 9bc35927feb6c549f54a031dfa2f9c66b4d3b1a6fe6bb326b3471c0cc80eb4c2\nloaded: 9bc35927feb6c549f54a031dfa2f9c66b4d3b1a6fe6bb326b3471c0cc80eb4c2",
+      "cache-before.txt": "Compile requests                      0\nCompile requests executed             0\nCache hits                            0\nCache misses                          0\nCache hits rate                       -\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          0\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.000 s\nAverage compiler                  0.000 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"${GQC_SHARED}/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nMax cache size                       10 GiB",
+      "cache-after.txt": "Compile requests                      8\nCompile requests executed             8\nCache hits                            0\nCache misses                          8\nCache misses (C/C++)                  8\nCache hits rate                    0.00 %\nCache hits rate (C/C++)            0.00 %\nCache timeouts                        0\nCache read errors                     0\nForced recaches                       0\nCache write errors                    0\nCache errors                          0\nCompilations                          8\nCompilation failures                  0\nNon-cacheable compilations            0\nNon-cacheable calls                   0\nNon-compilation calls                 0\nUnsupported compiler calls            0\nAverage cache write               0.001 s\nAverage compiler                  6.298 s\nAverage cache read hit            0.000 s\nFailed distributed compilations       0\nCache location                  Local disk: \"${GQC_SHARED}/h100-portability/20261027-fd06/cache/sccache\"\nBase directories                (none)\nUse direct/preprocessor mode?   yes\nVersion (client)                0.16.0\nCache size                           10 GiB\nMax cache size                       10 GiB",
+      "binaries.sha256": "3046e9c1d1d6881124f6d52b695cb3cc9648b4a51de536a9a458e04970e34414  build/generativeqc\ne528760871c9edb3846f2b8153cf6deaf098bed980d819524c20fda688d17d76  build/libgenerativeqc.so",
+      "configure-command.txt": "${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -m cmake -S ${GQC_SHARED}/issue-3166-20261125/source -B ${GQC_SHARED}/issue-3166-20261125/b/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=/usr/bin/g++-12 -DCMAKE_CUDA_COMPILER=/opt/generativeqc-reuse/cuda-12.9/bin/nvcc -DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12 -DCMAKE_CXX_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DCMAKE_CUDA_COMPILER_LAUNCHER=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/sccache -DPython3_EXECUTABLE=${GQC_SHARED}/h100-portability/20261027-fd06/env/bin/python -DOpenBLAS_DIR=${GQC_SHARED}/h100-portability/20261027-fd06/env/lib/python3.11/site-packages/scipy_openblas32/lib/cmake/openblas -Dnlohmann_json_DIR=/tmp/gqc-3166.A81FeooT/json -DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas -DOPENSSL_INCLUDE_DIR=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include -DOPENSSL_CRYPTO_LIBRARY=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/lib/x86_64-linux-gnu/libcrypto.so -DLibArchive_INCLUDE_DIR=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include -DLibArchive_LIBRARY=${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/lib/x86_64-linux-gnu/libarchive.so -DCMAKE_CXX_FLAGS=-isystem\\ ${GQC_SHARED}/issue-3166-20261125/cli-deps/usr/include/x86_64-linux-gnu -DGENERATIVEQC_ENABLE_HESSIAN_AOT_LEAVES=OFF -DCMAKE_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_CUDA_ARCHITECTURES=90 -DGENERATIVEQC_ENABLE_CUDA=ON -DGENERATIVEQC_ENABLE_AOT_SHELLS=ON -DGENERATIVEQC_AOT_PROFILE=portable_cuda -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=ON -DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON -DGENERATIVEQC_STATIONARY_AOT_PROFILES=b3lyp_rks\\;m06_2x_rks\\;pbe0_rks\\;pbe_rks\\;r2scan_rks\\;wb97mv_rks -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF -DGENERATIVEQC_BUILD_CLI=ON -DGENERATIVEQC_BUILD_TESTS=OFF -DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON -DGENERATIVEQC_CUDA_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_SHARDS=8",
+      "cli-dependency-packages.sha256": "4db2c64ec74f673ed022e92cce7b83d0cbe0b779e02ca60a56ba59ae07754e05  libacl1_2.3.1-1_amd64.deb\n43b7717405d10f60a8dd50b1c566b754b59a2f418a4ee23a077a37dc2bba0081  libarchive-dev_3.6.0-1ubuntu1.9_amd64.deb\n979865c53912b227b8d65d208cd5810bcc3c535a042203a68eb1337dadd6d6c4  libarchive13_3.6.0-1ubuntu1.9_amd64.deb\n3bfeaf4259eadbb7faa09feee86cd6cad172cd95907d7465afd0eb5aebb5433f  libbz2-1.0_1.0.8-5build1_amd64.deb\n4883114ed51508d27e06030d78ac8348e01c92d50fcf1069bb5582786ff82633  libext2fs2_1.46.5-2ubuntu1.2_amd64.deb\n58a154f6307289813da2276f900498ef536ae7c0522d2cf31a3c3c5cf62dfd9a  libicu70_70.1-2_amd64.deb\nac9b54d0feb840345060c74fb687675c5e1eb2b195effafae38c5f9991041e98  liblz4-1_1.9.3-2build2_amd64.deb\n8f1c46e7d3f5102a5e4fdca7c949728a343ba71c2a7c124118df2c13d4c444f7  liblzma5_5.2.5-2ubuntu1_amd64.deb\n8a47dfa7f9bd4d54ac9dc9a1db14891a9133841bf44f12c3db086f2d4321bac6  libssl-dev_3.0.2-0ubuntu1.30_amd64.deb\nd1b4636e32ac6d3b95d583ac05ac548b1aa248414bae1c51b14f54be0f8fd7bc  libssl3_3.0.2-0ubuntu1.30_amd64.deb\n16e395b2c52d6ab232053468febc69f0876956ec2fae357a941a2a8dab36574f  libxml2_2.9.13+dfsg-1ubuntu0.14_amd64.deb\nae7db00ce8b093e50c994518b90203544e063b4bc574836a048bb142b950b2c9  libzstd1_1.4.8+dfsg-3build1_amd64.deb",
+      "original_stream_hashes": {
+        "configure.log": {
+          "sha256": "001db8ecd557905a9e0dc9ab41e53fe5a4dbce337c672842b3c4fd4c1a1a5848",
+          "bytes": 2478
+        },
+        "build.log": {
+          "sha256": "df19b5885dd3ff2c32d47da88b1fbc9b2e0ea8ae9e9f6b71cb5890c2985d6d4b",
+          "bytes": 16074
+        },
+        "compiler-commands.txt": {
+          "sha256": "9901f8188b96dcea26248a435443afd0c959c5c1d306a669da1ccdd6f4607a6a",
+          "bytes": 11409
+        },
+        "linkage.txt": {
+          "sha256": "c6d313d5dca251ba3e45ffbcc2dbb27a406677d1001210638331b5b88c8f4415",
+          "bytes": 3650
+        }
+      }
+    },
+    "withdrawn_b_driver": {
+      "sha256": "fdb873cc6d34f59eca256218fc4e2b58fa5a4f2967d1f155dc082b50a36b81ae",
+      "bytes": 6426
+    },
+    "withdrawn_b_core_build_revision": "471ea1a0aa9b872998be27abc990dcc837182a4c"
+  },
+  "retained_files": {
+    "BSE-LICENSE": {
+      "sha256": "14b5a1c21a9e0966e295b9e3d66c0cee9475ffe5931e74d063c3713e2ae9a496",
+      "bytes": 1505
+    },
+    "build-qz.sh": {
+      "sha256": "7470cdc43958bd62982356ec2978fad7d47e019459a221fe2ca579c9aeef60c2",
+      "bytes": 5249
+    },
+    "cc-pcvqz.json": {
+      "sha256": "db1757631be7321ed41ad3320fac7b1f9fb18dd1d953421d7a4a0eb496819051",
+      "bytes": 27168
+    },
+    "cc-pcvtz.json": {
+      "sha256": "73c9b0b0f813d906f15143cf68583f670f051e9ce7318d2362e5f20114e67549",
+      "bytes": 17928
+    },
+    "cc-pvdz.json": {
+      "sha256": "37d504cb0ee120317f3b9d19b41db971ea520b84cf663157192022deebb957c3",
+      "bytes": 9335
+    },
+    "cc-pwcvtz-rifit.json": {
+      "sha256": "591404d35e1856778703f8eb28015fab17ecdd8adeca5c97723b939f10d1c592",
+      "bytes": 35168
+    },
+    "check_df_minima.py": {
+      "sha256": "8066588b8a75d4be3dcd5addfc35efac4ec776932fe4cec56f367f18b28faa6d",
+      "bytes": 7886
+    },
+    "check_minima.py": {
+      "sha256": "3bd297264e6762e0ce1738b1e96b8f44c1e0029cfc4f11bc7235f5b79431e969",
+      "bytes": 8719
+    },
+    "cohort.json": {
+      "sha256": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
+      "bytes": 30471
+    },
+    "launch-minima-qz.sh": {
+      "sha256": "89e856fa56a31335aff84ad9085275e74600a58ca23462c8730d2ae6cd9027f5",
+      "bytes": 772
+    },
+    "launch-qz.sh": {
+      "sha256": "a47589d73a30c9c65bef57bc29a7d4f15ff298ecda0c37179c18378eaea0f6f6",
+      "bytes": 917
+    },
+    "launch-reuse-qz.sh": {
+      "sha256": "9eaeb68c4f7a06515f6d379560ef1d51b4daf8740aace45b0be07d9348807f9b",
+      "bytes": 1156
+    },
+    "minima.json.xz": {
+      "sha256": "ab6c55daf3358c201396ea2a9abb5899b7704161221bfe25bab5b51b9ad9c0cf",
+      "bytes": 10268
+    },
+    "records.json.xz": {
+      "sha256": "6e9edf362c06b798aec7d690741300a9045991aea1928104f8770052d5e026d7",
+      "bytes": 29320
+    },
+    "replay.py": {
+      "sha256": "5cd5e602798c1e1c4cbc74c2f63a7cb6233fb38cab2c8f8528293a21b0a23060",
+      "bytes": 10586
+    },
+    "run.py": {
+      "sha256": "3e1ae8fc67d9dcea224a9b36b3809936ac0cf306a7c7a8e36a2933b4602a56c8",
+      "bytes": 8838
+    },
+    "summary.json": {
+      "sha256": "b8d5057c06f564dab66803f85c174d6949a111359e92e86e42404eee81d41f62",
+      "bytes": 73076
+    },
+    "withdrawn-d154546d2.json.xz": {
+      "sha256": "85b122f138c6619346bf88f396fe255ce36de43f439969424122dc67062811a3",
+      "bytes": 5544
+    }
+  }
+}

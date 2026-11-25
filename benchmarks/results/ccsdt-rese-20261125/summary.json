@@ -1,0 +1,2855 @@
+{
+  "molecules": [
+    {
+      "id": "hf",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "c",
+          "rhf": {
+            "status": "timeout",
+            "wall_seconds": 180.0227525997907,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "cc-pcvqz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "d",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 3.4695514431223273,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -100.01970688255844,
+            "max_force": 6.311477570041721e-05,
+            "steps": 3,
+            "evaluations": 4
+          },
+          "cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 298.2603409239091,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -100.39990968576014,
+            "max_force": 6.192327553978837e-06,
+            "steps": 3,
+            "evaluations": 4,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0002106805477199991,
+              "max_abs": 0.0002106805477199991,
+              "worst": {
+                "molecule": "hf",
+                "label": "H-F",
+                "error": -0.0002106805477199991
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 1.0680547719910116e-05,
+              "max_abs": 1.0680547719910116e-05,
+              "worst": {
+                "molecule": "hf",
+                "label": "H-F",
+                "error": -1.0680547719910116e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          },
+          "cc-pcvqz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "e",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 3.168987938668579,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -100.01970688255838,
+            "max_force": 6.311477569109903e-05,
+            "steps": 3,
+            "evaluations": 4
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "cc-pcvqz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 68.7473232569173,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -100.4001322703141,
+            "max_force": 6.200092354191626e-06,
+            "steps": 3,
+            "evaluations": 4,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.00020199488577576918,
+              "max_abs": 0.00020199488577576918,
+              "worst": {
+                "molecule": "hf",
+                "label": "H-F",
+                "error": -0.00020199488577576918
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 1.9948857756801885e-06,
+              "max_abs": 1.9948857756801885e-06,
+              "worst": {
+                "molecule": "hf",
+                "label": "H-F",
+                "error": -1.9948857756801885e-06
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "h2o",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "c",
+          "rhf": {
+            "status": "interrupted"
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "d",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 3.25503054773435,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -76.0270533181156,
+            "max_force": 0.00021139141997170827,
+            "steps": 2,
+            "evaluations": 3
+          },
+          "cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 582.712561044842,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -76.38979714319211,
+            "max_force": 1.4866152076012276e-05,
+            "steps": 3,
+            "evaluations": 4,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0009282004819103351,
+              "max_abs": 0.0009282004819103351,
+              "worst": {
+                "molecule": "h2o",
+                "label": "O-H",
+                "error": 0.0009282004819103351
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.8341696656668205,
+              "max_abs": 0.8341696656668205,
+              "worst": {
+                "molecule": "h2o",
+                "label": "H-O-H",
+                "error": -0.8341696656668205
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 2.8200481910323205e-05,
+              "max_abs": 2.8200481910323205e-05,
+              "worst": {
+                "molecule": "h2o",
+                "label": "O-H",
+                "error": 2.8200481910323205e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "e",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 2.8690086798742414,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -76.02705331811565,
+            "max_force": 0.00021139141998656528,
+            "steps": 2,
+            "evaluations": 3
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 62.84310576412827,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -76.39002256173671,
+            "max_force": 1.4944780533508269e-05,
+            "steps": 3,
+            "evaluations": 4,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0009404901357318307,
+              "max_abs": 0.0009404901357318307,
+              "worst": {
+                "molecule": "h2o",
+                "label": "O-H",
+                "error": 0.0009404901357318307
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.8349829039658658,
+              "max_abs": 0.8349829039658658,
+              "worst": {
+                "molecule": "h2o",
+                "label": "H-O-H",
+                "error": -0.8349829039658658
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 4.049013573181881e-05,
+              "max_abs": 4.049013573181881e-05,
+              "worst": {
+                "molecule": "h2o",
+                "label": "O-H",
+                "error": 4.049013573181881e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "co",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "d",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 5.671872782986611,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -112.7501505994371,
+            "max_force": 0.0002501341093916654,
+            "steps": 3,
+            "evaluations": 5
+          },
+          "cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 1200.401309079025,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          },
+          "cc-pcvqz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "e",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 5.672645980026573,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -112.7501505994371,
+            "max_force": 0.00025013410935219267,
+            "steps": 3,
+            "evaluations": 5
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "cc-pcvqz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 226.59369168197736,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -113.26453782484725,
+            "max_force": 6.057054768902491e-08,
+            "steps": 4,
+            "evaluations": 6,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.004167251442772413,
+              "max_abs": 0.004167251442772413,
+              "worst": {
+                "molecule": "co",
+                "label": "C-O",
+                "error": 0.004167251442772413
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 3.274855722756875e-05,
+              "max_abs": 3.274855722756875e-05,
+              "worst": {
+                "molecule": "co",
+                "label": "C-O",
+                "error": -3.274855722756875e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "n2",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "d",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 4.670903849881142,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -108.95555878708643,
+            "max_force": 2.9327904422124373e-05,
+            "steps": 4,
+            "evaluations": 6
+          },
+          "cc-pcvtz": {
+            "status": "interrupted"
+          },
+          "df-cc-pcvtz": {
+            "status": "not_attempted"
+          }
+        },
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 4.821543342899531,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -108.95555878708643,
+            "max_force": 2.9327904399092135e-05,
+            "steps": 4,
+            "evaluations": 6
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 204.98188654286787,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -109.48279558198134,
+            "max_force": 7.490528375342537e-07,
+            "steps": 4,
+            "evaluations": 6,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.002914872104035071,
+              "max_abs": 0.002914872104035071,
+              "worst": {
+                "molecule": "n2",
+                "label": "N-N",
+                "error": 0.002914872104035071
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 1.4872104034946432e-05,
+              "max_abs": 1.4872104034946432e-05,
+              "worst": {
+                "molecule": "n2",
+                "label": "N-N",
+                "error": 1.4872104034946432e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "f2",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 3.5693830363452435,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -198.68893648525628,
+            "max_force": 8.638625793868098e-06,
+            "steps": 3,
+            "evaluations": 4
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 173.62987491767853,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -199.4195451112842,
+            "max_force": 9.636352231723328e-07,
+            "steps": 4,
+            "evaluations": 5,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0007845682717131375,
+              "max_abs": 0.0007845682717131375,
+              "worst": {
+                "molecule": "f2",
+                "label": "F-F",
+                "error": 0.0007845682717131375
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 0.0001154317282867634,
+              "max_abs": 0.0001154317282867634,
+              "worst": {
+                "molecule": "f2",
+                "label": "F-F",
+                "error": -0.0001154317282867634
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hcn",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 8.106733540073037,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -92.88421650841636,
+            "max_force": 3.948804799935142e-05,
+            "steps": 5,
+            "evaluations": 7
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 352.5973525289446,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -93.38082422748947,
+            "max_force": 1.818989245272462e-05,
+            "steps": 5,
+            "evaluations": 7,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.002511670832760937,
+              "max_abs": 0.003529076867251124,
+              "worst": {
+                "molecule": "hcn",
+                "label": "C-N",
+                "error": 0.003529076867251124
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 1.7406034490186073e-05,
+              "max_abs": 2.9076867251065508e-05,
+              "worst": {
+                "molecule": "hcn",
+                "label": "C-N",
+                "error": 2.9076867251065508e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hnc",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 7.17500417586416,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -92.86642098363814,
+            "max_force": 1.6373326204801307e-05,
+            "steps": 5,
+            "evaluations": 7
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 352.07332355203107,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -93.35685322006607,
+            "max_force": 1.3515983924961006e-05,
+            "steps": 5,
+            "evaluations": 7,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.002243850001489911,
+              "max_abs": 0.003640533818755065,
+              "worst": {
+                "molecule": "hnc",
+                "label": "N-C",
+                "error": 0.003640533818755065
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 4.3850001489986745e-05,
+              "max_abs": 4.7166184224733954e-05,
+              "worst": {
+                "molecule": "hnc",
+                "label": "H-N",
+                "error": 4.7166184224733954e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ch4",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column, footnote n"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 2.518158034887165,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -40.19871191888841,
+            "max_force": 0.00010611280634090688,
+            "steps": 2,
+            "evaluations": 3
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 51.83156803436577,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -40.48921220737893,
+            "max_force": 1.1556840723212596e-05,
+            "steps": 2,
+            "evaluations": 3,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0016332707352477716,
+              "max_abs": 0.0016332707352477716,
+              "worst": {
+                "molecule": "ch4",
+                "label": "C-H",
+                "error": 0.0016332707352477716
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 3.327073524794777e-05,
+              "max_abs": 3.327073524794777e-05,
+              "worst": {
+                "molecule": "ch4",
+                "label": "C-H",
+                "error": 3.327073524794777e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "nh3",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 5.121337317861617,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -56.19573154076679,
+            "max_force": 1.8795232194694907e-05,
+            "steps": 6,
+            "evaluations": 7
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 116.00987363513559,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -56.52742983748473,
+            "max_force": 3.0514196258807715e-07,
+            "steps": 5,
+            "evaluations": 6,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.0010062080254122918,
+              "max_abs": 0.0010062080254122918,
+              "worst": {
+                "molecule": "nh3",
+                "label": "N-H",
+                "error": 0.0010062080254122918
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 1.4539285440362448,
+              "max_abs": 1.4539285440362448,
+              "worst": {
+                "molecule": "nh3",
+                "label": "H-N-H",
+                "error": -1.4539285440362448
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 6.208025412401952e-06,
+              "max_abs": 6.208025412401952e-06,
+              "worst": {
+                "molecule": "nh3",
+                "label": "N-H",
+                "error": 6.208025412401952e-06
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hno",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 12.381032775621861,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -129.80130307551966,
+            "max_force": 1.715531680164891e-05,
+            "steps": 8,
+            "evaluations": 9
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 443.09154350403696,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -130.41004042721934,
+            "max_force": 1.953748428200995e-05,
+            "steps": 7,
+            "evaluations": 8,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.0028905178788956043,
+              "max_abs": 0.0032511820188469986,
+              "worst": {
+                "molecule": "hno",
+                "label": "N-O",
+                "error": 0.0032511820188469986
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.3384367083805273,
+              "max_abs": 0.3384367083805273,
+              "worst": {
+                "molecule": "hno",
+                "label": "H-N-O",
+                "error": -0.3384367083805273
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 4.051787889558511e-05,
+              "max_abs": 5.1182018846906985e-05,
+              "worst": {
+                "molecule": "hno",
+                "label": "N-O",
+                "error": 5.1182018846906985e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hof",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 9.608847043011338,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -174.7474013433353,
+            "max_force": 2.0898679890896822e-05,
+            "steps": 7,
+            "evaluations": 8
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 350.8800920988433,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -175.45363357116221,
+            "max_force": 1.2742784472337206e-06,
+            "steps": 5,
+            "evaluations": 6,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.0010118525018849023,
+              "max_abs": 0.001175030433741342,
+              "worst": {
+                "molecule": "hof",
+                "label": "O-H",
+                "error": -0.001175030433741342
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.2764343129042288,
+              "max_abs": 0.2764343129042288,
+              "worst": {
+                "molecule": "hof",
+                "label": "H-O-F",
+                "error": -0.2764343129042288
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 3.8147498115148615e-05,
+              "max_abs": 5.132542997166034e-05,
+              "worst": {
+                "molecule": "hof",
+                "label": "O-F",
+                "error": -5.132542997166034e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "co2",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 4.671159773133695,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -187.6528956145089,
+            "max_force": 8.800433083480703e-05,
+            "steps": 3,
+            "evaluations": 4
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 362.1715595787391,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -188.494549422026,
+            "max_force": 1.2462297430460012e-05,
+            "steps": 3,
+            "evaluations": 4,
+            "re_se_bonds": {
+              "n": 1,
+              "mae": 0.003599900870223438,
+              "max_abs": 0.003599900870223438,
+              "worst": {
+                "molecule": "co2",
+                "label": "C-O",
+                "error": 0.003599900870223438
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 1,
+              "mae": 9.912977660953004e-08,
+              "max_abs": 9.912977660953004e-08,
+              "worst": {
+                "molecule": "co2",
+                "label": "C-O",
+                "error": -9.912977660953004e-08
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "c2h2",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 5.621844157576561,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -76.8260430903841,
+            "max_force": 0.00018160976680143921,
+            "steps": 5,
+            "evaluations": 7
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 314.1067687962204,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -77.29017973488652,
+            "max_force": 7.798437274442183e-06,
+            "steps": 6,
+            "evaluations": 8,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.0025174851855256364,
+              "max_abs": 0.003010506903092125,
+              "worst": {
+                "molecule": "c2h2",
+                "label": "C-C",
+                "error": 0.003010506903092125
+              }
+            },
+            "re_se_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 1.748518552557865e-05,
+              "max_abs": 2.4463467959146e-05,
+              "worst": {
+                "molecule": "c2h2",
+                "label": "C-H",
+                "error": 2.4463467959146e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ch2o",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 9.17617577407509,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -113.87722271621311,
+            "max_force": 1.8089847970629338e-05,
+            "steps": 9,
+            "evaluations": 10
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 392.8578210901469,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -114.44260118889244,
+            "max_force": 7.172407476999778e-06,
+            "steps": 8,
+            "evaluations": 9,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.001981254960712331,
+              "max_abs": 0.00239241282641256,
+              "worst": {
+                "molecule": "ch2o",
+                "label": "C-O",
+                "error": 0.00239241282641256
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.5505655026691727,
+              "max_abs": 0.5505655026691727,
+              "worst": {
+                "molecule": "ch2o",
+                "label": "H-C-H",
+                "error": -0.5505655026691727
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 3.884213429972139e-05,
+              "max_abs": 7.009709501204497e-05,
+              "worst": {
+                "molecule": "ch2o",
+                "label": "C-H",
+                "error": 7.009709501204497e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "trans-n2h2",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 6.123486659023911,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -110.00850661595857,
+            "max_force": 1.7223872303229097e-05,
+            "steps": 7,
+            "evaluations": 8
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 325.05950232595205,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -110.58605468000535,
+            "max_force": 2.8934548266304887e-06,
+            "steps": 7,
+            "evaluations": 8,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.003015299103103053,
+              "max_abs": 0.0048430995156694134,
+              "worst": {
+                "molecule": "trans-n2h2",
+                "label": "N-N",
+                "error": 0.0048430995156694134
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.512211227739229,
+              "max_abs": 0.512211227739229,
+              "worst": {
+                "molecule": "trans-n2h2",
+                "label": "H-N-N",
+                "error": -0.512211227739229
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 3.470089689694422e-05,
+              "max_abs": 5.6900484330491e-05,
+              "worst": {
+                "molecule": "trans-n2h2",
+                "label": "N-N",
+                "error": -5.6900484330491e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "c2h4",
+      "re_se_source": {
+        "doi": "10.1063/1.1357225",
+        "location": "II and III, Emp. column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 4.787648871075362,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -78.04016526069694,
+            "max_force": 7.492589179142709e-05,
+            "steps": 5,
+            "evaluations": 6
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 535.2173714819364,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -78.54099572024825,
+            "max_force": 1.8821466071765595e-05,
+            "steps": 7,
+            "evaluations": 8,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.0022673596688018716,
+              "max_abs": 0.0031947350003798114,
+              "worst": {
+                "molecule": "c2h4",
+                "label": "C-C",
+                "error": 0.0031947350003798114
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.08290770196605024,
+              "max_abs": 0.08290770196605024,
+              "worst": {
+                "molecule": "c2h4",
+                "label": "H-C-H",
+                "error": -0.08290770196605024
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 2,
+              "mae": 2.2624668422066563e-05,
+              "max_abs": 3.998433722385286e-05,
+              "worst": {
+                "molecule": "c2h4",
+                "label": "C-H",
+                "error": 3.998433722385286e-05
+              }
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "fno",
+      "re_se_source": {
+        "doi": "10.1021/jp064769v",
+        "location": "4, r_e^SE row"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 12.23152970476076,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -228.6386140695359,
+            "max_force": 0.00018773345822726184,
+            "steps": 6,
+            "evaluations": 8
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 885.2589258560911,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -229.60236783743687,
+            "max_force": 2.8884602708725795e-06,
+            "steps": 8,
+            "evaluations": 9,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.014036136697109458,
+              "max_abs": 0.021175819565017573,
+              "worst": {
+                "molecule": "fno",
+                "label": "N-F",
+                "error": -0.021175819565017573
+              }
+            },
+            "re_se_angles": {
+              "n": 1,
+              "mae": 0.21723266940750818,
+              "max_abs": 0.21723266940750818,
+              "worst": {
+                "molecule": "fno",
+                "label": "F-N-O",
+                "error": 0.21723266940750818
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "trans-hono",
+      "re_se_source": {
+        "doi": "10.1021/jp064769v",
+        "location": "1, r_e^SE footnote d (all-electron CCSD(T)/cc-pVTZ cubic force field)"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 12.88145730085671,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -204.66217046532154,
+            "max_force": 0.00011459704623655518,
+            "steps": 9,
+            "evaluations": 10
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 1200.2806831235066,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        },
+        {
+          "attempt": "i",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 12.981642920523882,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -204.66217046532125,
+            "max_force": 0.00011459704633988352,
+            "steps": 9,
+            "evaluations": 10
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 1687.8120900485665,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -205.6030443029894,
+            "max_force": 8.743071320835765e-06,
+            "steps": 11,
+            "evaluations": 13,
+            "re_se_bonds": {
+              "n": 3,
+              "mae": 0.001233844909518833,
+              "max_abs": 0.0028683381957805842,
+              "worst": {
+                "molecule": "trans-hono",
+                "label": "N=O",
+                "error": 0.0028683381957805842
+              }
+            },
+            "re_se_angles": {
+              "n": 2,
+              "mae": 0.23307465024459617,
+              "max_abs": 0.46115119590284337,
+              "worst": {
+                "molecule": "trans-hono",
+                "label": "H-O-N",
+                "error": -0.46115119590284337
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ch2f2",
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 6.184802931733429,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -237.91189311017467,
+            "max_force": 0.00018286934383399242,
+            "steps": 5,
+            "evaluations": 6
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 1134.247894462198,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -238.87355700174948,
+            "max_force": 1.798814015093546e-05,
+            "steps": 6,
+            "evaluations": 7,
+            "re_se_bonds": {
+              "n": 2,
+              "mae": 0.0012286262313212504,
+              "max_abs": 0.0016642892801248532,
+              "worst": {
+                "molecule": "ch2f2",
+                "label": "C-H",
+                "error": 0.0016642892801248532
+              }
+            },
+            "re_se_angles": {
+              "n": 3,
+              "mae": 0.3533566118625468,
+              "max_abs": 0.6460199211735329,
+              "worst": {
+                "molecule": "ch2f2",
+                "label": "H-C-H",
+                "error": -0.6460199211735329
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "syn-ethenol",
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "attempts": [
+        {
+          "attempt": "g",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 19.057691478170455,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -152.90834733745885,
+            "max_force": 0.00021878093478510313,
+            "steps": 14,
+            "evaluations": 15
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 1200.2631638618186,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        },
+        {
+          "attempt": "k",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 18.89553644321859,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -152.90834733745868,
+            "max_force": 0.0002187809339651445,
+            "steps": 14,
+            "evaluations": 15
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 2400.3191455770284,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "trans-formic-acid",
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 12.930396473035216,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -188.78337519955824,
+            "max_force": 0.00016490155539778984,
+            "steps": 10,
+            "evaluations": 11
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 1200.2950126868673,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        },
+        {
+          "attempt": "j",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 13.28317446121946,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -188.78337519955863,
+            "max_force": 0.00016490155587375714,
+            "steps": 10,
+            "evaluations": 11
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "converged",
+            "wall_seconds": 2180.43972599227,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -189.66865879951837,
+            "max_force": 1.112790174378314e-05,
+            "steps": 11,
+            "evaluations": 13,
+            "re_se_bonds": {
+              "n": 4,
+              "mae": 0.002260272502620231,
+              "max_abs": 0.0028731548359595127,
+              "worst": {
+                "molecule": "trans-formic-acid",
+                "label": "C-O",
+                "error": 0.0028731548359595127
+              }
+            },
+            "re_se_angles": {
+              "n": 3,
+              "mae": 0.33817248026053903,
+              "max_abs": 0.5523796394492564,
+              "worst": {
+                "molecule": "trans-formic-acid",
+                "label": "C-O-H",
+                "error": -0.5523796394492564
+              }
+            },
+            "cc-pcvtz_bonds": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            },
+            "cc-pcvtz_angles": {
+              "n": 0,
+              "mae": null,
+              "max_abs": null,
+              "worst": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "aziridine",
+      "re_se_source": {
+        "doi": "10.1021/jp511432m",
+        "location": "4, B3LYP/SNSD r_e^SE column"
+      },
+      "attempts": [
+        {
+          "attempt": "f",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 9.43153447797522,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -133.05102312545384,
+            "max_force": 0.0002582435899537255,
+            "steps": 13,
+            "evaluations": 15
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 1200.41234935401,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        },
+        {
+          "attempt": "l",
+          "rhf": {
+            "status": "converged",
+            "wall_seconds": 9.880338550079614,
+            "returncode": 0,
+            "error": null,
+            "energy_hartree": -133.0510231254538,
+            "max_force": 0.0002582435900932634,
+            "steps": 13,
+            "evaluations": 15
+          },
+          "cc-pcvtz": {
+            "status": "not_attempted"
+          },
+          "df-cc-pcvtz": {
+            "status": "timeout",
+            "wall_seconds": 2400.243096644059,
+            "returncode": -9,
+            "error": null,
+            "stderr": ""
+          }
+        }
+      ]
+    }
+  ],
+  "comparison": {
+    "cc-pcvtz/re_se/bonds": {
+      "n": 2,
+      "mae": 0.0005694405148151671,
+      "max_abs": 0.0009282004819103351,
+      "worst": {
+        "molecule": "h2o",
+        "label": "O-H",
+        "error": 0.0009282004819103351
+      }
+    },
+    "cc-pcvtz/re_se/angles": {
+      "n": 1,
+      "mae": 0.8341696656668205,
+      "max_abs": 0.8341696656668205,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.8341696656668205
+      }
+    },
+    "cc-pcvtz/cc-pcvtz/bonds": {
+      "n": 2,
+      "mae": 1.944051481511666e-05,
+      "max_abs": 2.8200481910323205e-05,
+      "worst": {
+        "molecule": "h2o",
+        "label": "O-H",
+        "error": 2.8200481910323205e-05
+      },
+      "gate": 0.0003,
+      "pass": true
+    },
+    "cc-pcvtz/cc-pcvtz/angles": {
+      "n": 0,
+      "mae": null,
+      "max_abs": null,
+      "worst": null,
+      "gate": 0.05,
+      "pass": null
+    },
+    "df-cc-pcvtz/re_se/bonds": {
+      "n": 35,
+      "mae": 0.0027256939238045445,
+      "max_abs": 0.021175819565017573,
+      "worst": {
+        "molecule": "fno",
+        "label": "N-F",
+        "error": -0.021175819565017573
+      }
+    },
+    "df-cc-pcvtz/re_se/angles": {
+      "n": 16,
+      "mae": 0.4254647592454548,
+      "max_abs": 1.4539285440362448,
+      "worst": {
+        "molecule": "nh3",
+        "label": "H-N-H",
+        "error": -1.4539285440362448
+      }
+    },
+    "df-cc-pcvtz/cc-pcvtz/bonds": {
+      "n": 24,
+      "mae": 3.134432907350715e-05,
+      "max_abs": 0.0001154317282867634,
+      "worst": {
+        "molecule": "f2",
+        "label": "F-F",
+        "error": -0.0001154317282867634
+      }
+    },
+    "df-cc-pcvtz/cc-pcvtz/angles": {
+      "n": 0,
+      "mae": null,
+      "max_abs": null,
+      "worst": null
+    }
+  },
+  "parameters": {
+    "cc-pcvtz/re_se/bonds": [
+      {
+        "molecule": "hf",
+        "label": "H-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9169,
+        "measured": 0.91668931945228,
+        "error": -0.0002106805477199991,
+        "attempt": "d"
+      },
+      {
+        "molecule": "h2o",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9575,
+        "measured": 0.9584282004819104,
+        "error": 0.0009282004819103351,
+        "attempt": "d"
+      }
+    ],
+    "cc-pcvtz/re_se/angles": [
+      {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 104.51,
+        "measured": 103.67583033433318,
+        "error": -0.8341696656668205,
+        "attempt": "d"
+      }
+    ],
+    "cc-pcvtz/cc-pcvtz/bonds": [
+      {
+        "molecule": "hf",
+        "label": "H-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9167,
+        "measured": 0.91668931945228,
+        "error": -1.0680547719910116e-05,
+        "attempt": "d"
+      },
+      {
+        "molecule": "h2o",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9584,
+        "measured": 0.9584282004819104,
+        "error": 2.8200481910323205e-05,
+        "attempt": "d"
+      }
+    ],
+    "cc-pcvtz/cc-pcvtz/angles": [],
+    "df-cc-pcvtz/re_se/bonds": [
+      {
+        "molecule": "hf",
+        "label": "H-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9169,
+        "measured": 0.9166980051142243,
+        "error": -0.00020199488577576918,
+        "attempt": "e"
+      },
+      {
+        "molecule": "h2o",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9575,
+        "measured": 0.9584404901357318,
+        "error": 0.0009404901357318307,
+        "attempt": "e"
+      },
+      {
+        "molecule": "co",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1284,
+        "measured": 1.1325672514427725,
+        "error": 0.004167251442772413,
+        "attempt": "e"
+      },
+      {
+        "molecule": "n2",
+        "label": "N-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0977,
+        "measured": 1.100614872104035,
+        "error": 0.002914872104035071,
+        "attempt": "f"
+      },
+      {
+        "molecule": "f2",
+        "label": "F-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.4124,
+        "measured": 1.4131845682717132,
+        "error": 0.0007845682717131375,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hcn",
+        "label": "H-C",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0653,
+        "measured": 1.0667942647982707,
+        "error": 0.0014942647982707502,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hcn",
+        "label": "C-N",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.1534,
+        "measured": 1.156929076867251,
+        "error": 0.003529076867251124,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hnc",
+        "label": "H-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9949,
+        "measured": 0.9957471661842248,
+        "error": 0.0008471661842247569,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hnc",
+        "label": "N-C",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.1687,
+        "measured": 1.1723405338187551,
+        "error": 0.003640533818755065,
+        "attempt": "f"
+      },
+      {
+        "molecule": "ch4",
+        "label": "C-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0859,
+        "measured": 1.0875332707352479,
+        "error": 0.0016332707352477716,
+        "attempt": "f"
+      },
+      {
+        "molecule": "nh3",
+        "label": "N-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0116,
+        "measured": 1.0126062080254123,
+        "error": 0.0010062080254122918,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hno",
+        "label": "N-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0517,
+        "measured": 1.0542298537389443,
+        "error": 0.00252985373894421,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hno",
+        "label": "N-O",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.2086,
+        "measured": 1.211851182018847,
+        "error": 0.0032511820188469986,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hof",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9678,
+        "measured": 0.9666249695662587,
+        "error": -0.001175030433741342,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hof",
+        "label": "O-F",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.4344,
+        "measured": 1.4352486745700284,
+        "error": 0.0008486745700284626,
+        "attempt": "f"
+      },
+      {
+        "molecule": "co2",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1601,
+        "measured": 1.1636999008702233,
+        "error": 0.003599900870223438,
+        "attempt": "g"
+      },
+      {
+        "molecule": "c2h2",
+        "label": "C-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0613,
+        "measured": 1.063324463467959,
+        "error": 0.0020244634679591478,
+        "attempt": "g"
+      },
+      {
+        "molecule": "c2h2",
+        "label": "C-C",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.2037,
+        "measured": 1.2067105069030921,
+        "error": 0.003010506903092125,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2o",
+        "label": "C-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.1007,
+        "measured": 1.1022700970950121,
+        "error": 0.0015700970950121018,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2o",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.2047,
+        "measured": 1.2070924128264127,
+        "error": 0.00239241282641256,
+        "attempt": "g"
+      },
+      {
+        "molecule": "trans-n2h2",
+        "label": "N-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.0286,
+        "measured": 1.0297874986905367,
+        "error": 0.0011874986905366924,
+        "attempt": "f"
+      },
+      {
+        "molecule": "trans-n2h2",
+        "label": "N-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.2457,
+        "measured": 1.2505430995156694,
+        "error": 0.0048430995156694134,
+        "attempt": "f"
+      },
+      {
+        "molecule": "c2h4",
+        "label": "C-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.0807,
+        "measured": 1.082039984337224,
+        "error": 0.0013399843372239317,
+        "attempt": "f"
+      },
+      {
+        "molecule": "c2h4",
+        "label": "C-C",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.3307,
+        "measured": 1.3338947350003798,
+        "error": 0.0031947350003798114,
+        "attempt": "f"
+      },
+      {
+        "molecule": "fno",
+        "label": "N-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.51681,
+        "measured": 1.4956341804349824,
+        "error": -0.021175819565017573,
+        "attempt": "f"
+      },
+      {
+        "molecule": "fno",
+        "label": "N-O",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.13176,
+        "measured": 1.1386564538292014,
+        "error": 0.006896453829201343,
+        "attempt": "f"
+      },
+      {
+        "molecule": "trans-hono",
+        "label": "N=O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1689,
+        "measured": 1.1717683381957806,
+        "error": 0.0028683381957805842,
+        "attempt": "i"
+      },
+      {
+        "molecule": "trans-hono",
+        "label": "N-O",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.425,
+        "measured": 1.425236961860256,
+        "error": 0.00023696186025601307,
+        "attempt": "i"
+      },
+      {
+        "molecule": "trans-hono",
+        "label": "O-H",
+        "atoms": [
+          2,
+          3
+        ],
+        "reference": 0.9647,
+        "measured": 0.9652962346725199,
+        "error": 0.0005962346725199019,
+        "attempt": "i"
+      },
+      {
+        "molecule": "ch2f2",
+        "label": "C-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.3533,
+        "measured": 1.3525070368174823,
+        "error": -0.0007929631825176475,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2f2",
+        "label": "C-H",
+        "atoms": [
+          0,
+          3
+        ],
+        "reference": 1.0867,
+        "measured": 1.0883642892801249,
+        "error": 0.0016642892801248532,
+        "attempt": "g"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "C-H",
+        "atoms": [
+          0,
+          3
+        ],
+        "reference": 1.0918,
+        "measured": 1.0935469940378661,
+        "error": 0.0017469940378660453,
+        "attempt": "j"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "C=O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1973,
+        "measured": 1.1997878442785095,
+        "error": 0.0024878442785094546,
+        "attempt": "j"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "C-O",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.3417,
+        "measured": 1.3445731548359594,
+        "error": 0.0028731548359595127,
+        "attempt": "j"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "O-H",
+        "atoms": [
+          2,
+          4
+        ],
+        "reference": 0.9656,
+        "measured": 0.9675330968581459,
+        "error": 0.0019330968581459107,
+        "attempt": "j"
+      }
+    ],
+    "df-cc-pcvtz/re_se/angles": [
+      {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 104.51,
+        "measured": 103.67501709603414,
+        "error": -0.8349829039658658,
+        "attempt": "e"
+      },
+      {
+        "molecule": "nh3",
+        "label": "H-N-H",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 107.25,
+        "measured": 105.79607145596376,
+        "error": -1.4539285440362448,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hno",
+        "label": "H-N-O",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 108.27,
+        "measured": 107.93156329161947,
+        "error": -0.3384367083805273,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hof",
+        "label": "H-O-F",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 97.94,
+        "measured": 97.66356568709577,
+        "error": -0.2764343129042288,
+        "attempt": "f"
+      },
+      {
+        "molecule": "ch2o",
+        "label": "H-C-H",
+        "atoms": [
+          2,
+          0,
+          3
+        ],
+        "reference": 116.74,
+        "measured": 116.18943449733082,
+        "error": -0.5505655026691727,
+        "attempt": "g"
+      },
+      {
+        "molecule": "trans-n2h2",
+        "label": "H-N-N",
+        "atoms": [
+          2,
+          0,
+          1
+        ],
+        "reference": 106.36,
+        "measured": 105.84778877226077,
+        "error": -0.512211227739229,
+        "attempt": "f"
+      },
+      {
+        "molecule": "c2h4",
+        "label": "H-C-H",
+        "atoms": [
+          2,
+          0,
+          3
+        ],
+        "reference": 117.14,
+        "measured": 117.05709229803395,
+        "error": -0.08290770196605024,
+        "attempt": "f"
+      },
+      {
+        "molecule": "fno",
+        "label": "F-N-O",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 109.9361,
+        "measured": 110.1533326694075,
+        "error": 0.21723266940750818,
+        "attempt": "f"
+      },
+      {
+        "molecule": "trans-hono",
+        "label": "O-N-O",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 110.691,
+        "measured": 110.69599810458635,
+        "error": 0.004998104586348973,
+        "attempt": "i"
+      },
+      {
+        "molecule": "trans-hono",
+        "label": "H-O-N",
+        "atoms": [
+          3,
+          2,
+          0
+        ],
+        "reference": 102.086,
+        "measured": 101.62484880409716,
+        "error": -0.46115119590284337,
+        "attempt": "i"
+      },
+      {
+        "molecule": "ch2f2",
+        "label": "F-C-F",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 108.29,
+        "measured": 108.61672955194048,
+        "error": 0.32672955194047404,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2f2",
+        "label": "H-C-H",
+        "atoms": [
+          3,
+          0,
+          4
+        ],
+        "reference": 113.48,
+        "measured": 112.83398007882647,
+        "error": -0.6460199211735329,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2f2",
+        "label": "H-C-F",
+        "atoms": [
+          3,
+          0,
+          1
+        ],
+        "reference": 108.74,
+        "measured": 108.82732036247363,
+        "error": 0.0873203624736334,
+        "attempt": "g"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "H-C=O",
+        "atoms": [
+          3,
+          0,
+          1
+        ],
+        "reference": 125.38,
+        "measured": 125.17821268012122,
+        "error": -0.2017873198787754,
+        "attempt": "j"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "O-C=O",
+        "atoms": [
+          2,
+          0,
+          1
+        ],
+        "reference": 124.78,
+        "measured": 125.04035048145359,
+        "error": 0.2603504814535853,
+        "attempt": "j"
+      },
+      {
+        "molecule": "trans-formic-acid",
+        "label": "C-O-H",
+        "atoms": [
+          0,
+          2,
+          4
+        ],
+        "reference": 106.78,
+        "measured": 106.22762036055074,
+        "error": -0.5523796394492564,
+        "attempt": "j"
+      }
+    ],
+    "df-cc-pcvtz/cc-pcvtz/bonds": [
+      {
+        "molecule": "hf",
+        "label": "H-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9167,
+        "measured": 0.9166980051142243,
+        "error": -1.9948857756801885e-06,
+        "attempt": "e"
+      },
+      {
+        "molecule": "h2o",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9584,
+        "measured": 0.9584404901357318,
+        "error": 4.049013573181881e-05,
+        "attempt": "e"
+      },
+      {
+        "molecule": "co",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1326,
+        "measured": 1.1325672514427725,
+        "error": -3.274855722756875e-05,
+        "attempt": "e"
+      },
+      {
+        "molecule": "n2",
+        "label": "N-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1006,
+        "measured": 1.100614872104035,
+        "error": 1.4872104034946432e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "f2",
+        "label": "F-F",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.4133,
+        "measured": 1.4131845682717132,
+        "error": -0.0001154317282867634,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hcn",
+        "label": "H-C",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0668,
+        "measured": 1.0667942647982707,
+        "error": -5.735201729306638e-06,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hcn",
+        "label": "C-N",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.1569,
+        "measured": 1.156929076867251,
+        "error": 2.9076867251065508e-05,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hnc",
+        "label": "H-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9957,
+        "measured": 0.9957471661842248,
+        "error": 4.7166184224733954e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hnc",
+        "label": "N-C",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.1723,
+        "measured": 1.1723405338187551,
+        "error": 4.053381875523954e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "ch4",
+        "label": "C-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0875,
+        "measured": 1.0875332707352479,
+        "error": 3.327073524794777e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "nh3",
+        "label": "N-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0126,
+        "measured": 1.0126062080254123,
+        "error": 6.208025412401952e-06,
+        "attempt": "g"
+      },
+      {
+        "molecule": "hno",
+        "label": "N-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0542,
+        "measured": 1.0542298537389443,
+        "error": 2.9853738944263242e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hno",
+        "label": "N-O",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.2118,
+        "measured": 1.211851182018847,
+        "error": 5.1182018846906985e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hof",
+        "label": "O-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 0.9666,
+        "measured": 0.9666249695662587,
+        "error": 2.4969566258636888e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "hof",
+        "label": "O-F",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.4353,
+        "measured": 1.4352486745700284,
+        "error": -5.132542997166034e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "co2",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.1637,
+        "measured": 1.1636999008702233,
+        "error": -9.912977660953004e-08,
+        "attempt": "g"
+      },
+      {
+        "molecule": "c2h2",
+        "label": "C-H",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.0633,
+        "measured": 1.063324463467959,
+        "error": 2.4463467959146e-05,
+        "attempt": "g"
+      },
+      {
+        "molecule": "c2h2",
+        "label": "C-C",
+        "atoms": [
+          1,
+          2
+        ],
+        "reference": 1.2067,
+        "measured": 1.2067105069030921,
+        "error": 1.05069030920113e-05,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2o",
+        "label": "C-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.1022,
+        "measured": 1.1022700970950121,
+        "error": 7.009709501204497e-05,
+        "attempt": "g"
+      },
+      {
+        "molecule": "ch2o",
+        "label": "C-O",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.2071,
+        "measured": 1.2070924128264127,
+        "error": -7.5871735873978e-06,
+        "attempt": "g"
+      },
+      {
+        "molecule": "trans-n2h2",
+        "label": "N-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.0298,
+        "measured": 1.0297874986905367,
+        "error": -1.2501309463397448e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "trans-n2h2",
+        "label": "N-N",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.2506,
+        "measured": 1.2505430995156694,
+        "error": -5.6900484330491e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "c2h4",
+        "label": "C-H",
+        "atoms": [
+          0,
+          2
+        ],
+        "reference": 1.082,
+        "measured": 1.082039984337224,
+        "error": 3.998433722385286e-05,
+        "attempt": "f"
+      },
+      {
+        "molecule": "c2h4",
+        "label": "C-C",
+        "atoms": [
+          0,
+          1
+        ],
+        "reference": 1.3339,
+        "measured": 1.3338947350003798,
+        "error": -5.264999620280264e-06,
+        "attempt": "f"
+      }
+    ],
+    "df-cc-pcvtz/cc-pcvtz/angles": []
+  },
+  "df_minus_conventional": {
+    "bonds": {
+      "summary": {
+        "n": 2,
+        "mae": 1.0487657882862766e-05,
+        "max_abs": 1.2289653821495605e-05,
+        "worst": {
+          "molecule": "h2o",
+          "label": "O-H",
+          "error": 1.2289653821495605e-05
+        }
+      },
+      "parameters": [
+        {
+          "molecule": "hf",
+          "label": "H-F",
+          "conventional": 0.91668931945228,
+          "df": 0.9166980051142243,
+          "error": 8.685661944229928e-06
+        },
+        {
+          "molecule": "h2o",
+          "label": "O-H",
+          "conventional": 0.9584282004819104,
+          "df": 0.9584404901357318,
+          "error": 1.2289653821495605e-05
+        }
+      ]
+    },
+    "angles": {
+      "summary": {
+        "n": 1,
+        "mae": 0.000813238299045338,
+        "max_abs": 0.000813238299045338,
+        "worst": {
+          "molecule": "h2o",
+          "label": "H-O-H",
+          "error": -0.000813238299045338
+        }
+      },
+      "parameters": [
+        {
+          "molecule": "h2o",
+          "label": "H-O-H",
+          "conventional": 103.67583033433318,
+          "df": 103.67501709603414,
+          "error": -0.000813238299045338
+        }
+      ]
+    }
+  }
+}
