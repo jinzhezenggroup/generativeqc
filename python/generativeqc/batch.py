@@ -322,13 +322,6 @@ class PreparedBatch:
             )
             if ks_request is not None:
                 self._planned_properties = ks_request.identity.observables
-            self._packed_force_plan = bool(
-                calculator._cpu_packed_eri_maximum_bytes
-                and self._planned_properties
-                and "forces" in self._planned_properties
-            )
-            if self._packed_force_plan and not ks_export:
-                raise ValueError("packed force plans require ks_export=True")
         prepared_properties = (
             calculator._resource_properties(self._planned_properties)
             if self._output_aware_cpu_forces
@@ -374,6 +367,14 @@ class PreparedBatch:
                     raise ValueError("CPU DF force plans require ks_export=True")
                 if not self._cpu_df_plan:
                     resource_native_name = select_resource_program(calculator, request)
+            # Both supplied and internally planned packed requests must bind
+            # the force promise before native preparation and replay setup.
+            self._packed_force_plan = bool(
+                calculator._cpu_packed_eri_maximum_bytes
+                and "forces" in request.identity.observables
+            )
+            if self._packed_force_plan and not ks_export:
+                raise ValueError("packed force plans require ks_export=True")
             # Implicit calculator budgets also create a plan here; its force
             # authority has the same preparation and replay requirements.
             self._dense_force_plan = native_dense_force_request(request)
