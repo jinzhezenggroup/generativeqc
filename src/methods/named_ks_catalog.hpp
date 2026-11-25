@@ -42,6 +42,8 @@ struct Method {
   Dispersion dispersion{};
   const generativeqc_basis_template_descriptor_v1* bound_basis{};
   std::string_view basis_name, basis_identity;
+  /** Registry presentation may differ from preparation; zero leaves discovery explicit. */
+  std::int32_t registry_carrier{};
 };
 
 GENERATIVEQC_API std::span<const Method> methods() noexcept;
