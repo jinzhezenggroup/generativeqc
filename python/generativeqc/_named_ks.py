@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from . import _native
+from . import _generated_methods, _native
 
 
 class CompositeCorrectionResult(ct.Structure):
@@ -37,6 +37,28 @@ class _CatalogBinding(ct.Structure):
         ("identity", ct.c_char_p),
         ("spin", ct.c_uint32),
     ]
+
+
+def registry_carrier(library: Any, selector: str) -> int | None:
+    """Query a named KS carrier without constructing a MethodIR."""
+    name = selector.encode("utf-8")
+    if not name or len(name) > 256 or b"\0" in name:
+        return None
+    query = getattr(library, "generativeqc_ks_catalog_registry_carrier_v1", None)
+    if query is None:
+        raise RuntimeError(
+            "selected native library lacks the named KS registry projection; "
+            "install a matching native library"
+        )
+    query.argtypes = [ct.c_char_p, ct.c_size_t, ct.POINTER(ct.c_int32)]
+    query.restype = ct.c_int
+    carrier = ct.c_int32()
+    _native.check(library, query(name, len(name), ct.byref(carrier)))
+    if carrier.value == 0:
+        return None
+    if carrier.value not in _generated_methods.NATIVE_DFT_METHOD_IDS:
+        raise RuntimeError("selected native KS registry returned an invalid carrier")
+    return carrier.value
 
 
 def resolve_named_graph(library: Any, selector: str, backend: int) -> Any:
