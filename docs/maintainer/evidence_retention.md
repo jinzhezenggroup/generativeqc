@@ -280,9 +280,9 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-102,090,720 bytes. PR #3174 raises the prior 101,060,625-byte budget by
-1,030,095 bytes. The [external CCSD(T) force evidence](../../benchmarks/results/ccsdt-external-forces-20261125/README.md)
-uses 1,034,006 bytes, including 3,911 bytes of previously available capacity.
+102,185,571 bytes. PR #3174 raises the prior 101,151,565-byte budget by
+1,034,006 bytes for the
+[external CCSD(T) force evidence](../../benchmarks/results/ccsdt-external-forces-20261125/README.md).
 
 Earlier increases include an exact 2,171,627-byte addition for
 the [two approved HF/DFT figure datasets](../../benchmarks/results/paper-hfdft-cold3-20261115/README.md),

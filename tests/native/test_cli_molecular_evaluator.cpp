@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -334,13 +335,32 @@ void contracts(bool unrestricted) {
   owner.discard_current();
   fixture.invocation.derivatives.max_eri_primitives = 100'000'000;
   same(evaluate(owner, initial), baseline);
-  fixture.invocation.root_bytes = 1;
+  const auto root_event =
+      std::find_if(owner.records.rbegin(), owner.records.rend(), [](const auto& event) {
+        return event.at("stage") == "energy_gradient" && event.at("status") == "complete";
+      });
+  require(root_event != owner.records.rend(), "missing root capacity receipt");
+  const auto exact_root_bytes = root_event->at("root_numeric_reservation_bytes").get<std::size_t>();
+  const auto cross_bytes = root_event->at("root_cross_overlap_workspace_bytes").get<std::size_t>();
+  require(cross_bytes > 0 && exact_root_bytes > cross_bytes,
+          "accepted frame did not include the provider's cross-overlap workspace");
+  fixture.invocation.root_bytes = exact_root_bytes - 1;
+  const auto previous_work = owner.work;
+  const auto previous_events = owner.records.size();
   std::fill(output.begin(), output.end(), -781.25);
   energy = -781.25;
   refuses([&] { owner.energy_gradient(initial, energy, output); });
+  require(owner.work == previous_work && owner.records.size() == previous_events,
+          "one-byte-short root budget started a scientific evaluation");
   require(energy == -781.25 && std::all_of(output.begin(), output.end(),
                                            [](double value) { return value == -781.25; }),
           "resource-limited occupied-root export published a result");
+  require(owner.accepted_occupied_state(initial, 128ULL << 20) == accepted,
+          "resource refusal changed the accepted electronic root");
+  fixture.invocation.root_bytes = exact_root_bytes;
+  owner.energy_gradient(initial, energy, output);
+  require(std::abs(energy - baseline.energy) < 2e-11, "exact root capacity changed the energy");
+  close(output, baseline.gradient);
   fixture.invocation.root_bytes = 128ULL << 20;
   same(evaluate(owner, initial), baseline);
   require(owner.work.at("nuclear_response_solves").get<std::size_t>() > 0 &&
@@ -362,12 +382,200 @@ void contracts(bool unrestricted) {
               !failed_owner.records.back().at("detail").get<std::string>().empty(),
           "failed native SCF phase lost its progress diagnostic");
 }
+
+/** Compare the same physical-state export with and without a shared lease. */
+void orbital_lease_contracts(bool unrestricted) {
+  Context context(generativeqc_context_descriptor{sizeof(generativeqc_context_descriptor),
+                                                  GENERATIVEQC_ABI_VERSION, -1,
+                                                  GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const unsigned multiplicity = unrestricted ? 2 : 1;
+  const std::array<generativeqc_atom, 2> atoms{
+      {{unrestricted ? 2 : 1, 0, 0, 0}, {1, .2, -.1, 1.5}}};
+  System system(context, atoms, "sto-3g", 0, multiplicity, GENERATIVEQC_BASIS_SPHERICAL);
+  const generativeqc_system* systems[]{system.get()};
+  generativeqc_ks_options grid{};
+  grid.struct_size = sizeof(grid);
+  grid.abi_version = GENERATIVEQC_ABI_VERSION;
+  grid.grid_version = 1;
+  grid.radial_points = 12;
+  grid.angular_polar = 4;
+  grid.angular_azimuth = 8;
+  grid.partition_iterations = 3;
+  grid.coincident_tolerance = 1e-12;
+  grid.tile_points = 64;
+  generativeqc_method_descriptor method{};
+  method.struct_size = sizeof(method);
+  method.abi_version = GENERATIVEQC_ABI_VERSION;
+  method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
+  method.max_iterations = 200;
+  method.diis_history = 8;
+  method.energy_tolerance = 1e-12;
+  method.density_tolerance = 1e-10;
+  method.screening_tolerance = 1e-14;
+  method.ks_options = &grid;
+  generativeqc_named_ks_descriptor named{};
+  named.struct_size = sizeof(named);
+  named.abi_version = GENERATIVEQC_ABI_VERSION;
+  named.name = unrestricted ? "b3lyp-d3(bj)-uks" : "b3lyp-d3(bj)-rks";
+  named.dispersion_maximum_bytes = 16U << 20;
+  const auto check = [&](generativeqc_status status) {
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context.get()));
+  };
+  const std::size_t spins = unrestricted ? 2 : 1;
+  const auto workspace_bytes = api::host_orbital_workspace_bytes(2, spins);
+  auto controls = api::default_host_hessian_options();
+  controls.expected_atoms = atoms.data();
+  controls.expected_atom_count = atoms.size();
+  controls.expected_multiplicity = multiplicity;
+  controls.numeric_bytes = api::host_orbital_capacity(2, spins).numeric_bytes;
+  std::vector<double> reference;
+  HostResources pool(1ULL << 28);
+  for (const auto workspace : {std::size_t{0}, workspace_bytes - 1, workspace_bytes}) {
+    generativeqc_batch* raw{};
+    if (workspace)
+      check(generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+          context.get(), systems, 1, &method, &named, 0, pool.get(), 1ULL << 28, workspace, &raw));
+    else
+      check(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
+                                                   &raw));
+    const std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
+        raw, generativeqc_batch_destroy);
+    generativeqc_batch_item_result_descriptor primal{};
+    primal.struct_size = sizeof(primal);
+    primal.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_batch_execute(batch.get(), nullptr, 0, &primal, 1));
+    require(primal.converged, "orbital lease fixture did not converge");
+    std::uint64_t fock_builds{};
+    check(generativeqc_batch_get_last_fock_builds(batch.get(), 0, &fock_builds));
+    generativeqc_ks_host_orbitals_receipt_v1 receipt;
+    receipt.basis = 37;
+    std::vector<double> coefficients(4 * spins, 37);
+    const auto reservation = pool.snapshot();
+    const auto status = generativeqc_ks_orbitals_cpu_v1(
+        batch.get(), 0, &controls, coefficients.data(), coefficients.size(), &receipt);
+    if (workspace == workspace_bytes - 1) {
+      require(status == GENERATIVEQC_STATUS_RESOURCE_LIMIT && receipt.basis == 37 &&
+                  coefficients == std::vector<double>(4 * spins, 37),
+              "one-byte-short orbital lease published an output");
+    } else {
+      check(status);
+      require(receipt.basis == 2 && receipt.spins == spins &&
+                  receipt.numeric_reservation_bytes == controls.numeric_bytes,
+              "orbital export did not publish the expected detached shape");
+      if (workspace)
+        close(coefficients, reference, 0);
+      else
+        reference = coefficients;
+    }
+    const auto after = pool.snapshot();
+    require(after.retained_bytes == reservation.retained_bytes &&
+                after.workspace_bytes == reservation.workspace_bytes &&
+                after.owner_count == reservation.owner_count,
+            "orbital export altered the batch lease");
+    std::uint64_t completed_fock_builds{};
+    check(generativeqc_batch_get_last_fock_builds(batch.get(), 0, &completed_fock_builds));
+    require(completed_fock_builds == fock_builds, "orbital export repeated the native SCF");
+  }
+  require(pool.snapshot().owner_count == 0, "destroying batches did not release the orbital lease");
+}
+
+/** The bounded provider preserves normalization, AO order and high-l fallback. */
+void cross_overlap_workspace_contract() {
+  Context context(generativeqc_context_descriptor{sizeof(generativeqc_context_descriptor),
+                                                  GENERATIVEQC_ABI_VERSION, -1,
+                                                  GENERATIVEQC_BACKEND_CPU_REFERENCE});
+  const generativeqc_atom target_atom{2, .1, -.2, .3}, source_atom{2, -.5, .4, .7};
+  const generativeqc_shell target_shell{0, 4, 0, 1}, source_shell{0, 2, 0, 1};
+  const generativeqc_primitive primitive{.8, 1};
+  const generativeqc_system_descriptor target_descriptor{sizeof(target_descriptor),
+                                                         GENERATIVEQC_ABI_VERSION,
+                                                         &target_atom,
+                                                         1,
+                                                         &target_shell,
+                                                         1,
+                                                         &primitive,
+                                                         1,
+                                                         0,
+                                                         1,
+                                                         GENERATIVEQC_BASIS_SPHERICAL};
+  const generativeqc_system_descriptor source_descriptor{sizeof(source_descriptor),
+                                                         GENERATIVEQC_ABI_VERSION,
+                                                         &source_atom,
+                                                         1,
+                                                         &source_shell,
+                                                         1,
+                                                         &primitive,
+                                                         1,
+                                                         0,
+                                                         1,
+                                                         GENERATIVEQC_BASIS_CARTESIAN};
+  System target(context, target_descriptor), source(context, source_descriptor);
+  std::size_t bytes{};
+  check(generativeqc_system_cross_overlap_host_v1(context.get(), target.get(), source.get(),
+                                                  std::numeric_limits<std::size_t>::max(), nullptr,
+                                                  0, &bytes, nullptr));
+  require(bytes > 1, "cross-overlap plan omitted the provider workspace");
+  std::array<double, 9 * 6> original{}, bounded{}, reversed{};
+  check(generativeqc_system_cross_overlap_cpu(context.get(), target.get(), source.get(),
+                                              original.data(), original.size()));
+  bounded.fill(37);
+  const auto unchanged = bounded;
+  require(generativeqc_system_cross_overlap_host_v1(
+              context.get(), target.get(), source.get(), bytes - 1, bounded.data(), bounded.size(),
+              nullptr, nullptr) == GENERATIVEQC_STATUS_RESOURCE_LIMIT &&
+              bounded == unchanged,
+          "insufficient cross-overlap workspace changed the caller matrix");
+  check(generativeqc_system_cross_overlap_host_v1(context.get(), target.get(), source.get(), bytes,
+                                                  bounded.data(), bounded.size(), nullptr,
+                                                  nullptr));
+  require(bounded == original, "bounded high-l cross overlap changed the unbounded kernel output");
+  check(generativeqc_system_cross_overlap_host_v1(context.get(), source.get(), target.get(), bytes,
+                                                  reversed.data(), reversed.size(), nullptr,
+                                                  nullptr));
+  for (std::size_t row = 0; row < 9; ++row)
+    for (std::size_t column = 0; column < 6; ++column)
+      require(std::abs(bounded[row * 6 + column] - reversed[column * 9 + row]) < 1e-13,
+              "mixed-representation overlap violated target/source transpose symmetry");
+
+  const std::array<double, 3> shift{.23, -.14, .05};
+  auto shifted_atom = target_atom;
+  shifted_atom.x -= shift[0];
+  shifted_atom.y -= shift[1];
+  shifted_atom.z -= shift[2];
+  auto shifted_descriptor = target_descriptor;
+  shifted_descriptor.atoms = &shifted_atom;
+  System shifted(context, shifted_descriptor);
+  std::array<double, 9 * 6> copied_geometry{}, registered{}, original_after{};
+  check(generativeqc_system_cross_overlap_cpu(context.get(), shifted.get(), source.get(),
+                                              copied_geometry.data(), copied_geometry.size()));
+  check(generativeqc_system_cross_overlap_host_v1(context.get(), target.get(), source.get(), bytes,
+                                                  registered.data(), registered.size(), nullptr,
+                                                  shift.data()));
+  require(registered == copied_geometry && registered != original,
+          "centre-only registration disagreed with explicit shifted geometry");
+  check(generativeqc_system_cross_overlap_cpu(context.get(), target.get(), source.get(),
+                                              original_after.data(), original_after.size()));
+  require(original_after == original, "registration mutated the prepared target geometry");
+  registered.fill(37);
+  auto invalid_shift = shift;
+  invalid_shift[2] = std::numeric_limits<double>::infinity();
+  require(generativeqc_system_cross_overlap_host_v1(context.get(), target.get(), source.get(),
+                                                    bytes, registered.data(), registered.size(),
+                                                    nullptr, invalid_shift.data()) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              registered == unchanged,
+          "invalid registration published a metric");
+}
 }  // namespace
 
 int main() {
   try {
+    cross_overlap_workspace_contract();
     contracts(false);
     contracts(true);
+    orbital_lease_contracts(false);
+    orbital_lease_contracts(true);
     std::cout << "native molecular ECP frame/root/Hessian contracts passed\n";
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

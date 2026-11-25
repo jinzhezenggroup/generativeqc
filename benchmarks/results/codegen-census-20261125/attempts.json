@@ -1,0 +1,114 @@
+{
+  "source": "d154546d2d6629ab8c865ca08f680002d68b4152",
+  "note": "These diagnostics apply to the superseded d154546d2 comparison run. Its initial census exited nonzero due to output inventory and byte comparison checks. Both generators themselves exited successfully. The primary census uses 22f72d069.",
+  "initial_diagnostics": [
+    {
+      "id": "quadrature_cuda",
+      "group": "xc",
+      "argv": [
+        "python",
+        "tools/generate_quadrature_cuda.py",
+        "--output",
+        "generated_quadrature.cuh"
+      ],
+      "generator_sha256": "b9b9d4c18b041d3ab55a38fbed17f4626f00e5ee88fd2e6c47c987d9330f5fb6",
+      "timeout_seconds": 900,
+      "returncode": 0,
+      "missing": [],
+      "unexpected": [
+        "generated_atomic_grid.hpp"
+      ],
+      "status": "output_mismatch"
+    },
+    {
+      "id": "mp2_cpu",
+      "group": "mp2",
+      "argv": [
+        "python",
+        "tools/generate_mp2_native.py",
+        "--cpu-header",
+        "mp2_cpu_generated.hpp"
+      ],
+      "generator_sha256": "1e0d7b7808c45626a4b1fb7b9b85a0f9ed5f9860af40516d8fdf03fa3c281fec",
+      "timeout_seconds": 900,
+      "returncode": 0,
+      "missing": [],
+      "unexpected": [],
+      "status": "tracked_mismatch"
+    }
+  ],
+  "mp2_initial_comparisons": [
+    {
+      "group": "mp2",
+      "generator": "mp2_cpu",
+      "path": "block_capacity_generated.hpp",
+      "role": "support",
+      "sha256": "15a922949d8e1c27510bce4aeb52ac638242ccf6d0ee89dd422bee25bc8c2d6e",
+      "bytes": 2192,
+      "physical": 21,
+      "nonblank": 21,
+      "tracked_comparison": {
+        "path": "src/posthf/block_capacity_generated.hpp",
+        "sha256": "e33c396d69cfd688cd1df146f13d6c7bb53a1bb078f1c8c182cf0d4622a6e5af",
+        "bytes": 2870,
+        "physical": 53,
+        "nonblank": 52
+      }
+    },
+    {
+      "group": "mp2",
+      "generator": "mp2_cpu",
+      "path": "mp2_cpu_generated.hpp",
+      "role": "mixed",
+      "sha256": "aba81646582b133f26f09c87df6140f95f25aa8429140c0750bd1c4f34dabfe1",
+      "bytes": 18740,
+      "physical": 248,
+      "nonblank": 244,
+      "tracked_comparison": {
+        "path": "src/posthf/mp2_cpu_generated.hpp",
+        "sha256": "8d25613bfde39a02749684dfa4f793cafbcbae3807517f9cceb2d7d839964f3d",
+        "bytes": 21082,
+        "physical": 438,
+        "nonblank": 434
+      }
+    },
+    {
+      "group": "mp2",
+      "generator": "mp2_cpu",
+      "path": "mp2_schedule_generated.hpp",
+      "role": "support",
+      "sha256": "e591afa734efd60421202fadf21370fc2498f763ab530718e0e7ed7757b9f562",
+      "bytes": 3462,
+      "physical": 82,
+      "nonblank": 82,
+      "tracked_comparison": {
+        "path": "src/posthf/mp2_schedule_generated.hpp",
+        "sha256": "0386f2e4eb9fdbf42e31ba328fda553d4968f22b842ac5c0a65171fc85e19d24",
+        "bytes": 3457,
+        "physical": 75,
+        "nonblank": 74
+      }
+    },
+    {
+      "group": "mp2",
+      "generator": "mp2_cpu",
+      "path": "source_reuse_schedule_generated.hpp",
+      "role": "support",
+      "sha256": "6c159a202df65d6ba7ec99eb682d989ef251b02864b33a1a9c4934646e34e4c9",
+      "bytes": 5970,
+      "physical": 156,
+      "nonblank": 154,
+      "tracked_comparison": {
+        "path": "src/posthf/source_reuse_schedule_generated.hpp",
+        "sha256": "cff5bb944f5f13df072bfb8ec2ac09c6bee814748ef509d0f4de38f727908980",
+        "bytes": 6080,
+        "physical": 152,
+        "nonblank": 149
+      }
+    }
+  ],
+  "resolutions": {
+    "quadrature_cuda": "The extra generated_atomic_grid.hpp is declared alongside generated_quadrature.cuh in CMake. Count it as generated support.",
+    "mp2_cpu": "The three in-scope support headers are byte-identical after the repository's clang-format. The out-of-scope conventional MP2 CPU tile header differs only in the first-line generated banner after formatting. Final census records both raw replay and checked-in hashes."
+  }
+}
