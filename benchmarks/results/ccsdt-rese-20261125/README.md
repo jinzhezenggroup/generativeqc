@@ -69,6 +69,12 @@ orbital treatment. [Woon and Dunning](https://doi.org/10.1063/1.470645),
 
 ## Reference data and acceptance
 
+The [reference audit](reference-audit.md) gives the page, table, column and
+value for every reference in the 22-molecule cohort. It verified all 129
+original numerical entries. The audit corrects an omission in the first
+report by adding the independent H₂O cc-pCVTZ angle and clarifying the two
+NH₃ reference columns. The original measured geometries were replayed offline.
+
 - Bak et al. calculated empirical structures from observed rotational
   constants and computed vibrational corrections. For 16 molecules, we use
   their empirical values in Tables II and III. Same-Hamiltonian lengths at
@@ -85,6 +91,13 @@ orbital treatment. [Woon and Dunning](https://doi.org/10.1063/1.470645),
   For trans-HONO the chosen fit uses vibration–rotation constants from
   an all-electron CCSD(T)/cc-pVTZ cubic force field.
   [Demaison et al., J. Phys. Chem. A (2006)](https://doi.org/10.1021/jp064769v).
+
+Bak Table III gives NH₃ angles of 107.25° in `Emp.`, 106.7° in `Expt.` and
+106.36° at all-electron CCSD(T)/cc-pCVQZ. The QZ value is 0.89° below `Emp.`
+and 0.34° below `Expt.`. We keep the specified empirical column in the
+primary comparison. The GQC DF angle is 105.79607°. Using 106.7° only for
+this parameter gives an NH₃ absolute error of 0.9039° and a 16-angle MAE of
+0.3911° with a maximum of 0.9039°. [Bak et al., Table III, p. 6550](https://doi.org/10.1063/1.1357225).
 
 Each reference parameter maps to explicit zero-based atom indices. The
 summaries pool absolute deviations once per tabulated parameter, with
@@ -197,11 +210,22 @@ The retained DF failures are listed below.
 ## Conventional implementation controls
 
 The four-center CCSD(T) control passed the declared literature tolerance for
-both available optimized bond lengths. The HF result was 0.91668932 Å
+both available optimized bond lengths and the H₂O angle. The HF result was 0.91668932 Å
 against 0.9167 Å from Table VII. The H₂O O–H result was 0.95842820 Å against
 0.9584 Å. The two errors have MAE 0.00001944 Å and maximum 0.00002820 Å.
-Table VII provides no cc-pCVTZ angle for these two molecules.
 [Bak et al., J. Chem. Phys. (2001)](https://doi.org/10.1063/1.1357225).
+
+Bak Table III lists the H₂O `Emp.` angle at 104.51° and the CCSD(T)/cc-pCVQZ
+angle at 104.22°. Kahn et al. provide a same-table all-electron CCSD(T)
+basis comparison, with 103.6839° at cc-pCVTZ and 104.2253° at cc-pCVQZ.
+The archived GQC conventional cc-pCVTZ angle is 103.675830°, or −0.008070°
+relative to the same-method TZ literature value. The GQC DF result is
+103.675017°, or −0.008883° relative to that conventional TZ value.
+The Kahn TZ-to-QZ shift of +0.5414° accounts for about 65% of the 0.8350° DF
+deviation from 104.51°. At QZ the literature angle still lies 0.2847° below
+the empirical value. This supports basis incompleteness as a major contributor
+to the TZ deviation. [Bak et al., Table III, p. 6550](https://doi.org/10.1063/1.1357225),
+[Kahn et al., Table I, p. 074106-5](https://escholarship.org/uc/item/4g45z2kz).
 
 The corresponding DF and conventional optimized geometries differ by
 0.00000869 Å for HF and 0.00001229 Å for the H₂O bond. The H₂O angle

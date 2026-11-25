@@ -94,12 +94,13 @@
             2
           ],
           "re_se": 104.51,
+          "cc-pcvtz": 103.6839,
           "cc-pcvqz": 104.22
         }
       ],
       "theory_source": {
         "doi": "10.1063/1.1357225",
-        "cc-pcvtz": "Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm",
+        "cc-pcvtz": "Bond length from Bak et al., Table VII, Emp. plus cc-pCVTZ - Emp. column, converted from pm. Angle from Kahn et al., doi:10.1063/1.3464837, p. 074106-5, Table I, ae-CCSD(T)/cc-pCVTZ row, Angle column.",
         "cc-pcvqz": "Tables II (bond lengths, pm) and III (angles, degrees)"
       }
     },

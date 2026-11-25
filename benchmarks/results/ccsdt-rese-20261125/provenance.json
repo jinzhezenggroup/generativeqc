@@ -165,6 +165,15 @@
         "1",
         "4"
       ]
+    },
+    {
+      "doi": "10.1063/1.3464837",
+      "tables": [
+        "I"
+      ],
+      "page": "074106-5",
+      "full_text": "https://escholarship.org/uc/item/4g45z2kz",
+      "use": "H2O angle, Angle (deg) column, all-electron CCSD(T) cc-pCVTZ and cc-pCVQZ rows."
     }
   ],
   "compute": {
@@ -1202,8 +1211,8 @@
       "bytes": 8719
     },
     "cohort.json": {
-      "sha256": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
-      "bytes": 30471
+      "sha256": "26aef3018c752d3d93c692f1f5028b0131f3f367e83e31886bcc9bfadfdff101",
+      "bytes": 30641
     },
     "launch-minima-qz.sh": {
       "sha256": "89e856fa56a31335aff84ad9085275e74600a58ca23462c8730d2ae6cd9027f5",
@@ -1225,6 +1234,10 @@
       "sha256": "6e9edf362c06b798aec7d690741300a9045991aea1928104f8770052d5e026d7",
       "bytes": 29320
     },
+    "reference-audit.md": {
+      "sha256": "e1295562604beff727554b079def2aafdf53c0b12c3788a381ec09c204f9ab0d",
+      "bytes": 7743
+    },
     "replay.py": {
       "sha256": "5cd5e602798c1e1c4cbc74c2f63a7cb6233fb38cab2c8f8528293a21b0a23060",
       "bytes": 10586
@@ -1234,12 +1247,24 @@
       "bytes": 8838
     },
     "summary.json": {
-      "sha256": "b8d5057c06f564dab66803f85c174d6949a111359e92e86e42404eee81d41f62",
-      "bytes": 73076
+      "sha256": "1e31105add4286c2c50bad159f3e883e7a05811cd8dedcea90f4beefe073bc24",
+      "bytes": 74208
     },
     "withdrawn-d154546d2.json.xz": {
       "sha256": "85b122f138c6619346bf88f396fe255ce36de43f439969424122dc67062811a3",
       "bytes": 5544
     }
+  },
+  "reference_audit": {
+    "record": "reference-audit.md",
+    "original_gpu_cohort_sha256": "ad0ec2ec73f62204082c3ee1b6e2d7ea54fdedacb0975b9a250b01b6b65e9cf8",
+    "verified_existing_entries": {
+      "re_se": 74,
+      "cc-pcvtz": 24,
+      "cc-pcvqz": 31
+    },
+    "changed_existing_values": 0,
+    "added_reference": "h2o H-O-H cc-pcvtz = 103.6839 degrees",
+    "execution": "The analysis cohort adds the reference after acquisition. The original recorded GPU payload hashes still identify the acquisition inputs. Statistics use an offline replay of the unchanged native receipts."
   }
 }

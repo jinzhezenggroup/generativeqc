@@ -221,10 +221,14 @@
               }
             },
             "cc-pcvtz_angles": {
-              "n": 0,
-              "mae": null,
-              "max_abs": null,
-              "worst": null
+              "n": 1,
+              "mae": 0.008069665666809556,
+              "max_abs": 0.008069665666809556,
+              "worst": {
+                "molecule": "h2o",
+                "label": "H-O-H",
+                "error": -0.008069665666809556
+              }
             }
           },
           "df-cc-pcvtz": {
@@ -286,10 +290,14 @@
               }
             },
             "cc-pcvtz_angles": {
-              "n": 0,
-              "mae": null,
-              "max_abs": null,
-              "worst": null
+              "n": 1,
+              "mae": 0.008882903965854894,
+              "max_abs": 0.008882903965854894,
+              "worst": {
+                "molecule": "h2o",
+                "label": "H-O-H",
+                "error": -0.008882903965854894
+              }
             }
           }
         }
@@ -1764,12 +1772,16 @@
       "pass": true
     },
     "cc-pcvtz/cc-pcvtz/angles": {
-      "n": 0,
-      "mae": null,
-      "max_abs": null,
-      "worst": null,
+      "n": 1,
+      "mae": 0.008069665666809556,
+      "max_abs": 0.008069665666809556,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.008069665666809556
+      },
       "gate": 0.05,
-      "pass": null
+      "pass": true
     },
     "df-cc-pcvtz/re_se/bonds": {
       "n": 35,
@@ -1802,10 +1814,14 @@
       }
     },
     "df-cc-pcvtz/cc-pcvtz/angles": {
-      "n": 0,
-      "mae": null,
-      "max_abs": null,
-      "worst": null
+      "n": 1,
+      "mae": 0.008882903965854894,
+      "max_abs": 0.008882903965854894,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.008882903965854894
+      }
     }
   },
   "parameters": {
@@ -1876,7 +1892,21 @@
         "attempt": "d"
       }
     ],
-    "cc-pcvtz/cc-pcvtz/angles": [],
+    "cc-pcvtz/cc-pcvtz/angles": [
+      {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 103.6839,
+        "measured": 103.67583033433318,
+        "error": -0.008069665666809556,
+        "attempt": "d"
+      }
+    ],
     "df-cc-pcvtz/re_se/bonds": [
       {
         "molecule": "hf",
@@ -2799,7 +2829,21 @@
         "attempt": "f"
       }
     ],
-    "df-cc-pcvtz/cc-pcvtz/angles": []
+    "df-cc-pcvtz/cc-pcvtz/angles": [
+      {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "atoms": [
+          1,
+          0,
+          2
+        ],
+        "reference": 103.6839,
+        "measured": 103.67501709603414,
+        "error": -0.008882903965854894,
+        "attempt": "e"
+      }
+    ]
   },
   "df_minus_conventional": {
     "bonds": {
