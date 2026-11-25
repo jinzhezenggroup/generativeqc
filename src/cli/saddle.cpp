@@ -17,6 +17,7 @@
 #include "cli/native_basis.hpp"
 #include "geometry/harmonic_modes.hpp"
 #include "geometry/saddle_optimizer.hpp"
+#include "runtime/resource_planning.hpp"
 
 namespace generativeqc::cli {
 namespace {
@@ -48,6 +49,7 @@ double positive(std::string_view text, std::string_view option) {
 
 std::vector<double> coordinates_of(const std::vector<generativeqc_atom>& atoms) {
   std::vector<double> result;
+  result.reserve(3 * atoms.size());
   for (const auto& atom : atoms) result.insert(result.end(), {atom.x, atom.y, atom.z});
   return result;
 }
@@ -57,6 +59,7 @@ std::vector<double> read_masses(const std::string& path, std::size_t atoms) {
   if (!input.is_array() || input.size() != atoms)
     throw UsageError("--masses requires one positive finite dalton mass per ordered atom");
   std::vector<double> result;
+  result.reserve(atoms);
   for (const auto& value : input) {
     if (!value.is_number() || !std::isfinite(value.get<double>()) || value.get<double>() <= 0)
       throw UsageError("--masses requires one positive finite dalton mass per ordered atom");
@@ -71,6 +74,7 @@ std::vector<double> read_mode(const std::string& path, std::size_t atoms) {
   if (!input.is_array() || input.size() != atoms)
     throw UsageError("--initial-mode requires a finite natoms-by-3 array");
   std::vector<double> result;
+  result.reserve(3 * atoms);
   for (const auto& row : input) {
     if (!row.is_array() || row.size() != 3)
       throw UsageError("--initial-mode requires a finite natoms-by-3 array");
@@ -383,6 +387,8 @@ SaddleInvocation parse_saddle_invocation(int argc, char** argv) {
 int saddle_command(const RunOptions& options, const std::vector<generativeqc_atom>& atoms,
                    const SaddleInvocation& invocation) {
   const auto started = Clock::now();
+  if (!options.host_bytes && (options.host_reserve_bytes || options.headroom_fraction))
+    throw UsageError("saddle host reserve and headroom require --host-bytes");
   const auto* program = options.composition ? options.composition
                                             : methods::named_ks::find_method(options.method_name);
   if (options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || !program ||
@@ -410,8 +416,20 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
   const auto masses = read_masses(invocation.masses_file, atoms.size());
   const auto initial_mode = read_mode(invocation.initial_mode_file, atoms.size());
   const auto initial = coordinates_of(atoms);
-  const auto physical_subspace = geometry::rigid_subspace(initial, 1e-8, masses);
-  if (!physical_subspace.active_modes)
+  MolecularEvaluator evaluator(options, atoms, masses, invocation, *program);
+  if (options.host_bytes) {
+    const auto limit = runtime::resources::effective_capacity(
+        *options.host_bytes, options.host_reserve_bytes, options.headroom_fraction);
+    // The corrector capacity excludes all caller inputs and result panels.
+    const auto caller_bytes = sizeof(double) * (initial.capacity() + initial_mode.capacity() +
+                                                masses.capacity() + count * count + 4 * count) +
+                              atoms.capacity() * sizeof(generativeqc_atom);
+    evaluator.configure_host_budget(
+        limit, caller_bytes,
+        geometry::saddle::corrector_numeric_bytes(count, invocation.controls.max_attempts),
+        geometry::harmonic_numeric_bytes(count));
+  }
+  if (!geometry::rigid_subspace(initial, 1e-8, masses).active_modes)
     throw UsageError("molecular saddle requires at least one vibrational coordinate");
   std::vector<double> coordinates(count), gradient(count), hessian(count * count), mode(count),
       curvatures(count);
@@ -419,7 +437,6 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
   receipt.struct_size = sizeof(receipt);
   receipt.abi_version = GENERATIVEQC_ABI_VERSION;
   char detail[4096]{};
-  MolecularEvaluator evaluator(options, atoms, masses, invocation, *program);
   SignalScope signals;
   const auto status = generativeqc_saddle_correct_v1(
       &invocation.controls, initial.data(), count,
@@ -429,6 +446,9 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
       sizeof(detail));
   if (status != GENERATIVEQC_STATUS_SUCCESS)
     throw Error(status, std::string("native saddle argument/resource refusal: ") + detail);
+  // A trial rejected before its Hessian may still own a prepared batch. Only
+  // the accepted coefficients/system are needed after the corrector returns.
+  evaluator.discard_current();
   bool converged = receipt.status == GENERATIVEQC_SADDLE_FIRST_ORDER && receipt.stationary_verified;
   Json harmonics = nullptr, harmonic_failure = nullptr;
   if (receipt.stationary_verified) {
@@ -515,9 +535,13 @@ int saddle_command(const RunOptions& options, const std::vector<generativeqc_ato
         {"preoptimization_stages", 0},
         {"partial_failed_derivative_work_known", false},
         {"reservation_scope",
-         "owner-specific numeric panels; excludes primal, provider scratch, JSON and RSS"},
+         options.host_bytes
+             ? "aggregate modeled numeric panels and native electronic lease; "
+               "excludes unmodeled provider scratch, metadata parsing, JSON and RSS"
+             : "owner-specific numeric panels; excludes primal, provider scratch, JSON and RSS"},
         {"endpoint_seconds", std::chrono::duration<double>(Clock::now() - started).count()}}}};
   result["atomic_numbers"] = Json::array();
+  if (options.host_bytes) result["host_admission"] = evaluator.host_budget_receipt();
   for (const auto& atom : atoms) result["atomic_numbers"].push_back(atom.atomic_number);
   result["coordinates_bohr"] = receipt.has_valid_state ? rows(coordinates, 3) : rows(initial, 3);
   result["energy_hartree"] = receipt.has_valid_state ? Json(receipt.energy) : Json(nullptr);

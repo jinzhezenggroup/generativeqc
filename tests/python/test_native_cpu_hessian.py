@@ -172,9 +172,11 @@ def test_native_cpu_discrete_grid_covariance_and_atom_order(
     calc.clear_cache()
 
 
+@pytest.mark.parametrize("legacy_library", (False, True), ids=("paired", "legacy"))
 def test_native_cpu_preflight_refuses_missing_electronic_and_total_closure(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, legacy_library: bool
 ) -> None:
+    """Inject rejection through the selected native ABI, before any primal work."""
     calc = calculator(1, True)
     monkeypatch.setattr(
         calc, "prepare_batch", lambda *_, **__: pytest.fail("premature SCF")
@@ -186,7 +188,15 @@ def test_native_cpu_preflight_refuses_missing_electronic_and_total_closure(
             calc.hessian(geometry(1))
     from generativeqc import _named_ks
 
-    monkeypatch.setattr(_named_ks, "select_named_program", lambda *_, **__: None)
+    if legacy_library:
+        monkeypatch.setattr(library, "generativeqc_ks_hessian_cpu_model_match_v1", None)
+        monkeypatch.setattr(_named_ks, "select_named_program", lambda *_, **__: None)
+    else:
+        monkeypatch.setattr(
+            library,
+            "generativeqc_ks_hessian_cpu_model_match_v1",
+            lambda *_: 1,
+        )
     with pytest.raises(
         NotImplementedError, match="electronic-only publication is forbidden"
     ):

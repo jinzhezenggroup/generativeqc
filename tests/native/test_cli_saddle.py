@@ -100,6 +100,7 @@ class SaddleCli(unittest.TestCase):
             "--occupied-state-budget-bytes",
             "--accepted-frame-warm-start",
             "--cold-fock-damping",
+            "--host-bytes",
             "unscaled",
             "no Python/JIT or preoptimization",
         ):
@@ -203,6 +204,10 @@ class SaddleCli(unittest.TestCase):
                     ),
                     "ECP requires separate real-element qualification",
                 )
+        self.rejected(
+            self.call("--basis", str(basis), "--host-bytes", "536870912"),
+            "ECP requires separate real-element qualification",
+        )
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_def2_ecp_saddle_admission(self) -> None:
@@ -276,6 +281,32 @@ class SaddleCli(unittest.TestCase):
         self.assertIn("SCF did not converge", panel["derivative_failure"])
         self.assertTrue(self.scf_journal(journal, "rks"))
 
+        def budget_boundary(arguments: tuple[str, ...]) -> None:
+            # A small iteration cap yields a preparation receipt without
+            # making CI run the real-element Hessian.
+            admitted = json.loads(
+                self.call(*base, *arguments, "--host-bytes", "1073741824").stdout
+            )
+            cap = admitted["host_admission"]["minimum_host_peak_bytes"]
+            self.assertIn("SCF did not converge", admitted["derivative_failure"])
+            exact = json.loads(
+                self.call(*base, *arguments, "--host-bytes", str(cap)).stdout
+            )
+            self.assertEqual(exact["host_admission"]["selected_host_peak_bytes"], cap)
+            self.assertIn("SCF did not converge", exact["derivative_failure"])
+            short = json.loads(
+                self.call(*base, *arguments, "--host-bytes", str(cap - 1)).stdout
+            )
+            self.assertIn(
+                "--host-bytes preparation refused", short["derivative_failure"]
+            )
+            self.assertEqual(short["work"]["scf_fock_builds"], 0)
+            self.assertFalse(
+                any(row["stage"] == "scf_forces" for row in short["evaluation_records"])
+            )
+
+        budget_boundary((*d3_rks, *warm, *damping))
+
         def refused_before_scf(
             name: str, arguments: tuple[str, ...], message: str
         ) -> None:
@@ -301,12 +332,18 @@ class SaddleCli(unittest.TestCase):
             with self.subTest(name=name):
                 write_basis(representation, altered=altered)
                 refused_before_scf(name, arguments, "Cs46 def2-ECP")
+                refused_before_scf(
+                    f"{name}-budgeted",
+                    (*arguments, "--host-bytes", "1073741824"),
+                    "Cs46 def2-ECP",
+                )
 
         self.xyz.write_text("2\nBohr\nI 0 0 0\nH 0.1 0.2 3.1\n")
         self.masses.write_text("[126.9044719, 1.00782503223]")
         write_basis(heavy=53)
         bounds = ("--initial-radius", "0.015", "--maximum-radius", "0.03")
         continuity = ("--minimum-occupied-overlap", "0.99")
+        budget_boundary((*d3_rks, *warm, *bounds, *continuity))
         journal = self.root / "admitted-iodine.jsonl"
         admitted = self.call(
             *base, *d3_rks, *warm, *bounds, *continuity, journal=journal
@@ -340,6 +377,70 @@ class SaddleCli(unittest.TestCase):
         )
         self.rejected(self.call("--max-coordinates", "3"), "exceeds --max-coordinates")
         self.rejected(self.call("--device-budget-bytes", "1"), "does not use CUDA")
+        self.rejected(self.call("--host-reserve-bytes", "1"), "require --host-bytes")
+        self.rejected(
+            self.call(
+                "--host-bytes",
+                "536870912",
+                "--method",
+                "b3lyp-d3(bj)-rks",
+                "--cold-fock-damping",
+                "8",
+                "0.5",
+                "4096",
+            ),
+            "--accepted-frame-warm-start",
+        )
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_aggregate_host_admission_boundary(self) -> None:
+        controls = ("--grid-level", "0", "--occupied-state-budget-bytes", "256")
+        baseline = json.loads(self.call(*controls).stdout)
+        fitted = json.loads(self.call(*controls, "--host-bytes", "536870912").stdout)
+        cap = fitted["host_admission"]["minimum_host_peak_bytes"]
+        reserve = 123
+        exact = self.call(
+            *controls,
+            "--host-bytes",
+            str(cap + reserve),
+            "--host-reserve-bytes",
+            str(reserve),
+        )
+        self.assertEqual(exact.returncode, 1, exact.stderr)  # Nonnegative target.
+        panel = json.loads(exact.stdout)
+        capacity = panel["host_admission"]
+        self.assertEqual(capacity["effective_host_limit_bytes"], cap)
+        self.assertEqual(capacity["minimum_host_peak_bytes"], cap)
+        self.assertEqual(capacity["selected_host_peak_bytes"], cap)
+        self.assertEqual(
+            cap,
+            max(
+                capacity["harmonic_host_peak_bytes"],
+                capacity["outside_electronic_lease_bytes"]
+                + capacity["electronic_host_peak_bytes"],
+            ),
+        )
+        import numpy as np
+
+        for key in (
+            "energy_hartree",
+            "gradient_hartree_per_bohr",
+            "raw_hessian_hartree_per_bohr2",
+        ):
+            np.testing.assert_allclose(panel[key], baseline[key], rtol=0, atol=1e-10)
+            np.testing.assert_allclose(fitted[key], baseline[key], rtol=0, atol=1e-10)
+        self.assertEqual(panel["occupied_state"], baseline["occupied_state"])
+        self.assertEqual(fitted["work"], baseline["work"])
+        short = self.call(*controls, "--host-bytes", str(cap - 1))
+        self.assertEqual(short.returncode, 1, short.stderr)
+        refused = json.loads(short.stdout)
+        self.assertFalse(refused["receipt"]["has_valid_state"])
+        self.assertIn("--host-bytes", refused["derivative_failure"])
+        self.assertEqual(refused["work"]["scf_fock_builds"], 0)
+        self.assertIsNone(refused["occupied_state"])
+        self.assertFalse(
+            any(row["stage"] == "scf_forces" for row in refused["evaluation_records"])
+        )
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_bounded_cold_fock_damping(self) -> None:
@@ -356,6 +457,52 @@ class SaddleCli(unittest.TestCase):
         )
         self.assertFalse(initial["accepted_frame_warm_start"])
         self.assertEqual(initial["cold_fock_prefix_iterations"], 8)
+
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_damped_proposal_is_charged_to_host_lease(self) -> None:
+        controls = (
+            "--basis",
+            "sto-3g",
+            "--grid-level",
+            "0",
+            "--method",
+            "b3lyp-d3(bj)-rks",
+            "--accepted-frame-warm-start",
+            "--host-bytes",
+            "536870912",
+        )
+        base = json.loads(self.call(*controls).stdout)
+        damping = ("--cold-fock-damping", "8", "0.5")
+        # Two H/STO-3G AOs give one 2x2 FP64 proposal matrix.
+        proposal_bytes = 2 * 2 * 8
+        fitted = json.loads(self.call(*controls, *damping, str(proposal_bytes)).stdout)
+        cap = fitted["host_admission"]["minimum_host_peak_bytes"]
+        self.assertEqual(
+            cap - base["host_admission"]["minimum_host_peak_bytes"], proposal_bytes
+        )
+        scopes = [
+            row
+            for row in fitted["evaluation_records"]
+            if row["stage"] == "energy_gradient" and row["status"] == "complete"
+        ]
+        self.assertTrue(scopes)
+        self.assertEqual(scopes[0]["cold_fock_prefix_iterations"], 8)
+        exact_controls = (*controls[:-1], str(cap))
+        exact = json.loads(
+            self.call(*exact_controls, *damping, str(proposal_bytes)).stdout
+        )
+        self.assertTrue(exact["receipt"]["has_valid_state"])
+        for limit, proposal, expected in (
+            (cap - 1, proposal_bytes, "--host-bytes preparation refused"),
+            (cap, proposal_bytes - 1, "cold RKS Fock proposal exceeds"),
+        ):
+            with self.subTest(limit=limit, proposal=proposal):
+                result = self.call(*controls[:-1], str(limit), *damping, str(proposal))
+                self.assertEqual(result.returncode, 1, result.stderr)
+                failure = json.loads(result.stdout)
+                self.assertFalse(failure["receipt"]["has_valid_state"])
+                self.assertIn(expected, failure["derivative_failure"])
+                self.assertEqual(failure["work"]["scf_fock_builds"], 0)
 
     @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
     def test_packed_capacity_is_forwarded_with_cold_damping(self) -> None:
@@ -620,8 +767,16 @@ class SaddleCli(unittest.TestCase):
             with self.subTest(accepted_frame_warm_start=warm):
                 self.check_complete_nh3_endpoint_and_independent_mass_weighting(warm)
 
+    @unittest.skipUnless(HOST, "native CPU Hessian closure is disabled")
+    def test_host_lease_covers_moved_frames_and_preserves_accepted_root(self) -> None:
+        for warm in (False, True):
+            with self.subTest(warm=warm):
+                self.check_complete_nh3_endpoint_and_independent_mass_weighting(
+                    warm, host=True
+                )
+
     def check_complete_nh3_endpoint_and_independent_mass_weighting(
-        self, warm: bool
+        self, warm: bool, *, host: bool = False
     ) -> None:
         import numpy as np
         from generativeqc.vibrations import analyze_harmonic_modes
@@ -639,7 +794,7 @@ class SaddleCli(unittest.TestCase):
             f"H {-radius / 2} {off_axis} 0\nH {-radius / 2} {-off_axis} 0\n"
         )
         self.masses.write_text(json.dumps(specification["masses_dalton"]))
-        result = self.call(
+        controls = (
             "--representation",
             "spherical",
             "--occupied-state-budget-bytes",
@@ -649,8 +804,10 @@ class SaddleCli(unittest.TestCase):
             "--raw-symmetry-tolerance",
             str(specification["controls"]["raw_symmetry_tolerance"]),
             *(("--accepted-frame-warm-start",) if warm else ()),
-            timeout=900,
         )
+        if host:
+            controls += ("--grid-level", "0", "--host-bytes", "536870912")
+        result = self.call(*controls, timeout=900)
         self.assertEqual(result.returncode, 0, result.stderr)
         panel = json.loads(result.stdout)
         self.assertTrue(panel["converged"])
@@ -667,6 +824,41 @@ class SaddleCli(unittest.TestCase):
             if entry["stage"] == "hessian" and entry["status"] == "complete"
         ]
         self.assertGreater(len(energy), 2)
+        if host:
+            admission = panel["host_admission"]
+            if warm:
+                self.assertGreater(admission["warm_seed_snapshot_bytes_per_frame"], 0)
+                self.assertEqual(
+                    {row["root_seed_snapshot_bytes"] for row in hessians},
+                    {admission["warm_seed_snapshot_bytes_per_frame"]},
+                )
+            else:
+                self.assertEqual(admission["warm_seed_snapshot_bytes_per_frame"], 0)
+            self.assertLessEqual(
+                admission["selected_host_peak_bytes"],
+                admission["effective_host_limit_bytes"],
+            )
+            self.assertNotEqual(
+                energy[0]["coordinates_bohr"], energy[1]["coordinates_bohr"]
+            )
+            self.assertGreater(energy[1]["root_cross_overlap_workspace_bytes"], 0)
+            # The independent root cap can still reject a moved trial before
+            # SCF; neither its batch nor its orbitals may be published.
+            exact_root = energy[0]["root_numeric_reservation_bytes"]
+            rollback = self.call(*controls, "--root-budget-bytes", str(exact_root))
+            self.assertEqual(rollback.returncode, 1, rollback.stderr)
+            failed = json.loads(rollback.stdout)
+            self.assertTrue(failed["receipt"]["has_valid_state"])
+            self.assertEqual(failed["coordinates_bohr"], energy[0]["coordinates_bohr"])
+            self.assertEqual(failed["energy_hartree"], energy[0]["energy_hartree"])
+            self.assertIsNotNone(failed["occupied_state"])
+            self.assertIsNone(failed["harmonics"])
+            self.assertIn(
+                "occupied-root tracking exceeds", failed["derivative_failure"]
+            )
+            self.assertEqual(
+                failed["work"]["scf_fock_builds"], energy[0]["scf_fock_builds"]
+            )
         self.assertEqual(
             [entry["accepted_frame_warm_start"] for entry in energy],
             [False] + [warm] * (len(energy) - 1),
@@ -675,7 +867,7 @@ class SaddleCli(unittest.TestCase):
         self.assertTrue(
             all((entry["root_seed_snapshot_bytes"] > 0) == warm for entry in hessians)
         )
-        if warm:
+        if warm and not host:
             # Admit the initial root, but not its simultaneous retention with a trial.
             # Derive this capacity from the actual endpoint's numeric reservations.
             budget = energy[0]["root_numeric_reservation_bytes"]
