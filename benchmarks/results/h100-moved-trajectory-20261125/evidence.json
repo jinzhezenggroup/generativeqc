@@ -1,0 +1,154 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Water96 complete energy and analytic forces across ten moved geometries (#3169)",
+  "inputs_hash": "1a22a633cd89ec69e67f2fceb5829b7eb9b7885b4ab6ab9e0b5583c9d7527939",
+  "revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Four stock production functionals with explicit method/basis recorded.",
+    "ir": "Each stock backend owns its existing code; no common IR is emitted.",
+    "schedule": "Unchanged production schedule; actual work and binary retained per run."
+  },
+  "device": {
+    "backend": "cuda",
+    "device_id": 0,
+    "pci_bus_id": "0000:18:00.0",
+    "name": "NVIDIA H100 80GB HBM3",
+    "compute_capability": [
+      9,
+      0
+    ],
+    "total_global_memory_bytes": 85019590656,
+    "multiprocessor_count": 132,
+    "clock_rate_khz": 1980000,
+    "driver_version": 13020,
+    "runtime_version": 12080,
+    "nvidia_smi": {
+      "performance_state": "P0",
+      "power_draw_watts": 107.56,
+      "power_limit_watts": 700.0,
+      "sm_clock_mhz": 375.0,
+      "memory_clock_mhz": 2619.0,
+      "temperature_celsius": 30.0,
+      "uuid": "GPU-110e833f-85b4-8f76-d0af-2e607dd2047e",
+      "sampling_point": "before acquisition",
+      "timestamp_utc": "2026-11-25T10:10:36.356153+00:00"
+    }
+  },
+  "toolchain": {
+    "gpu4pyscf": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.9.0",
+      "cupy": "13.4.1",
+      "cutensor": "2.2.0",
+      "numpy": "2.2.6"
+    },
+    "standard": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.8.1",
+      "cupy": "13.6.0",
+      "cutensor": null,
+      "numpy": "2.2.6"
+    },
+    "oracle": {
+      "pyscf": "2.14.0",
+      "gpu4pyscf": "1.9.0",
+      "cupy": "13.4.1",
+      "cutensor": "2.2.0",
+      "numpy": "2.2.6"
+    }
+  },
+  "settings": {
+    "moved_steps": 10,
+    "trajectory_repeats": 1,
+    "oracle_steps": [
+      1,
+      5,
+      10
+    ],
+    "energy_and_force_gates": {
+      "energy_abs_per_atom_hartree": 1e-05,
+      "force_max_abs_hartree_per_bohr": 0.0001,
+      "force_rms_hartree_per_bohr": 3e-05
+    },
+    "grid_stability_gate_fraction": 0.25
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Single allocated H100 matched by physical UUID."
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": "Exact coordinates, energy and Cartesian forces retained."
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Exact git archive and matching preflight native source identity."
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "Fresh source-matched Release/sm90 build with explicit AOT profiles and real native cubin audit."
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "24/24 sampled paired geometry gates passed; 0 failed."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "16/16 complete converged trajectories retained; stock endpoints with host force output."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {},
+  "block_errors": {},
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "attachments": [
+    {
+      "path": "records.json.xz",
+      "sha256": "e2545e1992b67c6bdd529c9c073fcf235b0b7cf52e54c6e4b91520bfe4812127"
+    },
+    {
+      "path": "steps.csv",
+      "sha256": "83481232ca5a08acc7d210066df3930c94f3c1738a5c89742cda1c1843096eff"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "8d4644402d4a77153d55b4c701b44f5af03a0dcb7bae7883a1178a2c4a59714c"
+    },
+    {
+      "path": "provenance.json",
+      "sha256": "134476f913079cb7a4044f8fceb55073ca623e8315df0c0b6d498cf468df091e"
+    },
+    {
+      "path": "legacy-archive.json.xz",
+      "sha256": "deb2875478568726b87ddf903d6befe58cad1e10b8d0c9e067021d84ce65cf29"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Descriptive within-fixture timing comparison; no general speedup or default promotion gate."
+  }
+}

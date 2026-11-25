@@ -1,0 +1,712 @@
+{
+  "schema": "generativeqc.issue3169.provenance.v1",
+  "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "source_tree": "5b587f68163deeb5ae767591fa75512998040935",
+  "source_archive": {
+    "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
+    "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+    "library_sha256": "efe06223bca0782ac3e29071091b7252ceadab6daee54e1754c23ad004641969",
+    "build_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+    "build_receipt_sha256": "face2e824d78a0751c21fad44ca9e30399e702eb45a7c6c6f9178e7096b51429"
+  },
+  "build": {
+    "status": "complete",
+    "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+    "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
+    "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+    "sccache": "sccache 0.16.0",
+    "profiles": [
+      "pbe_rks",
+      "r2scan_rks",
+      "pbe0_rks",
+      "wb97mv_rks"
+    ],
+    "stages": [
+      {
+        "stage": "cache-before",
+        "argv": [
+          "<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/sccache",
+          "--show-stats"
+        ],
+        "status": "pass",
+        "returncode": 0,
+        "seconds": 0.007938018999993801
+      },
+      {
+        "stage": "configure",
+        "argv": [
+          "<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/python",
+          "-m",
+          "cmake",
+          "-S",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/source",
+          "-B",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_CXX_COMPILER=/usr/bin/g++-12",
+          "-DCMAKE_CUDA_COMPILER=/opt/generativeqc-reuse/cuda-12.9/bin/nvcc",
+          "-DCMAKE_CUDA_HOST_COMPILER=/usr/bin/g++-12",
+          "-DCMAKE_CXX_COMPILER_LAUNCHER=<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/sccache",
+          "-DCMAKE_CUDA_COMPILER_LAUNCHER=<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/sccache",
+          "-DPython3_EXECUTABLE=<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/python",
+          "-DOpenBLAS_DIR=<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/lib/python3.11/site-packages/scipy_openblas32/lib/cmake/openblas",
+          "-DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas",
+          "-DCMAKE_CUDA_ARCHITECTURES=90",
+          "-DGENERATIVEQC_CUDA_ARCHITECTURES=90",
+          "-DGENERATIVEQC_ENABLE_CUDA=ON",
+          "-DGENERATIVEQC_ENABLE_AOT_SHELLS=ON",
+          "-DGENERATIVEQC_AOT_PROFILE=portable_cuda",
+          "-DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=ON",
+          "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON",
+          "-DGENERATIVEQC_STATIONARY_AOT_PROFILES=pbe_rks;r2scan_rks;pbe0_rks;wb97mv_rks",
+          "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF",
+          "-DGENERATIVEQC_BUILD_TESTS=OFF",
+          "-DGENERATIVEQC_BUILD_CLI=OFF",
+          "-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON",
+          "-DGENERATIVEQC_CUDA_COMPILE_JOBS=4",
+          "-DGENERATIVEQC_AOT_COMPILE_JOBS=4",
+          "-DGENERATIVEQC_AOT_SHARDS=8"
+        ],
+        "status": "pass",
+        "returncode": 0,
+        "seconds": 14.782188233919442
+      },
+      {
+        "stage": "compile",
+        "argv": [
+          "<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/python",
+          "-m",
+          "ninja",
+          "-C",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build",
+          "-j12",
+          "generativeqc",
+          "generativeqc_stationary_pbe_rks_manifest",
+          "generativeqc_stationary_pbe_rks_spd_manifest",
+          "generativeqc_stationary_r2scan_rks_manifest",
+          "generativeqc_stationary_r2scan_rks_spd_manifest",
+          "generativeqc_stationary_pbe0_rks_manifest",
+          "generativeqc_stationary_pbe0_rks_spd_manifest",
+          "generativeqc_stationary_wb97mv_rks_manifest",
+          "generativeqc_stationary_wb97mv_rks_spd_manifest"
+        ],
+        "status": "pass",
+        "returncode": 0,
+        "seconds": 3254.3058889922686
+      },
+      {
+        "stage": "aot-audit",
+        "argv": [
+          "<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/python",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/source/tools/audit_stationary_aot_package.py",
+          "--directory",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build",
+          "--architecture",
+          "sm_90",
+          "--native-library",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc.so",
+          "--require-native-cubin",
+          "--output",
+          "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build-receipts/aot-audit.json",
+          "--profile",
+          "pbe_rks",
+          "--profile",
+          "r2scan_rks",
+          "--profile",
+          "pbe0_rks",
+          "--profile",
+          "wb97mv_rks"
+        ],
+        "status": "pass",
+        "returncode": 0,
+        "seconds": 1.816412306856364
+      },
+      {
+        "stage": "cache-after",
+        "argv": [
+          "<qz-global-user>/projects/GenerativeQC/h100-portability/20261027-fd06/env/bin/sccache",
+          "--show-stats"
+        ],
+        "status": "pass",
+        "returncode": 0,
+        "seconds": 0.007857454009354115
+      }
+    ],
+    "compiler_commands_sha256": "6ad04d0c8d90d778d247885568c33511ec2718de738fb49b485f6667d963e9be",
+    "cached_compiler_commands": 668,
+    "library_sha256": "efe06223bca0782ac3e29071091b7252ceadab6daee54e1754c23ad004641969"
+  },
+  "build_audit": {
+    "primary": {
+      "aot_binary_bytes": 105016752,
+      "aot_package_bytes": 105035550,
+      "aot_to_native_ratio": 0.11723577229237608,
+      "architecture": "sm_90",
+      "artifacts": [
+        {
+          "artifact_key": "f2c67b5c2d68f58886d244e89e1bd87572597737cf81dc3c17667271946b5614",
+          "binary_bytes": 7010072,
+          "binary_sha256": "edf79acd47fb1d26d5c3cfbc6a97883f36a57e22e0f756f75155b7446e62e753",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": null,
+          "contract_identity": "bd4b36e1faf38f228fbb876a2ff99e48e302b0217850bcf339df3897c0e6b1a3",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 1,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_pbe_rks.so",
+          "name": "pbe_rks",
+          "plan_identity": "5ef75257b912f909215f50a2d299945e66403f729d705a6078bb7338602c9b2d",
+          "source_identity": "65be588bf13c134e7e870f7ccf7808f711fb709d37c43415d18a387b4d0fd18c",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "3a69606966b5d58276e67b056374553c5264761b5799c857ee46250b22825c0a",
+          "binary_bytes": 8009504,
+          "binary_sha256": "1e7302377134896ec1dac85b4ba7c40077fa4ad5547dd69835839a713a6b42dd",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": null,
+          "contract_identity": "2e6a0ffb75fbf7726a8255e68634c5679f66b21635acc684ca8b0e378d29a4d7",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 2,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_r2scan_rks.so",
+          "name": "r2scan_rks",
+          "plan_identity": "64ebcf39cbbb5e12cadf4ec4a590c243d35a6c8bcfb0248591cbf1e952c7e468",
+          "source_identity": "04d48772ad132d5580ce688d4fb1c34d7e65ed168f9805fbb1cca8e8dc4d5282",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "20cbb94f13ee5f864be8bd083c542a5e788ccb6b4e49c8079f789e8045781177",
+          "binary_bytes": 7005976,
+          "binary_sha256": "5d32e7cc1671582947cd6ffee20435e249a22294bfabc683defdd94ec0d71132",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": null,
+          "contract_identity": "613afc31740a15702e0c65eac5d44bd6d34fc7370eacddd5a910962c20824269",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 1,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_pbe0_rks.so",
+          "name": "pbe0_rks",
+          "plan_identity": "f7602923c25ec33f2623b79ea2654ffdbebf3f5c552fea50a6fbfc7ba7c97b1c",
+          "source_identity": "97e8cbbd6f035261d416b29c6cdfa8eaee9cd89f155907f216d018ce00410840",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "c76fb8f84905568aa7429655c5f1fbeaefe55c6e12159ddb15312fb6a24a04d8",
+          "binary_bytes": 7522032,
+          "binary_sha256": "816bdf4b663ef0c23d22542032e0009722442dec1ff74f8c80def7454218c242",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": null,
+          "contract_identity": "19eb337c240102c3993ecc7fb0ca3a82fd8afb2698a84fd170593221d113bf84",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 4,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_wb97mv_rks.so",
+          "name": "wb97mv_rks",
+          "plan_identity": "08bfb11297671fd964657003cd9b6a01728cc249a558c269f4a194c019ebffe1",
+          "source_identity": "f955ad4a0aef632634ae1aa0616a5ba0022dea4222cbf645d45fa7e5dad54334",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "ea89e5b130ea0952e65494154f7942f90480a6631551e94ad5d2fcb5551844a4",
+          "binary_bytes": 18489440,
+          "binary_sha256": "089235d7269e297d846249f11f01195d0c99c302f67994326dd6d75435556886",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": [
+            "",
+            "x",
+            "xx",
+            "xy",
+            "xz",
+            "y",
+            "yy",
+            "yz",
+            "z",
+            "zz"
+          ],
+          "contract_identity": "f831cee7d5a494a4a549389c547855a1fee88b5ed7622778b653fc1236ede0ad",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 1,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_pbe_rks_spd.so",
+          "name": "pbe_rks_spd",
+          "plan_identity": "5ef75257b912f909215f50a2d299945e66403f729d705a6078bb7338602c9b2d",
+          "source_identity": "93388107b38de608e0eb135e68b0888e0f38abf6ed6c6a0ee65114fa05c46b1e",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "bf08dc5b7c21ee178e48213fc515e87e037c9c832fc9025601a2422727e53dc9",
+          "binary_bytes": 19488880,
+          "binary_sha256": "ba7adfba367ccac22d75a138784f2b7eb8a9f193887aa5899f810e646b1ca4e9",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": [
+            "",
+            "x",
+            "xx",
+            "xy",
+            "xz",
+            "y",
+            "yy",
+            "yz",
+            "z",
+            "zz"
+          ],
+          "contract_identity": "571b0ae50467ea46315b30d5fff0bcbabb79479c37fb7d48b3341b0a829e77bd",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 2,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_r2scan_rks_spd.so",
+          "name": "r2scan_rks_spd",
+          "plan_identity": "64ebcf39cbbb5e12cadf4ec4a590c243d35a6c8bcfb0248591cbf1e952c7e468",
+          "source_identity": "314077e19c595fed3f0ed44b33fe7e6672de6edf6fda594da646a2166c2617cb",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "afdf0097119451677eb607e8d6e73673a58e1f8b19e9d7674072c89607152736",
+          "binary_bytes": 18485352,
+          "binary_sha256": "0a5e6396ca39d02565dc7b82c17d22e0387b6d5dfdc84f4c517226149beab762",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": [
+            "",
+            "x",
+            "xx",
+            "xy",
+            "xz",
+            "y",
+            "yy",
+            "yz",
+            "z",
+            "zz"
+          ],
+          "contract_identity": "79c5018b5e6aef83e5fd5bd062252dd1c64d4736a739bde2e6b6ea3d79da1bc2",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 1,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_pbe0_rks_spd.so",
+          "name": "pbe0_rks_spd",
+          "plan_identity": "f7602923c25ec33f2623b79ea2654ffdbebf3f5c552fea50a6fbfc7ba7c97b1c",
+          "source_identity": "081cd816812d7f0be50c7c53b92de65d6208287e879a07462f2dccc7ac0b21ac",
+          "spin": "unpolarized"
+        },
+        {
+          "artifact_key": "2d87c257b95dfaefbeeef5cc3edeb3675ef34393fc8cf48b0cbfaa00166f04c6",
+          "binary_bytes": 19005496,
+          "binary_sha256": "8899e6f2d334674af87dfe7df76dd4bf080f03fb466853719902c9bea9b4f7bb",
+          "code_kinds": [
+            "cubin",
+            "ptx"
+          ],
+          "component_domain": [
+            "",
+            "x",
+            "xx",
+            "xy",
+            "xz",
+            "y",
+            "yy",
+            "yz",
+            "z",
+            "zz"
+          ],
+          "contract_identity": "d94b3d56e5a5c59712dca3886dac9de40ebb8ab33143c66501e8773d5bb27b0d",
+          "driver_ptx_jit_possible": true,
+          "driver_ptx_jit_required": false,
+          "functional": 4,
+          "library": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build/libgenerativeqc_stationary_wb97mv_rks_spd.so",
+          "name": "wb97mv_rks_spd",
+          "plan_identity": "08bfb11297671fd964657003cd9b6a01728cc249a558c269f4a194c019ebffe1",
+          "source_identity": "4c7d64f391afc75336b280c747d5de8e2749afedbabc86cbd42bad3b52b033a6",
+          "spin": "unpolarized"
+        }
+      ],
+      "directory": "<qz-global-user>/projects/GenerativeQC/gqc3169-22f-1125/build",
+      "manifest_bytes": 18798,
+      "native_library_bytes": 895773960
+    }
+  },
+  "compiler_cache_statistics": {
+    "cache-before.txt": [
+      "Compile requests                      0",
+      "Compile requests executed             0",
+      "Cache hits                            0",
+      "Cache misses                          0",
+      "Cache hits rate                       -",
+      "Cache timeouts                        0",
+      "Cache read errors                     0",
+      "Forced recaches                       0",
+      "Cache write errors                    0",
+      "Cache errors                          0",
+      "Compilations                          0",
+      "Compilation failures                  0",
+      "Non-cacheable compilations            0",
+      "Non-cacheable calls                   0",
+      "Non-compilation calls                 0",
+      "Unsupported compiler calls            0",
+      "Average cache write               0.000 s",
+      "Average compiler                  0.000 s",
+      "Average cache read hit            0.000 s",
+      "Failed distributed compilations       0",
+      "Cache location                  Local disk: \"/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-portability/20261027-fd06/cache/sccache\"",
+      "Base directories                (none)",
+      "Use direct/preprocessor mode?   yes",
+      "Version (client)                0.16.0",
+      "Max cache size                       10 GiB"
+    ],
+    "cache-after.txt": [
+      "Compile requests                          668",
+      "Compile requests executed                1792",
+      "Cache hits                                111",
+      "Cache hits (CUBIN)                         86",
+      "Cache hits (CUDA)                          25",
+      "Cache misses                             1400",
+      "Cache misses (C/C++)                      387",
+      "Cache misses (CUBIN)                      195",
+      "Cache misses (CUDA)                       256",
+      "Cache misses (CUDA (Device code))         281",
+      "Cache misses (PTX)                        281",
+      "Cache hits rate                          7.35 %",
+      "Cache hits rate (C/C++)                  0.00 %",
+      "Cache hits rate (CUBIN)                 30.60 %",
+      "Cache hits rate (CUDA)                   8.90 %",
+      "Cache hits rate (CUDA (Device code))     0.00 %",
+      "Cache hits rate (PTX)                    0.00 %",
+      "Cache timeouts                              0",
+      "Cache read errors                           0",
+      "Forced recaches                             0",
+      "Cache write errors                          0",
+      "Cache errors                                0",
+      "Compilations                             1681",
+      "Compilation failures                        0",
+      "Non-cacheable compilations                281",
+      "Non-cacheable calls                         0",
+      "Non-compilation calls                       0",
+      "Unsupported compiler calls                  0",
+      "Average cache write                     0.011 s",
+      "Average compiler                       13.057 s",
+      "Average cache read hit                  0.014 s",
+      "Failed distributed compilations             0",
+      "Cache location                       Local disk: \"/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/h100-portability/20261027-fd06/cache/sccache\"",
+      "Base directories                     (none)",
+      "Use direct/preprocessor mode?        yes",
+      "Version (client)                     0.16.0",
+      "Cache size                                 10 GiB",
+      "Max cache size                             10 GiB"
+    ]
+  },
+  "fixture_and_basis": {
+    "trajectory_sha256": "1a22a633cd89ec69e67f2fceb5829b7eb9b7885b4ab6ab9e0b5583c9d7527939",
+    "auxiliary_basis_source": "paper-hfdft-cold3-20261120/h100/inputs.json.xz",
+    "basis": "spherical def2-SVP",
+    "fixture": "scaling_cases()['water-96'].atoms"
+  },
+  "driver_hashes": {
+    "trajectory.py": "8b78a63dac2cf9f4779b8787980e319c4f34eeb5a7a678b0830a7e8029e8e0b9",
+    "run_qz.sh": "f01ba778bee07c54b4135f13f57c79a8441e9331150211e07b8fedac1dbbb83a",
+    "build_qz.py": "c334352db2a70a4ce0e211a833ff95eac5f6efd2b3dcda1edd724300e909ea97",
+    "replay.py": "1cabb50a7791902a62822af01987b5d1fbcb3a2e74700935e2105207c17b54e2"
+  },
+  "platform": {
+    "job": {
+      "name": "gqc-3169-h100-trajectory-22f-1125",
+      "status": "SUCCEEDED",
+      "project": "CQ-NexChem",
+      "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 16,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "priority": 20,
+      "priority_level": "NORMAL",
+      "public_path_mount_mode": 1,
+      "created_at": "1795596751000",
+      "finished_at": "1795602513000"
+    },
+    "instances": [
+      {
+        "status": "instance_running",
+        "type": "instance_type_worker",
+        "node": "qb-prod-gpu188",
+        "rank": 0
+      }
+    ],
+    "platform_usage_priority": 4,
+    "events": [
+      {
+        "time": "2026-11-25 00:52:53",
+        "instance": "rank=0",
+        "type": "Normal",
+        "reason": "Scheduled",
+        "message": "Successfully assigned cq-nex-chem/<redacted>-worker-0 to qb-prod-gpu188"
+      },
+      {
+        "time": "2026-11-25 00:52:54",
+        "instance": "rank=0",
+        "type": "Normal",
+        "reason": "Pulled",
+        "message": "Container image \"docker.sii.shaipower.online/inspire-studio/generativeqc-science-py311-cuda129:20261015\" already present on machine"
+      },
+      {
+        "time": "2026-11-25 00:52:55",
+        "instance": "rank=0",
+        "type": "Normal",
+        "reason": "Pulled",
+        "message": "Container image \"docker.sii.shaipower.online/infly-dev/exit-code-server:1.0.13\" already present on machine"
+      },
+      {
+        "time": "2026-11-25 00:52:55",
+        "instance": "rank=0",
+        "type": "Normal",
+        "reason": "Started",
+        "message": "Started container exit-code-server"
+      },
+      {
+        "time": "2026-11-25 00:52:55",
+        "instance": "rank=0",
+        "type": "Normal",
+        "reason": "Started",
+        "message": "Started container pytorch"
+      }
+    ],
+    "allocation_cost": {
+      "scheduled_utc": "2026-11-25T08:52:53+00:00",
+      "primary_container_started_utc": "2026-11-25T08:52:55+00:00",
+      "interval_end_lower_utc": "2026-11-25T10:28:33+00:00",
+      "interval_end_upper_utc": "2026-11-25T10:28:33+00:00",
+      "estimated_gpu_hours_range": [
+        1.593888888888889,
+        1.5944444444444446
+      ],
+      "estimated_points_range_at_list_rate": [
+        1.593888888888889,
+        1.5944444444444446
+      ],
+      "actual_billing": null,
+      "scope": "One card. Lower bound uses container start, upper uses scheduler assignment. Rounding or adjustments by platform billing are unverified."
+    },
+    "cleanup": {
+      "name": "gqc-3169-h100-trajectory-22f-1125",
+      "status": "deleted"
+    },
+    "previous_attempt": {
+      "job": {
+        "name": "gqc-3169-h100-trajectory-1125-a",
+        "status": "RUNNING",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "nodes": [
+          "qb-prod-gpu038"
+        ],
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 1,
+        "created_at": "1795595678000"
+      },
+      "source_revision": "d154546d2d6629ab8c865ca08f680002d68b4152",
+      "completion": "Stopped and deleted after superseding source revision",
+      "stop": {
+        "name": "gqc-3169-h100-trajectory-1125-a",
+        "status": "stopped"
+      },
+      "cleanup": {
+        "name": "gqc-3169-h100-trajectory-1125-a",
+        "status": "deleted"
+      },
+      "events": [
+        {
+          "time": "2026-11-25 00:34:53",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu045, once resource is released and minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 00:34:56",
+          "type": "Warning",
+          "reason": "Unschedulable",
+          "message": "Error pod <redacted>-worker-0 condition message: Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu045, once resource is released and minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 00:34:56",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "0/696 nodes are unavailable: 130 Insufficient rdma/hca_shared_devices, 139 Insufficient nvidia.com/gpu, 36 Insufficient cpu, 378 Insufficient memory, 6 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-25 00:35:01",
+          "type": "Warning",
+          "reason": "Unschedulable",
+          "message": "Error pod <redacted>-worker-0 condition message: 0/696 nodes are unavailable: 22 Insufficient rdma/hca_shared_devices, 247 Insufficient nvidia.com/gpu, 36 Insufficient cpu, 378 Insufficient memory, 6 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-25 00:35:01",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "0/696 nodes are unavailable: 22 Insufficient rdma/hca_shared_devices, 247 Insufficient nvidia.com/gpu, 36 Insufficient cpu, 378 Insufficient memory, 6 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-25 00:35:05",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "0/696 nodes are unavailable: 131 Insufficient rdma/hca_shared_devices, 139 Insufficient nvidia.com/gpu, 36 Insufficient cpu, 378 Insufficient memory, 5 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-25 00:35:09",
+          "instance": "rank=0",
+          "type": "Warning",
+          "reason": "FailedScheduling",
+          "message": "0/696 nodes are unavailable: 124 Insufficient nvidia.com/gpu, 146 Insufficient rdma/hca_shared_devices, 36 Insufficient cpu, 378 Insufficient memory, 5 node(s) didn't match Pod's node affinity/selector, 7 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-25 00:35:11",
+          "instance": "rank=0",
+          "type": "Normal",
+          "reason": "Scheduled",
+          "message": "Successfully assigned cq-nex-chem/<redacted>-worker-0 to qb-prod-gpu038"
+        },
+        {
+          "time": "2026-11-25 00:36:48",
+          "instance": "rank=0",
+          "type": "Normal",
+          "reason": "Pulled",
+          "message": "Successfully pulled image \"docker.sii.shaipower.online/inspire-studio/generativeqc-science-py311-cuda129:20261015\" in 1m36.034853559s (1m36.034878477s including waiting)"
+        },
+        {
+          "time": "2026-11-25 00:36:49",
+          "instance": "rank=0",
+          "type": "Normal",
+          "reason": "Started",
+          "message": "Started container pytorch"
+        },
+        {
+          "time": "2026-11-25 00:36:49",
+          "instance": "rank=0",
+          "type": "Normal",
+          "reason": "Pulled",
+          "message": "Container image \"docker.sii.shaipower.online/infly-dev/exit-code-server:1.0.13\" already present on machine"
+        },
+        {
+          "time": "2026-11-25 00:36:50",
+          "instance": "rank=0",
+          "type": "Normal",
+          "reason": "Started",
+          "message": "Started container exit-code-server"
+        }
+      ],
+      "allocation_cost": {
+        "scheduled_utc": "2026-11-25T08:35:11+00:00",
+        "primary_container_started_utc": "2026-11-25T08:36:49+00:00",
+        "interval_end_lower_utc": "2026-11-25T08:47:58+00:00",
+        "interval_end_upper_utc": "2026-11-25T08:48:18.849948+00:00",
+        "estimated_gpu_hours_range": [
+          0.18583333333333332,
+          0.2188472077777778
+        ],
+        "estimated_points_range_at_list_rate": [
+          0.18583333333333332,
+          0.2188472077777778
+        ],
+        "actual_billing": null,
+        "scope": "One card. Lower bound uses container start, upper uses scheduler assignment. Rounding or adjustments by platform billing are unverified."
+      }
+    },
+    "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+    "image": "generativeqc-science-py311-cuda129:20261015",
+    "requested_priority": 4,
+    "max_runtime_hours": 6,
+    "quota": {
+      "workspace": "\u5206\u5e03\u5f0f\u8bad\u7ec3\u7a7a\u95f4",
+      "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+      "gpu_type": "NVIDIA H100 (80GB)",
+      "quota": "1,20,200",
+      "priority": "any",
+      "allowed_priority_levels": [],
+      "points_per_hour": 1.0
+    }
+  },
+  "raw_receipt_sha256": {
+    "build.json": "face2e824d78a0751c21fad44ca9e30399e702eb45a7c6c6f9178e7096b51429",
+    "pbe-df-gpu4pyscf.json": "b9f0667971ba7896357fecf1f2e126370c0bde30757f1b54a20d1726f78b56f3",
+    "pbe-df-standard.json": "6599ab9f998221893a75c940e58374020d1529631254120673d27a66dd18f72a",
+    "pbe-direct-gpu4pyscf.json": "2734ecec97527be140f7ccbf257592731d3c4422113f7e93b8a370e91e2a7db2",
+    "pbe-direct-oracle.json": "975f1b0952f2e88cfecfbc1d1b56dac83c732a85173aacdc7af85a088eda9ede",
+    "pbe-direct-standard.json": "f5ed8556f2cb2428a1035feb9afc4f5b0cd55d15534cb89e960ac27082554221",
+    "pbe0-df-gpu4pyscf.json": "c8dbe29745fa9668db26c590daac75df9b58c6961cf33e2fe22af150ad27f19d",
+    "pbe0-df-standard.json": "dec7bd01e616a802284fb1517c466fc9be2888665191a37a7fa7db07df210785",
+    "pbe0-direct-gpu4pyscf.json": "8ac2525c14db67f44cd9203fbc0ec69fab59027592074af0100490658c9901d6",
+    "pbe0-direct-oracle.json": "daa9af786720d9c63299c536313bc5f7e088eb2f0047649904265094e2da5275",
+    "pbe0-direct-standard.json": "b6538a054225e4b2c14d977f3b972eac48e70ec50aa31b5872e2ee01841659c0",
+    "preflight.json": "d5e9b9e81afc1cb10e22b98f82696ef48d0cbb0f0864c0c0305967d8df062b70",
+    "r2scan-df-gpu4pyscf.json": "fa9e03458cb1e309566b6eba1fb1208a11740ac5d5f428e3d646f55c17e1a7a2",
+    "r2scan-df-standard.json": "c5b7bbcc555bb54404b07d9bd705a2c9073586c8bdf19404e5db6634fa08a215",
+    "r2scan-direct-gpu4pyscf.json": "b402574c11caf52db6d1d9b6159083091b3bb221227b6b94a136cb59a654a0ec",
+    "r2scan-direct-oracle.json": "b14654ec66b5d7bfdde6c93678bdf4fa1ba4d6a16377bb2e0ee824762e5fb3f8",
+    "r2scan-direct-standard.json": "438741775c7998c22ecaa6bb866c4eb985915860c5f9bd151b2f090288040a60",
+    "trajectory.json": "1a22a633cd89ec69e67f2fceb5829b7eb9b7885b4ab6ab9e0b5583c9d7527939",
+    "wb97m-v-df-gpu4pyscf.json": "6514d16e2438555fd030c0b4e01c6c91d64bb34f862ba7d9c614fc005ef2399a",
+    "wb97m-v-df-standard.json": "531488e7d486f18d3d2fafec948c7c285fe2ac2448325d74bf806f700bab6fde",
+    "wb97m-v-direct-gpu4pyscf.json": "9a5485c39a775dae076449078a12ec1834a9814fe2ff14b115490ae8aba70f92",
+    "wb97m-v-direct-oracle.json": "54b9ee0792ca8f4e561125fa61bc6e405d1e6282861b82ab87df8e1982544f9b",
+    "wb97m-v-direct-standard.json": "92f74a0bdbcc2d2606b6e39eba6bb3047245635f2faccefebec3bbfb9c11c8ad"
+  },
+  "process_exit_codes": [
+    "wb97m-v direct standard 0",
+    "wb97m-v direct gpu4pyscf 0",
+    "wb97m-v df gpu4pyscf 0",
+    "wb97m-v df standard 0",
+    "pbe direct standard 0",
+    "pbe direct gpu4pyscf 0",
+    "pbe df gpu4pyscf 0",
+    "pbe df standard 0",
+    "r2scan direct standard 0",
+    "r2scan direct gpu4pyscf 0",
+    "r2scan df gpu4pyscf 0",
+    "r2scan df standard 0",
+    "pbe0 direct standard 0",
+    "pbe0 direct gpu4pyscf 0",
+    "pbe0 df gpu4pyscf 0",
+    "pbe0 df standard 0",
+    "pbe direct oracle 0",
+    "r2scan direct oracle 0",
+    "pbe0 direct oracle 0",
+    "wb97m-v direct oracle 0"
+  ],
+  "raw_path_redaction": "Only the personal shared-storage prefix is replaced in published configuration strings. Original receipt hashes are retained."
+}

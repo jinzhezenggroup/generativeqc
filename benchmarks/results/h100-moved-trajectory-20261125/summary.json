@@ -1,0 +1,766 @@
+{
+  "summary": [
+    {
+      "method": "pbe",
+      "mode": "df",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 3.8849135152995586,
+        "moved_median_seconds": 2.926030151313171,
+        "moved_total_seconds": 29.47865782584995,
+        "cold_plus_moved_total_seconds": 33.36357134114951
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 7.6898027383722365,
+        "moved_median_seconds": 2.8376087725628167,
+        "moved_total_seconds": 28.328613142017275,
+        "cold_plus_moved_total_seconds": 36.01841588038951
+      },
+      "moved_gpu4pyscf_over_standard": 0.9609872101156453,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "pbe",
+      "mode": "direct",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 4.205352703109384,
+        "moved_median_seconds": 4.318373249610886,
+        "moved_total_seconds": 42.1957525620237,
+        "cold_plus_moved_total_seconds": 46.40110526513308
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 8.336788897868246,
+        "moved_median_seconds": 3.475735879736021,
+        "moved_total_seconds": 34.74953287048265,
+        "cold_plus_moved_total_seconds": 43.0863217683509
+      },
+      "moved_gpu4pyscf_over_standard": 0.8235315348246054,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "pbe0",
+      "mode": "df",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 4.710619221907109,
+        "moved_median_seconds": 3.911551773780957,
+        "moved_total_seconds": 39.15571964113042,
+        "cold_plus_moved_total_seconds": 43.86633886303753
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 7.6475421320647,
+        "moved_median_seconds": 3.259591947309673,
+        "moved_total_seconds": 32.72071397583932,
+        "cold_plus_moved_total_seconds": 40.36825610790402
+      },
+      "moved_gpu4pyscf_over_standard": 0.8356560491220913,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "pbe0",
+      "mode": "direct",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 6.746645674109459,
+        "moved_median_seconds": 8.964510666904971,
+        "moved_total_seconds": 88.05662120645866,
+        "cold_plus_moved_total_seconds": 94.80326688056812
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 12.151354995090514,
+        "moved_median_seconds": 6.440509109990671,
+        "moved_total_seconds": 64.37066630553454,
+        "cold_plus_moved_total_seconds": 76.52202130062506
+      },
+      "moved_gpu4pyscf_over_standard": 0.7310144929886677,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "r2scan",
+      "mode": "df",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 4.643650799058378,
+        "moved_median_seconds": 3.3737876273225993,
+        "moved_total_seconds": 33.79433596553281,
+        "cold_plus_moved_total_seconds": 38.43798676459119
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 9.007300324272364,
+        "moved_median_seconds": 4.128757609752938,
+        "moved_total_seconds": 41.40768149821088,
+        "cold_plus_moved_total_seconds": 50.41498182248324
+      },
+      "moved_gpu4pyscf_over_standard": 1.2252846613244006,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "r2scan",
+      "mode": "direct",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 4.89692167378962,
+        "moved_median_seconds": 4.749506139429286,
+        "moved_total_seconds": 46.669313287362456,
+        "cold_plus_moved_total_seconds": 51.56623496115208
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 9.924031246919185,
+        "moved_median_seconds": 4.709938661195338,
+        "moved_total_seconds": 47.07769044768065,
+        "cold_plus_moved_total_seconds": 57.00172169459984
+      },
+      "moved_gpu4pyscf_over_standard": 1.0087504428831777,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "df",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 20.309585770126432,
+        "moved_median_seconds": 16.046067820163444,
+        "moved_total_seconds": 160.55354833835736,
+        "cold_plus_moved_total_seconds": 180.8631341084838
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 39.904840119648725,
+        "moved_median_seconds": 25.985774523112923,
+        "moved_total_seconds": 260.1241917973384,
+        "cold_plus_moved_total_seconds": 300.02903191698715
+      },
+      "moved_gpu4pyscf_over_standard": 1.6201709304433538,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "direct",
+      "standard": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 33.6312700859271,
+        "moved_median_seconds": 36.537351611535996,
+        "moved_total_seconds": 361.2818193398416,
+        "cold_plus_moved_total_seconds": 394.9130894257687
+      },
+      "gpu4pyscf": {
+        "complete": true,
+        "completed_endpoints": 11,
+        "cold_seconds": 77.16638317098841,
+        "moved_median_seconds": 28.75665958947502,
+        "moved_total_seconds": 288.60347123490646,
+        "cold_plus_moved_total_seconds": 365.7698544058949
+      },
+      "moved_gpu4pyscf_over_standard": 0.7988319804253148,
+      "sampled_gates_passed": 3,
+      "sampled_gates_total": 3
+    }
+  ],
+  "qualification": [
+    {
+      "method": "pbe",
+      "mode": "df",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 9.631291201609808e-08,
+        "force_max_abs_hartree_per_bohr": 1.7470118012674618e-05,
+        "force_rms_hartree_per_bohr": 5.262739962989668e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 7.307365516832458e-06,
+        "force_max_abs_hartree_per_bohr": 3.763174888926635e-05,
+        "force_rms_hartree_per_bohr": 1.566104270609632e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 7.307364995767784e-06,
+        "force_max_abs_hartree_per_bohr": 3.747355171590527e-05,
+        "force_rms_hartree_per_bohr": 1.5681491626434577e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe",
+      "mode": "df",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 1.0091722894382353e-07,
+        "force_max_abs_hartree_per_bohr": 1.8848809988369908e-05,
+        "force_rms_hartree_per_bohr": 5.1453231601105664e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 7.310503988833261e-06,
+        "force_max_abs_hartree_per_bohr": 3.887684948167269e-05,
+        "force_rms_hartree_per_bohr": 1.527098997786683e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 7.310503254605767e-06,
+        "force_max_abs_hartree_per_bohr": 3.841367367574122e-05,
+        "force_rms_hartree_per_bohr": 1.5284103453657246e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe",
+      "mode": "df",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 1.1034015301447653e-07,
+        "force_max_abs_hartree_per_bohr": 1.9635593972999743e-05,
+        "force_rms_hartree_per_bohr": 4.974437670828526e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 7.364224766585418e-06,
+        "force_max_abs_hartree_per_bohr": 4.6228776058129806e-05,
+        "force_rms_hartree_per_bohr": 1.5088198500658858e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 7.364224027620973e-06,
+        "force_max_abs_hartree_per_bohr": 4.5987759213161894e-05,
+        "force_rms_hartree_per_bohr": 1.5091457174093635e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe",
+      "mode": "direct",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 9.631291201609808e-08,
+        "force_max_abs_hartree_per_bohr": 1.7470118012674618e-05,
+        "force_rms_hartree_per_bohr": 5.262739962989668e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 5.232368920360386e-07,
+        "force_max_abs_hartree_per_bohr": 3.443617952425537e-05,
+        "force_rms_hartree_per_bohr": 1.54769246333124e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 5.232401747434778e-07,
+        "force_max_abs_hartree_per_bohr": 3.440817030231358e-05,
+        "force_rms_hartree_per_bohr": 1.5488527645858522e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe",
+      "mode": "direct",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 1.0091722894382353e-07,
+        "force_max_abs_hartree_per_bohr": 1.8848809988369908e-05,
+        "force_rms_hartree_per_bohr": 5.1453231601105664e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 5.309580094111274e-07,
+        "force_max_abs_hartree_per_bohr": 3.7421451319803734e-05,
+        "force_rms_hartree_per_bohr": 1.510896962638011e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 5.309616142312734e-07,
+        "force_max_abs_hartree_per_bohr": 3.7253888093502496e-05,
+        "force_rms_hartree_per_bohr": 1.510376544514237e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe",
+      "mode": "direct",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 1.1034015301447653e-07,
+        "force_max_abs_hartree_per_bohr": 1.9635593972999743e-05,
+        "force_rms_hartree_per_bohr": 4.974437670828526e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 5.002783562228311e-07,
+        "force_max_abs_hartree_per_bohr": 4.9681821879976606e-05,
+        "force_rms_hartree_per_bohr": 1.4883730073814061e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 5.002806820660529e-07,
+        "force_max_abs_hartree_per_bohr": 4.9440603119066395e-05,
+        "force_rms_hartree_per_bohr": 1.4860369885575822e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "df",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 6.530988609180592e-08,
+        "force_max_abs_hartree_per_bohr": 1.3340726443544781e-05,
+        "force_rms_hartree_per_bohr": 3.844720713290213e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 8.883892140450674e-08,
+        "force_max_abs_hartree_per_bohr": 2.3585548559745817e-05,
+        "force_rms_hartree_per_bohr": 9.998522762866581e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 8.883714978461892e-08,
+        "force_max_abs_hartree_per_bohr": 2.3306960548197253e-05,
+        "force_rms_hartree_per_bohr": 9.997685889754807e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "df",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 6.863386185311053e-08,
+        "force_max_abs_hartree_per_bohr": 1.4224429048859122e-05,
+        "force_rms_hartree_per_bohr": 3.755363512413304e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 9.549705263604362e-08,
+        "force_max_abs_hartree_per_bohr": 2.465208783053452e-05,
+        "force_rms_hartree_per_bohr": 9.843196054294387e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 9.549068143617963e-08,
+        "force_max_abs_hartree_per_bohr": 2.452763422500226e-05,
+        "force_rms_hartree_per_bohr": 9.844709026087253e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "df",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 7.543174736686827e-08,
+        "force_max_abs_hartree_per_bohr": 1.4662765003947698e-05,
+        "force_rms_hartree_per_bohr": 3.600827728000683e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 1.3403955279045476e-07,
+        "force_max_abs_hartree_per_bohr": 3.264920827769635e-05,
+        "force_rms_hartree_per_bohr": 9.976725585682474e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 1.340358248095678e-07,
+        "force_max_abs_hartree_per_bohr": 3.2554487948033284e-05,
+        "force_rms_hartree_per_bohr": 9.981705733205478e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "direct",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 6.530988609180592e-08,
+        "force_max_abs_hartree_per_bohr": 1.3340726443544781e-05,
+        "force_rms_hartree_per_bohr": 3.844720713290213e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 3.0239612177259306e-07,
+        "force_max_abs_hartree_per_bohr": 2.297400011519457e-05,
+        "force_rms_hartree_per_bohr": 1.079400290746519e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 3.0239812076615635e-07,
+        "force_max_abs_hartree_per_bohr": 2.2930458390746367e-05,
+        "force_rms_hartree_per_bohr": 1.0793187816487646e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "direct",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 6.863386185311053e-08,
+        "force_max_abs_hartree_per_bohr": 1.4224429048859122e-05,
+        "force_rms_hartree_per_bohr": 3.755363512413304e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 3.0934568447567773e-07,
+        "force_max_abs_hartree_per_bohr": 2.5456753318130187e-05,
+        "force_rms_hartree_per_bohr": 1.05054113426174e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 3.0934861191174906e-07,
+        "force_max_abs_hartree_per_bohr": 2.5409845965995714e-05,
+        "force_rms_hartree_per_bohr": 1.049925162602247e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "pbe0",
+      "mode": "direct",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 7.543174736686827e-08,
+        "force_max_abs_hartree_per_bohr": 1.4662765003947698e-05,
+        "force_rms_hartree_per_bohr": 3.600827728000683e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 2.92101465978097e-07,
+        "force_max_abs_hartree_per_bohr": 3.462772021783911e-05,
+        "force_rms_hartree_per_bohr": 1.0355819938005121e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 2.921036639236263e-07,
+        "force_max_abs_hartree_per_bohr": 3.453383085538775e-05,
+        "force_rms_hartree_per_bohr": 1.0344038480456609e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "df",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.318926632000512e-07,
+        "force_max_abs_hartree_per_bohr": 1.8647058865894905e-05,
+        "force_rms_hartree_per_bohr": 6.498821813269355e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 6.1631129237108935e-06,
+        "force_max_abs_hartree_per_bohr": 2.9293679561170904e-05,
+        "force_rms_hartree_per_bohr": 1.3294397733921424e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 6.16311222264206e-06,
+        "force_max_abs_hartree_per_bohr": 2.930116400357008e-05,
+        "force_rms_hartree_per_bohr": 1.3277607505959118e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "df",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.296862574752595e-07,
+        "force_max_abs_hartree_per_bohr": 1.9462465976616272e-05,
+        "force_rms_hartree_per_bohr": 5.997286421780336e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 6.171979980725458e-06,
+        "force_max_abs_hartree_per_bohr": 3.5403977671322195e-05,
+        "force_rms_hartree_per_bohr": 1.2864767729775729e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 6.171979038072095e-06,
+        "force_max_abs_hartree_per_bohr": 3.546700024159577e-05,
+        "force_rms_hartree_per_bohr": 1.2865922712145092e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "df",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.24347694106109e-07,
+        "force_max_abs_hartree_per_bohr": 1.828911390600041e-05,
+        "force_rms_hartree_per_bohr": 5.23073287078197e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 6.214673163640327e-06,
+        "force_max_abs_hartree_per_bohr": 3.889314230409724e-05,
+        "force_rms_hartree_per_bohr": 1.260527697037228e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 6.214672254145626e-06,
+        "force_max_abs_hartree_per_bohr": 3.901926936400457e-05,
+        "force_rms_hartree_per_bohr": 1.2619485080764054e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "direct",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.318926632000512e-07,
+        "force_max_abs_hartree_per_bohr": 1.8647058865894905e-05,
+        "force_rms_hartree_per_bohr": 6.498821813269355e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 1.6030016828002165e-06,
+        "force_max_abs_hartree_per_bohr": 2.5929118955048125e-05,
+        "force_rms_hartree_per_bohr": 1.277546294179143e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 1.6030036628459736e-06,
+        "force_max_abs_hartree_per_bohr": 2.597997204034641e-05,
+        "force_rms_hartree_per_bohr": 1.2814825349825244e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "direct",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.296862574752595e-07,
+        "force_max_abs_hartree_per_bohr": 1.9462465976616272e-05,
+        "force_rms_hartree_per_bohr": 5.997286421780336e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 1.6057564096172428e-06,
+        "force_max_abs_hartree_per_bohr": 3.174541325723368e-05,
+        "force_rms_hartree_per_bohr": 1.227833620094116e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 1.6057590149406071e-06,
+        "force_max_abs_hartree_per_bohr": 3.1763206200352556e-05,
+        "force_rms_hartree_per_bohr": 1.2294678476906992e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "r2scan",
+      "mode": "direct",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 8.24347694106109e-07,
+        "force_max_abs_hartree_per_bohr": 1.828911390600041e-05,
+        "force_rms_hartree_per_bohr": 5.23073287078197e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 1.5866628852260571e-06,
+        "force_max_abs_hartree_per_bohr": 3.4738123414257416e-05,
+        "force_rms_hartree_per_bohr": 1.1960896757603864e-05,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 1.5866656326579687e-06,
+        "force_max_abs_hartree_per_bohr": 3.486476872183175e-05,
+        "force_rms_hartree_per_bohr": 1.1951314163319259e-05,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "df",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 9.440411948465528e-08,
+        "force_max_abs_hartree_per_bohr": 8.891552935708091e-06,
+        "force_rms_hartree_per_bohr": 3.922835021354739e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 3.037987364488496e-06,
+        "force_max_abs_hartree_per_bohr": 2.050576987888686e-05,
+        "force_rms_hartree_per_bohr": 8.49976619680527e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 3.0388211295454917e-06,
+        "force_max_abs_hartree_per_bohr": 2.097482546581375e-05,
+        "force_rms_hartree_per_bohr": 8.519222728276626e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "df",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 7.98036599765813e-08,
+        "force_max_abs_hartree_per_bohr": 1.1603273144089599e-05,
+        "force_rms_hartree_per_bohr": 4.006503651180874e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 3.0500610629739335e-06,
+        "force_max_abs_hartree_per_bohr": 2.5808055736868674e-05,
+        "force_rms_hartree_per_bohr": 8.849952409167317e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 3.0508661457891626e-06,
+        "force_max_abs_hartree_per_bohr": 2.6051567003193554e-05,
+        "force_rms_hartree_per_bohr": 8.829514039895668e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "df",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 4.8370462006156835e-08,
+        "force_max_abs_hartree_per_bohr": 1.3443265784118807e-05,
+        "force_rms_hartree_per_bohr": 4.235907219346337e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 3.106937583652325e-06,
+        "force_max_abs_hartree_per_bohr": 3.0374472202721048e-05,
+        "force_rms_hartree_per_bohr": 9.433568747174408e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 3.107745139156274e-06,
+        "force_max_abs_hartree_per_bohr": 3.0578324449415106e-05,
+        "force_rms_hartree_per_bohr": 9.374459966328765e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "direct",
+      "step": 1,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 9.440411948465528e-08,
+        "force_max_abs_hartree_per_bohr": 8.891552935708091e-06,
+        "force_rms_hartree_per_bohr": 3.922835021354739e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 4.575553115652535e-07,
+        "force_max_abs_hartree_per_bohr": 2.3437144133331422e-05,
+        "force_rms_hartree_per_bohr": 9.835689266385148e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 4.575554347259943e-07,
+        "force_max_abs_hartree_per_bohr": 2.3366935103297237e-05,
+        "force_rms_hartree_per_bohr": 9.788104830353418e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "direct",
+      "step": 5,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 7.98036599765813e-08,
+        "force_max_abs_hartree_per_bohr": 1.1603273144089599e-05,
+        "force_rms_hartree_per_bohr": 4.006503651180874e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 4.5826531902548595e-07,
+        "force_max_abs_hartree_per_bohr": 2.8284553611417074e-05,
+        "force_rms_hartree_per_bohr": 9.885029345636536e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 4.582659300922387e-07,
+        "force_max_abs_hartree_per_bohr": 2.8336991692690106e-05,
+        "force_rms_hartree_per_bohr": 9.881265882352013e-06,
+        "passed": true
+      },
+      "status": "pass"
+    },
+    {
+      "method": "wb97m-v",
+      "mode": "direct",
+      "step": 10,
+      "grid_stability": {
+        "energy_abs_per_atom_hartree": 4.8370462006156835e-08,
+        "force_max_abs_hartree_per_bohr": 1.3443265784118807e-05,
+        "force_rms_hartree_per_bohr": 4.235907219346337e-06,
+        "passed": true
+      },
+      "standard": {
+        "energy_abs_per_atom_hartree": 4.231733517675214e-07,
+        "force_max_abs_hartree_per_bohr": 3.294777422971351e-05,
+        "force_rms_hartree_per_bohr": 9.867547724314457e-06,
+        "passed": true
+      },
+      "gpu4pyscf": {
+        "energy_abs_per_atom_hartree": 4.23173323345812e-07,
+        "force_max_abs_hartree_per_bohr": 3.296763614724085e-05,
+        "force_rms_hartree_per_bohr": 9.908226714395945e-06,
+        "passed": true
+      },
+      "status": "pass"
+    }
+  ]
+}

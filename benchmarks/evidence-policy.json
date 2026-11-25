@@ -1,5 +1,5 @@
 {
-  "benchmark_results_max_bytes": 101060625,
+  "benchmark_results_max_bytes": 101845793,
   "change_review_max_bytes": 2097152,
   "exceptions": {
     "benchmarks/results/array-api-rhf-slurm-20261011/build/configure.log": {

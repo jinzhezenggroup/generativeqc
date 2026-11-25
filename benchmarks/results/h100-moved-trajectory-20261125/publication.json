@@ -1,0 +1,87 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The results describe one prescribed trajectory on one H100 and retain sampled numerical outcomes.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4417,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "2875d391725980d5b9ddd914e42c39c671082a621ef4f66fc0972289a5255e19"
+    },
+    {
+      "bytes": 556560,
+      "path": "records.json.xz",
+      "role": "samples",
+      "sha256": "e2545e1992b67c6bdd529c9c073fcf235b0b7cf52e54c6e4b91520bfe4812127"
+    },
+    {
+      "bytes": 12417,
+      "path": "steps.csv",
+      "role": "summary",
+      "sha256": "83481232ca5a08acc7d210066df3930c94f3c1738a5c89742cda1c1843096eff"
+    },
+    {
+      "bytes": 26148,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "8d4644402d4a77153d55b4c701b44f5af03a0dcb7bae7883a1178a2c4a59714c"
+    },
+    {
+      "bytes": 31182,
+      "path": "provenance.json",
+      "role": "input",
+      "sha256": "134476f913079cb7a4044f8fceb55073ca623e8315df0c0b6d498cf468df091e"
+    },
+    {
+      "bytes": 11411,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "ac21d63594f7ec8765c51b2a3a9c2e2d6c44b0ce298ff0054d74a03d6aeec535"
+    },
+    {
+      "bytes": 16161,
+      "path": "trajectory.py",
+      "role": "reproduction",
+      "sha256": "8b78a63dac2cf9f4779b8787980e319c4f34eeb5a7a678b0830a7e8029e8e0b9"
+    },
+    {
+      "bytes": 3548,
+      "path": "run_qz.sh",
+      "role": "reproduction",
+      "sha256": "f01ba778bee07c54b4135f13f57c79a8441e9331150211e07b8fedac1dbbb83a"
+    },
+    {
+      "bytes": 8548,
+      "path": "build_qz.py",
+      "role": "reproduction",
+      "sha256": "c334352db2a70a4ce0e211a833ff95eac5f6efd2b3dcda1edd724300e909ea97"
+    },
+    {
+      "bytes": 105088,
+      "path": "legacy-archive.json.xz",
+      "role": "input",
+      "sha256": "deb2875478568726b87ddf903d6befe58cad1e10b8d0c9e067021d84ce65cf29"
+    },
+    {
+      "bytes": 11157,
+      "path": "replay.py",
+      "role": "reproduction",
+      "sha256": "1cabb50a7791902a62822af01987b5d1fbcb3a2e74700935e2105207c17b54e2"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python3.11",
+      "benchmarks/results/h100-moved-trajectory-20261125/replay.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5"
+  }
+}

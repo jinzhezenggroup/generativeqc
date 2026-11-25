@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-moved-trajectory-20261125",
+  "owner": "Issue #3169 water96 moved-geometry H100 comparison on 22f72d069",
+  "reason": "The compressed observations retain the 176 complete timed endpoints, 24 tighter independent oracle solves, per-step coordinates, full force vectors, and semantic work for offline numerical and timing replay. The record is within the per-file limit.",
+  "review_document": "benchmarks/results/h100-moved-trajectory-20261125/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-moved-trajectory-20261125/records.json.xz",
+      "family": "h100-moved-trajectory-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Source-bound timed and independent reference endpoints for all declared trajectory arms.",
+      "bytes": 556560,
+      "sha256": "e2545e1992b67c6bdd529c9c073fcf235b0b7cf52e54c6e4b91520bfe4812127"
+    }
+  ]
+}
