@@ -120,10 +120,12 @@ endpoint; D3 composition never widens that electronic capability. In particular,
 PBE0-D3(BJ) does not acquire public forces merely because the D3 gradient exists.
 
 The D3 owner remains independently bounded by
-`dispersion_memory_budget_bytes` (256 MiB by default). Whole-calculation
-`ResourceBudget` / `estimate_resources()` does not yet aggregate the separate D3
-owner and therefore fails closed for a composite calculation rather than reporting
-an electronic-only budget as complete.
+`dispersion_memory_budget_bytes` (256 MiB by default). For supported compositions,
+`estimate_resources()` includes D3 capacity in the whole-calculation plan. The
+complete KS owner reports its per-item D3 layout. If standalone D3 execution is
+selected on CPU, the selected library must export
+`generativeqc_resource_d3_layout_v1` to admit the plan. A library-free correction
+estimate can still use the portable layout; it does not admit CPU execution.
 
 The architecture rationale and sign/failure invariants are recorded in the
 [Calculator D3 composition decision](../../.agents/notes/implemented/architecture/2026-09-21-d3-calculator-composition.md).

@@ -40,7 +40,7 @@ def test_native_matches_independent_portable_inventory_without_provider_loading(
 
 
 @pytest.mark.parametrize("backend", ("cpu", "cuda"))
-def test_public_native_and_old_library_keep_bounds_but_distinct_provenance(
+def test_public_d3_bounds_preserve_dry_run_and_cuda_compatibility(
     library: typing.Any, monkeypatch: pytest.MonkeyPatch, backend: str
 ) -> None:
     graph = resolve_method("PBE-D3(BJ)", spin="unpolarized")
@@ -50,16 +50,16 @@ def test_public_native_and_old_library_keep_bounds_but_distinct_provenance(
         )
         for owner in (library, SimpleNamespace(), None)
     ]
-    assert requests[0].candidates == requests[1].candidates == requests[2].candidates
+    assert requests[0].candidates == requests[2].candidates
     controls = [json.loads(request.identity.schedule) for request in requests]
     assert controls[0]["inventory_owner"] == "native-d3-layout-v1"
-    assert (
-        controls[1]["inventory_owner"]
-        == controls[2]["inventory_owner"]
-        == "portable-d3-layout-v1"
-    )
+    assert controls[2]["inventory_owner"] == "portable-d3-layout-v1"
     assert requests[0].identity.identity != requests[1].identity.identity
-    assert requests[1].identity == requests[2].identity
+    if backend == "cpu":
+        assert not requests[1].candidates
+        assert "generativeqc_resource_d3_layout_v1" in requests[1].unsupported_reason
+    else:
+        assert requests[1] == requests[2]
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
         pytest.fail("dry-run planning loaded a native provider")
