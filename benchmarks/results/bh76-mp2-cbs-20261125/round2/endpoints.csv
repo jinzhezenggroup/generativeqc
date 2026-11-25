@@ -50,7 +50,7 @@ TQ_D,HTBH38/TS11,failed,angular_momentum_refusal,capability_gap,angular_momentum
 DT_D,HTBH38/TS12,timeout,timeout,ok,,True,2
 TQ_D,HTBH38/TS12,failed,angular_momentum_refusal,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS13,failed,correlation_work_policy,failed,df_eigensolve_input_refusal,True,
-TQ_D,HTBH38/TS13,failed,df_eigensolve_input_refusal,capability_gap,df_eigensolve_input_refusal angular_momentum_refusal,False,
+TQ_D,HTBH38/TS13,failed,df_eigensolve_input_refusal,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS14,failed,correlation_work_policy,failed,scf_nonconvergence,True,
 TQ_D,HTBH38/TS14,failed,scf_nonconvergence,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS15,failed,correlation_work_policy,timeout,timeout,,
@@ -74,7 +74,7 @@ TQ_D,HTBH38/TS5,ok,,,,,1
 DT_D,HTBH38/TS6,failed,correlation_work_policy,timeout,timeout,,
 TQ_D,HTBH38/TS6,failed,angular_momentum_refusal,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS7,failed,correlation_work_policy,failed,df_eigensolve_input_refusal,True,
-TQ_D,HTBH38/TS7,failed,df_eigensolve_input_refusal,capability_gap,df_eigensolve_input_refusal angular_momentum_refusal,False,
+TQ_D,HTBH38/TS7,failed,df_eigensolve_input_refusal,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS8,failed,numeric_memory_refusal,timeout,timeout,,
 TQ_D,HTBH38/TS8,failed,numeric_memory_refusal,capability_gap,angular_momentum_refusal,False,
 DT_D,HTBH38/TS9,failed,scf_nonconvergence,failed,scf_nonconvergence,True,

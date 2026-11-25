@@ -20,7 +20,6 @@ ENDPOINT_SECONDS = 7200
 NUMERIC_BYTES = 64 << 30
 SCALAR_WORK = 50_000_000_000_000
 WORK_ENV = "GENERATIVEQC_CORRELATION_MAX_SCALAR_WORK"
-EIGENSOLVE = "df_eigensolve_input_refusal"
 ANGULAR = "angular_momentum_refusal"
 
 
@@ -47,7 +46,7 @@ def point(system: dict, task: dict) -> dict:
         "scf_stability_search": False,
     }
     diagnosis = task["round1_diagnosis"]
-    gaps = [EIGENSOLVE] if diagnosis == EIGENSOLVE else []
+    gaps: list[str] = []
     if recipe == "TQ_D" and system["multiplicity"] != 1:
         # The QZ energy-only component has the same owner and basis operators
         # as this UMP2 capability report. It does not execute integrals or SCF.
@@ -195,7 +194,11 @@ def launch(output: Path, plan_path: Path, cards: int) -> None:
     for worker in workers:
         worker.join()
     if any(worker.exitcode != 0 for worker in workers):
+        tasks.cancel_join_thread()
+        tasks.close()
         raise RuntimeError("one or more GPU workers failed, inspect their journals")
+    tasks.close()
+    tasks.join_thread()
 
 
 if __name__ == "__main__":

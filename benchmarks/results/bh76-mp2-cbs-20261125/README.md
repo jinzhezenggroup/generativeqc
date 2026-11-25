@@ -44,8 +44,8 @@ TQ_D covers 4/18 with MAE 0.253 and maximum absolute difference 0.538.
 The protocol column counts host-side per-point timeouts. The resource
 column counts scalar-work and numeric-memory refusals. SCF convergence
 counts native reference stopping failures. The development column counts
-the angular-momentum and eigensolve-input refusals, with one endpoint
-count when both apply. CCSD amplitude convergence has its own column.
+the angular-momentum and eigensolve-input refusals using each round's
+observations. CCSD amplitude convergence has its own column.
 Both recipes reported CCSD amplitude nonconvergence for C5H8, blocking
 HTBH38 directions 37 and 38.
 
@@ -135,9 +135,16 @@ The raw CUDA journals retain the original diagnostic messages and the fresh-proc
   and the resulting energies in a regression for both structures.
   [Input validation](../../../src/scf/cuda/df_eigensystem.cpp)
 
-The angular-momentum gap affects 54/76 TQ_D barriers by transition-structure or channel dependency. The affected indices are HTBH38 1–8, 11–36 and NHTBH38 1–12, 29–36. This leaves a maximum of 22/76 TQ_D barriers at the pinned capability boundary. The TQ_D eigensolve-affected directions are included in the angular-momentum list.
+The angular-momentum gap affects 54/76 TQ_D barriers by
+transition-structure or channel dependency. The affected indices are
+HTBH38 1–8 and 11–36, and NHTBH38 1–12 and 29–36. This leaves a
+maximum of 22/76 TQ_D barriers at the pinned capability boundary.
 
-DF eigensolve input refusals affect `DT_D` HTBH38 13–14, 25–26 and `TQ_D` HTBH38 13–14, 25–26.
+The DF eigensolver input refusal was observed in TQ_D round 1 and
+reproduced on DT_D in round 2 for TS7 and TS13. The affected directions
+are HTBH38 13–14 and 25–26 in each of those measurements. In round 2,
+the TQ_D preflight excluded both structures at the angular-momentum
+gate before native execution.
 
 ## Round 1 CUDA comparisons to the conventional anchors
 
@@ -230,8 +237,10 @@ requires native CPU exact J/K. Retried points therefore use the original
 SCF defaults. The runner uses the energy-only QZ UMP2 basis capability
 report to check whether higher angular momentum makes a complete result
 impossible for an open-shell endpoint. An endpoint skipped on that basis
-retains its primary round 1 diagnosis. The two recorded DF eigensolve
-input refusals are also carried forward as development-required outcomes.
+retains its primary round 1 diagnosis. The round 2 diagnostics for
+these exclusions come from the basis preflight. Raw logs retain the
+historical eigensolve labels and the replay assigns each diagnostic to
+the round in which it was observed.
 
 The conventional CPU anchors use independent PySCF RHF/UHF, MP2 and
 CCSD(T) with the same orbital bases, charge, spin and geometry. The
@@ -317,9 +326,14 @@ extract it under `source/`, verify the archive and write its digest with
 `sha256sum source.tar.gz > source-staged.sha256`. In the allocated qz
 image, run `bash build_qz.sh`, followed by
 `bash run_qz_gpu.sh HTBH38 <new-output-directory>` (or `NHTBH38`).
-For round 2, use the same staged archive, include the frozen plan as
-`plan.json`, and run `bash build_production_qz.sh` followed by
+For round 2, create a separate staging directory, copy the same source
+archive into it, expand it under `source/`, and verify its digest as
+above. Stage the drivers and inputs alongside it and save the frozen
+plan as `plan.json`. Run `bash build_production_qz.sh` followed by
 `bash run_round2_qz.sh <new-output-directory> <allocated-GPU-count>`.
+Each build keeps its library and receipts in its staging directory.
+The [acquired round 2 driver](round2/raw/acquisition-round2-driver.py.xz)
+preserves the exact measured bytes for the provenance checks.
 The first production allocation ran until eight long DT_D endpoints
 completed their 2 h attempts. At the cutover, 36 points had terminal
 records. The two [continuation plans](round2/plans/) partition the 59
@@ -331,6 +345,7 @@ continuation, supply its plan file as the third argument to
 
 Run `python replay_round2.py --output /tmp/bh76-round2` to reproduce both
 rounds and cumulative coverage from the published diagnostic journals.
+Both offline replay scripts support Python 3.10 and later.
 
 Run `srun bash run_qz_cpu.sh <new-output-directory>` for the conventional
 reference, using the original CPU acquisition input to match the archived

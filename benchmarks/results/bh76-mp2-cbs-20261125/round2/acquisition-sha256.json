@@ -250,5 +250,9 @@
   "allocation-receipts.json.xz": {
     "acquired": "94007e04e652419c4f001c8ca94eb99ebb7f7901e49162de94633a53129e3e58",
     "published": "7f0ec122e92621a516c92116f860fbe79b4f9a6df2bf5a97bad03b737b8112f2"
+  },
+  "acquisition-round2-driver.py.xz": {
+    "acquired": "5bdf6b5889d27a324c480c113f2a9ade18a90bd2d45d84c7e7590ab916cbe4df",
+    "published": "2c57a80a45f2bc2a4aea3d68b661add0014ab367e85481bfffdf9b8033f18b92"
   }
 }

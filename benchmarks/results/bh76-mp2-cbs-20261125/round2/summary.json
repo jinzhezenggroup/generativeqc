@@ -36,13 +36,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 2,
-            "population": 38,
+            "population": 2,
             "mae_kcal_mol": 0.5881384382868884,
             "max_abs_kcal_mol": 0.5881384382868884,
             "max_set": "HTBH38",
             "max_index": 9,
             "within_1_kcal_mol": 2,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "NHTBH38": {
@@ -77,7 +77,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 10,
-            "population": 38,
+            "population": 10,
             "mae_kcal_mol": 0.6658023166218316,
             "max_abs_kcal_mol": 1.2685315835451618,
             "max_set": "NHTBH38",
@@ -120,7 +120,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 12,
-            "population": 76,
+            "population": 12,
             "mae_kcal_mol": 0.6528583368993411,
             "max_abs_kcal_mol": 1.2685315835451618,
             "max_set": "NHTBH38",
@@ -167,13 +167,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 2,
-            "population": 38,
+            "population": 2,
             "mae_kcal_mol": 0.32955204496308177,
             "max_abs_kcal_mol": 0.32955204496308177,
             "max_set": "HTBH38",
             "max_index": 9,
             "within_1_kcal_mol": 2,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "NHTBH38": {
@@ -211,13 +211,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 10,
-            "population": 38,
+            "population": 10,
             "mae_kcal_mol": 0.2168291412426111,
             "max_abs_kcal_mol": 0.39212607876140027,
             "max_set": "NHTBH38",
             "max_index": 28,
             "within_1_kcal_mol": 10,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "BH76": {
@@ -256,13 +256,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 12,
-            "population": 76,
+            "population": 12,
             "mae_kcal_mol": 0.23561629186268954,
             "max_abs_kcal_mol": 0.39212607876140027,
             "max_set": "NHTBH38",
             "max_index": 28,
             "within_1_kcal_mol": 12,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         }
       }
@@ -416,7 +416,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 38
+            "population": 0
           }
         },
         "NHTBH38": {
@@ -444,7 +444,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 38
+            "population": 0
           }
         },
         "BH76": {
@@ -476,7 +476,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 76
+            "population": 0
           }
         }
       },
@@ -498,8 +498,7 @@
           },
           "diagnoses": {
             "angular_momentum_refusal": 27,
-            "ccsd_nonconvergence": 1,
-            "df_eigensolve_input_refusal": 2
+            "ccsd_nonconvergence": 1
           },
           "vs_ref1": {
             "n": 0,
@@ -507,7 +506,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 38
+            "population": 0
           }
         },
         "NHTBH38": {
@@ -539,7 +538,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 38
+            "population": 0
           }
         },
         "BH76": {
@@ -559,8 +558,7 @@
           },
           "diagnoses": {
             "angular_momentum_refusal": 45,
-            "ccsd_nonconvergence": 1,
-            "df_eigensolve_input_refusal": 2
+            "ccsd_nonconvergence": 1
           },
           "vs_ref1": {
             "n": 4,
@@ -574,7 +572,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 0,
-            "population": 76
+            "population": 0
           }
         }
       }
@@ -651,14 +649,6 @@
             35,
             36
           ]
-        },
-        "df_eigensolve_input_refusal": {
-          "HTBH38": [
-            13,
-            14,
-            25,
-            26
-          ]
         }
       }
     }
@@ -701,13 +691,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 2,
-            "population": 38,
+            "population": 2,
             "mae_kcal_mol": 0.5881384382868884,
             "max_abs_kcal_mol": 0.5881384382868884,
             "max_set": "HTBH38",
             "max_index": 9,
             "within_1_kcal_mol": 2,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "NHTBH38": {
@@ -741,7 +731,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 18,
-            "population": 38,
+            "population": 18,
             "mae_kcal_mol": 0.7552934114368948,
             "max_abs_kcal_mol": 2.372700640576838,
             "max_set": "NHTBH38",
@@ -785,7 +775,7 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 20,
-            "population": 76,
+            "population": 20,
             "mae_kcal_mol": 0.7385779141218942,
             "max_abs_kcal_mol": 2.372700640576838,
             "max_set": "NHTBH38",
@@ -813,8 +803,7 @@
           },
           "diagnoses": {
             "angular_momentum_refusal": 27,
-            "ccsd_nonconvergence": 1,
-            "df_eigensolve_input_refusal": 2
+            "ccsd_nonconvergence": 1
           },
           "vs_ref1": {
             "n": 2,
@@ -828,13 +817,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 2,
-            "population": 38,
+            "population": 2,
             "mae_kcal_mol": 0.32955204496308177,
             "max_abs_kcal_mol": 0.32955204496308177,
             "max_set": "HTBH38",
             "max_index": 9,
             "within_1_kcal_mol": 2,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "NHTBH38": {
@@ -866,13 +855,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 18,
-            "population": 38,
+            "population": 18,
             "mae_kcal_mol": 0.2897477479472955,
             "max_abs_kcal_mol": 0.7064977369249696,
             "max_set": "NHTBH38",
             "max_index": 22,
             "within_1_kcal_mol": 18,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         },
         "BH76": {
@@ -892,8 +881,7 @@
           },
           "diagnoses": {
             "angular_momentum_refusal": 45,
-            "ccsd_nonconvergence": 1,
-            "df_eigensolve_input_refusal": 2
+            "ccsd_nonconvergence": 1
           },
           "vs_ref1": {
             "n": 20,
@@ -907,13 +895,13 @@
           },
           "vs_ref1_on_common_coverage": {
             "n": 20,
-            "population": 76,
+            "population": 20,
             "mae_kcal_mol": 0.29372817764887416,
             "max_abs_kcal_mol": 0.7064977369249696,
             "max_set": "NHTBH38",
             "max_index": 22,
             "within_1_kcal_mol": 20,
-            "all_complete_and_within_1": false
+            "all_complete_and_within_1": true
           }
         }
       }
@@ -1070,14 +1058,6 @@
             34,
             35,
             36
-          ]
-        },
-        "df_eigensolve_input_refusal": {
-          "HTBH38": [
-            13,
-            14,
-            25,
-            26
           ]
         }
       }

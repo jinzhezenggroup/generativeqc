@@ -4,8 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from replay import failure_reason, load_journal
-from run_gpu import ATOM_WEIGHT, RECIPES, ROOT, sha
+from replay import failure_reason, load_journal, sha
+from run_gpu import ATOM_WEIGHT, RECIPES, ROOT
 
 
 def build_plan(data: dict, first: dict[tuple[str, str], dict]) -> list[dict]:

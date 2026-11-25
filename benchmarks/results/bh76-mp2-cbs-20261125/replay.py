@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from statistics import fmean, median
 
-from run_gpu import RECIPES, ROOT, SOURCE_REVISION, sha
+from run_gpu import RECIPES, ROOT, SOURCE_REVISION
 from run_reference import PAIRS, selected_keys
 
 HARTREE_TO_KCAL_MOL = 627.5094740631
@@ -25,6 +25,15 @@ ROLES = (
     "correction_ccsdt",
     "correction_mp2",
 )
+
+
+def sha(path: str | Path) -> str:
+    """Hash a retained file on Python 3.10 and later."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_journal(

@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import hashlib
 import json
 import lzma
 from collections import Counter
@@ -14,12 +15,15 @@ from replay import (
     failure_reason,
     load_journal,
     metric,
+    sha,
     summarize,
     verify_native,
     verify_provenance,
 )
-from run_gpu import RECIPES, ROOT, SOURCE_REVISION, sha
-from run_round2 import ANGULAR, EIGENSOLVE, ENDPOINT_SECONDS, NUMERIC_BYTES, SCALAR_WORK
+from run_gpu import RECIPES, ROOT, SOURCE_REVISION
+from run_round2 import ANGULAR, ENDPOINT_SECONDS, NUMERIC_BYTES, SCALAR_WORK
+
+EIGENSOLVE = "df_eigensolve_input_refusal"
 
 KNOWN = {
     "timeout": "protocol_limit",
@@ -55,6 +59,10 @@ def verify_round2(raw: Path, plans: dict[str, Path]) -> dict[str, list[Path]]:
     assert all(
         sha(raw / name) == record["published"] for name, record in hashes.items()
     )
+    driver_name = "acquisition-round2-driver.py.xz"
+    driver = lzma.decompress((raw / driver_name).read_bytes())
+    driver_sha = hashlib.sha256(driver).hexdigest()
+    assert driver_sha == hashes[driver_name]["acquired"]
     audit = json.loads((raw / "build-aot-audit.json").read_text())["primary"]
     assert audit["architecture"] == "sm_90" and len(audit["artifacts"]) == 12
     assert all(
@@ -69,7 +77,7 @@ def verify_round2(raw: Path, plans: dict[str, Path]) -> dict[str, list[Path]]:
         assert receipt["source_revision"] == SOURCE_REVISION
         assert receipt["inputs_sha256"] == sha(ROOT / "inputs.json")
         assert receipt["driver_sha256"] == sha(ROOT / "run_gpu.py")
-        assert receipt["round2_driver_sha256"] == sha(ROOT / "run_round2.py")
+        assert receipt["round2_driver_sha256"] == driver_sha
         job_name = receipt["environment"]["GQC_QZ_JOB_NAME"]
         assert receipt["plan_sha256"] == sha(plans[job_name])
         journals.setdefault(job_name, []).append(journal)
@@ -88,8 +96,11 @@ def verify_round2(raw: Path, plans: dict[str, Path]) -> dict[str, list[Path]]:
 
 def row_diagnoses(row: dict) -> list[str]:
     if row["status"] == "capability_gap":
-        assert row["gaps"] and not row["native_attempted"]
-        return row["gaps"]
+        assert ANGULAR in row["gaps"] and not row["native_attempted"]
+        if EIGENSOLVE in row["gaps"]:
+            # The acquired driver copied this diagnosis from round 1.
+            assert row["round1_diagnosis"] == EIGENSOLVE
+        return [ANGULAR]
     if row["status"] in ("started", "planned"):
         return ["not_finished"]
     reason = failure_reason(row)
@@ -210,7 +221,7 @@ def coverage(
                     )
                 ),
                 "vs_ref1": metric(selected, "error", len(selected)),
-                "vs_ref1_on_common_coverage": metric(matched, "error", len(selected)),
+                "vs_ref1_on_common_coverage": metric(matched, "error", len(matched)),
             }
     return rows, {
         "by_recipe": summary,
