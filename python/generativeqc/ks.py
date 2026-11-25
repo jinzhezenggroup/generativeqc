@@ -40,6 +40,12 @@ from generativeqc_compiler.method import (
     d4_composite_method_identifiers,
     resolve_method,
 )
+from generativeqc_compiler.method.native_carriers import (
+    electronic_carrier,
+)
+from generativeqc_compiler.method.native_carriers import (
+    is_pbe_d4_composition as _is_pbe_d4_composition,
+)
 from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
@@ -94,6 +100,15 @@ def parse_automatic_libxc_selector(method: typing.Any) -> tuple[str, str] | None
         automatic_functional_code(name)
         return name, spin
     return None
+
+
+def _named_catalog_selector(selector: str) -> str:
+    """Use the catalog spelling of an already classified named Libxc selector."""
+    for prefix, spin in _AUTOMATIC_LIBXC_PREFIXES:
+        if selector.startswith(prefix):
+            canonical = "libxc:" if spin == "unpolarized" else "libxc-uks:"
+            return canonical + selector[len(prefix) :].strip()
+    return selector
 
 
 def _public_dft_identifier_index() -> dict[str, str]:
@@ -421,24 +436,6 @@ def _native_execution_plan(method_ir: typing.Any) -> typing.Any:
                 "native KS range-separated exchange requires one shared omega"
             )
     return plan
-
-
-def _is_pbe_d4_composition(method_ir: typing.Any) -> bool:
-    if not isinstance(method_ir, MethodIR) or len(method_ir.primitives) != 2:
-        return False
-    semilocal, correction = method_ir.primitives
-    pbe = functional("PBE", spin="unpolarized")
-    return (
-        type(semilocal) is SemilocalXCPrimitive
-        and type(correction) is DispersionCorrectionPrimitive
-        and isinstance(correction.specification, D4Spec)
-        and correction.specification.charge_model == "eeq2019"
-        and correction.specification.reference_model == "eeq"
-        and semilocal.functional.spin == "unpolarized"
-        and semilocal.functional.ingredients == pbe.ingredients
-        and SemilocalXCPrimitive(semilocal.functional).semantic_payload()
-        == SemilocalXCPrimitive(pbe).semantic_payload()
-    )
 
 
 def _native_pbe_d4_semilocal(method_ir: typing.Any) -> typing.Any:
@@ -1123,17 +1120,7 @@ def native_dft_carrier_for_ir(method_ir: MethodIR) -> str:
     """Choose a provider carrier from the electronic ingredient contract."""
     semilocal = _native_semilocal(method_ir)
     ks_coefficients(method_ir)
-    carrier = {
-        ("rho",): "lda",
-        ("rho", "sigma"): "pbe",
-        ("rho", "sigma", "tau"): "r2scan",
-    }.get(semilocal.ingredients)
-    if carrier is None:
-        raise NotImplementedError(
-            "native KS has no provider carrier for these XC ingredients"
-        )
-    suffix = "uks" if method_ir.spin == "polarized" else "rks"
-    return f"{carrier}-{suffix}"
+    return electronic_carrier(semilocal.ingredients, method_ir.spin)
 
 
 def native_dft_carrier(method: typing.Any) -> str:
