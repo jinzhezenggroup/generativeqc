@@ -3,6 +3,7 @@
 #include "generativeqc/warm_seed.h"
 #include "methods/warm_seed_capacity.hpp"
 #include "methods/warm_seed_snapshot.hpp"
+#include "runtime/host_resource_ledger.hpp"
 #include "runtime/resource_ledger.hpp"
 
 /** C handle owns only the detached method-level host snapshot. */
@@ -41,6 +42,8 @@ extern "C" generativeqc_status generativeqc_batch_capture_warm_seeds_v1(
     const auto* owner =
         dynamic_cast<const generativeqc::methods::BatchWarmStarts*>(batch->plan.get());
     if (!owner) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     auto snapshot = std::make_unique<generativeqc_warm_seed_snapshot>();
     snapshot->value = generativeqc::methods::capture_warm_seeds(*owner, batch->atom_counts,
                                                                 maximum_numeric_bytes);
@@ -68,6 +71,8 @@ extern "C" generativeqc_status generativeqc_batch_restore_warm_seeds_v1(
   try {
     auto* owner = dynamic_cast<generativeqc::methods::BatchWarmStarts*>(batch->plan.get());
     if (!owner) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     // Physical restoration may allocate eigensolver/provider scratch. The SDK
     // must retain the target's admission even without a Python observation.
     generativeqc::runtime::DeviceResourceScope resources(batch->resource_ledger);
