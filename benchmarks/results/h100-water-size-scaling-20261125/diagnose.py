@@ -2,10 +2,9 @@
 
 import argparse
 import json
-import os
 import signal
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from acquire import TIMEOUT, environment, interrupt, stop_process, verify
 

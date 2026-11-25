@@ -1,0 +1,33 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "h100-water-size-scaling-20261125",
+  "owner": "#3170 H100 water size-scaling probe at source 22f72d069",
+  "reason": "Size-sharded XZ retains all original prewarm and formal receipts, including unsuccessful and slower cases, and lets offline replay check exact log/receipt digests and full numerical force vectors. The records are accepted for retention as descriptive probe evidence.",
+  "review_document": "benchmarks/results/h100-water-size-scaling-20261125/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/h100-water-size-scaling-20261125/gpu-large-240.json.xz",
+      "family": "h100-water-size-scaling-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless original process receipts and logs, including full E/F vectors, timings and failures, for one fixed size",
+      "bytes": 134108,
+      "sha256": "da700fb3f1a07284a56c2b9662c45d32e03c2282117323c116e220d15c2c267e"
+    },
+    {
+      "path": "benchmarks/results/h100-water-size-scaling-20261125/gpu-main-144.json.xz",
+      "family": "h100-water-size-scaling-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless original process receipts and logs, including full E/F vectors, timings and failures, for one fixed size",
+      "bytes": 138720,
+      "sha256": "6ada5e5da67e3212ba538991df78dfaa19fa0b20ddfe772c12464e8318380d95"
+    },
+    {
+      "path": "benchmarks/results/h100-water-size-scaling-20261125/gpu-main-192.json.xz",
+      "family": "h100-water-size-scaling-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Lossless original process receipts and logs, including full E/F vectors, timings and failures, for one fixed size",
+      "bytes": 196580,
+      "sha256": "8ba56677b770ccc11547fd276de37263bc1a6527e9bf44ea1cd0b8e6e2b5df43"
+    }
+  ]
+}

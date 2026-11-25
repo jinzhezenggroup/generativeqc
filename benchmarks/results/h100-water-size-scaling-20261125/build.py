@@ -4,11 +4,11 @@ import ctypes
 import importlib.util
 import json
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from acquire import digest, interrupt, save, stop_process
 

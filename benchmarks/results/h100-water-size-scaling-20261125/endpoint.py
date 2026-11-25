@@ -8,7 +8,6 @@ import os
 import platform
 from pathlib import Path
 from time import monotonic
-from types import SimpleNamespace
 
 from benchmarks import readme_defaults as paper
 from benchmarks._support import cuda_accelerator_metadata
@@ -83,8 +82,9 @@ def observe_reference(engine_type, mode):
 
 
 def cpu_oracle(args, geometry, record):
-    from benchmarks.readme_defaults_accuracy import solve
     from pyscf import lib
+
+    from benchmarks.readme_defaults_accuracy import solve
 
     model = next(
         line.split(":", 1)[1].strip()

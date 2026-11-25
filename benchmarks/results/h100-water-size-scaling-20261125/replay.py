@@ -8,9 +8,11 @@ import json
 import lzma
 import math
 import statistics
+from itertools import product
 from pathlib import Path
 
 from acquire import ARMS, METHODS, MODES, REPEATS
+
 from geometry import SIZES
 
 GATES = {
@@ -154,6 +156,30 @@ def read_attempt(files, formal, source, geometry_digest, build_text=None):
     return observations
 
 
+def verify_population(campaign, sizes):
+    stages = [("prewarm", 0), *(("formal", repeat) for repeat in range(REPEATS))]
+    expected = set(product(sizes, METHODS, MODES, ARMS, stages))
+    rows = campaign["rows"]
+    actual = {
+        (
+            row["atoms"],
+            row["method"],
+            row["mode"],
+            row["arm"],
+            (row["stage"], row["repeat"]),
+        )
+        for row in rows
+    }
+    if (
+        campaign["status"] != "finished"
+        or len(rows) != len(expected)
+        or actual != expected
+    ):
+        raise ValueError(f"incomplete acquisition population for sizes {sizes}")
+    if any(row["status"] == "running" for row in rows):
+        raise ValueError(f"unfinished outcome for sizes {sizes}")
+
+
 def summarize(observations, oracles, source):
     rows = []
     details = {}
@@ -204,6 +230,13 @@ def summarize(observations, oracles, source):
                         if (*key, arm, r) in observations
                     }
                     item[f"{arm}_complete"] = len(records)
+                    item[f"{arm}_complete_median_seconds"] = (
+                        statistics.median(
+                            sample["seconds"] for _, sample in records.values()
+                        )
+                        if records
+                        else None
+                    )
                     item[f"{arm}_peak_mib"] = max(
                         (
                             row["memory"]["peak_used_bytes"] / 2**20
@@ -266,50 +299,50 @@ def main():
     failures = []
     build_path = directory / "build-raw.json.xz"
     build_text = read_bundle(build_path)["build.json"] if build_path.is_file() else None
-    for shard in ("main", "large"):
+    for shard, sizes in (("main", SIZES[:3]), ("large", SIZES[3:])):
         raw_files = {}
         for path in sorted(directory.glob(f"gpu-{shard}-*.json.xz")):
             for name, contents in read_bundle(path).items():
                 if name in raw_files:
                     raise ValueError(f"duplicate raw file {name}")
                 raw_files[name] = contents
-        if raw_files:
-            shard_observations = read_attempt(
-                raw_files, True, source, geometry_digest, build_text
+        if not raw_files:
+            raise ValueError(f"missing H100 acquisition shard {shard}")
+        shard_observations = read_attempt(
+            raw_files, True, source, geometry_digest, build_text
+        )
+        campaign = json.loads(raw_files["campaign.json"])
+        verify_population(campaign, sizes)
+        for row in campaign["rows"]:
+            if row["status"] == "complete":
+                continue
+            raw = json.loads(raw_files.get(row["name"] + ".json", "{}"))
+            failures.append(
+                {
+                    "shard": shard,
+                    **{
+                        key: row[key]
+                        for key in (
+                            "name",
+                            "atoms",
+                            "method",
+                            "mode",
+                            "arm",
+                            "stage",
+                            "status",
+                        )
+                    },
+                    "last_stage": row.get("last_stage"),
+                    "error": raw.get("error", row.get("error")),
+                    "subprocess_seconds": row.get("subprocess_seconds"),
+                    "peak_mib": row["memory"]["peak_used_bytes"] / 2**20
+                    if row.get("memory")
+                    else None,
+                }
             )
-            campaign = json.loads(raw_files["campaign.json"])
-            for row in campaign["rows"]:
-                if row["status"] == "complete":
-                    continue
-                raw = json.loads(raw_files.get(row["name"] + ".json", "{}"))
-                failures.append(
-                    {
-                        "shard": shard,
-                        **{
-                            key: row[key]
-                            for key in (
-                                "name",
-                                "atoms",
-                                "method",
-                                "mode",
-                                "arm",
-                                "stage",
-                                "status",
-                            )
-                        },
-                        "last_stage": row.get("last_stage"),
-                        "error": raw.get("error", row.get("error")),
-                        "subprocess_seconds": row.get("subprocess_seconds"),
-                        "peak_mib": row["memory"]["peak_used_bytes"] / 2**20
-                        if row.get("memory")
-                        else None,
-                    }
-                )
-            if overlap := observations.keys() & shard_observations.keys():
-                raise ValueError(
-                    f"duplicate observations across H100 shards: {overlap}"
-                )
-            observations.update(shard_observations)
+        if overlap := observations.keys() & shard_observations.keys():
+            raise ValueError(f"duplicate observations across H100 shards: {overlap}")
+        observations.update(shard_observations)
     cpu_path = directory / "cpu-raw.json.xz"
     oracles = read_bundle(cpu_path) if cpu_path.is_file() else {}
     long_pbe_path = directory / "cpu-pbe-long.json.xz"

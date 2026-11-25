@@ -5,13 +5,14 @@ import hashlib
 import json
 import lzma
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tarfile
 import tempfile
+from pathlib import Path
 
 from build import source_identity
+
 from geometry import generate
 
 REVISION = "22f72d0692a760c2892cd7791022584d9ae1c3e5"

@@ -14,12 +14,48 @@
       },
       "passed": true
     },
+    "formal-1-96-hf-direct-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.917962168188145e-12,
+        "force_max_Eh_per_bohr": 7.376277626341965e-07,
+        "force_rms_Eh_per_bohr": 1.7913478673536697e-07
+      },
+      "passed": true
+    },
+    "formal-2-96-hf-direct-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.9558577807620168e-12,
+        "force_max_Eh_per_bohr": 7.376281595666834e-07,
+        "force_rms_Eh_per_bohr": 1.7913479690001398e-07
+      },
+      "passed": true
+    },
     "formal-0-96-hf-direct-gpu4pyscf": {
       "oracle_status": "available",
       "errors": {
         "energy_per_atom_Eh": 7.863339609078442e-13,
         "force_max_Eh_per_bohr": 2.9179781674271155e-07,
         "force_rms_Eh_per_bohr": 8.32646838222686e-08
+      },
+      "passed": true
+    },
+    "formal-1-96-hf-direct-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 8.052817671947802e-13,
+        "force_max_Eh_per_bohr": 2.917977390270998e-07,
+        "force_rms_Eh_per_bohr": 8.326468820826759e-08
+      },
+      "passed": true
+    },
+    "formal-2-96-hf-direct-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 7.958078640513122e-13,
+        "force_max_Eh_per_bohr": 2.9179782695676337e-07,
+        "force_rms_Eh_per_bohr": 8.326468370715127e-08
       },
       "passed": true
     },
@@ -32,12 +68,48 @@
       },
       "passed": false
     },
+    "formal-1-96-hf-df-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.074801057953361e-05,
+        "force_max_Eh_per_bohr": 2.429662841407776e-05,
+        "force_rms_Eh_per_bohr": 6.979273942223795e-06
+      },
+      "passed": false
+    },
+    "formal-2-96-hf-df-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.074801057953361e-05,
+        "force_max_Eh_per_bohr": 2.429662843539404e-05,
+        "force_rms_Eh_per_bohr": 6.9792739426183365e-06
+      },
+      "passed": false
+    },
     "formal-0-96-hf-df-gpu4pyscf": {
       "oracle_status": "available",
       "errors": {
         "energy_per_atom_Eh": 2.0748013800660676e-05,
         "force_max_Eh_per_bohr": 2.4318554093127887e-05,
         "force_rms_Eh_per_bohr": 7.003742769723277e-06
+      },
+      "passed": false
+    },
+    "formal-1-96-hf-df-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.0748013791186775e-05,
+        "force_max_Eh_per_bohr": 2.431858647611307e-05,
+        "force_rms_Eh_per_bohr": 7.003744107317102e-06
+      },
+      "passed": false
+    },
+    "formal-2-96-hf-df-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 2.0748013800660676e-05,
+        "force_max_Eh_per_bohr": 2.4318585690963346e-05,
+        "force_rms_Eh_per_bohr": 7.00369408000702e-06
       },
       "passed": false
     },
@@ -50,12 +122,48 @@
       },
       "passed": true
     },
+    "formal-1-96-pbe-direct-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 1.2516347662009744e-07,
+        "force_max_Eh_per_bohr": 9.153783361171008e-05,
+        "force_rms_Eh_per_bohr": 1.914304474419899e-05
+      },
+      "passed": true
+    },
+    "formal-2-96-pbe-direct-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 1.251634671461943e-07,
+        "force_max_Eh_per_bohr": 9.153783355131395e-05,
+        "force_rms_Eh_per_bohr": 1.9143044748553153e-05
+      },
+      "passed": true
+    },
     "formal-0-96-pbe-direct-gpu4pyscf": {
       "oracle_status": "available",
       "errors": {
         "energy_per_atom_Eh": 1.2515813333872453e-07,
         "force_max_Eh_per_bohr": 9.169220117932753e-05,
         "force_rms_Eh_per_bohr": 1.912854510129099e-05
+      },
+      "passed": true
+    },
+    "formal-1-96-pbe-direct-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 1.2515815228653082e-07,
+        "force_max_Eh_per_bohr": 9.169220117932753e-05,
+        "force_rms_Eh_per_bohr": 1.91285451013913e-05
+      },
+      "passed": true
+    },
+    "formal-2-96-pbe-direct-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 1.2515815228653082e-07,
+        "force_max_Eh_per_bohr": 9.169220120774924e-05,
+        "force_rms_Eh_per_bohr": 1.9128545105736e-05
       },
       "passed": true
     },
@@ -68,6 +176,24 @@
       },
       "passed": true
     },
+    "formal-1-96-pbe-df-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 8.103065222068532e-06,
+        "force_max_Eh_per_bohr": 9.246848764554727e-05,
+        "force_rms_Eh_per_bohr": 1.9437157311353556e-05
+      },
+      "passed": true
+    },
+    "formal-2-96-pbe-df-standard": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 8.103065207857677e-06,
+        "force_max_Eh_per_bohr": 9.246848764554727e-05,
+        "force_rms_Eh_per_bohr": 1.9437157319270275e-05
+      },
+      "passed": true
+    },
     "formal-0-96-pbe-df-gpu4pyscf": {
       "oracle_status": "available",
       "errors": {
@@ -77,131 +203,455 @@
       },
       "passed": true
     },
+    "formal-1-96-pbe-df-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 8.103062962542632e-06,
+        "force_max_Eh_per_bohr": 9.262196186377025e-05,
+        "force_rms_Eh_per_bohr": 1.9423106220506288e-05
+      },
+      "passed": true
+    },
+    "formal-2-96-pbe-df-gpu4pyscf": {
+      "oracle_status": "available",
+      "errors": {
+        "energy_per_atom_Eh": 8.103062981490439e-06,
+        "force_max_Eh_per_bohr": 9.262196173231985e-05,
+        "force_rms_Eh_per_bohr": 1.9423106216913324e-05
+      },
+      "passed": true
+    },
     "formal-0-96-r2scan-direct-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-96-r2scan-direct-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-r2scan-direct-standard": {
       "oracle_status": "incomplete_oracle"
     },
     "formal-0-96-r2scan-direct-gpu4pyscf": {
       "oracle_status": "incomplete_oracle"
     },
+    "formal-1-96-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
     "formal-0-96-r2scan-df-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-96-r2scan-df-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-r2scan-df-standard": {
       "oracle_status": "incomplete_oracle"
     },
     "formal-0-96-r2scan-df-gpu4pyscf": {
       "oracle_status": "incomplete_oracle"
     },
+    "formal-1-96-r2scan-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-r2scan-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
     "formal-0-96-wb97m-v-direct-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-96-wb97m-v-direct-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-wb97m-v-direct-standard": {
       "oracle_status": "incomplete_oracle"
     },
     "formal-0-96-wb97m-v-direct-gpu4pyscf": {
       "oracle_status": "incomplete_oracle"
     },
+    "formal-1-96-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
     "formal-0-96-wb97m-v-df-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-96-wb97m-v-df-standard": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-wb97m-v-df-standard": {
       "oracle_status": "incomplete_oracle"
     },
     "formal-0-96-wb97m-v-df-gpu4pyscf": {
       "oracle_status": "incomplete_oracle"
     },
+    "formal-1-96-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-96-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
     "formal-0-144-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-hf-direct-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-hf-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-hf-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-hf-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-hf-df-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-hf-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-pbe-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-pbe-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-pbe-direct-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-pbe-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-pbe-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-pbe-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-pbe-df-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-pbe-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-r2scan-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-r2scan-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-r2scan-direct-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-r2scan-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-r2scan-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-r2scan-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-r2scan-df-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-r2scan-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-144-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-144-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-wb97m-v-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-144-wb97m-v-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-144-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-144-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-hf-direct-standard": {
       "oracle_status": "no_oracle"
     },
     "formal-0-192-hf-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-192-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-hf-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-192-pbe-direct-standard": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-192-pbe-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-pbe-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-pbe-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-192-pbe-df-standard": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-192-pbe-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-pbe-df-standard": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-pbe-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-192-r2scan-direct-standard": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-192-r2scan-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-r2scan-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-r2scan-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-192-r2scan-df-standard": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-192-r2scan-df-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-r2scan-df-standard": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-192-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-0-192-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-wb97m-v-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-0-192-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-192-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-192-wb97m-v-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-240-hf-direct-standard": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-240-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-hf-direct-standard": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-240-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-240-hf-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-hf-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-240-hf-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-240-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-hf-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-240-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-240-pbe-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-pbe-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-240-pbe-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-240-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-pbe-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-240-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-240-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-r2scan-direct-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-240-r2scan-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
+    "formal-1-240-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
     "formal-0-240-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-240-wb97m-v-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-240-wb97m-v-df-gpu4pyscf": {
       "oracle_status": "no_oracle"
     },
     "formal-0-300-hf-direct-gpu4pyscf": {
       "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-300-hf-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-300-hf-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-0-300-pbe-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-300-pbe-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-300-pbe-direct-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-0-300-pbe-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-1-300-pbe-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-2-300-pbe-df-gpu4pyscf": {
+      "oracle_status": "incomplete_oracle"
+    },
+    "formal-0-300-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-300-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-300-r2scan-direct-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-0-300-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-1-300-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
+    },
+    "formal-2-300-r2scan-df-gpu4pyscf": {
+      "oracle_status": "no_oracle"
     }
   }
 }

@@ -1,17 +1,17 @@
 """Run the cold GPU pairs serially on one H100, retaining every attempt."""
 
 import argparse
-from contextlib import suppress
 import ctypes
 import hashlib
 import itertools
 import json
 import os
-from pathlib import Path
 import re
 import signal
 import subprocess
 import time
+from contextlib import suppress
+from pathlib import Path
 
 from geometry import SIZES
 

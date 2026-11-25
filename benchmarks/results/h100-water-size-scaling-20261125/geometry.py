@@ -30,7 +30,7 @@ def generate(archive):
     if any([symbol for symbol, _ in water] != ["O", "H", "H"] for water in waters):
         raise ValueError("expected O/H/H ordering")
     oxygens = [water[0][1] for water in waters]
-    centroid = tuple(sum(axis) / len(oxygens) for axis in zip(*oxygens))
+    centroid = tuple(sum(axis) / len(oxygens) for axis in zip(*oxygens, strict=True))
     center_index = min(
         range(len(oxygens)), key=lambda i: math.dist(centroid, oxygens[i])
     )
@@ -60,7 +60,10 @@ def generate(archive):
             "geometry_bohr": [
                 [
                     symbol,
-                    [(x - origin) / BOHR_ANGSTROM for x, origin in zip(xyz, center)],
+                    [
+                        (x - origin) / BOHR_ANGSTROM
+                        for x, origin in zip(xyz, center, strict=True)
+                    ],
                 ]
                 for i in chosen
                 for symbol, xyz in waters[i]

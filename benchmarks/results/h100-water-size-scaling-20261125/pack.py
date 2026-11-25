@@ -3,8 +3,8 @@
 import argparse
 import json
 import lzma
-from pathlib import Path
 import re
+from pathlib import Path
 
 
 def write(path, contents):
