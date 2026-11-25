@@ -653,7 +653,7 @@ if(GENERATIVEQC_BUILD_TESTS)
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_saddle.py"
                      $<TARGET_FILE:generativeqc_cli>)
     set_tests_properties(generativeqc_cli_saddle_contract PROPERTIES
-                         ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_HOST_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HOST_KS_HESSIAN}>"
+                         ENVIRONMENT "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/python;OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1;GENERATIVEQC_TEST_HOST_HESSIAN=$<BOOL:${GENERATIVEQC_ENABLE_HOST_KS_HESSIAN}>"
                          TIMEOUT 300)
     add_test(NAME generativeqc_cli_rhf_cpu
              COMMAND generativeqc_cli run

@@ -203,7 +203,8 @@ scientific identity and inclusive logical phase lifetime. Shared buffers count
 once under their owner; overlap of phases models concurrent residency.
 
 `HostResources` takes an effective unsigned 64-bit cap for the modeled shared
-host capacity of admitted CPU DF-KS batches. `HostResourceSnapshot` reports the
+host capacity of admitted CPU DF-KS and Direct CPU KS Hessian batches.
+`HostResourceSnapshot` reports the
 cap, total retained bytes, largest serialized workspace and live owner count.
 These counts are not allocator measurements or process RSS.
 

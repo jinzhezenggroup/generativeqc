@@ -3557,6 +3557,7 @@ class Calculator:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         host_resources: HostResources | None = None,
+        host_hessian_workspace_bytes: int | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
@@ -3576,6 +3577,9 @@ class Calculator:
         Unsupported batch contexts raise NotImplementedError; validation,
         native and resource failures propagate. Close the returned plan or use
         it as a context manager. It is not concurrently re-entrant.
+        With ``host_resources``, ``host_hessian_workspace_bytes`` reserves one
+        shared derivative workspace for a linked Direct CPU KS fleet. This
+        mode admits energy replay and Hessian-vector products, not forces.
         See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
         if getattr(self, "_provider_initialization_intent", None) is not None:
@@ -3600,6 +3604,7 @@ class Calculator:
             ks_export=ks_export,
             resource_plan=resource_plan,
             host_resources=host_resources,
+            host_hessian_workspace_bytes=host_hessian_workspace_bytes,
             _hessian_request=_hessian_request,
             _resource_properties=_resource_properties,
         )

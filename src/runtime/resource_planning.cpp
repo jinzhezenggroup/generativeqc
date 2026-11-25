@@ -229,4 +229,18 @@ Composition compose(std::span<const Request> requests, std::span<const Limit> li
   return result;
 }
 
+HostWorkspaceCapacity select_overlapped_host_workspace(const Composition& mandatory,
+                                                       std::uint64_t floor, std::uint64_t ceiling) {
+  checked_value(floor);
+  checked_value(ceiling);
+  if (mandatory.status != Status::feasible || floor > ceiling)
+    throw std::invalid_argument("overlapped host workspace requires a feasible mandatory floor");
+  const auto peak = mandatory.accounting.peaks.at(kHostSpace).bytes;
+  const auto limit = mandatory.limits.at(kHostSpace);
+  if (floor > peak || (limit && peak > *limit))
+    throw std::invalid_argument("overlapped workspace floor is outside the mandatory host plan");
+  const auto optional = limit ? std::min(ceiling - floor, *limit - peak) : ceiling - floor;
+  return {floor + optional, checked_sum(peak, optional)};
+}
+
 }  // namespace generativeqc::runtime::resources
