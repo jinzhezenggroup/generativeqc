@@ -1,0 +1,1129 @@
+{
+  "round1": {
+    "by_recipe": {
+      "DT_D": {
+        "HTBH38": {
+          "successful_endpoints": 14,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 38,
+          "recorded_endpoints": 40,
+          "successful_wall_seconds": {
+            "min": 0.5682735139271244,
+            "median": 47.617383565055206,
+            "max": 295.6816515731625,
+            "sum": 1102.6606715047965
+          },
+          "failure_classes": {
+            "protocol_limit": 9,
+            "resource_limit": 16,
+            "scf_convergence": 1
+          },
+          "diagnoses": {
+            "correlation_work_policy": 13,
+            "numeric_memory_refusal": 3,
+            "scf_nonconvergence": 1,
+            "timeout": 9
+          },
+          "vs_ref1": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.5881384382868884,
+            "max_abs_kcal_mol": 0.5881384382868884,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.5881384382868884,
+            "max_abs_kcal_mol": 0.5881384382868884,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 30,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 38,
+          "recorded_endpoints": 47,
+          "successful_wall_seconds": {
+            "min": 0.6385853909887373,
+            "median": 73.08360605267808,
+            "max": 355.5614908859134,
+            "sum": 3625.0577738713473
+          },
+          "failure_classes": {
+            "protocol_limit": 4,
+            "resource_limit": 13
+          },
+          "diagnoses": {
+            "correlation_work_policy": 11,
+            "numeric_memory_refusal": 2,
+            "timeout": 4
+          },
+          "vs_ref1": {
+            "n": 18,
+            "population": 38,
+            "mae_kcal_mol": 0.7552934114368948,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 12,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 10,
+            "population": 38,
+            "mae_kcal_mol": 0.6658023166218316,
+            "max_abs_kcal_mol": 1.2685315835451618,
+            "max_set": "NHTBH38",
+            "max_index": 26,
+            "within_1_kcal_mol": 8,
+            "all_complete_and_within_1": false
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 44,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 76,
+          "recorded_endpoints": 87,
+          "successful_wall_seconds": {
+            "min": 0.5682735139271244,
+            "median": 63.517439800314605,
+            "max": 355.5614908859134,
+            "sum": 4727.718445376144
+          },
+          "failure_classes": {
+            "protocol_limit": 13,
+            "resource_limit": 29,
+            "scf_convergence": 1
+          },
+          "diagnoses": {
+            "correlation_work_policy": 24,
+            "numeric_memory_refusal": 5,
+            "scf_nonconvergence": 1,
+            "timeout": 13
+          },
+          "vs_ref1": {
+            "n": 20,
+            "population": 76,
+            "mae_kcal_mol": 0.7385779141218942,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 14,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 12,
+            "population": 76,
+            "mae_kcal_mol": 0.6528583368993411,
+            "max_abs_kcal_mol": 1.2685315835451618,
+            "max_set": "NHTBH38",
+            "max_index": 26,
+            "within_1_kcal_mol": 10,
+            "all_complete_and_within_1": false
+          }
+        }
+      },
+      "TQ_D": {
+        "HTBH38": {
+          "successful_endpoints": 11,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 7,
+          "recorded_endpoints": 40,
+          "successful_wall_seconds": {
+            "min": 0.5651577860116959,
+            "median": 59.7179485806264,
+            "max": 173.25032680807635,
+            "sum": 795.0047858138569
+          },
+          "failure_classes": {
+            "development_required": 17,
+            "protocol_limit": 2,
+            "resource_limit": 4,
+            "scf_convergence": 6
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 15,
+            "df_eigensolve_input_refusal": 2,
+            "numeric_memory_refusal": 4,
+            "scf_nonconvergence": 6,
+            "timeout": 2
+          },
+          "vs_ref1": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.32955204496308177,
+            "max_abs_kcal_mol": 0.32955204496308177,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.32955204496308177,
+            "max_abs_kcal_mol": 0.32955204496308177,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 24,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 21,
+          "recorded_endpoints": 47,
+          "successful_wall_seconds": {
+            "min": 0.573386849835515,
+            "median": 112.96197175164707,
+            "max": 385.6082709939219,
+            "sum": 3714.554939971771
+          },
+          "failure_classes": {
+            "development_required": 15,
+            "protocol_limit": 5,
+            "resource_limit": 2,
+            "scf_convergence": 1
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 15,
+            "numeric_memory_refusal": 2,
+            "scf_nonconvergence": 1,
+            "timeout": 5
+          },
+          "vs_ref1": {
+            "n": 10,
+            "population": 38,
+            "mae_kcal_mol": 0.2168291412426111,
+            "max_abs_kcal_mol": 0.39212607876140027,
+            "max_set": "NHTBH38",
+            "max_index": 28,
+            "within_1_kcal_mol": 10,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 10,
+            "population": 38,
+            "mae_kcal_mol": 0.2168291412426111,
+            "max_abs_kcal_mol": 0.39212607876140027,
+            "max_set": "NHTBH38",
+            "max_index": 28,
+            "within_1_kcal_mol": 10,
+            "all_complete_and_within_1": false
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 35,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 28,
+          "recorded_endpoints": 87,
+          "successful_wall_seconds": {
+            "min": 0.5651577860116959,
+            "median": 84.59341913508251,
+            "max": 385.6082709939219,
+            "sum": 4509.559725785628
+          },
+          "failure_classes": {
+            "development_required": 32,
+            "protocol_limit": 7,
+            "resource_limit": 6,
+            "scf_convergence": 7
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 30,
+            "df_eigensolve_input_refusal": 2,
+            "numeric_memory_refusal": 6,
+            "scf_nonconvergence": 7,
+            "timeout": 7
+          },
+          "vs_ref1": {
+            "n": 12,
+            "population": 76,
+            "mae_kcal_mol": 0.23561629186268954,
+            "max_abs_kcal_mol": 0.39212607876140027,
+            "max_set": "NHTBH38",
+            "max_index": 28,
+            "within_1_kcal_mol": 12,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 12,
+            "population": 76,
+            "mae_kcal_mol": 0.23561629186268954,
+            "max_abs_kcal_mol": 0.39212607876140027,
+            "max_set": "NHTBH38",
+            "max_index": 28,
+            "within_1_kcal_mol": 12,
+            "all_complete_and_within_1": false
+          }
+        }
+      }
+    },
+    "common_barrier_indices": [
+      [
+        "HTBH38",
+        9
+      ],
+      [
+        "HTBH38",
+        10
+      ],
+      [
+        "NHTBH38",
+        13
+      ],
+      [
+        "NHTBH38",
+        14
+      ],
+      [
+        "NHTBH38",
+        15
+      ],
+      [
+        "NHTBH38",
+        16
+      ],
+      [
+        "NHTBH38",
+        25
+      ],
+      [
+        "NHTBH38",
+        26
+      ],
+      [
+        "NHTBH38",
+        27
+      ],
+      [
+        "NHTBH38",
+        28
+      ],
+      [
+        "NHTBH38",
+        37
+      ],
+      [
+        "NHTBH38",
+        38
+      ]
+    ],
+    "capability_gap_barrier_indices": {
+      "DT_D": {},
+      "TQ_D": {
+        "angular_momentum_refusal": {
+          "HTBH38": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            33,
+            34,
+            35,
+            36
+          ],
+          "NHTBH38": [
+            1,
+            2,
+            3,
+            4,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35
+          ]
+        },
+        "df_eigensolve_input_refusal": {
+          "HTBH38": [
+            13,
+            14,
+            25,
+            26
+          ]
+        }
+      }
+    }
+  },
+  "round2_only": {
+    "by_recipe": {
+      "DT_D": {
+        "HTBH38": {
+          "successful_endpoints": 9,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 34,
+          "recorded_endpoints": 26,
+          "successful_wall_seconds": {
+            "min": 199.17740878998302,
+            "median": 1186.292362416163,
+            "max": 5563.367039498873,
+            "sum": 17104.397873495007
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 2,
+            "protocol_limit": 9,
+            "scf_convergence": 5
+          },
+          "diagnoses": {
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2,
+            "scf_nonconvergence": 5,
+            "timeout": 9
+          },
+          "vs_ref1": {
+            "n": 0,
+            "population": 38
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 38
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 6,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 38,
+          "recorded_endpoints": 17,
+          "successful_wall_seconds": {
+            "min": 222.92819158360362,
+            "median": 943.032317188452,
+            "max": 6918.817877392052,
+            "sum": 16348.3183549135
+          },
+          "failure_classes": {
+            "protocol_limit": 10,
+            "scf_convergence": 1
+          },
+          "diagnoses": {
+            "scf_nonconvergence": 1,
+            "timeout": 10
+          },
+          "vs_ref1": {
+            "n": 0,
+            "population": 38
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 38
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 15,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 72,
+          "recorded_endpoints": 43,
+          "successful_wall_seconds": {
+            "min": 199.17740878998302,
+            "median": 1030.6775532870088,
+            "max": 6918.817877392052,
+            "sum": 33452.716228408506
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 2,
+            "protocol_limit": 19,
+            "scf_convergence": 6
+          },
+          "diagnoses": {
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2,
+            "scf_nonconvergence": 6,
+            "timeout": 19
+          },
+          "vs_ref1": {
+            "n": 0,
+            "population": 76
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 76
+          }
+        }
+      },
+      "TQ_D": {
+        "HTBH38": {
+          "successful_endpoints": 1,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 4,
+          "recorded_endpoints": 29,
+          "successful_wall_seconds": {
+            "min": 23.318144883960485,
+            "median": 23.318144883960485,
+            "max": 23.318144883960485,
+            "sum": 23.318144883960485
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 27
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 27,
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2
+          },
+          "vs_ref1": {
+            "n": 0,
+            "population": 38
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 38
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 5,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 18,
+          "recorded_endpoints": 23,
+          "successful_wall_seconds": {
+            "min": 14.394860816188157,
+            "median": 14.89934636792168,
+            "max": 18.537662824150175,
+            "sum": 80.40882351947948
+          },
+          "failure_classes": {
+            "development_required": 18
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 18
+          },
+          "vs_ref1": {
+            "n": 4,
+            "population": 38,
+            "mae_kcal_mol": 0.13946465580466527,
+            "max_abs_kcal_mol": 0.25654206422976245,
+            "max_set": "NHTBH38",
+            "max_index": 24,
+            "within_1_kcal_mol": 4,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 38
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 6,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 22,
+          "recorded_endpoints": 52,
+          "successful_wall_seconds": {
+            "min": 14.394860816188157,
+            "median": 16.522416138555855,
+            "max": 23.318144883960485,
+            "sum": 103.72696840343997
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 45
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 45,
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2
+          },
+          "vs_ref1": {
+            "n": 4,
+            "population": 76,
+            "mae_kcal_mol": 0.13946465580466527,
+            "max_abs_kcal_mol": 0.25654206422976245,
+            "max_set": "NHTBH38",
+            "max_index": 24,
+            "within_1_kcal_mol": 4,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 0,
+            "population": 76
+          }
+        }
+      }
+    },
+    "common_barrier_indices": [],
+    "capability_gap_barrier_indices": {
+      "DT_D": {
+        "df_eigensolve_input_refusal": {
+          "HTBH38": [
+            13,
+            14,
+            25,
+            26
+          ]
+        }
+      },
+      "TQ_D": {
+        "angular_momentum_refusal": {
+          "HTBH38": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36
+          ],
+          "NHTBH38": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36
+          ]
+        },
+        "df_eigensolve_input_refusal": {
+          "HTBH38": [
+            13,
+            14,
+            25,
+            26
+          ]
+        }
+      }
+    }
+  },
+  "cumulative": {
+    "by_recipe": {
+      "DT_D": {
+        "HTBH38": {
+          "successful_endpoints": 23,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 34,
+          "recorded_endpoints": 40,
+          "successful_wall_seconds": {
+            "min": 0.5682735139271244,
+            "median": 169.13527305191383,
+            "max": 5563.367039498873,
+            "sum": 18207.058544999803
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 2,
+            "protocol_limit": 9,
+            "scf_convergence": 5
+          },
+          "diagnoses": {
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2,
+            "scf_nonconvergence": 5,
+            "timeout": 9
+          },
+          "vs_ref1": {
+            "n": 8,
+            "population": 38,
+            "mae_kcal_mol": 0.7044170334005614,
+            "max_abs_kcal_mol": 1.287100248844503,
+            "max_set": "HTBH38",
+            "max_index": 24,
+            "within_1_kcal_mol": 5,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.5881384382868884,
+            "max_abs_kcal_mol": 0.5881384382868884,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 36,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 38,
+          "recorded_endpoints": 47,
+          "successful_wall_seconds": {
+            "min": 0.6385853909887373,
+            "median": 123.71381154260598,
+            "max": 6918.817877392052,
+            "sum": 19973.376128784847
+          },
+          "failure_classes": {
+            "protocol_limit": 10,
+            "scf_convergence": 1
+          },
+          "diagnoses": {
+            "scf_nonconvergence": 1,
+            "timeout": 10
+          },
+          "vs_ref1": {
+            "n": 21,
+            "population": 38,
+            "mae_kcal_mol": 0.8198533489370852,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 13,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 18,
+            "population": 38,
+            "mae_kcal_mol": 0.7552934114368948,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 12,
+            "all_complete_and_within_1": false
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 59,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 72,
+          "recorded_endpoints": 87,
+          "successful_wall_seconds": {
+            "min": 0.5682735139271244,
+            "median": 151.54468928091228,
+            "max": 6918.817877392052,
+            "sum": 38180.43467378465
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 2,
+            "protocol_limit": 19,
+            "scf_convergence": 6
+          },
+          "diagnoses": {
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2,
+            "scf_nonconvergence": 6,
+            "timeout": 19
+          },
+          "vs_ref1": {
+            "n": 29,
+            "population": 76,
+            "mae_kcal_mol": 0.7880088480994234,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 18,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 20,
+            "population": 76,
+            "mae_kcal_mol": 0.7385779141218942,
+            "max_abs_kcal_mol": 2.372700640576838,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 14,
+            "all_complete_and_within_1": false
+          }
+        }
+      },
+      "TQ_D": {
+        "HTBH38": {
+          "successful_endpoints": 12,
+          "expected_endpoints": 40,
+          "max_barriers_with_known_capabilities": 4,
+          "recorded_endpoints": 40,
+          "successful_wall_seconds": {
+            "min": 0.5651577860116959,
+            "median": 54.38106178678572,
+            "max": 173.25032680807635,
+            "sum": 818.3229306978174
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 27
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 27,
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2
+          },
+          "vs_ref1": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.32955204496308177,
+            "max_abs_kcal_mol": 0.32955204496308177,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 2,
+            "population": 38,
+            "mae_kcal_mol": 0.32955204496308177,
+            "max_abs_kcal_mol": 0.32955204496308177,
+            "max_set": "HTBH38",
+            "max_index": 9,
+            "within_1_kcal_mol": 2,
+            "all_complete_and_within_1": false
+          }
+        },
+        "NHTBH38": {
+          "successful_endpoints": 29,
+          "expected_endpoints": 47,
+          "max_barriers_with_known_capabilities": 18,
+          "recorded_endpoints": 47,
+          "successful_wall_seconds": {
+            "min": 0.573386849835515,
+            "median": 83.93703945772722,
+            "max": 385.6082709939219,
+            "sum": 3794.9637634912506
+          },
+          "failure_classes": {
+            "development_required": 18
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 18
+          },
+          "vs_ref1": {
+            "n": 18,
+            "population": 38,
+            "mae_kcal_mol": 0.2897477479472955,
+            "max_abs_kcal_mol": 0.7064977369249696,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 18,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 18,
+            "population": 38,
+            "mae_kcal_mol": 0.2897477479472955,
+            "max_abs_kcal_mol": 0.7064977369249696,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 18,
+            "all_complete_and_within_1": false
+          }
+        },
+        "BH76": {
+          "successful_endpoints": 41,
+          "expected_endpoints": 87,
+          "max_barriers_with_known_capabilities": 22,
+          "recorded_endpoints": 87,
+          "successful_wall_seconds": {
+            "min": 0.5651577860116959,
+            "median": 72.1557673108764,
+            "max": 385.6082709939219,
+            "sum": 4613.286694189068
+          },
+          "failure_classes": {
+            "ccsd_convergence": 1,
+            "development_required": 45
+          },
+          "diagnoses": {
+            "angular_momentum_refusal": 45,
+            "ccsd_nonconvergence": 1,
+            "df_eigensolve_input_refusal": 2
+          },
+          "vs_ref1": {
+            "n": 20,
+            "population": 76,
+            "mae_kcal_mol": 0.29372817764887416,
+            "max_abs_kcal_mol": 0.7064977369249696,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 20,
+            "all_complete_and_within_1": false
+          },
+          "vs_ref1_on_common_coverage": {
+            "n": 20,
+            "population": 76,
+            "mae_kcal_mol": 0.29372817764887416,
+            "max_abs_kcal_mol": 0.7064977369249696,
+            "max_set": "NHTBH38",
+            "max_index": 22,
+            "within_1_kcal_mol": 20,
+            "all_complete_and_within_1": false
+          }
+        }
+      }
+    },
+    "common_barrier_indices": [
+      [
+        "HTBH38",
+        9
+      ],
+      [
+        "HTBH38",
+        10
+      ],
+      [
+        "NHTBH38",
+        13
+      ],
+      [
+        "NHTBH38",
+        14
+      ],
+      [
+        "NHTBH38",
+        15
+      ],
+      [
+        "NHTBH38",
+        16
+      ],
+      [
+        "NHTBH38",
+        17
+      ],
+      [
+        "NHTBH38",
+        18
+      ],
+      [
+        "NHTBH38",
+        19
+      ],
+      [
+        "NHTBH38",
+        20
+      ],
+      [
+        "NHTBH38",
+        21
+      ],
+      [
+        "NHTBH38",
+        22
+      ],
+      [
+        "NHTBH38",
+        23
+      ],
+      [
+        "NHTBH38",
+        24
+      ],
+      [
+        "NHTBH38",
+        25
+      ],
+      [
+        "NHTBH38",
+        26
+      ],
+      [
+        "NHTBH38",
+        27
+      ],
+      [
+        "NHTBH38",
+        28
+      ],
+      [
+        "NHTBH38",
+        37
+      ],
+      [
+        "NHTBH38",
+        38
+      ]
+    ],
+    "capability_gap_barrier_indices": {
+      "DT_D": {
+        "df_eigensolve_input_refusal": {
+          "HTBH38": [
+            13,
+            14,
+            25,
+            26
+          ]
+        }
+      },
+      "TQ_D": {
+        "angular_momentum_refusal": {
+          "HTBH38": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36
+          ],
+          "NHTBH38": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36
+          ]
+        },
+        "df_eigensolve_input_refusal": {
+          "HTBH38": [
+            13,
+            14,
+            25,
+            26
+          ]
+        }
+      }
+    }
+  },
+  "cumulative_vs_retained_cpu_anchors": {
+    "DT_D": {
+      "n": 11,
+      "population": 18,
+      "mae_kcal_mol": 0.5021779185898961,
+      "max_abs_kcal_mol": 1.6477343155717605,
+      "max_set": "HTBH38",
+      "max_index": 4,
+      "within_1_kcal_mol": 10,
+      "all_complete_and_within_1": false
+    },
+    "TQ_D": {
+      "n": 4,
+      "population": 18,
+      "mae_kcal_mol": 0.25269818703877434,
+      "max_abs_kcal_mol": 0.5379737616643254,
+      "max_set": "NHTBH38",
+      "max_index": 37,
+      "within_1_kcal_mol": 4,
+      "all_complete_and_within_1": false
+    }
+  },
+  "recoveries_by_round1_diagnosis": {
+    "DT_D": {
+      "correlation_work_policy": 4,
+      "timeout": 11
+    },
+    "TQ_D": {
+      "timeout": 6
+    }
+  },
+  "former_timeouts": {
+    "DT_D": {
+      "round1_count": 13,
+      "round2_successes": 11,
+      "round2_successes_below_round1_process_limit": 2
+    },
+    "TQ_D": {
+      "round1_count": 7,
+      "round2_successes": 6,
+      "round2_successes_below_round1_process_limit": 6
+    }
+  }
+}

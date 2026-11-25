@@ -1,0 +1,205 @@
+{
+  "inputs_sha256": "f2c68c0cfb117068a01332af184789594371f9bdf898bdb0eac6ba673325c6d6",
+  "round1_journal_sha256": {
+    "gpu-htbh38.jsonl.xz": "a688387c5f73eb1d6e7b975d4970bd752e9d02a47fc3a146ea2b8b5002ea4509",
+    "gpu-nhtbh38.jsonl.xz": "e55de286862a766d9571ff5dc6d17b22404d8b70c1de2e7cbdd83f229d728bd7",
+    "gpu-shard-rank-0-htbh38-DT_D.jsonl.xz": "d7cfc970514b2295ff8c18ca5156eb8ce71b46dc79c5f4da6526ea8f3c3990c4",
+    "gpu-shard-rank-0-htbh38-TQ_D.jsonl.xz": "0e7d1a570cf25d482dd344d1f9364b41f294913fee16a3a1c1eae1190b8d3997",
+    "gpu-shard-rank-0-nhtbh38-DT_D.jsonl.xz": "1ab21c7d3942c641220d954e6ef3fbd5f8b67812b9ccd1413dabcf8e93754e87",
+    "gpu-shard-rank-0-nhtbh38-TQ_D.jsonl.xz": "37ea592bcdbd062dbae08ead539dc781d2da088d92aa8b70e1c6c19bfb100c5d",
+    "gpu-shard-rank-1-htbh38-DT_D.jsonl.xz": "02d65bb4a05ad2790a7591b3dafffa5f3f8683350d03d4c627d37d05ea93652a",
+    "gpu-shard-rank-1-htbh38-TQ_D.jsonl.xz": "90ff442655066e200c84a270e43cf8a7459492f169b4e63b0ed45e33b8cfbc61",
+    "gpu-shard-rank-1-nhtbh38-DT_D.jsonl.xz": "a444791ddb0e16134afc4daf99df36e8904d194e976969f5fabccedfc753e4bd",
+    "gpu-shard-rank-1-nhtbh38-TQ_D.jsonl.xz": "786c4a0e6adb09b9e61ef2d7cb48eb39e712ed53adc4ef1baeb10e044a49ef91",
+    "gpu-shard-rank-2-htbh38-DT_D.jsonl.xz": "f93fee52ea4b67209cb719e822d26e668dee498893ddb72eb5bd990fdd011a63",
+    "gpu-shard-rank-2-htbh38-TQ_D.jsonl.xz": "f90f0590264436ad37c8e5c6e7d1d566e67af09700e43e3903f40277ab61e316",
+    "gpu-shard-rank-2-nhtbh38-DT_D.jsonl.xz": "2ecee9ba41b1f559ee2645d8f80eb3d1c2288273b9db57d223b348d2928785ab",
+    "gpu-shard-rank-2-nhtbh38-TQ_D.jsonl.xz": "f3d2bab7c041597cc156141adc8365d9aa6c18799414d40818d53dc1c8a62609",
+    "gpu-shard-rank-3-htbh38-DT_D.jsonl.xz": "6fc5279c062607849947d291a67641ac1b44566f20b7d41c18bd5690871e3805",
+    "gpu-shard-rank-3-htbh38-TQ_D.jsonl.xz": "36fb530a1d4b06d0dd3c0e128f4e8abca63cd6859d5d1f4796c28fd7fb29083b",
+    "gpu-shard-rank-3-nhtbh38-DT_D.jsonl.xz": "2fd3239edec8eb21ef4a698259ec79cb08447cc10eee0e024033efe56af10da3",
+    "gpu-shard-rank-3-nhtbh38-TQ_D.jsonl.xz": "e25015799c0f7f3cd1ad86bdc04cb55c71b63b2cd37aff402f2af8cdc3b2430f"
+  },
+  "points": [
+    {
+      "system": "HTBH38/TS13",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "df_eigensolve_input_refusal",
+      "round1_error": "GENERATIVEQC error 1: ordinary CUDA DF eigensolve requires finite symmetric AO inputs"
+    },
+    {
+      "system": "NHTBH38/HCO",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 1 Z=6 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 2 Z=8 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 1 Z=6 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 2 Z=8 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 1 Z=6 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 2 Z=8 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 1 Z=6 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 2 Z=8 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 1 Z=6 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; orbital atom 2 Z=8 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 1 Z=6 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 2 Z=8 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 1 Z=6 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4; auxiliary atom 2 Z=8 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "NHTBH38/TS15",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=7 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 1 Z=7 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=7 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 1 Z=7 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=7 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 1 Z=7 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=7 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 1 Z=7 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=7 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; orbital atom 1 Z=7 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=7 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 1 Z=7 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=7 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4; auxiliary atom 1 Z=7 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "NHTBH38/TS5",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 1 Z=9 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 2 Z=9 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 1 Z=9 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 2 Z=9 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 1 Z=9 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 2 Z=9 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 1 Z=9 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 2 Z=9 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 1 Z=9 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; orbital atom 2 Z=9 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 1 Z=9 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 2 Z=9 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 1 Z=9 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4; auxiliary atom 2 Z=9 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/TS1",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "scf_nonconvergence",
+      "round1_error": "GENERATIVEQC error 4: UHF did not produce a validated physical UMP2 reference; scf_status=4; stopping_reason=scf_not_converged; iterations=200; energy=-460.58479201782274; energy_change=0.00018009625028980736; density_rms=0.00011807633337412537; physical_residual_rms=0"
+    },
+    {
+      "system": "HTBH38/CH3",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=6 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=6 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=6 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=6 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=6 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=6 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=6 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/TS2",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/Cl",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=17 shell 39 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=17 shell 39 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/TS12",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 1 Z=8 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 1 Z=8 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 1 Z=8 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 1 Z=8 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 1 Z=8 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 1 Z=8 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 1 Z=8 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "NHTBH38/Cl",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=17 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=17 shell 39 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=17 shell 39 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/NH",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "scf_nonconvergence",
+      "round1_error": "GENERATIVEQC error 4: UHF did not produce a validated physical UMP2 reference; scf_status=4; stopping_reason=scf_not_converged; iterations=200; energy=-54.839522070781207; energy_change=1.7340013869215909e-09; density_rms=7.0839920720757723e-07; physical_residual_rms=0"
+    },
+    {
+      "system": "NHTBH38/OH",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/O",
+      "recipe": "TQ_D",
+      "round1_diagnosis": "angular_momentum_refusal",
+      "round1_error": "orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/overlap derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/kinetic derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/nuclear_attraction derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/eri derivative 0 supports only l<=3; orbital atom 0 Z=8 shell 13 contraction 0 l=4: cuda/df_three_center derivative 0 supports only l<=3; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_metric derivative 0 supports only l<=4; auxiliary atom 0 Z=8 shell 27 contraction 0 l=5: cuda/df_three_center derivative 0 supports only l<=4"
+    },
+    {
+      "system": "HTBH38/TS15",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=53 nocc_alpha=10 nocc_beta=8 nvir_alpha=43 nvir_beta=45 iteration_ceiling=150 estimated_work=2284485490354 allowed_work=100000000000 numeric_storage_bytes=8237484168"
+    },
+    {
+      "system": "NHTBH38/CH3CH2",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=53 nocc_alpha=9 nocc_beta=8 nvir_alpha=44 nvir_beta=45 iteration_ceiling=150 estimated_work=2083580429953 allowed_work=100000000000 numeric_storage_bytes=8317275456"
+    },
+    {
+      "system": "NHTBH38/TS17",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=53 nocc_alpha=9 nocc_beta=8 nvir_alpha=44 nvir_beta=45 iteration_ceiling=150 estimated_work=2083580429953 allowed_work=100000000000 numeric_storage_bytes=8317275456"
+    },
+    {
+      "system": "HTBH38/TS6",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=48 nocc_alpha=10 nocc_beta=9 nvir_alpha=38 nvir_beta=39 iteration_ceiling=150 estimated_work=1641726945768 allowed_work=100000000000 numeric_storage_bytes=5360714136"
+    },
+    {
+      "system": "HTBH38/TS14",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=37 nocc_alpha=14 nocc_beta=12 nvir_alpha=23 nvir_beta=25 iteration_ceiling=150 estimated_work=776174899466 allowed_work=100000000000 numeric_storage_bytes=1652039624"
+    },
+    {
+      "system": "HTBH38/TS13",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=33 nocc_alpha=10 nocc_beta=9 nvir_alpha=23 nvir_beta=24 iteration_ceiling=150 estimated_work=311677568373 allowed_work=100000000000 numeric_storage_bytes=1214475304"
+    },
+    {
+      "system": "NHTBH38/HCO",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=33 nocc_alpha=8 nocc_beta=7 nvir_alpha=25 nvir_beta=26 iteration_ceiling=150 estimated_work=222954458037 allowed_work=100000000000 numeric_storage_bytes=1133979264"
+    },
+    {
+      "system": "NHTBH38/TS15",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=33 nocc_alpha=8 nocc_beta=7 nvir_alpha=25 nvir_beta=26 iteration_ceiling=150 estimated_work=222954458037 allowed_work=100000000000 numeric_storage_bytes=1133979264"
+    },
+    {
+      "system": "NHTBH38/TS5",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=33 nocc_alpha=10 nocc_beta=9 nvir_alpha=23 nvir_beta=24 iteration_ceiling=150 estimated_work=311677568373 allowed_work=100000000000 numeric_storage_bytes=1088184480"
+    },
+    {
+      "system": "HTBH38/TS1",
+      "recipe": "DT_D",
+      "round1_diagnosis": "correlation_work_policy",
+      "round1_error": "GENERATIVEQC error 10: correlation work-policy rejection: phase=uccsd_primal nbf=28 nocc_alpha=10 nocc_beta=9 nvir_alpha=18 nvir_beta=19 iteration_ceiling=150 estimated_work=143753135408 allowed_work=100000000000 numeric_storage_bytes=622964928"
+    },
+    {
+      "system": "HTBH38/CH3",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "HTBH38/TS2",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "HTBH38/Cl",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "HTBH38/TS12",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "NHTBH38/Cl",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "HTBH38/NH",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    },
+    {
+      "system": "NHTBH38/OH",
+      "recipe": "DT_D",
+      "round1_diagnosis": "timeout",
+      "round1_error": null
+    }
+  ]
+}

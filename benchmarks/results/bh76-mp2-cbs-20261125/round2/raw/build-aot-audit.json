@@ -1,0 +1,307 @@
+{
+  "primary": {
+    "aot_binary_bytes": 159579344,
+    "aot_package_bytes": 159607824,
+    "aot_to_native_ratio": 0.17680389172071237,
+    "architecture": "sm_90",
+    "artifacts": [
+      {
+        "artifact_key": "d8d7d8252e1fa5f09a30147b957790bc9724256e6a9139577395efdc0ef8a4b5",
+        "binary_bytes": 7255840,
+        "binary_sha256": "2393be5c8b7a1c74e46c920fb4c31f3ca38759d1109f0da2d0b5f89eb55974bb",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "1c70399206793ecec15c6d7e3a28ee407ca0c7052f23420a0c048434698d2e31",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 3,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_b3lyp_rks.so",
+        "name": "b3lyp_rks",
+        "plan_identity": "4f78872228aeb4d15165d576dcbba68828d4223776be39f7531659424031c9aa",
+        "source_identity": "7b95bb1e7b0af112323cc1c2c70006d19322121d096b4fcbbf1d4343638f96e6",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "1dc7ddfab82716d4c7f6ffbd47d6a1c6ba3d5ebf8b2fe548efd008cead6e5951",
+        "binary_bytes": 8546080,
+        "binary_sha256": "714e6a0c1f79ab75b5022e8180db5ea15e35fdf1b7d8964309b8243d5f06fd02",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "883122b8ef9444c63c2f0506b4a6b1ec02e2385b0f0cff973cae788a86b963ce",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 131522,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_m06_2x_rks.so",
+        "name": "m06_2x_rks",
+        "plan_identity": "f6b314d4eb4ad4c6e85a5a541b4561fa83feddbbd76f4321dc2a2d79b941b294",
+        "source_identity": "5b0e6af649b375f7cdc7d9ad36b40abfa7fbfa3881f330dae7f6951826455003",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "9ed1db612f450a9089462a4a45a34f13e97d458cd4591a4178f0bd72cd72af4d",
+        "binary_bytes": 7005976,
+        "binary_sha256": "870e2dca0c9b0468bb0f3a299572c458dfee9548dd0a2dcb2704849e5dcd109e",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "613afc31740a15702e0c65eac5d44bd6d34fc7370eacddd5a910962c20824269",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 1,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_pbe0_rks.so",
+        "name": "pbe0_rks",
+        "plan_identity": "f7602923c25ec33f2623b79ea2654ffdbebf3f5c552fea50a6fbfc7ba7c97b1c",
+        "source_identity": "97e8cbbd6f035261d416b29c6cdfa8eaee9cd89f155907f216d018ce00410840",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "efd957a3e4cbf9434e3c69f7bdd450a6bf18ddd07febcdf3346e872a0be7ec96",
+        "binary_bytes": 7010072,
+        "binary_sha256": "e80c4cad26539ebdcf738dd6441fd3a70f9122731b93044256a22182ef87086a",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "bd4b36e1faf38f228fbb876a2ff99e48e302b0217850bcf339df3897c0e6b1a3",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 1,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_pbe_rks.so",
+        "name": "pbe_rks",
+        "plan_identity": "5ef75257b912f909215f50a2d299945e66403f729d705a6078bb7338602c9b2d",
+        "source_identity": "65be588bf13c134e7e870f7ccf7808f711fb709d37c43415d18a387b4d0fd18c",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "1a1bf903e465cf49c0df32463c0798c65aa05b355456853be888f3bf8d4cd6f6",
+        "binary_bytes": 8009504,
+        "binary_sha256": "5bcccdb9633433d4140268b98a86321f2411968834600d1c0d97b75783536aa5",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "2e6a0ffb75fbf7726a8255e68634c5679f66b21635acc684ca8b0e378d29a4d7",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 2,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_r2scan_rks.so",
+        "name": "r2scan_rks",
+        "plan_identity": "64ebcf39cbbb5e12cadf4ec4a590c243d35a6c8bcfb0248591cbf1e952c7e468",
+        "source_identity": "04d48772ad132d5580ce688d4fb1c34d7e65ed168f9805fbb1cca8e8dc4d5282",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "0605955128466fa538576f2ea9aa7ed32604b14efef3a6fc897aa940b25158be",
+        "binary_bytes": 7522032,
+        "binary_sha256": "17442e813b8c9b8896067ca5a416cdf7581c4c7cab9ccb35b337f360039afb13",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": null,
+        "contract_identity": "19eb337c240102c3993ecc7fb0ca3a82fd8afb2698a84fd170593221d113bf84",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 4,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_wb97mv_rks.so",
+        "name": "wb97mv_rks",
+        "plan_identity": "08bfb11297671fd964657003cd9b6a01728cc249a558c269f4a194c019ebffe1",
+        "source_identity": "f955ad4a0aef632634ae1aa0616a5ba0022dea4222cbf645d45fa7e5dad54334",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "d30b93dffeaf4b99644c18914693f951af01ed20990929f3d806301a14893d55",
+        "binary_bytes": 18735216,
+        "binary_sha256": "f5b3fd8c55815ee39dc16d01938ddf54af4971bebb6e8edfb604c26a69d20760",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "c184299e9d6c16eb74252f358c67173b344db793028d5dd2b44b68fe742adc45",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 3,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_b3lyp_rks_spd.so",
+        "name": "b3lyp_rks_spd",
+        "plan_identity": "4f78872228aeb4d15165d576dcbba68828d4223776be39f7531659424031c9aa",
+        "source_identity": "e67a77a90f6a511df12289a1b5e7deb7c15e1268c2f05a407e2b8866fa63f18a",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "4866b1faabdb51cc881448c83907481f050b24c71eba246159b2a8a247d6913f",
+        "binary_bytes": 20025456,
+        "binary_sha256": "4653aa9aae4f2c39e7dab478c34061c69cd24cda5236b7b14435f8e7aa146070",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "86a6cbed3c52278eba7e3181aa58c3611cbdb8aa8367ce5837ab98fe49d05be5",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 131522,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_m06_2x_rks_spd.so",
+        "name": "m06_2x_rks_spd",
+        "plan_identity": "f6b314d4eb4ad4c6e85a5a541b4561fa83feddbbd76f4321dc2a2d79b941b294",
+        "source_identity": "70ad6761d0056896116c82ab4693d9a40b32cd4f8f66bc2b507417168d207bfb",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "1afaf52ea568b3cb38eb41a1ef18e78b02ead06ad1e305e2315a46f543d83b0b",
+        "binary_bytes": 18485352,
+        "binary_sha256": "62974af3609353b17e11f5b1102a97ac95c9267841af10ead72b849a8fbcc376",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "79c5018b5e6aef83e5fd5bd062252dd1c64d4736a739bde2e6b6ea3d79da1bc2",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 1,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_pbe0_rks_spd.so",
+        "name": "pbe0_rks_spd",
+        "plan_identity": "f7602923c25ec33f2623b79ea2654ffdbebf3f5c552fea50a6fbfc7ba7c97b1c",
+        "source_identity": "081cd816812d7f0be50c7c53b92de65d6208287e879a07462f2dccc7ac0b21ac",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "6fe5f49e797878b1c54f78a22adcf654b4281b275052c7805012bb06446df409",
+        "binary_bytes": 18489440,
+        "binary_sha256": "c2f5687f6ddb1d3ec91c4bb66e556788c7191df0c2b3da35ac4eea8c71e86a97",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "f831cee7d5a494a4a549389c547855a1fee88b5ed7622778b653fc1236ede0ad",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 1,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_pbe_rks_spd.so",
+        "name": "pbe_rks_spd",
+        "plan_identity": "5ef75257b912f909215f50a2d299945e66403f729d705a6078bb7338602c9b2d",
+        "source_identity": "93388107b38de608e0eb135e68b0888e0f38abf6ed6c6a0ee65114fa05c46b1e",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "8fd1d75ec80c70cb1190ef06b35c56d3fe181ced5fc1db9252d56ff754a68a0b",
+        "binary_bytes": 19488880,
+        "binary_sha256": "29f9008bc26a00e344927bd0808f7e45fa829f02256dabf9790e23a401466eea",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "571b0ae50467ea46315b30d5fff0bcbabb79479c37fb7d48b3341b0a829e77bd",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 2,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_r2scan_rks_spd.so",
+        "name": "r2scan_rks_spd",
+        "plan_identity": "64ebcf39cbbb5e12cadf4ec4a590c243d35a6c8bcfb0248591cbf1e952c7e468",
+        "source_identity": "314077e19c595fed3f0ed44b33fe7e6672de6edf6fda594da646a2166c2617cb",
+        "spin": "unpolarized"
+      },
+      {
+        "artifact_key": "b91a1bf20b3edbb6824fe11650ae63dbb60a5c86e84edcf8322d299b10bfb717",
+        "binary_bytes": 19005496,
+        "binary_sha256": "fe4c71a6496948549d19baa16ce3c007857af8bad8bf6ae4207c67ca99550ec1",
+        "code_kinds": [
+          "cubin",
+          "ptx"
+        ],
+        "component_domain": [
+          "",
+          "x",
+          "xx",
+          "xy",
+          "xz",
+          "y",
+          "yy",
+          "yz",
+          "z",
+          "zz"
+        ],
+        "contract_identity": "d94b3d56e5a5c59712dca3886dac9de40ebb8ab33143c66501e8773d5bb27b0d",
+        "driver_ptx_jit_possible": true,
+        "driver_ptx_jit_required": false,
+        "functional": 4,
+        "library": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build/libgenerativeqc_stationary_wb97mv_rks_spd.so",
+        "name": "wb97mv_rks_spd",
+        "plan_identity": "08bfb11297671fd964657003cd9b6a01728cc249a558c269f4a194c019ebffe1",
+        "source_identity": "4c7d64f391afc75336b280c747d5de8e2749afedbabc86cbd42bad3b52b033a6",
+        "spin": "unpolarized"
+      }
+    ],
+    "directory": "$GQC_ASSETS/issue-3168-22f72-prod-20261125/build",
+    "manifest_bytes": 28480,
+    "native_library_bytes": 902578232
+  }
+}
