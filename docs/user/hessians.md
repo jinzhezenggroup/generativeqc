@@ -110,9 +110,14 @@ scalar ECPs count modeled primal setup workspace without changing derivative
 method, byte, or work admission. The lease includes retained providers and
 serialized workspace; execution applies the smaller of the lease's derivative
 capacity and the call's numerical limit. The leased
-batch supports energy replay and prepared HVP, not force replay or standalone
-orbital export. Closing the pool handle does not revoke the batch's lease.
-Export scratch, implicit BLAS workspace, caller storage and process RSS are
+batch supports energy replay and prepared HVP. Internal CPU orbital export
+shares the serialized workspace slot, independent of the caller's root-panel
+limit. Detached coefficients belong to the caller. SDK callers can also reserve
+native force replay for an otherwise admitted all-electron batch with
+`GENERATIVEQC_BATCH_RESERVE_HOST_HESSIAN_FORCES`. This charges the existing
+force inventory without expanding force capability.
+Closing the pool handle does not revoke the batch's lease.
+Other export scratch, implicit BLAS workspace, caller storage and process RSS are
 outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
