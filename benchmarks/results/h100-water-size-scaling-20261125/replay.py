@@ -165,6 +165,19 @@ def summarize(observations, oracles, source):
                     if all((*key, arm, repeat) in observations for arm in ARMS)
                 ]
                 item["paired_repeats"] = len(repeats)
+                cross_engine = [
+                    errors(
+                        observations[(*key, "standard", repeat)][1],
+                        observations[(*key, "gpu4pyscf", repeat)][1],
+                        atoms,
+                    )
+                    for repeat in repeats
+                ]
+                for metric in GATES:
+                    item[f"cross_engine_max_{metric}"] = max(
+                        (difference[metric] for difference in cross_engine),
+                        default=None,
+                    )
                 qualified = []
                 for arm in ARMS:
                     records = {
@@ -282,9 +295,14 @@ def main():
                 )
             observations.update(shard_observations)
     cpu_path = directory / "cpu-raw.json.xz"
-    rows, checks = summarize(
-        observations, read_bundle(cpu_path) if cpu_path.is_file() else {}, source
-    )
+    oracles = read_bundle(cpu_path) if cpu_path.is_file() else {}
+    long_pbe_path = directory / "cpu-pbe-long.json.xz"
+    if long_pbe_path.is_file():
+        name = "oracle-96-pbe.json"
+        pbe_raw = read_bundle(long_pbe_path).get(name)
+        if pbe_raw and json.loads(pbe_raw)["status"] == "complete":
+            oracles[name] = pbe_raw
+    rows, checks = summarize(observations, oracles, source)
     artifacts = {
         "summary.csv": as_csv(rows),
         "gates.json": json.dumps({"limits": GATES, "checks": checks}, indent=2) + "\n",

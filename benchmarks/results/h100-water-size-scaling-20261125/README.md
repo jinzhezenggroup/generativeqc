@@ -5,8 +5,14 @@ uses GenerativeQC revision `22f72d0692a760c2892cd7791022584d9ae1c3e5` and
 GPU4PySCF 1.9.0. It measures complete cold energy and analytic forces on
 96, 144, 192, 240 and 300 atoms.
 
-The master-revision acquisition is in progress. The retained legacy receipts
-document the pilot and do not enter the 22f72d069 result tables.
+The master acquisition is in progress. This checkpoint contains 25 complete
+formal endpoints and 12 pairs. [summary.csv](summary.csv) reports the observed
+pairs and [gates.json](gates.json) contains the sample-level oracle errors.
+The first 96-atom HF Direct pair reached 10.937 s and 8.240 s, respectively,
+with both endpoints passing the CPU PySCF gates. The first 240-atom HF Direct
+pair reached 386.520 s and 18.201 s, respectively, and recorded 34 and 11 SCF
+iterations. These are single observations on their respective H100s.
+The larger-size sweep and repeat acquisition continue.
 
 ## Molecular inputs
 
