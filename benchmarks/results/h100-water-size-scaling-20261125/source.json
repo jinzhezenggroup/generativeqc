@@ -1,0 +1,25 @@
+{
+  "revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "tree": "5b587f68163deeb5ae767591fa75512998040935",
+  "archive_exclusions": [
+    "assets",
+    "benchmarks/results"
+  ],
+  "source_archive_sha256": "1507adc4adc20ee67cb66737f0d31c5a82f1cab647800c6d46deb595fcbfc334",
+  "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+  "native_identity_inputs": 2284,
+  "paper_runner_sha256": "ed46ab4bc173b9573fd36b2262cc601622b00c964f1a8d2c3c5d33c33ad28c4c",
+  "cpu_oracle_driver_sha256": "c6e962347291b9eff54e3cb565172a5189dc347febe39d71dd4c8d758a1ac83c",
+  "geometry_sha256": "cbc81c685aa9d72e4dc7f4ffaed190c93f106496b264ddbccc2e36a12273846f",
+  "inputs_sha256": {
+    "inputs/hf-auxiliary.json": "81a009bc08d26614a6e87dd37a18b1e05c6f5407bbe8a224b0cfa80029a53c57",
+    "inputs/hf-reference.json": "81ee2af0f7599e544bf43713cd59a10d0441d86f39d9440cc70b94a909d9a1f2",
+    "inputs/pbe-auxiliary.json": "9eaad1a657b67cedd4e784bea1064e53e20ed8c33ce74e2ecc67b3100b8b7c38",
+    "inputs/pbe-reference.json": "81ee2af0f7599e544bf43713cd59a10d0441d86f39d9440cc70b94a909d9a1f2",
+    "inputs/r2scan-auxiliary.json": "cbecd0dd90bc1cf890c5486d072db49cebace5d74d78fb7b262dacaf4adf6054",
+    "inputs/r2scan-reference.json": "81ee2af0f7599e544bf43713cd59a10d0441d86f39d9440cc70b94a909d9a1f2",
+    "inputs/wb97m-v-auxiliary.json": "ab6c7c8889bfffd843ef8f0b3a50d2d60dce41f426c5cad1702e8845f1bfee71",
+    "inputs/wb97m-v-reference.json": "81ee2af0f7599e544bf43713cd59a10d0441d86f39d9440cc70b94a909d9a1f2"
+  },
+  "historical_inputs_revision": "d154546d2d6629ab8c865ca08f680002d68b4152"
+}

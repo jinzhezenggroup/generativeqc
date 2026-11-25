@@ -1,0 +1,58 @@
+{
+  "revision": "d154546d2d6629ab8c865ca08f680002d68b4152",
+  "tree": "6389daad0071c7487964fd0f28b63b21eb98b8ab",
+  "archive_exclusions": [
+    "assets",
+    "benchmarks/results"
+  ],
+  "source_archive_sha256": "6ccfdd9aa3ec75d54123076dd475942329489e3f4e2013f49797012b7736ce8e",
+  "binary_source_revision": "471ea1a0aa9b872998be27abc990dcc837182a4c",
+  "native_library_sha256": "e528760871c9edb3846f2b8153cf6deaf098bed980d819524c20fda688d17d76",
+  "native_source_identity": "9bc35927feb6c549f54a031dfa2f9c66b4d3b1a6fe6bb326b3471c0cc80eb4c2",
+  "paper_runner_sha256": "ed46ab4bc173b9573fd36b2262cc601622b00c964f1a8d2c3c5d33c33ad28c4c",
+  "paper_build_receipt_sha256": "31712d63610ebc2c560c01416cab1babd0d0634f6e0f5a5274c141e82d124efb",
+  "revision_diff_paths": [
+    ".gitattributes",
+    "README.md",
+    "assets/paper-hfdft-cold3-20261120-h100.svg",
+    "benchmarks/evidence-policy.json",
+    "benchmarks/evidence-reviews/paper-hfdft-cold3-20261120.json",
+    "benchmarks/results/paper-hfdft-cold3-20261120/README.md",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/evidence.json",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/inputs.json.xz",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/measured-source.json.xz",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/provenance.json.xz",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/publication.json",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/samples.json.xz",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/summary.csv",
+    "benchmarks/results/paper-hfdft-cold3-20261120/h100/timings.csv"
+  ],
+  "paper_build": {
+    "configuration_flags_without_machine_paths": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas",
+      "-DCMAKE_CUDA_ARCHITECTURES=90",
+      "-DGENERATIVEQC_CUDA_ARCHITECTURES=90",
+      "-DGENERATIVEQC_ENABLE_CUDA=ON",
+      "-DGENERATIVEQC_ENABLE_AOT_SHELLS=ON",
+      "-DGENERATIVEQC_AOT_PROFILE=portable_cuda",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=ON",
+      "-DGENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA=ON",
+      "-DGENERATIVEQC_STATIONARY_AOT_PROFILES=b3lyp_rks;m06_2x_rks;pbe0_rks;pbe_rks;r2scan_rks;wb97mv_rks",
+      "-DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF",
+      "-DGENERATIVEQC_BUILD_TESTS=OFF",
+      "-DGENERATIVEQC_BUILD_CLI=OFF",
+      "-DGENERATIVEQC_CUDA_DIRECT_DEVICE_LINK=ON",
+      "-DGENERATIVEQC_CUDA_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_COMPILE_JOBS=4",
+      "-DGENERATIVEQC_AOT_SHARDS=8"
+    ],
+    "native_source_identity": "9bc35927feb6c549f54a031dfa2f9c66b4d3b1a6fe6bb326b3471c0cc80eb4c2",
+    "native_library_sha256": "e528760871c9edb3846f2b8153cf6deaf098bed980d819524c20fda688d17d76",
+    "compiler_cache_version": "sccache 0.16.0",
+    "aot_audit_sha256": "e0632e26277b946a4290d92967f3b55e0096a4b5811c6d4a27a6965faae93d44",
+    "actual_process_timeout_seconds": 600,
+    "parent_monotonic_deadline_seconds": 46800,
+    "reference_imports_are_not_native_production_dependencies": true
+  }
+}

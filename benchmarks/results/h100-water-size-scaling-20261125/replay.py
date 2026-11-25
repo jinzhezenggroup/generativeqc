@@ -1,0 +1,306 @@
+"""Verify the archived raw records and reconstruct the paired cold summary."""
+
+import argparse
+import csv
+import hashlib
+import io
+import json
+import lzma
+import math
+import statistics
+from pathlib import Path
+
+from acquire import ARMS, METHODS, MODES, REPEATS
+from geometry import SIZES
+
+GATES = {
+    "energy_per_atom_Eh": 1e-5,
+    "force_max_Eh_per_bohr": 1e-4,
+    "force_rms_Eh_per_bohr": 3e-5,
+}
+
+
+def checksum(data):
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
+def read_bundle(path):
+    with lzma.open(path, "rt", encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def errors(sample, reference, atoms):
+    if len(sample["forces"]) != atoms or len(reference["forces"]) != atoms:
+        raise ValueError("force vectors do not match atom count")
+    delta = [
+        left - right
+        for a, b in zip(sample["forces"], reference["forces"], strict=True)
+        for left, right in zip(a, b, strict=True)
+    ]
+    if len(delta) != 3 * atoms:
+        raise ValueError("expected three Cartesian force components per atom")
+    return {
+        "energy_per_atom_Eh": abs(sample["energy"] - reference["energy"]) / atoms,
+        "force_max_Eh_per_bohr": max(map(abs, delta)),
+        "force_rms_Eh_per_bohr": math.sqrt(
+            sum(value * value for value in delta) / len(delta)
+        ),
+    }
+
+
+def within(difference, fraction=1.0):
+    return all(
+        math.isfinite(difference[k]) and difference[k] <= fraction * v
+        for k, v in GATES.items()
+    )
+
+
+def oracle(files, atoms, method, source):
+    raw = files.get(f"oracle-{atoms}-{method}.json")
+    if raw is None:
+        return None, "no_oracle"
+    record = json.loads(raw)
+    if record["status"] != "complete":
+        return None, "incomplete_oracle"
+    if (
+        record["source_revision"] != source["revision"]
+        or record["geometry_sha256"] != source["geometry_sha256"]
+        or record["packages"]["pyscf"] != "2.14.0"
+        or "9462" not in record["cpu"]["model"]
+    ):
+        raise ValueError("oracle provenance differs from the accepted contract")
+    samples = record["samples"]
+    if method != "hf":
+        if [sample["level"] for sample in samples] != [4, 5]:
+            raise ValueError("wrong oracle grid sequence")
+        if not within(errors(*samples, atoms), 0.25):
+            return None, "unstable_oracle_grid"
+    elif len(samples) != 1:
+        raise ValueError("wrong HF oracle count")
+    return samples[-1], "available"
+
+
+def read_attempt(files, formal, source, geometry_digest, build_sha=None):
+    campaign = json.loads(files["campaign.json"])
+    if (
+        campaign["hardware"]["native_source_identity"]
+        != source["native_source_identity"]
+    ):
+        raise ValueError("campaign native source identity differs")
+    library_sha = (
+        source.get("native_library_sha256")
+        or campaign["hardware"]["native_library_sha256"]
+    )
+    if (
+        build_sha is not None
+        and campaign["hardware"]["build_receipt_sha256"] != build_sha
+    ):
+        raise ValueError("campaign build receipt checksum differs")
+    seen = set()
+    observations = {}
+    for row in campaign["rows"]:
+        name = row["name"]
+        if name in seen:
+            raise ValueError(f"duplicate attempt {name}")
+        seen.add(name)
+        for suffix, key in ((".json", "raw_sha256"), (".txt", "log_sha256")):
+            if row.get(key) and checksum(files[name + suffix]) != row[key]:
+                raise ValueError(f"incorrect {key} for {name}")
+        if row["status"] != "complete":
+            continue
+        raw = json.loads(files[name + ".json"])
+        if (
+            raw["status"] != "complete"
+            or len(raw["samples"]) != 1
+            or not raw["samples"][0]["converged"]
+            or raw["samples"][0]["phase"] != "cold"
+            or raw["source_revision"] != source["revision"]
+            or raw["paper_driver_sha256"] != source["paper_runner_sha256"]
+            or raw["geometry_sha256"] != geometry_digest
+            or any(raw[k] != row[k] for k in ("atoms", "method", "mode", "arm"))
+        ):
+            raise ValueError(f"invalid completed outcome {name}")
+        if raw["arm"] == "gpu4pyscf":
+            if (
+                raw["packages"]["gpu4pyscf"] != "1.9.0"
+                or raw["packages"]["cupy"] != "13.4.1"
+            ):
+                raise ValueError("unexpected reference version")
+        elif (
+            raw["native_build"]["library_sha256"] != library_sha
+            or raw["native_build"]["source_identity"]
+            != source["native_source_identity"]
+        ):
+            raise ValueError(f"unexpected native build in {name}")
+        sample = raw["samples"][0]
+        if not (math.isfinite(sample["seconds"]) and sample["seconds"] > 0):
+            raise ValueError(f"invalid endpoint seconds in {name}")
+        if row["memory"]["peak_used_bytes"] < row["memory"]["baseline_bytes"]:
+            raise ValueError(f"invalid peak memory in {name}")
+        if formal and row["stage"] == "formal":
+            key = (row["atoms"], row["method"], row["mode"], row["arm"], row["repeat"])
+            if key in observations:
+                raise ValueError(f"duplicate formal population {key}")
+            observations[key] = (row, raw["samples"][0])
+    return observations
+
+
+def summarize(observations, oracles, source):
+    rows = []
+    details = {}
+    for atoms in SIZES:
+        for method in METHODS:
+            reference, available = oracle(oracles, atoms, method, source)
+            for mode in MODES:
+                item = {
+                    "atoms": atoms,
+                    "method": method,
+                    "mode": mode,
+                    "oracle": available,
+                }
+                key = (atoms, method, mode)
+                repeats = [
+                    repeat
+                    for repeat in range(REPEATS)
+                    if all((*key, arm, repeat) in observations for arm in ARMS)
+                ]
+                item["paired_repeats"] = len(repeats)
+                qualified = []
+                for arm in ARMS:
+                    records = {
+                        r: observations[(*key, arm, r)]
+                        for r in range(REPEATS)
+                        if (*key, arm, r) in observations
+                    }
+                    item[f"{arm}_complete"] = len(records)
+                    item[f"{arm}_peak_mib"] = max(
+                        (
+                            row["memory"]["peak_used_bytes"] / 2**20
+                            for row, _ in records.values()
+                        ),
+                        default=None,
+                    )
+                    item[f"{arm}_paired_median_seconds"] = (
+                        statistics.median(records[r][1]["seconds"] for r in repeats)
+                        if repeats
+                        else None
+                    )
+                    for row, sample in records.values():
+                        detail = {"oracle_status": available}
+                        if reference is not None:
+                            difference = errors(sample, reference, atoms)
+                            detail.update(errors=difference, passed=within(difference))
+                            if row["repeat"] in repeats:
+                                qualified.append(detail["passed"])
+                        details[row["name"]] = detail
+                item["gpu4pyscf_over_standard"] = (
+                    item["gpu4pyscf_paired_median_seconds"]
+                    / item["standard_paired_median_seconds"]
+                    if repeats
+                    else None
+                )
+                item["all_paired_observations_pass"] = (
+                    all(qualified) if qualified else None
+                )
+                rows.append(item)
+    return rows, details
+
+
+def as_csv(rows):
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(rows[0]), lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--directory", type=Path, default=Path(__file__).resolve().parent
+    )
+    parser.add_argument("--write-summary", action="store_true")
+    args = parser.parse_args()
+    directory = args.directory
+    source = json.loads((directory / "source.json").read_text())
+    geometry_digest = hashlib.sha256(
+        lzma.decompress((directory / "geometries.json.xz").read_bytes())
+    ).hexdigest()
+    legacy_source = json.loads((directory / "source-legacy.json").read_text())
+    for name in ("gpu-pilot.json.xz", "gpu-legacy.json.xz"):
+        path = directory / name
+        if path.is_file():
+            read_attempt(read_bundle(path), False, legacy_source, geometry_digest)
+    observations = {}
+    failures = []
+    build_path = directory / "build-raw.json.xz"
+    build_sha = (
+        checksum(read_bundle(build_path)["build.json"])
+        if build_path.is_file()
+        else None
+    )
+    for shard in ("main", "large"):
+        raw_files = {}
+        for path in sorted(directory.glob(f"gpu-{shard}-*.json.xz")):
+            for name, contents in read_bundle(path).items():
+                if name in raw_files:
+                    raise ValueError(f"duplicate raw file {name}")
+                raw_files[name] = contents
+        if raw_files:
+            shard_observations = read_attempt(
+                raw_files, True, source, geometry_digest, build_sha
+            )
+            campaign = json.loads(raw_files["campaign.json"])
+            for row in campaign["rows"]:
+                if row["status"] == "complete":
+                    continue
+                failures.append(
+                    {
+                        "shard": shard,
+                        **{
+                            key: row[key]
+                            for key in (
+                                "name",
+                                "atoms",
+                                "method",
+                                "mode",
+                                "arm",
+                                "stage",
+                                "status",
+                            )
+                        },
+                        "last_stage": row.get("last_stage"),
+                        "subprocess_seconds": row.get("subprocess_seconds"),
+                        "peak_mib": row["memory"]["peak_used_bytes"] / 2**20
+                        if "memory" in row
+                        else None,
+                    }
+                )
+            if overlap := observations.keys() & shard_observations.keys():
+                raise ValueError(
+                    f"duplicate observations across H100 shards: {overlap}"
+                )
+            observations.update(shard_observations)
+    cpu_path = directory / "cpu-raw.json.xz"
+    rows, checks = summarize(
+        observations, read_bundle(cpu_path) if cpu_path.is_file() else {}, source
+    )
+    artifacts = {
+        "summary.csv": as_csv(rows),
+        "gates.json": json.dumps({"limits": GATES, "checks": checks}, indent=2) + "\n",
+    }
+    if failures:
+        artifacts["failures.csv"] = as_csv(failures)
+    for name, expected in artifacts.items():
+        path = directory / name
+        if args.write_summary:
+            path.write_text(expected)
+        elif path.read_bytes() != expected.encode():
+            raise ValueError(f"summary differs from replay: {name}")
+    print(
+        f"{len(observations)} completed formal endpoints, {sum(row['paired_repeats'] for row in rows)} pairs"
+    )
+
+
+if __name__ == "__main__":
+    main()

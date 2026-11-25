@@ -1,0 +1,8 @@
+{
+  "limits": {
+    "energy_per_atom_Eh": 1e-05,
+    "force_max_Eh_per_bohr": 0.0001,
+    "force_rms_Eh_per_bohr": 3e-05
+  },
+  "checks": {}
+}
