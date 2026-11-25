@@ -99,11 +99,12 @@ backend, basis, spin, precision, density fitting, ECP and grid choices.
 native registry and is not a probe proving a requested device/context works.
 Its public discovery cache does not determine a `Calculator`'s registry view:
 the calculator queries its already-selected native library and verifies the
-canonical carrier with the installed named-method ABI when present. An older
-library without that optional lookup retains explicit numeric-ID compatibility;
-a selected lookup/query error or inconsistent publication does not rediscover a
-default library or fall back to cached/Python capability metadata. Public aliases,
-explicit compiler compositions and later contextual admission remain separate.
+canonical carrier with the installed named-method ABI. A library without that
+lookup must be replaced with a matching native build. A missing or failed
+lookup/query or inconsistent publication does not rediscover a default library
+or fall back to a numeric-ID-only query or cached/Python capability metadata.
+Public aliases, explicit compiler compositions and later contextual admission
+remain separate.
 For named KS selectors represented by the native program catalog, registry
 discovery obtains the public carrier without rebuilding a compiler graph.
 Corrected programs can have a different registry carrier from their preparation
