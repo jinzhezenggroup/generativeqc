@@ -40,7 +40,7 @@ def test_native_matches_independent_portable_inventory_without_provider_loading(
 
 
 @pytest.mark.parametrize("backend", ("cpu", "cuda"))
-def test_public_d3_bounds_preserve_dry_run_and_cuda_compatibility(
+def test_public_d3_bounds_distinguish_native_and_dry_run_plans(
     library: typing.Any, monkeypatch: pytest.MonkeyPatch, backend: str
 ) -> None:
     graph = resolve_method("PBE-D3(BJ)", spin="unpolarized")
@@ -54,7 +54,7 @@ def test_public_d3_bounds_preserve_dry_run_and_cuda_compatibility(
     controls = [json.loads(request.identity.schedule) for request in requests]
     assert controls[0]["inventory_owner"] == "native-d3-layout-v1"
     assert controls[2]["inventory_owner"] == "portable-d3-layout-v1"
-    assert requests[0].identity.identity != requests[1].identity.identity
+    assert requests[0].identity != requests[2].identity
     if backend == "cpu":
         assert not requests[1].candidates
         assert "generativeqc_resource_d3_layout_v1" in requests[1].unsupported_reason
