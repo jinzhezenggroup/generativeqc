@@ -317,6 +317,69 @@ def test_prepared_hvp_shared_host_lease_exact_and_rollback(method: str) -> None:
         )
 
 
+def test_packed_prepared_hvp_reserves_actual_values_not_packed_cap() -> None:
+    atoms = (("H", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.4)))
+    directions = np.array([[[0.0, 0.0, 0.1], [0.0, 0.0, -0.1]]])
+
+    def make(packed_cap: int) -> Calculator:
+        return Calculator(
+            method="pbe-rks",
+            basis="sto-3g",
+            basis_representation="spherical",
+            ks_options=KsOptions(grid=GridSpec(12, 6, 12)),
+            initial_guess=None,
+            cpu_packed_eri_maximum_bytes=packed_cap,
+        )
+
+    packed = make(48)  # Six packed values for the two spherical s AOs.
+    if not linked_method(packed._library, packed.method_ir.identity):
+        pytest.skip("linked CPU Hessian is unavailable")
+    with make(0).prepare_batch([atoms]) as unleased:
+        unleased.execute(strict=True, properties=("energy",))
+        reference = unleased.hessian_vector_products(0, directions)
+    floor = reference.diagnostics["minimum_numeric_bytes"]
+
+    def prepare(calculator: Calculator, pool: HostResources) -> PreparedBatch:
+        return calculator.prepare_batch(
+            [atoms], host_resources=pool, host_hessian_workspace_bytes=floor
+        )
+
+    with HostResources(1 << 30) as pool:
+        with prepare(packed, pool):
+            receipt = pool.snapshot()
+        assert pool.snapshot().owner_count == 0
+        with prepare(make(1 << 20), pool):
+            assert pool.snapshot() == receipt
+        with pytest.raises(MemoryError, match="packed.*(capacity|cap)"):
+            prepare(make(47), pool)
+        assert pool.snapshot().owner_count == 0
+        with pytest.raises(MemoryError, match="packed.*(capacity|cap)"):
+            make(95).prepare_batch(
+                [atoms, atoms], host_resources=pool, host_hessian_workspace_bytes=floor
+            )
+        assert pool.snapshot().owner_count == 0
+        with make(96).prepare_batch(
+            [atoms, atoms], host_resources=pool, host_hessian_workspace_bytes=floor
+        ):
+            assert pool.snapshot().retained_bytes == 2 * receipt.retained_bytes
+
+    exact = receipt.retained_bytes + receipt.workspace_bytes
+    with HostResources(exact - 1) as pool:
+        with pytest.raises(MemoryError, match="shared host capacity"):
+            prepare(packed, pool)
+        assert pool.snapshot().owner_count == 0
+    with HostResources(exact) as pool, prepare(packed, pool) as batch:
+        before = pool.snapshot()
+        assert before.retained_bytes + before.workspace_bytes == exact
+        with pytest.raises(MemoryError, match="shared host capacity"):
+            prepare(packed, pool)
+        assert pool.snapshot() == before
+        batch.execute(strict=True)
+        result = batch.hessian_vector_products(0, directions)
+        np.testing.assert_allclose(result.value, reference.value, atol=2e-8, rtol=0)
+        assert result.diagnostics["scf_fock_builds"] == 0
+
+
 @pytest.mark.parametrize(
     ("representation", "basis_name"),
     (("cartesian", "sto-3g"), ("spherical", "def2-svp")),
