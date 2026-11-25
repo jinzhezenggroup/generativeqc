@@ -781,12 +781,17 @@ packed cap. It requires a linked endpoint that admits a real-spherical s/p/d/f
 basis. This option also applies to linked CPU LDA/PBE spherical contexts.
 Pass `--host-bytes` to CPU `hessian` or `hvp` to enforce the same combined limit
 before SCF, after deducting any `--host-reserve-bytes` and `--headroom-fraction`. Remaining
-capacity can fund optional derivative storage up to `--numeric-budget-bytes`.
+capacity can fund optional derivative storage up to `--numeric-budget-bytes`,
+using the same native capacity policy as the Python `ResourceBudget` path.
 The dry-run reports the minimum modeled peak as `peak_bytes.host` and, with a
 host limit, the selected caps in `derivative_inventory`. Execution reports
-the same admission in `diagnostics.resource_admission`. These modeled caps
-are not an allocation promise for optional response schedules, solver
-convergence, work limits, or process RSS. Without a host limit,
+the same admission in `diagnostics.resource_admission`. For admitted Direct CPU
+execution, including explicit packed ERIs and admitted scalar ECPs, it acquires
+a private native host ledger and reports its retained and workspace bytes as
+`native_host_lease`. The combined CLI limit also counts its own HVP direction
+buffer, which is outside the lease. The lease includes ECP setup capacity but
+does not promise optional response schedules, solver convergence, work limits, or
+process RSS. Without a host limit,
 `--numeric-budget-bytes` still caps the derivative itself. CUDA and methods
 without a matching primal inventory do not accept a combined
 Hessian/HVP host budget.

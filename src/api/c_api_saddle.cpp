@@ -81,9 +81,8 @@ extern "C" generativeqc_status generativeqc_saddle_correct_v1(
       coordinate_count > options->max_coordinates || options->project_rigid_motions > 1 ||
       !options->max_attempts || options->max_attempts > 100)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  const auto numeric_bytes = sizeof(double) * (16 * coordinate_count * coordinate_count +
-                                               (options->max_attempts + 64) * coordinate_count +
-                                               16 * options->max_attempts);
+  const auto numeric_bytes =
+      saddle::corrector_numeric_bytes(coordinate_count, options->max_attempts);
   if (numeric_bytes > options->maximum_numeric_bytes) return GENERATIVEQC_STATUS_RESOURCE_LIMIT;
   try {
     saddle::Options controls;

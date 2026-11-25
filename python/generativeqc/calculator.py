@@ -2944,8 +2944,8 @@ class Calculator:
         correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
             "df_metric"
         )
-        if not correlation_auxiliary and _basis_builtin.eligible(
-            self._library, selected_basis
+        if not correlation_auxiliary and _basis_builtin.is_catalog_record(
+            selected_basis
         ):
             return _basis_builtin.create_system(
                 self._library, context, selected_basis, atoms, charge, multiplicity
@@ -2956,14 +2956,6 @@ class Calculator:
                 for atom in atoms
             )
         )
-        bundled_create = getattr(
-            self._library, "generativeqc_system_create_bundled", None
-        )
-        bundled_name = (
-            _model_resolution._bundled_basis_name(selected_basis)
-            if bundled_create is not None and not correlation_auxiliary
-            else None
-        )
         template_create = getattr(
             self._library, "generativeqc_system_create_basis_template_v1", None
         )
@@ -2972,11 +2964,7 @@ class Calculator:
             and isinstance(selected_basis, BasisSet)
             and not correlation_auxiliary
         )
-        if use_template or (
-            bundled_create is not None
-            and bundled_name is not None
-            and not correlation_auxiliary
-        ):
+        if use_template:
             descriptor = _native.SystemDescriptor(
                 struct_size=ctypes.sizeof(_native.SystemDescriptor),
                 abi_version=_native.ABI_VERSION,
@@ -2991,33 +2979,24 @@ class Calculator:
                 ),
             )
             system = ctypes.c_void_p()
-            if bundled_create is not None and bundled_name is not None:
-                status = bundled_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    bundled_name.encode("ascii"),
-                    selected_basis.provenance.checksum.encode("ascii"),
-                    ctypes.byref(system),
-                )
-            else:
-                from ._basis_native import NativeBasisTemplate
+            from ._basis_native import NativeBasisTemplate
 
-                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
-                if (
-                    source.has_ecp
-                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                    and not self._supports_fitted_ecp_basis()
-                    and self._method not in _CORRELATED_METHODS
-                ):
-                    raise NotImplementedError(
-                        "ECP density-fitting execution is not yet validated"
-                    )
-                status = template_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    ctypes.byref(source.descriptor),
-                    ctypes.byref(system),
+            source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+            if (
+                source.has_ecp
+                and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not self._supports_fitted_ecp_basis()
+                and self._method not in _CORRELATED_METHODS
+            ):
+                raise NotImplementedError(
+                    "ECP density-fitting execution is not yet validated"
                 )
+            status = template_create(
+                context,
+                ctypes.byref(descriptor),
+                ctypes.byref(source.descriptor),
+                ctypes.byref(system),
+            )
             _native.check(self._library, status, context=context)
             return system
         shells = self._shells_for_atoms(atoms, basis)
@@ -3596,6 +3575,7 @@ class Calculator:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         host_resources: HostResources | None = None,
+        host_hessian_workspace_bytes: int | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
@@ -3615,6 +3595,9 @@ class Calculator:
         Unsupported batch contexts raise NotImplementedError; validation,
         native and resource failures propagate. Close the returned plan or use
         it as a context manager. It is not concurrently re-entrant.
+        With ``host_resources``, ``host_hessian_workspace_bytes`` reserves one
+        shared derivative workspace for a linked Direct CPU KS fleet. This
+        mode admits energy replay and Hessian-vector products, not forces.
         See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
         if getattr(self, "_provider_initialization_intent", None) is not None:
@@ -3639,6 +3622,7 @@ class Calculator:
             ks_export=ks_export,
             resource_plan=resource_plan,
             host_resources=host_resources,
+            host_hessian_workspace_bytes=host_hessian_workspace_bytes,
             _hessian_request=_hessian_request,
             _resource_properties=_resource_properties,
         )
