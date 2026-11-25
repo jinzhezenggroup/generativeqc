@@ -1,0 +1,874 @@
+{
+  "source": "d154546d2d6629ab8c865ca08f680002d68b4152",
+  "groups": {
+    "mean_field_shared": {
+      "spec": [
+        "python/generativeqc_compiler/integral/one_electron_values.py:build_one_electron_value_ir",
+        "python/generativeqc_compiler/integral/one_electron_values.py:build_one_electron_component_kernel",
+        "python/generativeqc_compiler/integral/one_electron_derivatives.py:build_one_electron_derivative_ir",
+        "python/generativeqc_compiler/integral/one_electron_derivatives.py:build_one_electron_derivative_kernel",
+        "python/generativeqc_compiler/method/nuclear_repulsion.py:nuclear_pair_program",
+        "python/generativeqc_compiler/method/stationary_gradient.py:StationaryGradientPlan"
+      ],
+      "runtime": [
+        "src/methods/hf_method.cpp",
+        "src/scf/rhf.cpp",
+        "src/scf/cuda_rhf.cpp",
+        "src/scf/fock_execution.cpp",
+        "src/scf/cuda_fock_execution.cpp",
+        "src/scf/gradient/hf_gradient.cpp",
+        "src/scf/stationary_integral_gradient.cpp"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/method/nuclear_repulsion.py:emit_nuclear_repulsion_header",
+        "python/generativeqc_compiler/method/stationary_cuda.py",
+        "python/generativeqc_compiler/integral/one_electron_cpu.py",
+        "python/generativeqc_compiler/integral/one_electron_cuda.py",
+        "python/generativeqc_compiler/integral/one_electron_derivatives_cuda.py",
+        "python/generativeqc_compiler/integral/one_electron_families_cuda.py"
+      ]
+    },
+    "direct": {
+      "spec": [
+        "python/generativeqc_compiler/integral/shell_spec.py:ShellClassSpec",
+        "python/generativeqc_compiler/integral/shell_class.py:build_coulomb_derivative_algebra",
+        "python/generativeqc_compiler/integral/shell_class.py:build_shell_class_component_kernel",
+        "python/generativeqc_compiler/integral/lowering/fock_accumulation.py",
+        "python/generativeqc_compiler/integral/weighted_eri.py:build_weighted_eri_ir",
+        "python/generativeqc_compiler/integral/weighted_eri.py:build_weighted_eri_kernel"
+      ],
+      "runtime": [
+        "src/scf/fock_build.cpp",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_jk_kernels.cu",
+        "src/scf/cuda/direct_angular_fock.cu",
+        "src/scf/cuda/direct_angular_force.cu",
+        "src/scf/cuda/direct_generated_tasks.cu",
+        "src/scf/cuda/direct_md_jk.cu",
+        "src/scf/cuda/weighted_eri_kernels.cu",
+        "src/scf/cuda/direct_force_execution.cuh"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/integral/eri_cpu.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_pair_gradient_cuda.py",
+        "python/generativeqc_compiler/integral/md_j_engine_cuda.py",
+        "python/generativeqc_compiler/integral/weighted_eri_cuda.py",
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
+      ]
+    },
+    "df": {
+      "spec": [
+        "python/generativeqc_compiler/integral/df_values.py:build_df_value_ir",
+        "python/generativeqc_compiler/integral/df_values.py:build_df_component_kernel",
+        "python/generativeqc_compiler/integral/df_derivatives.py:build_df_derivative_ir",
+        "python/generativeqc_compiler/integral/df_derivatives.py:build_df_derivative_kernel",
+        "python/generativeqc_compiler/tensor/df_coulomb.py",
+        "python/generativeqc_compiler/tensor/df_coulomb_metric.py",
+        "python/generativeqc_compiler/method/df_hf_response_contract.py"
+      ],
+      "runtime": [
+        "src/scf/density_fitting.cpp",
+        "src/scf/cuda/df_jk.cpp",
+        "src/scf/cuda/df_coulomb.cpp",
+        "src/scf/cuda/df_exchange.cpp",
+        "src/scf/cuda/df_rhf_scf.cpp",
+        "src/scf/cuda/df_uhf_scf.cpp",
+        "src/scf/cuda/df_force_response.cpp",
+        "src/scf/cuda/df_gradient_bridge.cu",
+        "src/scf/cuda/df_shell_derivatives.cu",
+        "src/integrals/cuda_df_nuclear_response.cu",
+        "src/integrals/density_fitting_metric.cpp"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/integral/df_cuda.py",
+        "python/generativeqc_compiler/integral/df_derivatives_cuda.py",
+        "python/generativeqc_compiler/integral/df_shell_units.py",
+        "python/generativeqc_compiler/integral/df_shell_derivatives.py",
+        "python/generativeqc_compiler/method/df_hf_response_cuda.py",
+        "python/generativeqc_compiler/method/df_occupied_response_cuda.py",
+        "python/generativeqc_compiler/method/df_exchange_schedule.py",
+        "python/generativeqc_compiler/integral/df_md_j_cuda.py"
+      ]
+    },
+    "xc": {
+      "spec": [
+        "python/generativeqc_compiler/method/spec.py:MethodSpec",
+        "python/generativeqc_compiler/method/spec.py:MethodIR",
+        "python/generativeqc_compiler/xc/spec.py:FunctionalSpec",
+        "python/generativeqc_compiler/xc/program_ir.py",
+        "python/generativeqc_compiler/dft/ao_axis.py",
+        "python/generativeqc_compiler/xc/grid_response_ir.py",
+        "python/generativeqc_compiler/xc/grid_partition_ir.py",
+        "python/generativeqc_compiler/xc/b88_vwn_maple.py",
+        "python/generativeqc_compiler/xc/scan_maple.py",
+        "python/generativeqc_compiler/xc/wb97mv_maple.py",
+        "python/generativeqc_compiler/method/nonlocal_pair.py:build_nonlocal_pair_program"
+      ],
+      "runtime": [
+        "src/methods/dft_method.cpp",
+        "src/methods/dft_method_derivative_adapter.cpp",
+        "src/dft/rks.cpp",
+        "src/dft/uks.cpp",
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_grid.cu",
+        "src/dft/native_stationary_shared_kernels.cu",
+        "src/dft/native_stationary_runtime.cuh",
+        "src/dft/xc.cpp",
+        "src/dft/cuda_xc_kernels.cuh",
+        "src/dft/cuda_stationary_controller.cpp"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/dft/ao_cuda.py",
+        "python/generativeqc_compiler/xc/semilocal_codegen.py",
+        "python/generativeqc_compiler/xc/quadrature_cuda.py",
+        "python/generativeqc_compiler/method/nonlocal_pair_cuda.py",
+        "python/generativeqc_compiler/xc/atomic_grid_native.py",
+        "python/generativeqc_compiler/xc/geometry_cuda.py"
+      ]
+    },
+    "mp2": {
+      "spec": [
+        "python/generativeqc_compiler/mp2/equations.py:df_energy_program",
+        "python/generativeqc_compiler/mp2/equations.py:df_energy_response_program",
+        "python/generativeqc_compiler/mp2/equations.py:pair_energy_program"
+      ],
+      "runtime": [
+        "src/methods/mp2_method.cpp",
+        "src/posthf/ri_mp2_cuda.cu",
+        "src/posthf/mp2_energy.cpp",
+        "src/posthf/mp2_force.cpp",
+        "src/posthf/mp2_gradient.cpp",
+        "src/posthf/mp2_derivative_cpu.cpp",
+        "src/posthf/mp2_derivative_cuda.cpp",
+        "src/methods/rccsd_method.cpp"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/method/mp2_schedule.py"
+      ]
+    },
+    "ccsdt": {
+      "spec": [
+        "python/generativeqc_compiler/cc/equations.py",
+        "python/generativeqc_compiler/cc/df_equations.py",
+        "python/generativeqc_compiler/cc/occupied_triples.py",
+        "python/generativeqc_compiler/cc/occupied_triples_response.py",
+        "python/generativeqc_compiler/cc/df_lambda.py",
+        "python/generativeqc_compiler/cc/df_lambda_reduction.py"
+      ],
+      "runtime": [
+        "src/methods/df_rccsdt_method.cpp",
+        "src/methods/df_ccsdt_force.cu",
+        "src/cc/rccsdt_force.cpp",
+        "src/cc/df_lambda_cuda.cu",
+        "src/cc/df_triples_cuda.cu",
+        "src/cc/lambda_response.cpp",
+        "src/cc/triples_response.cpp"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/cc/df_hoist.py",
+        "python/generativeqc_compiler/cc/df_lambda_matrix.py",
+        "python/generativeqc_compiler/cc/occupied_triples_lowering.py"
+      ]
+    },
+    "cbs": {
+      "spec": [],
+      "runtime": [
+        "python/generativeqc/cbs.py",
+        "python/generativeqc/_cbs_plan.py",
+        "src/core/cbs_extrapolation.hpp",
+        "src/api/c_api_correlation_convergence.cpp"
+      ],
+      "compiler_support": []
+    },
+    "df_posthf_shared": {
+      "spec": [
+        "python/generativeqc_compiler/cc/df_source.py",
+        "python/generativeqc_compiler/method/df_ao_source.py",
+        "python/generativeqc_compiler/method/df_mo_source.py",
+        "python/generativeqc_compiler/method/rhf_orbital_response.py"
+      ],
+      "runtime": [
+        "src/cc/df_source_cuda.cu",
+        "src/posthf/df_mo_response.cu",
+        "src/hf/rhf_frame_response.cu",
+        "src/posthf/df_interaction_source.cpp",
+        "src/posthf/native_provider.cpp",
+        "src/posthf/df_factor_blocks.cu"
+      ],
+      "compiler_support": [
+        "python/generativeqc_compiler/common/source_reuse.py"
+      ]
+    }
+  },
+  "generators": [
+    {
+      "group": "mean_field_shared",
+      "id": "nuclear_repulsion",
+      "script": "tools/generate_nuclear_repulsion.py",
+      "argv": [
+        "--output",
+        "generated_nuclear_repulsion.hpp"
+      ],
+      "outputs": {
+        "generated_nuclear_repulsion.hpp": "mixed"
+      }
+    },
+    {
+      "group": "mean_field_shared",
+      "id": "stationary_integral_weights",
+      "script": "tools/generate_stationary_integral_weights.py",
+      "argv": [
+        "--output",
+        "generated_stationary_integral_weights.hpp"
+      ],
+      "outputs": {
+        "generated_stationary_integral_weights.hpp": "response"
+      }
+    },
+    {
+      "group": "mean_field_shared",
+      "id": "one_electron_values",
+      "script": "tools/generate_one_electron_kernels.py",
+      "argv": [
+        "--max-angular-momentum",
+        "4",
+        "--output",
+        "generated_one_electron_values.cuh",
+        "--family-output",
+        "generated_one_electron_value_family.cuh",
+        "--family-metadata-output",
+        "generated_one_electron_family_metadata.cuh",
+        "--policy-output",
+        "generated_one_electron_policy.cuh"
+      ],
+      "outputs": {
+        "generated_one_electron_values.cuh": "value",
+        "generated_one_electron_value_family.cuh": "value",
+        "generated_one_electron_family_metadata.cuh": "support",
+        "generated_one_electron_policy.cuh": "support"
+      }
+    },
+    {
+      "group": "mean_field_shared",
+      "id": "one_electron_derivatives",
+      "script": "tools/generate_one_electron_kernels.py",
+      "argv": [
+        "--max-angular-momentum",
+        "4",
+        "--output",
+        "generated_one_electron_derivatives.cuh",
+        "--family-output",
+        "generated_one_electron_derivative_family.cuh",
+        "--derivatives"
+      ],
+      "outputs": {
+        "generated_one_electron_derivatives.cuh": "response",
+        "generated_one_electron_derivative_family.cuh": "response"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "eri_cpu",
+      "script": "tools/generate_eri_cpu.py",
+      "argv": [
+        "--output",
+        "generated_eri_cpu.hpp"
+      ],
+      "outputs": {
+        "generated_eri_cpu.hpp": "value"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "direct_pair_gradient",
+      "script": "tools/generate_direct_pair_gradient.py",
+      "argv": [
+        "--output",
+        "generated_direct_high_order_pair_gradient.cuh"
+      ],
+      "outputs": {
+        "generated_direct_high_order_pair_gradient.cuh": "response"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "direct_source_contraction",
+      "script": "tools/generate_direct_source_contraction.py",
+      "argv": [
+        "--output",
+        "generated_direct_source_contraction.cuh"
+      ],
+      "outputs": {
+        "generated_direct_source_contraction.cuh": "mixed"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "md_j_engine",
+      "script": "tools/generate_md_j_engine.py",
+      "argv": [
+        "--output",
+        "generated_md_j_engine.cuh"
+      ],
+      "outputs": {
+        "generated_md_j_engine.cuh": "value"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "direct_recurrence",
+      "script": "tools/generate_direct_recurrence.py",
+      "argv": [
+        "--output-directory",
+        "."
+      ],
+      "outputs": {
+        "generated_direct_eri_order2.cuh": "mixed",
+        "generated_direct_eri_order3.cuh": "mixed",
+        "generated_direct_eri_order4.cuh": "mixed",
+        "generated_direct_shell_class.cuh": "support"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "fock_accumulation",
+      "script": "tools/generate_shell_kernels.py",
+      "argv": [
+        "--direct-fock-accumulation-output",
+        "generated_direct_fock_accumulation.cuh"
+      ],
+      "outputs": {
+        "generated_direct_fock_accumulation.cuh": "value"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "weighted_eri",
+      "script": "tools/generate_weighted_eri_kernels.py",
+      "argv": [
+        "--output",
+        "weighted_eri.cuh",
+        "--order4-output",
+        "order4_weighted_eri.cuh",
+        "--order5-output",
+        "order5_weighted_eri.cuh"
+      ],
+      "outputs": {
+        "weighted_eri.cuh": "response",
+        "order4_weighted_eri.cuh": "response",
+        "order5_weighted_eri.cuh": "response"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_values_cpu",
+      "script": "tools/generate_df_kernels.py",
+      "argv": [
+        "--cpu",
+        "--output",
+        "generated_df_values_cpu.hpp"
+      ],
+      "outputs": {
+        "generated_df_values_cpu.hpp": "value"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_derivatives_cpu",
+      "script": "tools/generate_df_kernels.py",
+      "argv": [
+        "--cpu",
+        "--derivatives",
+        "--output",
+        "generated_df_derivatives_cpu.hpp"
+      ],
+      "outputs": {
+        "generated_df_derivatives_cpu.hpp": "response"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_values_cuda",
+      "script": "tools/generate_df_kernels.py",
+      "argv": [
+        "--output",
+        "df_values.cuh",
+        "--policy-output",
+        "generated_df_policy.cuh"
+      ],
+      "outputs": {
+        "df_values.cuh": "value",
+        "generated_df_value_candidates.cuh": "value",
+        "generated_df_policy.cuh": "support"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_derivatives_cuda",
+      "script": "tools/generate_df_kernels.py",
+      "argv": [
+        "--derivatives",
+        "--output",
+        "generated_df_derivatives.cuh",
+        "--policy-output",
+        "generated_df_derivative_policy.cuh",
+        "--schedule-output",
+        "generated_df_derivative_schedule.cuh",
+        "--shell-output",
+        "generated_df_shell_derivatives.cuh",
+        "--shell-units-directory",
+        "df_shells"
+      ],
+      "outputs": {
+        "generated_df_derivatives.cuh": "response",
+        "generated_df_derivative_policy.cuh": "support",
+        "generated_df_derivative_schedule.cuh": "support",
+        "generated_df_shell_derivatives.cuh": "response",
+        "generated_df_rys.cuh": "mixed",
+        "generated_df_rys_policy.hpp": "support",
+        "generated_df_production.hpp": "support",
+        "generated_df_screening.cuh": "support",
+        "generated_df_pair_screening.cuh": "support",
+        "generated_df_rys_shell.cuh": "mixed",
+        "df_shells/generated_df_shell_dispatch.hpp": "support",
+        "df_shells/df_shell_{df_class}.cu": "mixed",
+        "df_shells/df_shell_polynomial_{df_class}.cuh": "mixed",
+        "df_shells/df_shell_math_{df_class}.cuh": "mixed",
+        "df_shells/df_shell_policy_{df_class}.hpp": "support"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_response_contract",
+      "script": "tools/generate_df_hf_response.py",
+      "argv": [
+        "--contract-output",
+        "generated_df_hf_response_contract.hpp"
+      ],
+      "outputs": {
+        "generated_df_hf_response_contract.hpp": "response"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_response_cuda",
+      "script": "tools/generate_df_hf_response.py",
+      "argv": [
+        "--cuda-output",
+        "generated_df_hf_response.cuh"
+      ],
+      "outputs": {
+        "generated_df_hf_response.cuh": "response"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_exchange_schedule",
+      "script": "tools/generate_df_exchange_schedule.py",
+      "argv": [
+        "--output",
+        "generated_df_exchange_schedule.hpp"
+      ],
+      "outputs": {
+        "generated_df_exchange_schedule.hpp": "support"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_coulomb_lowering",
+      "script": "tools/generate_df_coulomb_lowering.py",
+      "argv": [
+        "--output",
+        "generated_df_coulomb_lowering.hpp"
+      ],
+      "outputs": {
+        "generated_df_coulomb_lowering.hpp": "value"
+      }
+    },
+    {
+      "group": "df",
+      "id": "df_md_j",
+      "script": "tools/generate_df_md_j.py",
+      "argv": [
+        "--output",
+        "generated_df_md_j.cuh"
+      ],
+      "outputs": {
+        "generated_df_md_j.cuh": "value"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "xc_b3lyp_cuda",
+      "script": "tools/generate_xc_b3lyp_cuda.py",
+      "argv": [
+        "--output",
+        "generated_b3lyp_device.cuh"
+      ],
+      "outputs": {
+        "generated_b3lyp_device.cuh": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "xc_r2scan_cuda",
+      "script": "tools/generate_xc_r2scan_cuda.py",
+      "argv": [
+        "--output",
+        "generated_r2scan_device.cuh"
+      ],
+      "outputs": {
+        "generated_r2scan_device.cuh": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "xc_wb97mv_cuda",
+      "script": "tools/generate_xc_wb97mv_cuda.py",
+      "argv": [
+        "--output",
+        "generated_wb97mv_device.cuh"
+      ],
+      "outputs": {
+        "generated_wb97mv_device.cuh": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "xc_cpu",
+      "script": "tools/generate_xc_cpu.py",
+      "argv": [
+        "--output",
+        "xc_cpu_generated.hpp"
+      ],
+      "outputs": {
+        "xc_cpu_generated.hpp": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "grid_kernels",
+      "script": "tools/generate_grid_kernels.py",
+      "argv": [
+        "--xc-matrix-tile",
+        "16",
+        "--ao-radial-reuse",
+        "--output",
+        "generated_grid_policy.cu"
+      ],
+      "outputs": {
+        "generated_grid_policy.cu": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "quadrature_cuda",
+      "script": "tools/generate_quadrature_cuda.py",
+      "argv": [
+        "--output",
+        "generated_quadrature.cuh"
+      ],
+      "outputs": {
+        "generated_quadrature.cuh": "mixed",
+        "generated_atomic_grid.hpp": "support"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "nonlocal_pair_native",
+      "script": "tools/generate_nonlocal_pair_native.py",
+      "argv": [
+        "--output",
+        "generated_nonlocal_pair_native.hpp"
+      ],
+      "outputs": {
+        "generated_nonlocal_pair_native.hpp": "mixed"
+      }
+    },
+    {
+      "group": "df_posthf_shared",
+      "id": "mp2_checked_in_headers",
+      "script": "tools/generate_mp2_native.py",
+      "argv": [
+        "--cpu-header",
+        "mp2_cpu_generated.hpp"
+      ],
+      "outputs": {
+        "mp2_cpu_generated.hpp": "excluded",
+        "block_capacity_generated.hpp": "support",
+        "mp2_schedule_generated.hpp": "support",
+        "source_reuse_schedule_generated.hpp": "support"
+      },
+      "tracked": {
+        "mp2_cpu_generated.hpp": "src/posthf/mp2_cpu_generated.hpp",
+        "block_capacity_generated.hpp": "src/posthf/block_capacity_generated.hpp",
+        "mp2_schedule_generated.hpp": "src/posthf/mp2_schedule_generated.hpp",
+        "source_reuse_schedule_generated.hpp": "src/posthf/source_reuse_schedule_generated.hpp"
+      }
+    },
+    {
+      "group": "mp2",
+      "id": "mp2_cuda_sm90",
+      "script": "tools/generate_mp2_native.py",
+      "argv": [
+        "--cuda-dir",
+        ".",
+        "--architectures",
+        "90"
+      ],
+      "outputs": {
+        "mp2_cuda_table.cu": "excluded",
+        "mp2_pair_energy.cuh": "value",
+        "mp2_sm90_t1_runtime.cu": "excluded",
+        "mp2_sm90_t2_runtime.cu": "excluded",
+        "mp2_sm90_t4_runtime.cu": "excluded",
+        "mp2_sm90_t8_runtime.cu": "excluded"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_ccsd_native",
+      "script": "tools/generate_df_ccsd_native.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_ccsd_cpu.hpp": "value",
+        "generated_df_ccsd_cuda.cuh": "value",
+        "generated_df_ccsd_cuda.cu": "value"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_ccsd_core",
+      "script": "tools/generate_df_ccsd_core.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_ccsd_core_cpu.hpp": "value",
+        "generated_df_ccsd_core_cuda.cuh": "value",
+        "generated_df_ccsd_core_cuda.cu": "value"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_ccsd_hoisted",
+      "script": "tools/generate_df_ccsd_hoisted.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_ccsd_hoisted_cpu.hpp": "value",
+        "generated_df_ccsd_hoisted_cuda.cuh": "value",
+        "generated_df_ccsd_hoisted_cuda.cu": "value"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_ccsd_spectator_pairs",
+      "script": "tools/generate_df_ccsd_spectator_pairs.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_ccsd_spectator_pairs_cpu.hpp": "value",
+        "generated_df_ccsd_spectator_pairs_cuda.cuh": "value",
+        "generated_df_ccsd_spectator_pairs_cuda.cu": "value"
+      }
+    },
+    {
+      "group": "df_posthf_shared",
+      "id": "df_cc_source",
+      "script": "tools/generate_df_cc_source.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_cc_source_cpu.hpp": "mixed",
+        "generated_df_cc_source_cuda.cuh": "mixed",
+        "generated_df_cc_source_cuda.cu": "mixed"
+      }
+    },
+    {
+      "group": "df_posthf_shared",
+      "id": "rhf_frame_response",
+      "script": "tools/generate_rhf_frame_response.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_rhf_frame_response_cpu.hpp": "response",
+        "generated_rhf_frame_response_cuda.cuh": "response",
+        "generated_rhf_frame_response_cuda.cu": "response"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_occupied_triples",
+      "script": "tools/generate_df_occupied_triples.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_occupied_triples.hpp": "mixed",
+        "generated_df_occupied_triples_cuda.cuh": "mixed",
+        "generated_df_occupied_triples_cuda.cu": "mixed"
+      }
+    },
+    {
+      "group": "ccsdt",
+      "id": "df_lambda",
+      "script": "tools/generate_df_lambda.py",
+      "argv": [
+        "--cross-size-arena",
+        "--output-dir",
+        "."
+      ],
+      "outputs": {
+        "generated_df_lambda.hpp": "response",
+        "generated_df_lambda_cuda.cuh": "response",
+        "generated_df_lambda_cuda.cu": "response"
+      }
+    },
+    {
+      "group": "df_posthf_shared",
+      "id": "df_ao_native",
+      "script": "tools/generate_df_ao_native.py",
+      "argv": [
+        "--cpu-header",
+        "generated_df_ao_source.hpp",
+        "--cuda-source",
+        "generated_df_ao_source.cu"
+      ],
+      "outputs": {
+        "generated_df_ao_source.hpp": "mixed",
+        "generated_df_ao_source.cu": "mixed"
+      }
+    },
+    {
+      "group": "df_posthf_shared",
+      "id": "df_mo_source",
+      "script": "tools/generate_df_mo_source.py",
+      "argv": [
+        "--output",
+        "df_mo_source_generated.hpp"
+      ],
+      "outputs": {
+        "df_mo_source_generated.hpp": "value"
+      }
+    },
+    {
+      "group": "direct",
+      "id": "shell_aot_sm90",
+      "script": "tools/generate_shell_kernels.py",
+      "argv": [
+        "--production-manifest",
+        "{source}/python/generativeqc_compiler/integral/production_shell_classes.json",
+        "--output-directory",
+        ".",
+        "--shards",
+        "8",
+        "--unit-mode",
+        "stable-shards",
+        "--target-architecture",
+        "sm_90",
+        "--cuda-image",
+        "90-real"
+      ],
+      "outputs": {
+        "generativeqc_generated_shell_registry.cu": "support",
+        "generativeqc_generated_shell_registry.hpp": "support",
+        "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_4.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_5.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_6.cu": "mixed",
+        "sm_90/generativeqc_generated_shell_sm90_shard_7.cu": "mixed"
+      }
+    },
+    {
+      "group": "xc",
+      "id": "native_stationary_xc",
+      "script": "tools/generate_native_stationary_cuda.py",
+      "argv": [
+        "--output-dir",
+        ".",
+        "--all-profiles",
+        "--profiles",
+        "r2scan_rks",
+        "r2scan_uks",
+        "pbe0_rks",
+        "pbe0_uks",
+        "wb97mv_rks",
+        "wb97mv_uks",
+        "--fused-profiles"
+      ],
+      "outputs": {
+        "native_r2scan_rks.cu": "response",
+        "native_r2scan_uks.cu": "response",
+        "native_pbe0_rks.cu": "response",
+        "native_pbe0_uks.cu": "response",
+        "native_wb97mv_rks.cu": "response",
+        "native_wb97mv_uks.cu": "response"
+      }
+    }
+  ],
+  "families": {
+    "Direct HF energy and forces": [
+      "mean_field_shared",
+      "direct"
+    ],
+    "Direct DFT energy and forces": [
+      "mean_field_shared",
+      "direct",
+      "xc"
+    ],
+    "DF HF energy and forces": [
+      "mean_field_shared",
+      "df"
+    ],
+    "DF DFT energy and forces": [
+      "mean_field_shared",
+      "df",
+      "xc"
+    ],
+    "DF-MP2 energy and forces": [
+      "mean_field_shared",
+      "df",
+      "df_posthf_shared",
+      "mp2"
+    ],
+    "DF-CCSD(T) energy and forces": [
+      "mean_field_shared",
+      "df",
+      "df_posthf_shared",
+      "ccsdt"
+    ],
+    "CBS composite (full-DF component reuse)": [
+      "mean_field_shared",
+      "df",
+      "df_posthf_shared",
+      "mp2",
+      "ccsdt",
+      "cbs"
+    ]
+  }
+}
