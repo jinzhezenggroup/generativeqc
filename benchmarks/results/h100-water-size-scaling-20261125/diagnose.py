@@ -3,10 +3,11 @@
 import argparse
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 
-from acquire import TIMEOUT, environment, stop_process, verify
+from acquire import TIMEOUT, environment, interrupt, stop_process, verify
 
 
 def main():
@@ -15,6 +16,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("cases", nargs="+", help="case as n-atoms:method:mode")
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, interrupt)
+    signal.signal(signal.SIGINT, interrupt)
     root = args.acquisition.resolve()
     output = args.output.resolve()
     output.mkdir()
@@ -56,8 +59,7 @@ def main():
             except subprocess.TimeoutExpired:
                 timeout = True
             finally:
-                if child.poll() is None:
-                    stop_process(child)
+                stop_process(child)
         receipt["rows"].append(
             {"case": case, "timeout": timeout, "returncode": child.returncode}
         )

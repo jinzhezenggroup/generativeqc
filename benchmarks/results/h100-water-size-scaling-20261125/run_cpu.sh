@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run within an allocated srun step. Save every oracle exit even after a failure.
 set -eu
-root="$1"
+root="$(cd -- "$1" && pwd -P)"
 python="$2"
 output="$root/cpu"
 mkdir "$output"

@@ -3,11 +3,12 @@
 import argparse
 import json
 import os
+import signal
 from pathlib import Path
 import sqlite3
 import subprocess
 
-from acquire import digest, environment, save, stop_process, verify
+from acquire import digest, environment, interrupt, save, stop_process, verify
 
 CAPTURE_SHA256 = "67620bee0161e0296db2807ae8b5895fe433feb4dddc17543e712c744e2d4075"
 CASES = ((240, "hf"), (96, "wb97m-v"))
@@ -29,8 +30,7 @@ def run(argv, logfile, cwd, env, timeout):
         except subprocess.TimeoutExpired:
             timed_out = True
         finally:
-            if child.poll() is None:
-                stop_process(child)
+            stop_process(child)
     return {
         "argv": list(map(str, argv)),
         "returncode": child.returncode,
@@ -68,9 +68,12 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--nsys", type=Path, required=True)
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, interrupt)
+    signal.signal(signal.SIGINT, interrupt)
     root = args.root.resolve()
     output = args.output.resolve()
     output.mkdir()
+    args.nsys = args.nsys.resolve()
     if digest(args.nsys) != CAPTURE_SHA256:
         raise ValueError("unexpected Nsight Systems binary")
     config = json.loads((root / "paper-config.json").read_text())

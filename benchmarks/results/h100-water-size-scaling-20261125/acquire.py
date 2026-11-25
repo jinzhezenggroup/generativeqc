@@ -1,6 +1,7 @@
 """Run the cold GPU pairs serially on one H100, retaining every attempt."""
 
 import argparse
+from contextlib import suppress
 import ctypes
 import hashlib
 import itertools
@@ -32,13 +33,18 @@ def digest(path):
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
+def interrupt(signum, frame):
+    raise SystemExit(128 + signum)
+
+
 def stop_process(child):
-    os.killpg(child.pid, signal.SIGTERM)
-    try:
+    with suppress(ProcessLookupError):
+        os.killpg(child.pid, signal.SIGTERM)
+    with suppress(subprocess.TimeoutExpired):
         child.wait(timeout=15)
-    except subprocess.TimeoutExpired:
+    with suppress(ProcessLookupError):
         os.killpg(child.pid, signal.SIGKILL)
-        child.wait()
+    child.wait()
 
 
 class DeviceMemory:
@@ -185,43 +191,48 @@ def run(root, output, config, env, memory, row, remaining):
         str(root),
     ]
     begin = time.monotonic()
-    baseline = memory.used()
-    peak = baseline
-    samples = 1
+    child = None
+    baseline = peak = None
+    samples = 0
     timed_out = False
-    with logfile.open("xb") as log:
-        child = subprocess.Popen(
-            argv,
-            cwd=root / "source",
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        try:
-            while child.poll() is None:
-                peak = max(peak, memory.used())
-                samples += 1
-                if time.monotonic() - begin >= min(TIMEOUT, remaining):
-                    timed_out = True
-                    stop_process(child)
-                    break
-                time.sleep(0.05)
-        finally:
-            if child.poll() is None:
+    error = None
+    try:
+        baseline = peak = memory.used()
+        samples = 1
+        with logfile.open("xb") as log:
+            child = subprocess.Popen(
+                argv,
+                cwd=root / "source",
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            try:
+                while child.poll() is None:
+                    peak = max(peak, memory.used())
+                    samples += 1
+                    if time.monotonic() - begin >= min(TIMEOUT, remaining):
+                        timed_out = True
+                        break
+                    time.sleep(0.05)
+            finally:
                 stop_process(child)
-    output_text = logfile.read_text(errors="replace")
+    except BaseException as failure:
+        error = failure
+    output_text = logfile.read_text(errors="replace") if logfile.exists() else ""
     marks = [
         json.loads(line[6:])
-        for line in output_text.splitlines()
-        if line.startswith("STAGE ")
+        for line in output_text.splitlines(keepends=True)
+        if line.startswith("STAGE ") and line.endswith("\n")
     ]
     raw = json.loads(path.read_text()) if path.exists() else {}
+    code = child.returncode if child is not None else None
     row.update(
-        status=classify(child.returncode, raw, output_text, timed_out),
+        status="interrupted" if error else classify(code, raw, output_text, timed_out),
         argv=argv,
         subprocess_seconds=time.monotonic() - begin,
-        returncode=child.returncode,
+        returncode=code,
         stages=marks,
         last_stage=marks[-1]["stage"] if marks else "startup",
         memory={
@@ -229,10 +240,15 @@ def run(root, output, config, env, memory, row, remaining):
             "baseline_bytes": baseline,
             "peak_used_bytes": peak,
             "samples": samples,
-        },
-        raw_sha256=digest(path) if raw else None,
-        log_sha256=digest(logfile),
+        }
+        if samples
+        else None,
+        raw_sha256=digest(path) if path.exists() else None,
+        log_sha256=digest(logfile) if logfile.exists() else None,
     )
+    if error is not None:
+        row["error"] = f"{type(error).__name__}: {error}"
+        raise error
 
 
 def main():
@@ -241,6 +257,8 @@ def main():
     parser.add_argument("--deadline-seconds", type=int, default=28200)
     parser.add_argument("--sizes", type=int, choices=SIZES, nargs="+", default=SIZES)
     args = parser.parse_args()
+    if len(set(args.sizes)) != len(args.sizes):
+        parser.error("--sizes must be unique")
     root = args.root.resolve()
     output = root / "gpu"
     output.mkdir()
@@ -259,9 +277,6 @@ def main():
         project=os.environ["GQC_QZ_PROJECT"],
     )
     save(destination, receipt)
-
-    def interrupt(signum, frame):
-        raise SystemExit(128 + signum)
 
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
@@ -303,8 +318,15 @@ def main():
         receipt.update(status="interrupted", error=f"{type(error).__name__}: {error}")
         raise
     finally:
-        memory.close()
-        save(destination, receipt)
+        try:
+            memory.close()
+        except RuntimeError as error:
+            receipt["nvml_shutdown_error"] = str(error)
+            if receipt["status"] == "finished":
+                receipt["status"] = "cleanup_failed"
+                raise
+        finally:
+            save(destination, receipt)
 
 
 if __name__ == "__main__":

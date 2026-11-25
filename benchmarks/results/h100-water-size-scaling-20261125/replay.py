@@ -80,22 +80,30 @@ def oracle(files, atoms, method, source):
     return samples[-1], "available"
 
 
-def read_attempt(files, formal, source, geometry_digest, build_sha=None):
+def read_attempt(files, formal, source, geometry_digest, build_text=None):
     campaign = json.loads(files["campaign.json"])
-    if (
-        campaign["hardware"]["native_source_identity"]
-        != source["native_source_identity"]
-    ):
+    hardware = campaign["hardware"]
+    if hardware["native_source_identity"] != source["native_source_identity"]:
         raise ValueError("campaign native source identity differs")
-    library_sha = (
-        source.get("native_library_sha256")
-        or campaign["hardware"]["native_library_sha256"]
-    )
-    if (
-        build_sha is not None
-        and campaign["hardware"]["build_receipt_sha256"] != build_sha
-    ):
-        raise ValueError("campaign build receipt checksum differs")
+    if formal:
+        if build_text is None or hardware["build_receipt_sha256"] != checksum(
+            build_text
+        ):
+            raise ValueError("campaign build receipt checksum differs")
+        build = json.loads(build_text)
+        if (
+            build["status"] != "complete"
+            or build["source_revision"] != source["revision"]
+            or build["source_archive_sha256"] != source["source_archive_sha256"]
+            or build["native_source_identity"] != source["native_source_identity"]
+        ):
+            raise ValueError("build receipt disagrees with the source pin")
+        library_sha = build["native_library_sha256"]
+    else:
+        library_sha = source["native_library_sha256"]
+    if hardware["native_library_sha256"] != library_sha:
+        raise ValueError("campaign native library differs from the build")
+    gpu_uuid = hardware["gpu"].split(",")[1].strip()
     seen = set()
     observations = {}
     for row in campaign["rows"]:
@@ -117,6 +125,7 @@ def read_attempt(files, formal, source, geometry_digest, build_sha=None):
             or raw["source_revision"] != source["revision"]
             or raw["paper_driver_sha256"] != source["paper_runner_sha256"]
             or raw["geometry_sha256"] != geometry_digest
+            or raw["accelerator"]["nvidia_smi"]["uuid"] != gpu_uuid
             or any(raw[k] != row[k] for k in ("atoms", "method", "mode", "arm"))
         ):
             raise ValueError(f"invalid completed outcome {name}")
@@ -141,7 +150,7 @@ def read_attempt(files, formal, source, geometry_digest, build_sha=None):
             key = (row["atoms"], row["method"], row["mode"], row["arm"], row["repeat"])
             if key in observations:
                 raise ValueError(f"duplicate formal population {key}")
-            observations[key] = (row, raw["samples"][0])
+            observations[key] = ({**row, "gpu_uuid": gpu_uuid}, raw["samples"][0])
     return observations
 
 
@@ -164,6 +173,15 @@ def summarize(observations, oracles, source):
                     for repeat in range(REPEATS)
                     if all((*key, arm, repeat) in observations for arm in ARMS)
                 ]
+                devices = {
+                    observations[(*key, arm, repeat)][0]["gpu_uuid"]
+                    for repeat in repeats
+                    for arm in ARMS
+                }
+                if len(devices) > 1:
+                    raise ValueError(
+                        f"paired observations span multiple GPUs for {key}"
+                    )
                 item["paired_repeats"] = len(repeats)
                 cross_engine = [
                     errors(
@@ -247,11 +265,7 @@ def main():
     observations = {}
     failures = []
     build_path = directory / "build-raw.json.xz"
-    build_sha = (
-        checksum(read_bundle(build_path)["build.json"])
-        if build_path.is_file()
-        else None
-    )
+    build_text = read_bundle(build_path)["build.json"] if build_path.is_file() else None
     for shard in ("main", "large"):
         raw_files = {}
         for path in sorted(directory.glob(f"gpu-{shard}-*.json.xz")):
@@ -261,7 +275,7 @@ def main():
                 raw_files[name] = contents
         if raw_files:
             shard_observations = read_attempt(
-                raw_files, True, source, geometry_digest, build_sha
+                raw_files, True, source, geometry_digest, build_text
             )
             campaign = json.loads(raw_files["campaign.json"])
             for row in campaign["rows"]:
@@ -285,7 +299,7 @@ def main():
                         "last_stage": row.get("last_stage"),
                         "subprocess_seconds": row.get("subprocess_seconds"),
                         "peak_mib": row["memory"]["peak_used_bytes"] / 2**20
-                        if "memory" in row
+                        if row.get("memory")
                         else None,
                     }
                 )

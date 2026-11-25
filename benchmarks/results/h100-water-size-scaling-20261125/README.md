@@ -82,10 +82,33 @@ python "$results/replay.py"
 ```
 
 [replay.py](replay.py) checks the retained bytes and regenerates the timing and
-accuracy tables. The speed ratio is the GPU4PySCF median divided by the
+accuracy tables. [master-drivers.json.xz](master-drivers.json.xz) holds the
+exact scripts used for acquisition. The maintained drivers include subsequent
+review fixes to input verification, cleanup and interruption handling. The speed ratio is the GPU4PySCF median divided by the
 GenerativeQC median over jointly completed repeats of the same method, route,
 geometry and device. Reported ratios characterize these samples and fixed
 geometries.
+
+## Direct path diagnostics
+
+The source-matched [native component trace](trace-hf.json.xz) recorded 12 native
+SCF iterations at 96 atoms and 33 at 240 atoms. The 96-atom diagnostic used the
+Hückel guess. At 240 atoms the initial-guess work receipt records
+`budget_skipped`. This is a change in the observed initialization route.
+
+The [Nsight census](trace-nsys.json.xz) covers two additional diagnostic
+GenerativeQC endpoints. For HF Direct at 240 atoms, the union of CUDA kernel
+intervals was 370.777 s. Generated RHF Fock kernels occupied 289.263 s and the
+bounded force-wave kernel occupied 62.925 s. At 96 atoms for ωB97M-V Direct,
+the kernel union was 94.718 s. The three canonical J/K kernels accounted for
+43.279 s, generated Fock kernels for 13.385 s, and the two named Direct
+force kernels for 20.376 s. The comparison uses the unprofiled process timings.
+
+The original QDSTRM hashes were recorded before import. The first importer run
+altered the two QDSTRM streams in place. The post-import streams, Nsight reports
+and SQLite databases are retained outside Git, and their identities and
+import/export output are archived with the kernel census. The maintained
+converter works from a temporary copy.
 
 ## Earlier revision
 

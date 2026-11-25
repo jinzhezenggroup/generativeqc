@@ -1,6 +1,7 @@
 """Cold-only calls through the pinned paper drivers on the new geometries."""
 
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import os
@@ -115,13 +116,17 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
+    if args.arm == "cpu" and args.mode != "direct":
+        parser.error("the independent CPU oracle uses Direct SCF")
     args.inputs = args.root / "inputs"
     args.force_tile_points = None
     args.warm_repeats = 0
     source = json.loads((args.root / "source.json").read_text())
-    geometry = json.loads((args.root / "geometries.json").read_text())["cases"][
-        str(args.atoms)
-    ]["geometry_bohr"]
+    geometry_bytes = (args.root / "geometries.json").read_bytes()
+    geometry_digest = hashlib.sha256(geometry_bytes).hexdigest()
+    if geometry_digest != source["geometry_sha256"]:
+        raise ValueError("geometry differs from the frozen source manifest")
+    geometry = json.loads(geometry_bytes)["cases"][str(args.atoms)]["geometry_bohr"]
     if args.output.exists():
         raise FileExistsError(args.output)
     record = {
@@ -132,7 +137,7 @@ def main():
         "atoms": args.atoms,
         "source_revision": source["revision"],
         "paper_driver_sha256": paper.digest(Path(paper.__file__)),
-        "geometry_sha256": paper.digest(args.root / "geometries.json"),
+        "geometry_sha256": geometry_digest,
         "orbital_basis": "def2-SVP",
         "basis_representation": "spherical",
         "charge": 0,

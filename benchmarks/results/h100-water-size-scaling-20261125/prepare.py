@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
+import tempfile
 
 from build import source_identity
 from geometry import generate
@@ -35,8 +36,8 @@ def published(repository, name):
     return json.loads(lzma.decompress(packed))
 
 
-def stage(repository, ergo, root):
-    root.mkdir(parents=True, exist_ok=False)
+def write_stage(repository, ergo, root):
+    root.mkdir()
     old = published(repository, "provenance")
     inputs = published(repository, "inputs")["files"]
     (root / "inputs").mkdir()
@@ -105,6 +106,12 @@ def stage(repository, ergo, root):
         },
         "historical_inputs_revision": COHORT_REVISION,
     }
+    pinned = json.loads((HERE / "source.json").read_text())
+    for key, actual in source.items():
+        if pinned[key] != actual:
+            raise ValueError(
+                f"reconstructed {key} differs from the published source pin"
+            )
     (root / "source.json").write_bytes(plain(source))
     (root / "paper-config.json").write_bytes(
         plain(old["reacquisition_launchers"]["campaign-config"])
@@ -115,9 +122,25 @@ def stage(repository, ergo, root):
         "diagnose.py",
         "endpoint.py",
         "geometry.py",
+        "nsys_probe.py",
+        "nsys_reduce.py",
         "run_cpu.sh",
     ):
         shutil.copyfile(HERE / name, root / name)
+
+
+def stage(repository, ergo, root):
+    if root.exists():
+        raise FileExistsError(root)
+    root.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=f".{root.name}-", dir=root.parent
+    ) as directory:
+        staged = Path(directory) / "source-stage"
+        write_stage(repository, ergo, staged)
+        if root.exists():
+            raise FileExistsError(root)
+        staged.rename(root)
 
 
 if __name__ == "__main__":
