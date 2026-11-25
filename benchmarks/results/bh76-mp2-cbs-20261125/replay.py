@@ -173,13 +173,38 @@ def metric(rows: list[dict], field: str, population: int) -> dict:
     }
 
 
+def failure_reason(row: dict) -> str:
+    if row["status"] != "failed":
+        return row["status"]
+    message = row["error"].lower()
+    if "supports only l<=" in message:
+        return "angular_momentum_refusal"
+    if "work-policy rejection" in message:
+        return "correlation_work_policy"
+    if "memory budget" in message or "numeric capacity" in message:
+        return "numeric_memory_refusal"
+    if "requires finite symmetric ao inputs" in message:
+        return "df_eigensolve_input_refusal"
+    if "scf_not_converged" in message or "scf did not converge" in message:
+        return "scf_nonconvergence"
+    if "ccsd did not converge" in message:
+        return "ccsd_nonconvergence"
+    return "other_error"
+
+
 def endpoint_stats(rows: list[dict], expected: int) -> dict:
     status_counts = Counter(row["status"] for row in rows)
+    failure_counts = Counter(
+        failure_reason(row)
+        for row in rows
+        if row["status"] in ("failed", "process_failed", "timeout")
+    )
     times = [row["wall_seconds"] for row in rows if row["status"] == "ok"]
     return {
         "expected": expected,
         "missing": expected - len(rows),
         "outcomes": dict(sorted(status_counts.items())),
+        "failure_reasons": dict(sorted(failure_counts.items())),
         "wall_seconds": {
             "min": min(times),
             "median": median(times),

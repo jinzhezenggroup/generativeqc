@@ -21,10 +21,10 @@
     "project": "CQ-NexChem",
     "workload": "H100",
     "rate_points_per_gpu_hour": 1,
-    "scheduled_to_finish_or_stop_gpu_hours": null,
-    "container_start_to_finish_or_stop_gpu_hours": null,
+    "scheduled_to_finish_or_stop_gpu_hours": 5.914444444444444,
+    "container_start_to_finish_or_stop_gpu_hours": 5.835555555555556,
     "estimated_cpu_hours": null,
-    "estimated_points": null
+    "estimated_points": 5.914444444444444
   },
   "gqc-3168-htbh38-1125a": {
     "project": "CQ-NexChem",
@@ -68,7 +68,7 @@
     "rate_points_per_gpu_hour": 0,
     "scheduled_to_finish_or_stop_gpu_hours": null,
     "container_start_to_finish_or_stop_gpu_hours": null,
-    "estimated_cpu_hours": null,
+    "estimated_cpu_hours": 5.691111111111111,
     "estimated_points": 0.0
   }
 }
