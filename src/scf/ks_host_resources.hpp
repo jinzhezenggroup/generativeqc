@@ -352,6 +352,14 @@ class KsHostFleetResources {
     return item;
   }
 
+  /** Charge additional retained providers without changing electronic component totals. */
+  void add_retained(std::uint64_t bytes) {
+    const auto retained = checked_sum(retained_, bytes);
+    const auto peak = checked_sum(retained, workspace_);
+    retained_ = retained;
+    peak_ = peak;
+  }
+
   /** Twelve persistent component totals, then retained/workspace/peak bytes. */
   std::array<std::uint64_t, 15> inventory() const {
     std::array<std::uint64_t, 15> result{};

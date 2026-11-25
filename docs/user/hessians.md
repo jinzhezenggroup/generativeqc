@@ -93,10 +93,25 @@ both spin densities and their coupled response. Python retains the previous
 PBE0 RKS route when the package lacks the linked binding; PBE0 UKS requires
 the linked owner. For linked CPU endpoints, a Python
 `ResourceBudget` composes the declared SCF and correction peaks with the
-native derivative reservation. It rejects a host budget below the native
-mandatory floor before SCF. Explicit derivative numerical caps are also checked
-against that floor before SCF. Optional schedules and solver/work limits can
-still refuse after SCF. A resource refusal does not select the Python derivative.
+native derivative reservation. The native planner rejects a host budget below
+the mandatory peak before SCF and selects optional derivative capacity from the
+effective host headroom, up to the derivative numerical cap. A prepared HVP
+uses the admitted fleet inventory without changing its providers. Explicit
+derivative numerical caps are checked against the floor before SCF. Optional
+schedules and solver/work limits can still refuse after SCF. A resource refusal
+does not select the Python derivative. This plan alone is not a shared lease.
+To share a host pool for an admitted prepared Direct FP64 batch,
+pass `host_resources=pool` and a positive `host_hessian_workspace_bytes` to
+`Calculator.prepare_batch`. The linked named calculation must not use a
+preliminary guess or incremental J/K. Explicit packed ERIs require real
+spherical s/p/d/f AOs. The lease counts their actual retained values;
+`cpu_packed_eri_maximum_bytes` remains a separate fleet-wide ceiling. Admitted
+scalar ECPs count modeled primal setup workspace without changing derivative
+method, byte, or work admission. The lease includes retained providers and
+serialized workspace; execution applies the smaller of the lease's derivative
+capacity and the call's numerical limit. The leased
+batch supports energy replay and prepared HVP, not force replay or standalone
+orbital export. Closing the pool handle does not revoke the batch's lease.
 Export scratch, implicit BLAS workspace, caller storage and process RSS are
 outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for

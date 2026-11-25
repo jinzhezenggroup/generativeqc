@@ -11,8 +11,10 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/ks_host_hessian.hpp"
+#include "methods/method.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/df_progress_trace.hpp"
+#include "runtime/host_resource_ledger.hpp"
 
 #if GENERATIVEQC_HAS_HOST_HESSIAN
 #include "dft/host_ks_nuclear_hessian.hpp"
@@ -271,7 +273,7 @@ std::size_t minimum_bytes_for_shape(const core::System& system, std::size_t aos,
 
 generativeqc_ks_host_hessian_receipt_v1 execute(
     generativeqc_batch& batch, std::size_t index,
-    const generativeqc_ks_host_hessian_options_v1& options, std::span<const double> external,
+    const generativeqc_ks_host_hessian_options_v1& requested, std::span<const double> external,
     std::span<double> output, const generativeqc_ks_host_hessian_receipt_v1* receipt,
     std::size_t recycle_width, bool sequential) {
   const auto started = std::chrono::steady_clock::now();
@@ -292,8 +294,11 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
           detail);
   reject_sources(output.data(), output.size_bytes(), source);
   reject_sources(receipt, sizeof(*receipt), source);
-  reject_sources(&options, sizeof(options), source);
+  reject_sources(&requested, sizeof(requested), source);
   reject_sources(external.data(), external.size_bytes(), source);
+  auto options = requested;
+  if (batch.cpu_hessian_workspace_bytes)
+    options.numeric_bytes = std::min(options.numeric_bytes, batch.cpu_hessian_workspace_bytes);
   reject_sources(options.expected_atoms,
                  size_mul(options.expected_atom_count, sizeof(generativeqc_atom)), source);
   const auto* binding = &live_binding(token, source);
@@ -657,6 +662,22 @@ generativeqc_ks_host_hessian_receipt_v1 execute(
 #endif
 }  // namespace
 
+void generativeqc::api::validate_host_hessian_system(const core::System& system,
+                                                     std::string_view identity) {
+#if GENERATIVEQC_HAS_HOST_HESSIAN
+  methods::named_ks::Dispersion correction;
+  if (const auto* binding = linked_program(identity, correction)) {
+    validate_linked_system(system, *binding, correction);
+    return;
+  }
+#else
+  (void)system;
+  (void)identity;
+#endif
+  throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                             "CPU Hessian has no exact linked MethodIR");
+}
+
 extern "C" std::uint32_t generativeqc_ks_hessian_cpu_version_v1() {
   return GENERATIVEQC_HAS_HOST_HESSIAN ? 1 : 0;
 }
@@ -752,6 +773,8 @@ extern "C" generativeqc_status generativeqc_ks_hvp_cpu_prepared_minimum_bytes_v1
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 #if GENERATIVEQC_HAS_HOST_HESSIAN
     using namespace generativeqc;
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     dft::CudaKsFinalStateToken token;
     std::string detail;
     require(methods::detail::dft_final_state_token(*batch->plan, index, token, detail), detail);
@@ -871,6 +894,8 @@ generativeqc_status dispatch_cpu_hessian(generativeqc_batch* batch, std::size_t 
                                   [](double value) { return std::isfinite(value); }))
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 #if GENERATIVEQC_HAS_HOST_HESSIAN
+    auto host_workspace =
+        batch->host_lease ? batch->host_lease->use_workspace() : std::unique_lock<std::mutex>{};
     const auto result = execute(*batch, index, *options, {direction, direction_count},
                                 {output, output_count}, receipt, recycle_width, sequential);
     *receipt = result;
@@ -929,6 +954,10 @@ extern "C" generativeqc_status generativeqc_ks_orbitals_cpu_v1(
   if (!batch || !batch->context || !batch->plan || !options || !receipt)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  if (batch->cpu_hessian_workspace_bytes) {
+    batch->context->last_detail = "orbital export is outside the admitted CPU Hessian host budget";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   if (!generativeqc::api::valid_descriptor(options) ||
       !generativeqc::api::valid_descriptor(receipt))
     return GENERATIVEQC_STATUS_ABI_MISMATCH;

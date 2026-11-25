@@ -125,7 +125,10 @@ generativeqc_status generativeqc_ks_batch_supported_properties_v1(
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   const auto value = batch->plan->supported_properties(index);
   if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  *output = batch->cpu_df_host_properties ? *value & batch->cpu_df_host_properties : *value;
+  const auto admitted = batch->cpu_hessian_workspace_bytes
+                            ? static_cast<generativeqc_property_flags>(GENERATIVEQC_PROPERTY_ENERGY)
+                            : batch->cpu_df_host_properties;
+  *output = admitted ? *value & admitted : *value;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -136,12 +139,18 @@ generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(batch->initial_guesses[index], out);
 }
 
+struct HostHessianAdmission {
+  const generativeqc_host_resources& resources;
+  std::uint64_t limit, derivative_workspace;
+};
+
 static generativeqc_status prepare_batch(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
     const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
     generativeqc_batch** batch, const generativeqc_named_ks_descriptor* named,
-    const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr) {
+    const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr,
+    const HostHessianAdmission* hessian_admission = nullptr) {
   generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
@@ -164,11 +173,15 @@ static generativeqc_status prepare_batch(
     }
     generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
-    std::optional<generativeqc::api::CpuDfKsHostAdmission> cpu_host_admission;
+    std::optional<generativeqc::api::CpuKsHostAdmission> cpu_host_admission;
     if (named) {
       named_inputs.emplace(*descriptor, named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
-      if (named_inputs->selection.cpu_df_host_properties)
+      if (hessian_admission)
+        cpu_host_admission.emplace(*named_inputs, context->state.executed_backend,
+                                   hessian_admission->resources, hessian_admission->limit,
+                                   hessian_admission->derivative_workspace);
+      else if (named_inputs->selection.cpu_df_host_properties)
         cpu_host_admission.emplace(*named_inputs, context->state.executed_backend);
     }
 
@@ -205,7 +218,10 @@ static generativeqc_status prepare_batch(
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
     candidate->host_lease = host_lease;
-    if (cpu_host_admission) candidate->cpu_df_host_properties = cpu_host_admission->properties();
+    if (hessian_admission)
+      candidate->cpu_hessian_workspace_bytes = hessian_admission->derivative_workspace;
+    else if (cpu_host_admission)
+      candidate->cpu_df_host_properties = cpu_host_admission->properties();
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
@@ -255,6 +271,21 @@ generativeqc_status generativeqc_batch_prepare_named_ks_v1(
   if (batch) *batch = nullptr;
   if (!name) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name);
+}
+
+generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_host_resources* resources,
+    uint64_t maximum_bytes, uint64_t derivative_workspace_bytes, generativeqc_batch** batch) {
+  if (batch) *batch = nullptr;
+  if (!resources || !name || !derivative_workspace_bytes ||
+      derivative_workspace_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const HostHessianAdmission host{*resources, maximum_bytes, derivative_workspace_bytes};
+  return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name, nullptr,
+                       &host);
 }
 
 generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1(
@@ -908,6 +939,10 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
+    if (compute_forces && batch->cpu_hessian_workspace_bytes) {
+      batch->context->last_detail = "force replay is outside the admitted CPU Hessian host budget";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if (!generativeqc::api::cpu_df_host_replay_allowed(batch->cpu_df_host_properties,
                                                        compute_forces)) {
       batch->context->last_detail = "replay is outside the admitted CPU DF KS host budget";
