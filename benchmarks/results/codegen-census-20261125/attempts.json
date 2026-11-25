@@ -1,6 +1,6 @@
 {
   "source": "d154546d2d6629ab8c865ca08f680002d68b4152",
-  "note": "Initial census exited nonzero due to output inventory and byte comparison checks. Both generators themselves exited successfully.",
+  "note": "These diagnostics apply to the superseded d154546d2 comparison run. Its initial census exited nonzero due to output inventory and byte comparison checks. Both generators themselves exited successfully. The primary census uses 22f72d069.",
   "initial_diagnostics": [
     {
       "id": "quadrature_cuda",

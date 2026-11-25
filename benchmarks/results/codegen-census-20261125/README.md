@@ -1,22 +1,22 @@
-# Generated source census at `d154546d2`
+# Generated source census at `22f72d069`
 
 This source-only audit for [#3171](https://github.com/jinzhezenggroup/generativeqc/issues/3171)
 replayed 41 generator commands at
-[`d154546d2d6629ab8c865ca08f680002d68b4152`](https://github.com/jinzhezenggroup/generativeqc/commit/d154546d2d6629ab8c865ca08f680002d68b4152).
-The selected inventory contains 416 distinct C++/CUDA artifacts and 4,168,879
+[`22f72d0692a760c2892cd7791022584d9ae1c3e5`](https://github.com/jinzhezenggroup/generativeqc/commit/22f72d0692a760c2892cd7791022584d9ae1c3e5).
+The selected inventory contains 419 distinct C++/CUDA artifacts and 4,197,040
 nonblank generated lines, including three checked-in headers verified by replay.
 The census records source emission and historical qualification. It makes no new
 endpoint timing, numerical accuracy, or code-maintenance claims.
 
-| Selected method-family sources | Spec / IR | Hand-written runtime | Compiler support | Generated total | Derivative / response files | Mixed files |
+| Selected method-family sources | Spec / IR | Hand-written runtime | Compiler support | Generated total | Lines in derivative / response files | Lines in mixed files |
 |---|---:|---:|---:|---:|---:|---:|
-| Direct HF energy and forces | 1,634 | 19,211 | 7,946 | 1,480,071 | 858,187 | 293,597 |
-| Direct DFT energy and forces | 3,805 | 35,640 | 11,399 | 1,623,465 | 948,402 | 339,060 |
-| DF HF energy and forces | 1,047 | 19,984 | 5,041 | 3,357,591 | 750,851 | 2,023,098 |
-| DF DFT energy and forces | 3,218 | 36,413 | 8,494 | 3,500,985 | 841,066 | 2,068,561 |
-| DF-MP2 energy and forces | 2,049 | 27,232 | 5,651 | 3,364,362 | 753,649 | 2,026,536 |
-| DF-CCSD(T) energy and forces | 2,696 | 28,563 | 5,950 | 3,434,852 | 784,779 | 2,033,457 |
-| CBS composite with full-DF components | 2,767 | 33,626 | 6,193 | 3,434,881 | 784,779 | 2,033,457 |
+| Direct HF energy and forces | 1,634 | 19,344 | 7,960 | 1,480,071 | 858,187 | 293,597 |
+| Direct DFT energy and forces | 3,859 | 36,212 | 11,786 | 1,651,626 | 969,042 | 346,576 |
+| DF HF energy and forces | 1,048 | 19,995 | 5,055 | 3,357,591 | 750,851 | 2,023,098 |
+| DF DFT energy and forces | 3,273 | 36,863 | 8,881 | 3,529,146 | 861,706 | 2,076,077 |
+| DF-MP2 energy and forces | 2,050 | 27,243 | 5,665 | 3,364,362 | 753,649 | 2,026,536 |
+| DF-CCSD(T) energy and forces | 2,697 | 28,574 | 5,964 | 3,434,852 | 784,779 | 2,033,457 |
+| CBS composite with full-DF components | 2,768 | 33,637 | 6,207 | 3,434,881 | 784,779 | 2,033,457 |
 
 All table cells are nonblank **lines**. The last two columns count lines in
 artifacts dedicated to derivatives/response or containing a mix of roles,
@@ -53,7 +53,11 @@ images, the full named/libxc registry and stationary profile inventory,
 unrestricted post-HF implementations, runtime JIT inventories, and unrelated
 methods. Direct AOT uses the accepted shell manifest, one SM90 real image and
 eight stable shards. The native stationary XC sample is RKS/UKS for PBE0,
-r²SCAN and ωB97M-V. The DF shell invocation covers all 80 emitted orbital
+r²SCAN and ωB97M-V. The NVIDIA native force build at this revision also
+emits variational r²SCAN value and force artifacts. The sample includes these
+with the base r²SCAN artifacts and includes the generated r²SCAN+rVV10
+parameter header. The opt-in variational M06-2X and MN15 routes and Hessian
+packages are outside the audit. The DF shell invocation covers all 80 emitted orbital
 s/p/d/f and auxiliary s/p/d/f/g combinations.
 
 - **Spec / IR** counts the selected first-party definitions of mathematical
@@ -122,7 +126,7 @@ Run from the PR checkout with Git and CPython 3.12. Set distinct paths for
 `PIN_CHECKOUT` and `CENSUS_VENV` outside that checkout.
 
 ```sh
-git worktree add --detach "$PIN_CHECKOUT" d154546d2d6629ab8c865ca08f680002d68b4152
+git worktree add --detach "$PIN_CHECKOUT" 22f72d0692a760c2892cd7791022584d9ae1c3e5
 python3.12 -m venv "$CENSUS_VENV"
 "$CENSUS_VENV/bin/python" -m pip install numpy==2.4.6 array-api-compat==1.15.0 \
   typing-extensions==4.15.0 clang-format==23.1.5
@@ -137,11 +141,14 @@ artifact names against the allowlist. It records both raw and formatted
 replay hashes for the checked-in MP2 headers, and uses the checked-in line
 counts. An unsuccessful, timed-out, or mismatched in-scope generation stays
 in the JSON and produces a nonzero exit status. [attempts.json](attempts.json)
-retains the initial quadrature inventory omission and the pre-formatting
-MP2 byte mismatches. The later run reconciled both. Two independent replays produced identical
-JSON bytes. The committed gzip preserves that JSON without resampling. Its
+retains the quadrature inventory omission and pre-formatting MP2 byte
+mismatches from the first audit at `d154546d2`. Those issues were reconciled
+before the master-revision replay. The
+[superseded census](https://github.com/jinzhezenggroup/generativeqc/blob/4ef20a26420024beb28206afc2bf09b6ba624aad/benchmarks/results/codegen-census-20261125/README.md)
+is available in the PR's earlier commit for comparison. Two independent
+master-revision replays produced identical JSON bytes. The committed gzip preserves that JSON without resampling. Its
 uncompressed SHA-256 is
-`08c17f00802ee3d74e19714d0a8010e86de7ac00c2c0a5a33525d79a0cb74dc8`.
+`26d79f8b1605d8fba7a294a5d7e87e8699c48d3a379056b9c32bdccda7fa693a`.
 
 Host provenance is Apple M5 Pro, Darwin arm64, macOS 26.6 (25G72), Git 2.56.0
 and CPython 3.12.14. Exact package versions and the Git tree ID are in
