@@ -4,9 +4,13 @@
 -
 -from __future__ import annotations
 -
-@@ -22 +18,0 @@
+@@ -16 +12,0 @@
+-import tarfile
+@@ -20 +15,0 @@
+-from contextlib import suppress
+@@ -24 +18,0 @@
 -from typing import TYPE_CHECKING, Any
-@@ -24,10 +19,0 @@
+@@ -26,10 +19,0 @@
 -Record = dict[str, Any]
 -Atoms = list[tuple[int, list[float]]]
 -
@@ -17,32 +21,35 @@
 -
 -    Endpoint = tuple[float, ndarray | None, float, Record]
 -
-@@ -39 +25 @@
+@@ -41,4 +25 @@
 -REVISION = "22f72d0692a760c2892cd7791022584d9ae1c3e5"
+-NATIVE_SOURCE_IDENTITY = (
+-    "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2"
+-)
 +REVISION = "d154546d2d6629ab8c865ca08f680002d68b4152"
-@@ -43 +29 @@
+@@ -48 +29 @@
 -def write(path: Path, value: Record) -> None:
 +def write(path, value):
-@@ -49 +35 @@
+@@ -54 +35 @@
 -def digest(path: Path) -> str:
 +def digest(path):
-@@ -54 +40 @@
+@@ -59 +40 @@
 -def basis_file(fixture: Record, role: str) -> Path:
 +def basis_file(fixture, role):
-@@ -62,3 +48 @@
+@@ -67,3 +48 @@
 -def native(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def native(atoms, fitted, forces, args, fixture):
-@@ -85 +69 @@
+@@ -90 +69 @@
 -        correlation_memory_budget_bytes=args.correlation_budget_gib << 30,
 +        correlation_memory_budget_bytes=32 << 30,
-@@ -88,3 +72 @@
+@@ -93,3 +72 @@
 -        atoms,
 -        charge=0,
 -        multiplicity=1,
 +        atoms, charge=0, multiplicity=1,
-@@ -96,16 +78,6 @@
+@@ -101,16 +78,6 @@
 -    return (
 -        value.energy,
 -        value.forces,
@@ -65,15 +72,15 @@
 +        "rhf_energy": value.correlation.reference_energy, "hf_cycles": value.iterations,
 +        "hf_density_rms": value.density_rms, "executed_backend": value.executed_backend,
 +    }
-@@ -114 +86 @@
+@@ -119 +86 @@
 -def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
 +def shells(fixture, role):
-@@ -119,3 +91 @@
+@@ -124,3 +91 @@
 -def psi4_basis(
 -    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
 -) -> None:
 +def psi4_basis(psi4, fixture, role, name, option):
-@@ -129,8 +99,3 @@
+@@ -134,8 +99,3 @@
 -                lines.extend(
 -                    f"{Decimal(e):f} {Decimal(c):f}"
 -                    for e, c in zip(
@@ -85,10 +92,10 @@
 +                lines.extend(f"{Decimal(e):f} {Decimal(c):f}" for e, c in zip(
 +                    shell["exponents"], contraction, strict=True,
 +                ))
-@@ -141 +106 @@
+@@ -146 +106 @@
 -def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
 +def pyscf_basis(fixture):
-@@ -144,11 +109,4 @@
+@@ -149,11 +109,4 @@
 -            [
 -                shell["angular_momentum"],
 -                *[
@@ -104,20 +111,20 @@
 +                [float(e), *map(float, c)]
 +                for e, c in zip(shell["exponents"], zip(*shell["coefficients"]), strict=True)
 +            ]]
-@@ -161,3 +119 @@
+@@ -166,3 +119 @@
 -def psi4_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def psi4_endpoint(atoms, fitted, forces, args, fixture):
-@@ -172,2 +128 @@
+@@ -177,2 +128 @@
 -        "0 1\n"
 -        + "\n".join(
 +        "0 1\n" + "\n".join(
-@@ -176,2 +131 @@
+@@ -181,2 +131 @@
 -        )
 -        + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
 +        ) + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
-@@ -180,5 +134,2 @@
+@@ -185,5 +134,2 @@
 -        "basis": orbital_name,
 -        "puream": True,
 -        "reference": "rhf",
@@ -125,7 +132,7 @@
 -        "scf_type": "disk_df" if fitted else "pk",
 +        "basis": orbital_name, "puream": True, "reference": "rhf",
 +        "freeze_core": False, "scf_type": "disk_df" if fitted else "pk",
-@@ -187,6 +138,3 @@
+@@ -192,6 +138,3 @@
 -        "e_convergence": 1e-12,
 -        "d_convergence": 1e-10,
 -        "maxiter": 200,
@@ -135,11 +142,11 @@
 +        "e_convergence": 1e-12, "d_convergence": 1e-10,
 +        "maxiter": 200, "ints_tolerance": 1e-14,
 +        "ccenergy__e_convergence": 1e-12, "ccenergy__r_convergence": 1e-10,
-@@ -194,2 +142 @@
+@@ -199,2 +142 @@
 -        "dfocc__e_convergence": 1e-12,
 -        "dfocc__r_convergence": 1e-10,
 +        "dfocc__e_convergence": 1e-12, "dfocc__r_convergence": 1e-10,
-@@ -198,5 +145,2 @@
+@@ -203,5 +145,2 @@
 -        settings.update(
 -            df_basis_scf=auxiliary_name,
 -            df_basis_cc=auxiliary_name,
@@ -147,12 +154,12 @@
 -        )
 +        settings.update(df_basis_scf=auxiliary_name, df_basis_cc=auxiliary_name,
 +                        df_fitting_condition=1e-10)
-@@ -205,3 +149 @@
+@@ -210,3 +149 @@
 -        gradient, wfn = psi4.gradient(
 -            "ccsd(t)", molecule=molecule, dertype=1, return_wfn=True
 -        )
 +        gradient, wfn = psi4.gradient("ccsd(t)", molecule=molecule, dertype=1, return_wfn=True)
-@@ -215,5 +157,2 @@
+@@ -220,5 +157,2 @@
 -    if any(
 -        abs(actual_geometry[i, a] - x) > 1e-12
 -        for i, (_, xyz) in enumerate(atoms)
@@ -160,7 +167,7 @@
 -    ):
 +    if any(abs(actual_geometry[i, a] - x) > 1e-12
 +           for i, (_, xyz) in enumerate(atoms) for a, x in enumerate(xyz)):
-@@ -230,12 +169,4 @@
+@@ -235,12 +169,4 @@
 -    return (
 -        energy,
 -        force,
@@ -177,12 +184,12 @@
 +        "settings": settings, "nao": nbf, "auxiliary_counts": auxiliary_counts,
 +        "electrons": wfn.nalpha() + wfn.nbeta(), "rhf_energy": psi4.variable("SCF TOTAL ENERGY"),
 +    }
-@@ -244,3 +175 @@
+@@ -249,3 +175 @@
 -def pyscf_endpoint(
 -    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
 -) -> Endpoint:
 +def pyscf_endpoint(atoms, fitted, forces, args, fixture):
-@@ -253,11 +182,2 @@
+@@ -258,11 +182,2 @@
 -    mol = gto.M(
 -        atom=atoms,
 -        unit="Bohr",
@@ -196,13 +203,13 @@
 -    )
 +    mol = gto.M(atom=atoms, unit="Bohr", basis=orbitals, cart=False, symmetry=False,
 +                charge=0, spin=0, max_memory=args.memory_mib, verbose=4)
-@@ -283,4 +203 @@
+@@ -288,4 +203 @@
 -            solver,
 -            eris=eris,
 -            max_cycle=150,
 -            tol=1e-10,
 +            solver, eris=eris, max_cycle=150, tol=1e-10,
-@@ -292,15 +209,7 @@
+@@ -297,15 +209,7 @@
 -    return (
 -        energy,
 -        force,
@@ -225,37 +232,59 @@
 +        "ccsd_cycles": getattr(solver, "cycles", None),
 +        "ccsdt_lambda_converged": True if forces else None,
 +    }
-@@ -309 +218 @@
--def native_provenance(source: Path) -> Record:
+@@ -314,19 +218 @@
+-def source_revision(source: Path, archive: Path | None) -> str:
+-    if (source / ".git").exists():
+-        revision = subprocess.check_output(
+-            ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"], text=True
+-        ).strip()
+-        if subprocess.run(
+-            ["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], check=False
+-        ).returncode:
+-            raise RuntimeError(f"Source checkout has tracked changes: {source}")
+-    else:
+-        archive = archive or source.parent / f"source-{REVISION[:5]}.tar.gz"
+-        with tarfile.open(archive) as staged:
+-            revision = staged.pax_headers.get("comment")
+-    if revision != REVISION:
+-        raise RuntimeError(f"Source revision differs: {revision} != {REVISION}")
+-    return revision
+-
+-
+-def native_provenance(source: Path, archive: Path | None) -> Record:
 +def native_provenance(source):
-@@ -318,2 +227 @@
+@@ -335 +220,0 @@
+-    revision = source_revision(source, archive)
+@@ -342,4 +227 @@
+-    if expected != NATIVE_SOURCE_IDENTITY:
+-        raise RuntimeError(f"Source inputs differ from pinned revision {revision}")
 -    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
 -    receipt_sha = digest(library)
 +    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
-@@ -325,6 +233,2 @@
+@@ -351,6 +233,2 @@
 -    return {
--        "source_revision": REVISION,
+-        "source_revision": revision,
 -        "source_identity": found,
 -        "library_sha256": receipt_sha,
 -        "native_input_count": len(inputs),
 -    }
 +    return {"source_revision": REVISION, "source_identity": found,
 +            "library_sha256": digest(library), "native_input_count": len(inputs)}
-@@ -333 +237 @@
+@@ -359 +237 @@
 -def worker(args: argparse.Namespace, label: str) -> None:
 +def worker(args, label):
-@@ -349 +252,0 @@
+@@ -375 +252,0 @@
 -
-@@ -372,3 +275 @@
+@@ -398,3 +275 @@
 -        energy, force, elapsed, work = endpoint(
 -            atoms, model == "df", not move, args, fixture
 -        )
 +        energy, force, elapsed, work = endpoint(atoms, model == "df", not move, args, fixture)
-@@ -379,2 +280 @@
+@@ -405,2 +280 @@
 -            force is None
 -            or len(force) != len(atoms)
 +            force is None or len(force) != len(atoms)
-@@ -384,9 +284,4 @@
+@@ -410,9 +284,4 @@
 -        record = {
 -            "status": "completed",
 -            "energy_hartree": float(energy),
@@ -269,7 +298,7 @@
 +                  "force_hartree_per_bohr": force, "endpoint_seconds": elapsed,
 +                  "versions": versions, "work": work}
 +    except Exception as exc:
-@@ -395,10 +290,2 @@
+@@ -421,10 +290,2 @@
 -    write(
 -        output,
 -        {
@@ -282,17 +311,17 @@
 -    )
 +    write(output, {**record, "case": case, "trial": trial, "arm": args.arm,
 +                   "displacement": diagnostic or None})
-@@ -407 +294 @@
+@@ -433 +294 @@
 -def cpu_model() -> str:
 +def cpu_model():
-@@ -414 +301 @@
+@@ -440 +301 @@
 -def hardware(args: argparse.Namespace) -> Record:
 +def hardware(args):
-@@ -416,2 +303 @@
+@@ -442,2 +303 @@
 -        "cpu_model": cpu_model(),
 -        "affinity": sorted(os.sched_getaffinity(0)),
 +        "cpu_model": cpu_model(), "affinity": sorted(os.sched_getaffinity(0)),
-@@ -420,24 +306,10 @@
+@@ -446,24 +306,10 @@
 -        "cgroup_memory": {
 -            str(path): path.read_text().strip()
 -            for path in (
@@ -327,7 +356,7 @@
 +            "SLURM_JOB_ID", "SLURM_STEP_ID", "SLURM_CPUS_PER_TASK", "GQC_QZ_JOB_NAME",
 +            "GQC_QZ_PROJECT", "CUDA_VISIBLE_DEVICES", "CUBLAS_WORKSPACE_CONFIG",
 +        )},
-@@ -447,8 +319,3 @@
+@@ -473,8 +319,3 @@
 -        info["gpu"] = subprocess.check_output(
 -            [
 -                "nvidia-smi",
@@ -339,10 +368,13 @@
 +        info["gpu"] = subprocess.check_output([
 +            "nvidia-smi", "--query-gpu=name,memory.total,driver_version,uuid",
 +            "--format=csv,noheader"], text=True).strip()
-@@ -461 +328 @@
+@@ -483 +324 @@
+-        info.update(native_provenance(args.source, args.source_archive))
++        info.update(native_provenance(args.source))
+@@ -487 +328 @@
 -def run(args: argparse.Namespace) -> None:
 +def run(args):
-@@ -468,16 +335,4 @@
+@@ -494,16 +335,4 @@
 -        raise RuntimeError(
 -            f"Requested CPU {args.expected_cpu}, found {info['cpu_model']}"
 -        )
@@ -363,23 +395,23 @@
 +    env = {**os.environ, **{key: str(args.threads) for key in (
 +        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
 +    )}, "PYTHONNOUSERSITE": "1"}
-@@ -485,3 +340 @@
+@@ -511,3 +340 @@
 -    labels = (
 -        [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
 -    )
 +    labels = [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
-@@ -492,3 +345 @@
+@@ -518,3 +345 @@
 -            for atom in range(5)
 -            for axis in range(3)
 -            for sign in (-1, 1)
 +            for atom in range(5) for axis in range(3) for sign in (-1, 1)
-@@ -496,4 +347 @@
+@@ -522,4 +347 @@
 -    write(
 -        args.output / "plan.json",
 -        {"labels": labels, "trial_timeout_seconds": args.timeout},
 -    )
 +    write(args.output / "plan.json", {"labels": labels, "trial_timeout_seconds": args.timeout})
-@@ -505,34 +353,7 @@
+@@ -531,40 +353,7 @@
 -        argv = [
 -            sys.executable,
 -            "-u",
@@ -401,11 +433,17 @@
 -                stderr=subprocess.STDOUT,
 -                start_new_session=True,
 -            )
+-            timed_out = False
 -            try:
 -                process.wait(timeout=args.timeout)
 -            except subprocess.TimeoutExpired:
--                os.killpg(process.pid, signal.SIGKILL)
--                process.wait()
+-                timed_out = True
+-            finally:
+-                if process.returncode is None:
+-                    with suppress(ProcessLookupError):
+-                        os.killpg(process.pid, signal.SIGKILL)
+-                    process.wait()
+-            if timed_out:
 -                write(
 -                    record,
 -                    {
@@ -421,7 +459,7 @@
 +                process = subprocess.Popen(
 +                    argv, env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
 +                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
-@@ -539,0 +361,7 @@
+@@ -571,0 +361,7 @@
 +                try:
 +                    process.wait(timeout=args.timeout)
 +                except subprocess.TimeoutExpired:
@@ -429,7 +467,7 @@
 +                    process.wait()
 +                    write(record, {"status": "timeout", "label": label,
 +                                   "arm": args.arm, "timeout_seconds": args.timeout})
-@@ -541,9 +369,2 @@
+@@ -573,9 +369,2 @@
 -            write(
 -                record,
 -                {
@@ -441,7 +479,7 @@
 -            )
 +            write(record, {"status": "worker_exit", "label": label,
 +                           "arm": args.arm, "returncode": process.returncode})
-@@ -552,8 +373 @@
+@@ -584,8 +373 @@
 -        print(
 -            "END",
 -            args.arm,
@@ -451,13 +489,15 @@
 -            flush=True,
 -        )
 +        print("END", args.arm, label, status, round(time.perf_counter() - start, 3), flush=True)
-@@ -563 +377 @@
+@@ -595 +377 @@
 -def main() -> None:
 +def main():
-@@ -569,3 +382,0 @@
+@@ -601,3 +382,0 @@
 -    p.add_argument(
 -        "--correlation-budget-gib", type=int, choices=range(1, 81), default=32
 -    )
-@@ -580 +391 @@
+@@ -611 +389,0 @@
+-    p.add_argument("--source-archive", type=Path)
+@@ -613 +391 @@
 -    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
 +    p.add_argument("--scratch", type=Path, default=Path("/tmp"))

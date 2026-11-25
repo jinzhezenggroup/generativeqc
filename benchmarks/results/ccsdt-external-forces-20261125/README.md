@@ -174,17 +174,23 @@ times, convergence/work metadata and displaced energies. `execution.json`
 binds the samples to the hardware, allocations, acquired rows and failure
 records. `provenance.json` contains source, package and platform provenance.
 
-`run.py` is the readable shared driver. Apply `gpu-measured-driver.patch`
-or `cpu-measured-driver.patch` to a copy in the same directory as
-`fixtures.json` and `basis/` to recover the exact measured bytes for the
-original H100 acquisitions or the standalone CPU references. `run.py` itself
-is the measured driver for the 72-GiB C5 recovery.
-The superseded driver can be recovered from the measured CPU copy by
-reversing `old-gpu-driver.patch`. The qz shell launchers record the build and
-worker commands. Install each CPU environment from its explicit Conda lock
-file, then run the recovered CPU driver on the appropriate allocation.
-For the conventional C5 recovery, run from the staged source workspace
-containing the built library, inputs and recovery driver.
+`run.py` is the shared driver for further acquisitions. It checks the revision
+of a clean Git checkout or reads the commit ID from the accompanying Git tar
+archive. It also verifies the staged native inputs against the pinned build
+identity and checks that identity against the loaded library. An archive
+staged beside `source/` defaults to `source-22f72.tar.gz`; pass
+`--source-archive` for a different location.
+
+To recover the exact measured driver bytes, apply the appropriate patch to a
+copy of `run.py` alongside `fixtures.json` and `basis/`.
+`gpu-measured-driver.patch` recovers the original master H100 driver,
+`gpu-recovery-measured-driver.patch` recovers the 72-GiB C5 driver, and
+`cpu-measured-driver.patch` recovers the independent CPU driver. Reverse
+`old-gpu-driver.patch` on the measured CPU copy to recover the superseded
+driver. Install each CPU environment from its explicit Conda lock file.
+The qz shell launchers record the build and worker commands. To reproduce the
+conventional C5 recovery, run from the staged source workspace containing the
+library, inputs and recovery driver.
 
 ```bash
 GQC_BENCHMARK_DRIVER=run.py bash qz-gpu-conventional-controls.sh run-c5-replay \

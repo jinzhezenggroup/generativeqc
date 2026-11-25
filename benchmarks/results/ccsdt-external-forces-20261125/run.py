@@ -13,9 +13,11 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import traceback
+from contextlib import suppress
 from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
@@ -37,6 +39,9 @@ AUX = "cc-pvdz-jkfit"
 ELEMENT = {1: "H", 6: "C", 7: "N", 8: "O"}
 STEPS = (0.001, 0.0005)
 REVISION = "22f72d0692a760c2892cd7791022584d9ae1c3e5"
+NATIVE_SOURCE_IDENTITY = (
+    "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2"
+)
 ARMS = ("native-conv", "native-df", "psi4-conv", "psi4-df", "pyscf-conv")
 
 
@@ -306,15 +311,36 @@ def pyscf_endpoint(
     )
 
 
-def native_provenance(source: Path) -> Record:
+def source_revision(source: Path, archive: Path | None) -> str:
+    if (source / ".git").exists():
+        revision = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"], text=True
+        ).strip()
+        if subprocess.run(
+            ["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], check=False
+        ).returncode:
+            raise RuntimeError(f"Source checkout has tracked changes: {source}")
+    else:
+        archive = archive or source.parent / f"source-{REVISION[:5]}.tar.gz"
+        with tarfile.open(archive) as staged:
+            revision = staged.pax_headers.get("comment")
+    if revision != REVISION:
+        raise RuntimeError(f"Source revision differs: {revision} != {REVISION}")
+    return revision
+
+
+def native_provenance(source: Path, archive: Path | None) -> Record:
     import ctypes
 
+    revision = source_revision(source, archive)
     path = source / "tools/generate_build_identity.py"
     spec = importlib.util.spec_from_file_location("source_identity", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     inputs = module._inventory(source, source / "cmake/GenerativeQCSourceIdentity.json")
     expected = module._source_identity(source, inputs)
+    if expected != NATIVE_SOURCE_IDENTITY:
+        raise RuntimeError(f"Source inputs differ from pinned revision {revision}")
     library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
     receipt_sha = digest(library)
     identity = ctypes.CDLL(str(library)).generativeqc_get_source_identity
@@ -323,7 +349,7 @@ def native_provenance(source: Path) -> Record:
     if found != expected:
         raise RuntimeError(f"Native source identity differs: {found} != {expected}")
     return {
-        "source_revision": REVISION,
+        "source_revision": revision,
         "source_identity": found,
         "library_sha256": receipt_sha,
         "native_input_count": len(inputs),
@@ -454,7 +480,7 @@ def hardware(args: argparse.Namespace) -> Record:
         ).strip()
         if len(info["gpu"].splitlines()) != 1 or "H100" not in info["gpu"]:
             raise RuntimeError(f"Expected one allocated H100, got {info['gpu']}")
-        info.update(native_provenance(args.source))
+        info.update(native_provenance(args.source, args.source_archive))
     return info
 
 
@@ -523,11 +549,17 @@ def run(args: argparse.Namespace) -> None:
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
+            timed_out = False
             try:
                 process.wait(timeout=args.timeout)
             except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
+                timed_out = True
+            finally:
+                if process.returncode is None:
+                    with suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+            if timed_out:
                 write(
                     record,
                     {
@@ -576,6 +608,7 @@ def main() -> None:
     p.add_argument("--fd-only", action="store_true")
     p.add_argument("--worker", help=argparse.SUPPRESS)
     p.add_argument("--source", type=Path)
+    p.add_argument("--source-archive", type=Path)
     p.add_argument("--expected-cpu")
     p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
     args = p.parse_args()
