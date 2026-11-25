@@ -130,6 +130,49 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             )
             assert diagnostic["d3_pair_visits"] == cpp["panel_d3_pair_visits"]
         if method == "pbe-d3(bj)-rks":
+            inventory_command = (cli, "resources", *command[1:], "--property", "hvp")
+            inventory = run(*inventory_command)
+            peak = inventory["peak_bytes"]["host"]
+            floor = inventory["derivative_inventory"]["minimum_numeric_bytes"]
+            for slack in (0, 4096):
+                host_flags = (
+                    "--host-bytes",
+                    str(2 * (peak + slack + 1024)),
+                    "--host-reserve-bytes",
+                    "1024",
+                    "--headroom-fraction",
+                    "0.5",
+                )
+                dry_run = run(*inventory_command, *host_flags)
+                action = run(*hvp_command, *host_flags)
+                observed = action["diagnostics"]["resource_admission"]
+                sizing = dry_run["derivative_inventory"]
+                assert observed["effective_host_limit_bytes"] == peak + slack
+                assert observed["minimum_host_peak_bytes"] == peak
+                assert (
+                    observed["selected_host_peak_bytes"]
+                    == sizing["selected_host_peak_bytes"]
+                    == peak + slack
+                )
+                assert (
+                    observed["derivative_numeric_cap_bytes"]
+                    == sizing["selected_numeric_cap_bytes"]
+                    == floor + slack
+                )
+                np.testing.assert_allclose(
+                    np.ravel(action["value"]), cpp["value"], atol=2e-8, rtol=0
+                )
+            shortage = subprocess.run(
+                (*hvp_command, "--host-bytes", str(peak - 1)),
+                env=runtime,
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+            assert shortage.returncode != 0 and not shortage.stdout
+            assert "allocation inventory exceeds host budget" in shortage.stderr
+        if method == "pbe-d3(bj)-rks":
             panel = np.stack(
                 (seed, -0.5 * seed, np.zeros_like(seed), seed[::-1], 2 * seed)
             )

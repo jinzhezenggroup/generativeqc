@@ -179,7 +179,11 @@ def test_prepared_hvp_admits_exact_fleet_budget() -> None:
             ks_options=KsOptions(grid=GridSpec(12, 6, 12)),
             resource_budget=ResourceBudget()
             if limit is None
-            else ResourceBudget(host_bytes=limit),
+            else ResourceBudget(
+                host_bytes=2 * (limit + 1024),
+                host_reserve_bytes=1024,
+                headroom_fraction=0.5,
+            ),
         )
 
     calculator = make()
@@ -201,15 +205,27 @@ def test_prepared_hvp_admits_exact_fleet_budget() -> None:
     )
     with make(exact).prepare_batch(systems) as batch:
         batch.execute(strict=True, properties=("energy",))
+        plan = batch.resource_plan
+        with pytest.raises(MemoryError, match="aggregate numerical reservation"):
+            batch.hessian_vector_products(
+                1, directions, numeric_budget_bytes=minimum - 1
+            )
         result = batch.hessian_vector_products(1, directions)
-        assert result.diagnostics["resource_admission"]["plan_host_peak_bytes"] == exact
+        admission = result.diagnostics["resource_admission"]
+        assert admission["plan_host_peak_bytes"] == exact
+        assert admission["effective_host_limit_bytes"] == exact
+        assert admission["derivative_host_cap_bytes"] == minimum
+        assert result.diagnostics["scf_fock_builds"] == 0
+        assert batch.resource_plan is plan
         np.testing.assert_allclose(result.value, full.value, atol=2e-8, rtol=0)
     with make(exact - 1).prepare_batch(systems) as batch:
         batch.execute(strict=True, properties=("energy",))
+        plan = batch.resource_plan
         with pytest.raises(MemoryError, match="no supported plan fits"):
             batch.hessian_vector_products(1, directions)
-        plan = batch.resource_plan
-        assert batch.hessian_vector_products(1, directions[:1]).value.shape == (1, 3, 3)
+        smaller = batch.hessian_vector_products(1, directions[:1])
+        assert smaller.diagnostics["scf_fock_builds"] == 0
+        np.testing.assert_allclose(smaller.value, full.value[:1], atol=2e-8, rtol=0)
         assert batch.resource_plan is plan
 
 

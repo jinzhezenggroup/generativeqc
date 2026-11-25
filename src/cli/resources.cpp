@@ -1001,13 +1001,11 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   }
   if (derivative_program && plan["status"] == "feasible" && options.host_bytes) {
     auto& inventory = plan["derivative_inventory"];
-    const auto floor = inventory.at("minimum_numeric_bytes").get<Bytes>();
-    const auto minimum_peak = plan["peak_bytes"].at("host").get<Bytes>();
-    const auto limit = limits.at("host").get<Bytes>();
-    // Only the slack beyond the full mandatory peak can fund optional derivative storage.
-    const auto optional = std::min(derivative->numeric_bytes - floor, limit - minimum_peak);
-    inventory["selected_numeric_cap_bytes"] = floor + optional;
-    inventory["selected_host_peak_bytes"] = minimum_peak + optional;
+    const auto selected = resource::select_overlapped_host_workspace(
+        composition, inventory.at("minimum_numeric_bytes").get<Bytes>(),
+        inventory.at("numeric_bytes").get<Bytes>());
+    inventory["selected_numeric_cap_bytes"] = selected.workspace_bytes;
+    inventory["selected_host_peak_bytes"] = selected.host_peak_bytes;
   }
   return finish();
 }
