@@ -135,11 +135,10 @@ bool disjoint(const void* first, std::size_t first_bytes, const void* second,
   return first_address + first_bytes <= second_address ||
          second_address + second_bytes <= first_address;
 }
-}  // namespace
 
-extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
-    const char* name, std::size_t name_size, generativeqc_backend backend,
-    generativeqc_ks_catalog_binding_v1* output) {
+template <typename Binding>
+generativeqc_status catalog_binding(const char* name, std::size_t name_size,
+                                    generativeqc_backend backend, Binding* output) {
   if (!output || output->struct_size != sizeof(*output) ||
       output->abi_version != GENERATIVEQC_ABI_VERSION || !name || !name_size || name_size > 256 ||
       (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE && backend != GENERATIVEQC_BACKEND_CUDA) ||
@@ -149,15 +148,40 @@ extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
   if (selector.find('\0') != std::string_view::npos) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 
   const auto* entry = generativeqc::methods::named_ks::find_method(selector);
-  generativeqc_ks_catalog_binding_v1 binding{sizeof(binding), GENERATIVEQC_ABI_VERSION, nullptr,
-                                             nullptr, 0};
+  Binding binding{};
+  binding.struct_size = sizeof(binding);
+  binding.abi_version = GENERATIVEQC_ABI_VERSION;
   if (entry && (backend == GENERATIVEQC_BACKEND_CUDA ? entry->cuda : entry->cpu)) {
     binding.identifier = entry->source.data();
     binding.identity = entry->identity.data();
     binding.spin = entry->spin;
+    if constexpr (requires { binding.correction_role; }) {
+      binding.facade_carrier = entry->registry_carrier;
+      if (entry->bound_basis || entry->dispersion.composite_profile)
+        binding.correction_role = GENERATIVEQC_KS_CATALOG_CORRECTION_BOUND;
+      else if (!entry->dispersion.kind)
+        binding.correction_role = GENERATIVEQC_KS_CATALOG_CORRECTION_NONE;
+      else if (entry->registry_carrier == GENERATIVEQC_METHOD_PBE_D4_RKS)
+        binding.correction_role = GENERATIVEQC_KS_CATALOG_CORRECTION_INTRINSIC;
+      else
+        binding.correction_role = GENERATIVEQC_KS_CATALOG_CORRECTION_DETACHED;
+    }
   }
   *output = binding;
   return GENERATIVEQC_STATUS_SUCCESS;
+}
+}  // namespace
+
+extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v1(
+    const char* name, std::size_t name_size, generativeqc_backend backend,
+    generativeqc_ks_catalog_binding_v1* output) {
+  return catalog_binding(name, name_size, backend, output);
+}
+
+extern "C" generativeqc_status generativeqc_ks_catalog_lookup_v2(
+    const char* name, std::size_t name_size, generativeqc_backend backend,
+    generativeqc_ks_catalog_binding_v2* output) {
+  return catalog_binding(name, name_size, backend, output);
 }
 
 extern "C" generativeqc_status generativeqc_ks_catalog_execution_policy_v1(

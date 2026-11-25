@@ -827,6 +827,10 @@ def run_prepared_panel(
         response_budget_bytes=response_budget_bytes,
     )
     panel = _direction_panel(directions, len(atoms))
+    if batch._host_hessian_workspace_bytes is not None:
+        options.numeric_bytes = min(
+            options.numeric_bytes, batch._host_hessian_workspace_bytes
+        )
     coordinates = 3 * len(atoms)
     if _output_panel_bytes(coordinates, False, len(panel)) > options.output_bytes:
         raise ValueError("native CPU result/staging exceeds output_budget_bytes")
