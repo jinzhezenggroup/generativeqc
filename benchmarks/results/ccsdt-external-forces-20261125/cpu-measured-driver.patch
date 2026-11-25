@@ -1,0 +1,455 @@
+--- run.py
++++ run.py
+@@ -2,3 +1,0 @@
+-
+-from __future__ import annotations
+-
+@@ -22 +18,0 @@
+-from typing import TYPE_CHECKING, Any
+@@ -24,10 +19,0 @@
+-Record = dict[str, Any]
+-Atoms = list[tuple[int, list[float]]]
+-
+-if TYPE_CHECKING:
+-    from types import ModuleType
+-
+-    from numpy import ndarray
+-
+-    Endpoint = tuple[float, ndarray | None, float, Record]
+-
+@@ -39 +25 @@
+-REVISION = "22f72d0692a760c2892cd7791022584d9ae1c3e5"
++REVISION = "d154546d2d6629ab8c865ca08f680002d68b4152"
+@@ -43 +29 @@
+-def write(path: Path, value: Record) -> None:
++def write(path, value):
+@@ -49 +35 @@
+-def digest(path: Path) -> str:
++def digest(path):
+@@ -54 +40 @@
+-def basis_file(fixture: Record, role: str) -> Path:
++def basis_file(fixture, role):
+@@ -62,3 +48 @@
+-def native(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def native(atoms, fitted, forces, args, fixture):
+@@ -88,3 +72 @@
+-        atoms,
+-        charge=0,
+-        multiplicity=1,
++        atoms, charge=0, multiplicity=1,
+@@ -96,15 +78,6 @@
+-    return (
+-        value.energy,
+-        value.forces,
+-        elapsed,
+-        {
+-            "correlation": asdict(value.correlation),
+-            "cc_performance": asdict(value.cc_performance)
+-            if value.cc_performance
+-            else None,
+-            "rhf_energy": value.correlation.reference_energy,
+-            "hf_cycles": value.iterations,
+-            "hf_density_rms": value.density_rms,
+-            "executed_backend": value.executed_backend,
+-        },
+-    )
++    return value.energy, value.forces, elapsed, {
++        "correlation": asdict(value.correlation),
++        "cc_performance": asdict(value.cc_performance) if value.cc_performance else None,
++        "rhf_energy": value.correlation.reference_energy, "hf_cycles": value.iterations,
++        "hf_density_rms": value.density_rms, "executed_backend": value.executed_backend,
++    }
+@@ -113 +86 @@
+-def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
++def shells(fixture, role):
+@@ -118,3 +91 @@
+-def psi4_basis(
+-    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
+-) -> None:
++def psi4_basis(psi4, fixture, role, name, option):
+@@ -128,8 +99,3 @@
+-                lines.extend(
+-                    f"{Decimal(e):f} {Decimal(c):f}"
+-                    for e, c in zip(
+-                        shell["exponents"],
+-                        contraction,
+-                        strict=True,
+-                    )
+-                )
++                lines.extend(f"{Decimal(e):f} {Decimal(c):f}" for e, c in zip(
++                    shell["exponents"], contraction, strict=True,
++                ))
+@@ -140 +106 @@
+-def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
++def pyscf_basis(fixture):
+@@ -143,11 +109,4 @@
+-            [
+-                shell["angular_momentum"],
+-                *[
+-                    [float(e), *map(float, c)]
+-                    for e, c in zip(
+-                        shell["exponents"],
+-                        zip(*shell["coefficients"], strict=True),
+-                        strict=True,
+-                    )
+-                ],
+-            ]
++            [shell["angular_momentum"], *[
++                [float(e), *map(float, c)]
++                for e, c in zip(shell["exponents"], zip(*shell["coefficients"]), strict=True)
++            ]]
+@@ -160,3 +119 @@
+-def psi4_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def psi4_endpoint(atoms, fitted, forces, args, fixture):
+@@ -171,2 +128 @@
+-        "0 1\n"
+-        + "\n".join(
++        "0 1\n" + "\n".join(
+@@ -175,2 +131 @@
+-        )
+-        + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
++        ) + "\nunits bohr\nsymmetry c1\nno_com\nno_reorient\n"
+@@ -179,5 +134,2 @@
+-        "basis": orbital_name,
+-        "puream": True,
+-        "reference": "rhf",
+-        "freeze_core": False,
+-        "scf_type": "disk_df" if fitted else "pk",
++        "basis": orbital_name, "puream": True, "reference": "rhf",
++        "freeze_core": False, "scf_type": "disk_df" if fitted else "pk",
+@@ -186,6 +138,3 @@
+-        "e_convergence": 1e-12,
+-        "d_convergence": 1e-10,
+-        "maxiter": 200,
+-        "ints_tolerance": 1e-14,
+-        "ccenergy__e_convergence": 1e-12,
+-        "ccenergy__r_convergence": 1e-10,
++        "e_convergence": 1e-12, "d_convergence": 1e-10,
++        "maxiter": 200, "ints_tolerance": 1e-14,
++        "ccenergy__e_convergence": 1e-12, "ccenergy__r_convergence": 1e-10,
+@@ -193,2 +142 @@
+-        "dfocc__e_convergence": 1e-12,
+-        "dfocc__r_convergence": 1e-10,
++        "dfocc__e_convergence": 1e-12, "dfocc__r_convergence": 1e-10,
+@@ -197,5 +145,2 @@
+-        settings.update(
+-            df_basis_scf=auxiliary_name,
+-            df_basis_cc=auxiliary_name,
+-            df_fitting_condition=1e-10,
+-        )
++        settings.update(df_basis_scf=auxiliary_name, df_basis_cc=auxiliary_name,
++                        df_fitting_condition=1e-10)
+@@ -204,3 +149 @@
+-        gradient, wfn = psi4.gradient(
+-            "ccsd(t)", molecule=molecule, dertype=1, return_wfn=True
+-        )
++        gradient, wfn = psi4.gradient("ccsd(t)", molecule=molecule, dertype=1, return_wfn=True)
+@@ -214,5 +157,2 @@
+-    if any(
+-        abs(actual_geometry[i, a] - x) > 1e-12
+-        for i, (_, xyz) in enumerate(atoms)
+-        for a, x in enumerate(xyz)
+-    ):
++    if any(abs(actual_geometry[i, a] - x) > 1e-12
++           for i, (_, xyz) in enumerate(atoms) for a, x in enumerate(xyz)):
+@@ -229,12 +169,4 @@
+-    return (
+-        energy,
+-        force,
+-        elapsed,
+-        {
+-            "settings": settings,
+-            "nao": nbf,
+-            "auxiliary_counts": auxiliary_counts,
+-            "electrons": wfn.nalpha() + wfn.nbeta(),
+-            "rhf_energy": psi4.variable("SCF TOTAL ENERGY"),
+-        },
+-    )
++    return energy, force, elapsed, {
++        "settings": settings, "nao": nbf, "auxiliary_counts": auxiliary_counts,
++        "electrons": wfn.nalpha() + wfn.nbeta(), "rhf_energy": psi4.variable("SCF TOTAL ENERGY"),
++    }
+@@ -243,3 +175 @@
+-def pyscf_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def pyscf_endpoint(atoms, fitted, forces, args, fixture):
+@@ -252,11 +182,2 @@
+-    mol = gto.M(
+-        atom=atoms,
+-        unit="Bohr",
+-        basis=orbitals,
+-        cart=False,
+-        symmetry=False,
+-        charge=0,
+-        spin=0,
+-        max_memory=args.memory_mib,
+-        verbose=4,
+-    )
++    mol = gto.M(atom=atoms, unit="Bohr", basis=orbitals, cart=False, symmetry=False,
++                charge=0, spin=0, max_memory=args.memory_mib, verbose=4)
+@@ -282,4 +203 @@
+-            solver,
+-            eris=eris,
+-            max_cycle=150,
+-            tol=1e-10,
++            solver, eris=eris, max_cycle=150, tol=1e-10,
+@@ -291,15 +209,7 @@
+-    return (
+-        energy,
+-        force,
+-        elapsed,
+-        {
+-            "nao": mol.nao_nr(),
+-            "electrons": mol.nelectron,
+-            "rhf_energy": mf.e_tot,
+-            "ccsd_energy": solver.e_tot,
+-            "triples_energy": triples,
+-            "hf_cycles": getattr(mf, "cycles", None),
+-            "ccsd_cycles": getattr(solver, "cycles", None),
+-            "ccsdt_lambda_converged": True if forces else None,
+-        },
+-    )
++    return energy, force, elapsed, {
++        "nao": mol.nao_nr(), "electrons": mol.nelectron, "rhf_energy": mf.e_tot,
++        "ccsd_energy": solver.e_tot, "triples_energy": triples,
++        "hf_cycles": getattr(mf, "cycles", None),
++        "ccsd_cycles": getattr(solver, "cycles", None),
++        "ccsdt_lambda_converged": True if forces else None,
++    }
+@@ -308 +218 @@
+-def native_provenance(source: Path) -> Record:
++def native_provenance(source):
+@@ -317,2 +227 @@
+-    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+-    receipt_sha = digest(library)
++    library = Path(os.environ["GENERATIVEQC_LIBRARY"])
+@@ -324,6 +233,2 @@
+-    return {
+-        "source_revision": REVISION,
+-        "source_identity": found,
+-        "library_sha256": receipt_sha,
+-        "native_input_count": len(inputs),
+-    }
++    return {"source_revision": REVISION, "source_identity": found,
++            "library_sha256": digest(library), "native_input_count": len(inputs)}
+@@ -332 +237 @@
+-def worker(args: argparse.Namespace, label: str) -> None:
++def worker(args, label):
+@@ -348 +252,0 @@
+-
+@@ -371,3 +275 @@
+-        energy, force, elapsed, work = endpoint(
+-            atoms, model == "df", not move, args, fixture
+-        )
++        energy, force, elapsed, work = endpoint(atoms, model == "df", not move, args, fixture)
+@@ -378,2 +280 @@
+-            force is None
+-            or len(force) != len(atoms)
++            force is None or len(force) != len(atoms)
+@@ -383,9 +284,4 @@
+-        record = {
+-            "status": "completed",
+-            "energy_hartree": float(energy),
+-            "force_hartree_per_bohr": force,
+-            "endpoint_seconds": elapsed,
+-            "versions": versions,
+-            "work": work,
+-        }
+-    except Exception as exc:  # noqa: BLE001 - retain worker failure details
++        record = {"status": "completed", "energy_hartree": float(energy),
++                  "force_hartree_per_bohr": force, "endpoint_seconds": elapsed,
++                  "versions": versions, "work": work}
++    except Exception as exc:
+@@ -394,10 +290,2 @@
+-    write(
+-        output,
+-        {
+-            **record,
+-            "case": case,
+-            "trial": trial,
+-            "arm": args.arm,
+-            "displacement": diagnostic or None,
+-        },
+-    )
++    write(output, {**record, "case": case, "trial": trial, "arm": args.arm,
++                   "displacement": diagnostic or None})
+@@ -406 +294 @@
+-def cpu_model() -> str:
++def cpu_model():
+@@ -413 +301 @@
+-def hardware(args: argparse.Namespace) -> Record:
++def hardware(args):
+@@ -415,2 +303 @@
+-        "cpu_model": cpu_model(),
+-        "affinity": sorted(os.sched_getaffinity(0)),
++        "cpu_model": cpu_model(), "affinity": sorted(os.sched_getaffinity(0)),
+@@ -419,24 +306,10 @@
+-        "cgroup_memory": {
+-            str(path): path.read_text().strip()
+-            for path in (
+-                Path("/sys/fs/cgroup/memory.max"),
+-                Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+-            )
+-            if path.exists()
+-        },
+-        "threads": args.threads,
+-        "application_memory_mib": args.memory_mib,
+-        "platform": platform.platform(),
+-        "python": platform.python_version(),
+-        "allocation": {
+-            k: os.environ.get(k)
+-            for k in (
+-                "SLURM_JOB_ID",
+-                "SLURM_STEP_ID",
+-                "SLURM_CPUS_PER_TASK",
+-                "GQC_QZ_JOB_NAME",
+-                "GQC_QZ_PROJECT",
+-                "CUDA_VISIBLE_DEVICES",
+-                "CUBLAS_WORKSPACE_CONFIG",
+-            )
+-        },
++        "cgroup_memory": {str(path): path.read_text().strip() for path in (
++            Path("/sys/fs/cgroup/memory.max"),
++            Path("/sys/fs/cgroup/memory/memory.limit_in_bytes"),
++        ) if path.exists()},
++        "threads": args.threads, "application_memory_mib": args.memory_mib,
++        "platform": platform.platform(), "python": platform.python_version(),
++        "allocation": {k: os.environ.get(k) for k in (
++            "SLURM_JOB_ID", "SLURM_STEP_ID", "SLURM_CPUS_PER_TASK", "GQC_QZ_JOB_NAME",
++            "GQC_QZ_PROJECT", "CUDA_VISIBLE_DEVICES", "CUBLAS_WORKSPACE_CONFIG",
++        )},
+@@ -446,8 +319,3 @@
+-        info["gpu"] = subprocess.check_output(
+-            [
+-                "nvidia-smi",
+-                "--query-gpu=name,memory.total,driver_version,uuid",
+-                "--format=csv,noheader",
+-            ],
+-            text=True,
+-        ).strip()
++        info["gpu"] = subprocess.check_output([
++            "nvidia-smi", "--query-gpu=name,memory.total,driver_version,uuid",
++            "--format=csv,noheader"], text=True).strip()
+@@ -460 +328 @@
+-def run(args: argparse.Namespace) -> None:
++def run(args):
+@@ -467,16 +335,4 @@
+-        raise RuntimeError(
+-            f"Requested CPU {args.expected_cpu}, found {info['cpu_model']}"
+-        )
+-    env = {
+-        **os.environ,
+-        **{
+-            key: str(args.threads)
+-            for key in (
+-                "OMP_NUM_THREADS",
+-                "OPENBLAS_NUM_THREADS",
+-                "MKL_NUM_THREADS",
+-                "NUMEXPR_NUM_THREADS",
+-            )
+-        },
+-        "PYTHONNOUSERSITE": "1",
+-    }
++        raise RuntimeError(f"Requested CPU {args.expected_cpu}, found {info['cpu_model']}")
++    env = {**os.environ, **{key: str(args.threads) for key in (
++        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS",
++    )}, "PYTHONNOUSERSITE": "1"}
+@@ -484,3 +340 @@
+-    labels = (
+-        [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
+-    )
++    labels = [] if args.fd_only else [f"{c}.{r}" for r in range(args.repeats) for c in cases]
+@@ -491,3 +345 @@
+-            for atom in range(5)
+-            for axis in range(3)
+-            for sign in (-1, 1)
++            for atom in range(5) for axis in range(3) for sign in (-1, 1)
+@@ -495,4 +347 @@
+-    write(
+-        args.output / "plan.json",
+-        {"labels": labels, "trial_timeout_seconds": args.timeout},
+-    )
++    write(args.output / "plan.json", {"labels": labels, "trial_timeout_seconds": args.timeout})
+@@ -504,34 +353,7 @@
+-        argv = [
+-            sys.executable,
+-            "-u",
+-            str(Path(__file__).resolve()),
+-            *sys.argv[1:],
+-            "--worker",
+-            label,
+-        ]
+-        with (
+-            tempfile.TemporaryDirectory(
+-                prefix="gqc-3167-", dir=args.scratch
+-            ) as scratch,
+-            (args.output / (label + ".txt")).open("x") as log,
+-        ):
+-            process = subprocess.Popen(
+-                argv,
+-                env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
+-                stdout=log,
+-                stderr=subprocess.STDOUT,
+-                start_new_session=True,
+-            )
+-            try:
+-                process.wait(timeout=args.timeout)
+-            except subprocess.TimeoutExpired:
+-                os.killpg(process.pid, signal.SIGKILL)
+-                process.wait()
+-                write(
+-                    record,
+-                    {
+-                        "status": "timeout",
+-                        "label": label,
+-                        "arm": args.arm,
+-                        "timeout_seconds": args.timeout,
+-                    },
++        argv = [sys.executable, "-u", str(Path(__file__).resolve()), *sys.argv[1:],
++                "--worker", label]
++        with tempfile.TemporaryDirectory(prefix="gqc-3167-", dir=args.scratch) as scratch:
++            with (args.output / (label + ".txt")).open("x") as log:
++                process = subprocess.Popen(
++                    argv, env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
++                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+@@ -538,0 +361,7 @@
++                try:
++                    process.wait(timeout=args.timeout)
++                except subprocess.TimeoutExpired:
++                    os.killpg(process.pid, signal.SIGKILL)
++                    process.wait()
++                    write(record, {"status": "timeout", "label": label,
++                                   "arm": args.arm, "timeout_seconds": args.timeout})
+@@ -540,9 +369,2 @@
+-            write(
+-                record,
+-                {
+-                    "status": "worker_exit",
+-                    "label": label,
+-                    "arm": args.arm,
+-                    "returncode": process.returncode,
+-                },
+-            )
++            write(record, {"status": "worker_exit", "label": label,
++                           "arm": args.arm, "returncode": process.returncode})
+@@ -551,8 +373 @@
+-        print(
+-            "END",
+-            args.arm,
+-            label,
+-            status,
+-            round(time.perf_counter() - start, 3),
+-            flush=True,
+-        )
++        print("END", args.arm, label, status, round(time.perf_counter() - start, 3), flush=True)
+@@ -562 +377 @@
+-def main() -> None:
++def main():
+@@ -576 +391 @@
+-    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
++    p.add_argument("--scratch", type=Path, default=Path("/tmp"))

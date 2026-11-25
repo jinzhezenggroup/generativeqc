@@ -1,0 +1,134 @@
+--- run.py
++++ run.py
+@@ -3,2 +2,0 @@
+-from __future__ import annotations
+-
+@@ -22 +19,0 @@
+-from typing import TYPE_CHECKING, Any
+@@ -24,10 +20,0 @@
+-Record = dict[str, Any]
+-Atoms = list[tuple[int, list[float]]]
+-
+-if TYPE_CHECKING:
+-    from types import ModuleType
+-
+-    from numpy import ndarray
+-
+-    Endpoint = tuple[float, ndarray | None, float, Record]
+-
+@@ -43 +30 @@
+-def write(path: Path, value: Record) -> None:
++def write(path, value):
+@@ -49 +36 @@
+-def digest(path: Path) -> str:
++def digest(path):
+@@ -54 +41 @@
+-def basis_file(fixture: Record, role: str) -> Path:
++def basis_file(fixture, role):
+@@ -62,3 +49 @@
+-def native(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def native(atoms, fitted, forces, args, fixture):
+@@ -113 +98 @@
+-def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
++def shells(fixture, role):
+@@ -118,3 +103 @@
+-def psi4_basis(
+-    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
+-) -> None:
++def psi4_basis(psi4, fixture, role, name, option):
+@@ -140 +123 @@
+-def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
++def pyscf_basis(fixture):
+@@ -148,3 +131 @@
+-                        shell["exponents"],
+-                        zip(*shell["coefficients"], strict=True),
+-                        strict=True,
++                        shell["exponents"], zip(*shell["coefficients"]), strict=True
+@@ -160,3 +141 @@
+-def psi4_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def psi4_endpoint(atoms, fitted, forces, args, fixture):
+@@ -243,3 +222 @@
+-def pyscf_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def pyscf_endpoint(atoms, fitted, forces, args, fixture):
+@@ -308 +285 @@
+-def native_provenance(source: Path) -> Record:
++def native_provenance(source):
+@@ -332 +309 @@
+-def worker(args: argparse.Namespace, label: str) -> None:
++def worker(args, label):
+@@ -391 +368 @@
+-    except Exception as exc:  # noqa: BLE001 - retain worker failure details
++    except Exception as exc:
+@@ -406 +383 @@
+-def cpu_model() -> str:
++def cpu_model():
+@@ -413 +390 @@
+-def hardware(args: argparse.Namespace) -> Record:
++def hardware(args):
+@@ -460 +437 @@
+-def run(args: argparse.Namespace) -> None:
++def run(args):
+@@ -512,26 +489,10 @@
+-        with (
+-            tempfile.TemporaryDirectory(
+-                prefix="gqc-3167-", dir=args.scratch
+-            ) as scratch,
+-            (args.output / (label + ".txt")).open("x") as log,
+-        ):
+-            process = subprocess.Popen(
+-                argv,
+-                env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
+-                stdout=log,
+-                stderr=subprocess.STDOUT,
+-                start_new_session=True,
+-            )
+-            try:
+-                process.wait(timeout=args.timeout)
+-            except subprocess.TimeoutExpired:
+-                os.killpg(process.pid, signal.SIGKILL)
+-                process.wait()
+-                write(
+-                    record,
+-                    {
+-                        "status": "timeout",
+-                        "label": label,
+-                        "arm": args.arm,
+-                        "timeout_seconds": args.timeout,
+-                    },
++        with tempfile.TemporaryDirectory(
++            prefix="gqc-3167-", dir=args.scratch
++        ) as scratch:
++            with (args.output / (label + ".txt")).open("x") as log:
++                process = subprocess.Popen(
++                    argv,
++                    env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
++                    stdout=log,
++                    stderr=subprocess.STDOUT,
++                    start_new_session=True,
+@@ -538,0 +500,14 @@
++                try:
++                    process.wait(timeout=args.timeout)
++                except subprocess.TimeoutExpired:
++                    os.killpg(process.pid, signal.SIGKILL)
++                    process.wait()
++                    write(
++                        record,
++                        {
++                            "status": "timeout",
++                            "label": label,
++                            "arm": args.arm,
++                            "timeout_seconds": args.timeout,
++                        },
++                    )
+@@ -562 +537 @@
+-def main() -> None:
++def main():
+@@ -576 +551 @@
+-    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
++    p.add_argument("--scratch", type=Path, default=Path("/tmp"))
