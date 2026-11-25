@@ -269,6 +269,52 @@ def test_linked_pbe0_whole_budget_refuses_before_primal_preparation(
         calc.hessian(atoms, charge=1)
 
 
+@pytest.mark.parametrize("dense", (False, True), ids=("hvp", "hessian"))
+def test_explicit_integral_capacity_is_checked_before_scf(
+    monkeypatch: pytest.MonkeyPatch, dense: bool
+) -> None:
+    """Find the native byte boundary without running SCF or duplicating sizing."""
+    from generativeqc._native_cpu_hessian import _minimum_bytes, _options
+
+    calc = linked_pbe0_calculator()
+    atoms = (Atom(2, (0.0, 0.0, -0.72)), Atom(1, (0.11, 0.13, 0.72)))
+    direction = np.array([[0.02, -0.03, -0.1], [-0.02, 0.03, 0.1]])
+    options = _options(64 << 20, 128 << 20, 64 << 20, 256 << 20, None)
+
+    def evaluate(**controls: int) -> Any:
+        if dense:
+            return calc.hessian(atoms, charge=1, **controls)
+        return calc.hessian_vector_product(atoms, direction, charge=1, **controls)
+
+    low, high = 1, options.integral_bytes
+    _minimum_bytes(calc, atoms, 1, 1, dense, options)
+    while high - low > 1:
+        probe = (low + high) // 2
+        options.integral_bytes = probe
+        try:
+            _minimum_bytes(calc, atoms, 1, 1, dense, options)
+        except RuntimeError as error:
+            assert "integral storage cap exceeded" in str(error)
+            low = probe
+        else:
+            high = probe
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("one byte below the native integral storage minimum prepared SCF")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(calc, "prepare_batch", forbidden)
+        with pytest.raises(RuntimeError, match="integral storage cap exceeded"):
+            evaluate(integral_budget_bytes=high - 1)
+
+    reference, exact = evaluate(), evaluate(integral_budget_bytes=high)
+    result = (lambda item: item.matrix) if dense else (lambda item: item.value)
+    np.testing.assert_allclose(result(exact), result(reference), atol=2e-8, rtol=0)
+    assert (
+        exact.diagnostics["scf_fock_builds"] == reference.diagnostics["scf_fock_builds"]
+    )
+
+
 @pytest.mark.parametrize(
     "method", ("pbe0-d3(bj)-rks", "b3lyp-d3(bj)-uks", "lda-rks", "pbe-rks")
 )
