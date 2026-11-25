@@ -126,10 +126,14 @@ python "$results/replay.py"
 To reacquire on qz, stage the reconstructed directory in the paper's H100
 environment. Use its standard Python interpreter to run `build.py` with the
 stage root as its argument, then run `acquire.py --root <stage> --sizes 96 144 192`.
-For sizes 240 and 300, copy the staged sources and inputs and the verified
-`build/libgenerativeqc.so` and `build-receipts/build.json` into a second root,
-then run `acquire.py --root <second-stage> --sizes 240 300`. Set `GQC_QZ_JOB_NAME`
-and `GQC_QZ_PROJECT` to the allocated job and project for each lane. The generated
+For sizes 240 and 300, prepare a second root with the same staged sources and
+inputs. Once the first build is complete, link the second root's `build/` and
+`build-receipts/` to the first root's directories on shared storage, as the
+recorded run did. Both directories can also be copied together. The
+stationary AOT `.so` libraries and their `.json` manifests must be available
+beside the main `libgenerativeqc.so`. Run `acquire.py --root <second-stage>
+--sizes 240 300` with the second allocation. Set `GQC_QZ_JOB_NAME` and
+`GQC_QZ_PROJECT` to the allocated job and project for each lane. The generated
 `paper-config.json` records the interpreter and environment paths from that
 qz installation. Other installations need equivalent dependencies at their
 own paths. Run `run_cpu.sh` under an allocated Slurm step with CPU PySCF 2.14.0.
