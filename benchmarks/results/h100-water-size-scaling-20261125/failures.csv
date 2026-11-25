@@ -1,3 +1,31 @@
-shard,name,atoms,method,mode,arm,stage,status,last_stage,subprocess_seconds,peak_mib
-main,formal-0-144-pbe-df-standard,144,pbe,df,standard,formal,running,,,
-large,prewarm-0-240-hf-df-standard,240,hf,df,standard,prewarm,running,,,
+shard,name,atoms,method,mode,arm,stage,status,last_stage,error,subprocess_seconds,peak_mib
+main,prewarm-0-144-wb97m-v-direct-standard,144,wb97m-v,direct,standard,prewarm,timeout,native_scf_and_forces,,601.2953333430924,25462.8125
+main,formal-0-144-wb97m-v-direct-standard,144,wb97m-v,direct,standard,formal,unattempted_failed_prewarm,,,,
+main,prewarm-0-144-wb97m-v-df-standard,144,wb97m-v,df,standard,prewarm,timeout,native_scf_and_forces,,601.4027418709593,65322.8125
+main,formal-0-144-wb97m-v-df-standard,144,wb97m-v,df,standard,formal,unattempted_failed_prewarm,,,,
+main,prewarm-0-192-hf-df-standard,192,hf,df,standard,prewarm,timeout,native_scf_and_forces,,601.2688135619974,29432.8125
+main,formal-0-192-hf-df-standard,192,hf,df,standard,formal,unattempted_failed_prewarm,,,,
+main,prewarm-0-192-wb97m-v-direct-standard,192,wb97m-v,direct,standard,prewarm,running,,,,
+large,prewarm-0-240-hf-df-standard,240,hf,df,standard,prewarm,timeout,native_scf_and_forces,,601.8188523529097,26104.8125
+large,formal-0-240-hf-df-standard,240,hf,df,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-pbe-direct-standard,240,pbe,direct,standard,prewarm,timeout,native_scf_and_forces,,600.3499378180131,9144.8125
+large,formal-0-240-pbe-direct-standard,240,pbe,direct,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-pbe-df-standard,240,pbe,df,standard,prewarm,unconverged,native_scf_and_forces,RuntimeError: batched item failures: 0: SCF did not converge,102.67087340913713,26440.8125
+large,formal-0-240-pbe-df-standard,240,pbe,df,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-r2scan-direct-standard,240,r2scan,direct,standard,prewarm,timeout,native_scf_and_forces,,600.3056212337688,9752.8125
+large,formal-0-240-r2scan-direct-standard,240,r2scan,direct,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-r2scan-df-standard,240,r2scan,df,standard,prewarm,timeout,native_scf_and_forces,,600.2769694887102,27452.8125
+large,formal-0-240-r2scan-df-standard,240,r2scan,df,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-wb97m-v-direct-standard,240,wb97m-v,direct,standard,prewarm,timeout,native_scf_and_forces,,602.317666541785,27632.8125
+large,prewarm-0-240-wb97m-v-direct-gpu4pyscf,240,wb97m-v,direct,gpu4pyscf,prewarm,failed,reference_forces,CUDADriverError: CUDA_ERROR_ILLEGAL_ADDRESS: an illegal memory access was encountered,193.2066580383107,35094.8125
+large,formal-0-240-wb97m-v-direct-standard,240,wb97m-v,direct,standard,formal,unattempted_failed_prewarm,,,,
+large,formal-0-240-wb97m-v-direct-gpu4pyscf,240,wb97m-v,direct,gpu4pyscf,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-240-wb97m-v-df-standard,240,wb97m-v,df,standard,prewarm,timeout,native_scf_and_forces,,602.5702328849584,39176.8125
+large,formal-0-240-wb97m-v-df-standard,240,wb97m-v,df,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-300-hf-direct-standard,300,hf,direct,standard,prewarm,timeout,native_scf_and_forces,,600.4077002583072,13490.8125
+large,formal-0-300-hf-direct-standard,300,hf,direct,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-300-hf-df-gpu4pyscf,300,hf,df,gpu4pyscf,prewarm,oom,reference_forces,CUDARuntimeError: cudaErrorMemoryAllocation: out of memory,59.27656643278897,81416.8125
+large,prewarm-0-300-hf-df-standard,300,hf,df,standard,prewarm,timeout,native_scf_and_forces,,601.6857836768031,21006.8125
+large,formal-0-300-hf-df-gpu4pyscf,300,hf,df,gpu4pyscf,formal,unattempted_failed_prewarm,,,,
+large,formal-0-300-hf-df-standard,300,hf,df,standard,formal,unattempted_failed_prewarm,,,,
+large,prewarm-0-300-pbe-direct-standard,300,pbe,direct,standard,prewarm,running,,,,

@@ -8,10 +8,20 @@ from pathlib import Path
 import sqlite3
 import subprocess
 
-from acquire import digest, environment, interrupt, save, stop_process, verify
+from acquire import (
+    METHODS,
+    MODES,
+    SIZES,
+    digest,
+    environment,
+    interrupt,
+    save,
+    stop_process,
+    verify,
+)
 
 CAPTURE_SHA256 = "67620bee0161e0296db2807ae8b5895fe433feb4dddc17543e712c744e2d4075"
-CASES = ((240, "hf"), (96, "wb97m-v"))
+CASES = ((240, "hf", "direct"), (96, "wb97m-v", "direct"))
 
 
 def run(argv, logfile, cwd, env, timeout):
@@ -62,11 +72,23 @@ def kernel_census(path):
     }
 
 
+def parse_case(value):
+    try:
+        atoms_text, method, mode = value.split(":")
+        atoms = int(atoms_text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected atoms:method:mode") from error
+    if atoms not in SIZES or method not in METHODS or mode not in MODES:
+        raise argparse.ArgumentTypeError("case is outside the measured protocol")
+    return atoms, method, mode
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--nsys", type=Path, required=True)
+    parser.add_argument("--case", action="append", type=parse_case)
     args = parser.parse_args()
     signal.signal(signal.SIGTERM, interrupt)
     signal.signal(signal.SIGINT, interrupt)
@@ -91,8 +113,8 @@ def main():
     }
     destination = output / "nsys.json"
     save(destination, report)
-    for atoms, method in CASES:
-        folder = output / f"{atoms}-{method}-direct"
+    for atoms, method, mode in args.case or CASES:
+        folder = output / f"{atoms}-{method}-{mode}"
         folder.mkdir()
         prefix = folder / "capture"
         profile = [
@@ -110,7 +132,7 @@ def main():
             root / "endpoint.py",
             "standard",
             method,
-            "direct",
+            mode,
             str(atoms),
             folder / "endpoint.json",
             "--root",

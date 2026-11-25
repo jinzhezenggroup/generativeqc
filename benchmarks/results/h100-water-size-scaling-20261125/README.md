@@ -5,14 +5,18 @@ uses GenerativeQC revision `22f72d0692a760c2892cd7791022584d9ae1c3e5` and
 GPU4PySCF 1.9.0. It measures complete cold energy and analytic forces on
 96, 144, 192, 240 and 300 atoms.
 
-The master acquisition is in progress. This checkpoint contains 25 complete
-formal endpoints and 12 pairs. [summary.csv](summary.csv) reports the observed
+The master acquisition is in progress. This checkpoint contains 50 complete
+formal endpoints and 20 pairs. The sweep has reached all five sizes. [summary.csv](summary.csv) reports the observed
 pairs and [gates.json](gates.json) contains the sample-level oracle errors.
 The first 96-atom HF Direct pair reached 10.937 s and 8.240 s, respectively,
 with both endpoints passing the CPU PySCF gates. The first 240-atom HF Direct
 pair reached 386.520 s and 18.201 s, respectively, and recorded 34 and 11 SCF
 iterations. These are single observations on their respective H100s.
-The larger-size sweep and repeat acquisition continue.
+The larger-size sweep and repeat acquisition continue. The 96-atom PBE
+oracle's two grids pass the stability limits. Both engines pass the first
+PBE Direct and DF energy/force checks. At 300 atoms the first GenerativeQC
+HF Direct endpoint attempt timed out; the GPU4PySCF HF DF prewarm hit OOM
+in the analytic forces with a sampled peak of 79.51 GiB.
 
 ## Molecular inputs
 
@@ -109,6 +113,14 @@ altered the two QDSTRM streams in place. The post-import streams, Nsight reports
 and SQLite databases are retained outside Git, and their identities and
 import/export output are archived with the kernel census. The maintained
 converter works from a temporary copy.
+
+For the 144-atom semilocal [trace](trace-semilocal.json.xz), the demangled
+stationary XC force-geometry kernel ran 1,580 times per endpoint. Its summed
+duration was 104.010 s for PBE Direct, 104.039 s for PBE DF, and 106.376 s for
+r²SCAN Direct. The corresponding device kernel unions were 124.794, 112.200
+and 126.618 s. The lone quadrature-setup kernel with the same short name was
+resolved separately through demangled symbols. Each QDSTRM input was preserved
+and the converter imported a scratch copy.
 
 ## Earlier revision
 

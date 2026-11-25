@@ -281,6 +281,7 @@ def main():
             for row in campaign["rows"]:
                 if row["status"] == "complete":
                     continue
+                raw = json.loads(raw_files.get(row["name"] + ".json", "{}"))
                 failures.append(
                     {
                         "shard": shard,
@@ -297,6 +298,7 @@ def main():
                             )
                         },
                         "last_stage": row.get("last_stage"),
+                        "error": raw.get("error", row.get("error")),
                         "subprocess_seconds": row.get("subprocess_seconds"),
                         "peak_mib": row["memory"]["peak_used_bytes"] / 2**20
                         if row.get("memory")
