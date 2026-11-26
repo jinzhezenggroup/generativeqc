@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from generativeqc import CBSBasis, CCSDTCBSCalculator, TargetErrorBudget, _native
 from generativeqc import _correlation_convergence as policy
+from generativeqc._cbs_plan import native_cbs_plan
 from generativeqc._model_resolution import snapshot_basis
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +109,134 @@ def test_policy_preserves_legacy_limits(library: Any) -> None:
             )
         )
     assert actual == expected
+
+
+def test_cbs_policy_preserves_legacy_allocation(library: Any) -> None:
+    """Freeze allocation and all stop limits, including midpoint rounding."""
+    rng = random.Random(2227)
+    inputs = [
+        (2, 3, 3.0, 1.63),
+        # A single compensated sum rounds this low-basis case one ULP low.
+        (28, 52, 7.860377502539633e-164, 6.250054175082996e-155),
+    ]
+    for _ in range(600):
+        low = rng.randrange(2, 100)
+        inputs.append(
+            (
+                low,
+                rng.randrange(low + 1, 101),
+                10 ** rng.uniform(-285, 3),
+                10 ** rng.uniform(-285, 3),
+            )
+        )
+    default = TargetErrorBudget(1e-5, 1e-4, 3e-5)
+    explicit = TargetErrorBudget(1e-16, 2e-4)
+    for index, values in enumerate(inputs):
+        plan = native_cbs_plan(
+            library, *values, "highest" if index % 3 == 2 else "exponential"
+        )
+        for role in range(3):
+            coefficients = list(plan.coefficients)
+            if role < 2:
+                coefficients[2 + role] += coefficients.pop()
+            amplification = math.fsum(map(abs, coefficients))
+            for requested, standard in ((None, True), (explicit, True), (None, False)):
+                expected_total = requested or (default if standard else None)
+                expected_component = None
+                if expected_total is not None:
+                    rms = expected_total.force_rms
+                    expected_component = TargetErrorBudget(
+                        expected_total.energy_abs / amplification,
+                        expected_total.force_max_abs / amplification,
+                        rms / amplification if rms is not None else None,
+                    )
+                result = policy.cbs_convergence_policy(
+                    library, plan, role, requested, default_standard=standard
+                )
+                assert result.coefficient_l1 == amplification
+                assert result.total_budget == expected_total
+                assert result.component_budget == expected_component
+                assert (result.scale, result.limits) == reference_policy(
+                    expected_component
+                )
+
+
+@pytest.mark.parametrize(
+    "mode",
+    (
+        "invalid_role",
+        "invalid_default",
+        "zero_energy",
+        "negative_rms",
+        "infinite_budget",
+        "underflow_energy",
+        "underflow_rms",
+        "inconsistent_plan",
+        "overflow_l1",
+        "abi_mismatch",
+    ),
+)
+def test_cbs_policy_rejects_without_publication(library: Any, mode: str) -> None:
+    """Check failures at the public ABI, before any receipt fields change."""
+    query = library.generativeqc_cbs_convergence_query_v1
+    query.argtypes = [
+        ctypes.POINTER(policy._CBSDescriptor),
+        ctypes.POINTER(policy._CBSResult),
+    ]
+    query.restype = ctypes.c_int
+    extrapolate = library.generativeqc_cbs_extrapolation_query_v1
+    from generativeqc._cbs_plan import _Descriptor, _Plan
+
+    extrapolate.argtypes = [ctypes.POINTER(_Descriptor), ctypes.POINTER(_Plan)]
+    extrapolate.restype = ctypes.c_int
+    inputs = _Descriptor(
+        ctypes.sizeof(_Descriptor), _native.ABI_VERSION, 2, 3, 0, 0, 3.0, 1.63
+    )
+    plan = _Plan(ctypes.sizeof(_Plan), _native.ABI_VERSION)
+    assert (
+        extrapolate(ctypes.byref(inputs), ctypes.byref(plan)) == _native.STATUS_SUCCESS
+    )
+    budget = policy._encode_budget(TargetErrorBudget(1e-5, 1e-4, 3e-5))
+    descriptor = policy._CBSDescriptor(
+        ctypes.sizeof(policy._CBSDescriptor),
+        _native.ABI_VERSION,
+        0,
+        1,
+        ctypes.pointer(plan),
+        ctypes.pointer(budget),
+    )
+    result = policy._CBSResult(
+        ctypes.sizeof(policy._CBSResult), _native.ABI_VERSION, -7.0
+    )
+    expected = _native.STATUS_INVALID_ARGUMENT
+    if mode == "invalid_role":
+        descriptor.correction_basis = 3
+    elif mode == "invalid_default":
+        descriptor.default_standard = 2
+    elif mode == "zero_energy":
+        budget.energy_abs = 0
+    elif mode == "negative_rms":
+        budget.force_rms = -math.ulp(0.0)
+    elif mode == "infinite_budget":
+        budget.force_max_abs = math.inf
+    elif mode == "underflow_energy":
+        budget.energy_abs = math.ulp(0.0)
+    elif mode == "underflow_rms":
+        budget.force_rms = math.ulp(0.0)
+    elif mode == "inconsistent_plan":
+        plan.coefficients[0] = 0
+    elif mode == "overflow_l1":
+        inputs.correlation_exponent = 3e-308
+        assert (
+            extrapolate(ctypes.byref(inputs), ctypes.byref(plan))
+            == _native.STATUS_SUCCESS
+        )
+    elif mode == "abi_mismatch":
+        plan.abi_version += 1
+        expected = _native.STATUS_ABI_MISMATCH
+    before = bytes(result)
+    assert query(ctypes.byref(descriptor), ctypes.byref(result)) == expected
+    assert bytes(result) == before
 
 
 def test_cbs_production_planning_uses_native(
@@ -206,7 +335,7 @@ def test_cbs_planning_rejects_missing_protocol(
         CBSBasis(snapshot_basis("def2-svp"), 3),
     )
     with pytest.raises(
-        NotImplementedError, match="required correlated-convergence query"
+        NotImplementedError, match="selected native CBS convergence query"
     ):
         CCSDTCBSCalculator(bases)
 
