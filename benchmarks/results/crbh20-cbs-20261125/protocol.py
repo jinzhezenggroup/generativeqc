@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -107,8 +108,21 @@ def outcome(status: str, error: str = "", returncode: int | None = None) -> str:
     return "unresolved"
 
 
-def endpoint(driver: Path, args: list[str], result_path: Path, log: TextIO) -> dict:
-    """Use a fresh process and end its process group when the cap expires."""
+def _kill_and_reap(process: subprocess.Popen) -> None:
+    with suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGKILL)
+    process.wait()
+
+
+def endpoint(
+    driver: Path,
+    args: list[str],
+    result_path: Path,
+    log: TextIO,
+    *,
+    env: dict[str, str] | None = None,
+) -> dict:
+    """Use a fresh process and reap its group after a timeout or interrupt."""
     result_path.unlink(missing_ok=True)
     start = time.perf_counter()
     with subprocess.Popen(
@@ -116,13 +130,16 @@ def endpoint(driver: Path, args: list[str], result_path: Path, log: TextIO) -> d
         stdout=log,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        env=env,
     ) as process:
         try:
             code = process.wait(timeout=TIME_LIMIT_SECONDS)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
+            _kill_and_reap(process)
             row = {"status": "timeout", "limit_seconds": TIME_LIMIT_SECONDS}
+        except KeyboardInterrupt:
+            _kill_and_reap(process)
+            raise
         else:
             if code == 0 and result_path.is_file():
                 row = load(result_path)

@@ -107,3 +107,6 @@ and [plan_gpu.py](plan_gpu.py) to generate the two paired-device shards.
 The qz entrypoints are [run_qz_gpu.sh](run_qz_gpu.sh) and
 [run_qz_cpu.sh](run_qz_cpu.sh). The replay command needs only the files
 retained here and the Python standard library.
+
+The reproduction runner reaps interrupted endpoint processes and cleans
+each CPU endpoint's scratch after the child exits.

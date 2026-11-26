@@ -149,14 +149,18 @@ def campaign(data: dict, dataset: str, output: Path) -> None:
     def run(task: tuple[str, int]) -> None:
         key, cardinal = task
         with (
-            tempfile.TemporaryDirectory(dir=output) as tmp,
+            tempfile.TemporaryDirectory(prefix="gqc-crbh20-pyscf-") as tmp,
             (output / f"{key.split('/')[1]}-{cardinal}.jsonl").open("x") as journal,
             (output / f"{key.split('/')[1]}-{cardinal}.txt").open("x") as log,
         ):
             request = {"system": key, "cardinal": cardinal}
             append(journal, {**request, "status": "started", "utc_unix": time.time()})
             row = endpoint(
-                Path(__file__), [key, str(cardinal)], Path(tmp) / "point.json", log
+                Path(__file__),
+                [key, str(cardinal)],
+                Path(tmp) / "point.json",
+                log,
+                env={**os.environ, "TMPDIR": tmp, "PYSCF_TMPDIR": tmp},
             )
             append(journal, {**request, **row, "finished_utc_unix": time.time()})
             print(key, cardinal, row["status"], row["process_wall_seconds"], flush=True)
