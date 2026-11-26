@@ -48,6 +48,22 @@ def test_cbs_requires_native_plan_before_electronic_execution(
     assert fake_native == []
 
 
+def test_cbs_requires_native_composition_before_electronic_execution(
+    bases: tuple[CBSBasis, CBSBasis],
+    fake_native: list[dict],
+    policy_library: ctypes.CDLL,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An older library must not silently resume the Python composition path."""
+    monkeypatch.setattr(policy_library, "generativeqc_cbs_compose_v1", None)
+    monkeypatch.setattr(
+        cbs_module._native, "load_library", lambda **options: policy_library
+    )
+    with pytest.raises(RuntimeError, match="native composition owner"):
+        CCSDTCBSCalculator(bases, device="cuda")
+    assert fake_native == []
+
+
 @pytest.mark.parametrize("multiplicity", (1, 3))
 def test_selected_native_plan_controls_composition_and_component_budgets(
     bases: tuple[CBSBasis, CBSBasis],

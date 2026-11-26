@@ -1,0 +1,97 @@
+{
+  "source_revision": "ae1086d511060662b7d728eb80d3e53981443ec1",
+  "native_builds": [
+    [
+      "8b7da30458fc938c253f23f2680cd41b1ad67da9438c3f81293bf4c2703dd822",
+      "495490024fee9a667b837c37cda21589ffa37a932aeb9f07707b4cc341b5ea2c"
+    ]
+  ],
+  "sets": {
+    "CRBH20": {
+      "DT_D": {
+        "barriers": {
+          "complete": 20,
+          "planned": 20,
+          "mae": 1.7633413151048547,
+          "max_abs": 3.094654642667578,
+          "within_1_kcal_mol": 6,
+          "complete_set_chemical_accuracy": false
+        },
+        "endpoint_status_counts": {
+          "ok": 40
+        },
+        "successful_endpoint_seconds": {
+          "median": 29.53742524050176,
+          "max": 117.56770423986018
+        },
+        "vs_canonical": {
+          "complete": 2,
+          "planned": 2,
+          "mae": 1.5017276480067885,
+          "max_abs": 1.6938885950992386,
+          "within_1_kcal_mol": 0,
+          "complete_set_chemical_accuracy": false
+        },
+        "conventional_composite_vs_canonical": {
+          "complete": 2,
+          "planned": 2,
+          "mae": 1.4652320942797417,
+          "max_abs": 1.6440758436860818,
+          "within_1_kcal_mol": 0,
+          "complete_set_chemical_accuracy": false
+        }
+      },
+      "TQ_D": {
+        "barriers": {
+          "complete": 20,
+          "planned": 20,
+          "mae": 0.26895726940151016,
+          "max_abs": 0.6755376559257797,
+          "within_1_kcal_mol": 20,
+          "complete_set_chemical_accuracy": true
+        },
+        "endpoint_status_counts": {
+          "ok": 40
+        },
+        "successful_endpoint_seconds": {
+          "median": 46.26834174711257,
+          "max": 157.55197184160352
+        },
+        "vs_canonical": {
+          "complete": 0,
+          "planned": 2,
+          "mae": null,
+          "max_abs": null,
+          "within_1_kcal_mol": 0,
+          "complete_set_chemical_accuracy": false
+        },
+        "conventional_composite_vs_canonical": {
+          "complete": 0,
+          "planned": 2,
+          "mae": null,
+          "max_abs": null,
+          "within_1_kcal_mol": 0,
+          "complete_set_chemical_accuracy": false
+        }
+      },
+      "same_card_common": {
+        "DT_D": {
+          "complete": 20,
+          "planned": 20,
+          "mae": 1.7633413151048547,
+          "max_abs": 3.094654642667578,
+          "within_1_kcal_mol": 6,
+          "complete_set_chemical_accuracy": false
+        },
+        "TQ_D": {
+          "complete": 20,
+          "planned": 20,
+          "mae": 0.26895726940151016,
+          "max_abs": 0.6755376559257797,
+          "within_1_kcal_mol": 20,
+          "complete_set_chemical_accuracy": true
+        }
+      }
+    }
+  }
+}

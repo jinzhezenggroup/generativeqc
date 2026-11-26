@@ -1,0 +1,27 @@
+{
+  "dataset": "CRBH20",
+  "systems": [
+    "CRBH20/19ts",
+    "CRBH20/09ts",
+    "CRBH20/13ts",
+    "CRBH20/15ts",
+    "CRBH20/17ts",
+    "CRBH20/16ts",
+    "CRBH20/03ts",
+    "CRBH20/05ts",
+    "CRBH20/07ts",
+    "CRBH20/14ts",
+    "CRBH20/18ts",
+    "CRBH20/06ts",
+    "CRBH20/20ts",
+    "CRBH20/04ts",
+    "CRBH20/08ts",
+    "CRBH20/12ts",
+    "CRBH20/10ts",
+    "CRBH20/02ts",
+    "CRBH20/11ts",
+    "CRBH20/01ts"
+  ],
+  "relative_work_estimate": 54478473005868,
+  "inputs_sha256": "ee4aac06d0f7e9fe270f9aec6eb4af827199cf18090df3fba4df21adfa1bc4ce"
+}
