@@ -128,46 +128,6 @@ def require_initial_guess_library(library: object) -> None:
         raise NotImplementedError("unsupported preliminary SCF schema")
 
 
-def supports_automatic_minao(library: object) -> bool:
-    """Require positive provider support; schema 1 alone also describes HF/LDA.
-
-    Automatic selection preserves Hcore on older or incompatible libraries.
-    Explicit policies retain their existing schema and native domain checks.
-    Unexpected query failures remain visible rather than becoming a fallback.
-    """
-    schema = getattr(library, "generativeqc_initial_guess_options_version", None)
-    if schema is None:
-        return False
-    schema.argtypes, schema.restype = [], ctypes.c_uint32
-    if schema() != 1:
-        return False
-    query = getattr(library, "generativeqc_initial_guess_capabilities_v1", None)
-    if query is None:
-        return False
-    query.argtypes, query.restype = [], ctypes.c_uint32
-    return bool(query() & _native.INITIAL_GUESS_CAPABILITY_MINAO)
-
-
-def supports_automatic_huckel(
-    library: object, *, cuda_rhf: bool = False, density_fitting: bool = False
-) -> bool:
-    """Discover provider and target-domain bits; schema alone proves neither."""
-    schema = getattr(library, "generativeqc_initial_guess_options_version", None)
-    query = getattr(library, "generativeqc_initial_guess_capabilities_v1", None)
-    if schema is None or query is None:
-        return False
-    schema.argtypes, schema.restype = [], ctypes.c_uint32
-    if schema() != 1:
-        return False
-    query.argtypes, query.restype = [], ctypes.c_uint32
-    required = _native.INITIAL_GUESS_CAPABILITY_HUCKEL
-    if cuda_rhf:
-        required |= _native.INITIAL_GUESS_CAPABILITY_HUCKEL_CUDA_RHF
-    if density_fitting:
-        required |= _native.INITIAL_GUESS_CAPABILITY_HUCKEL_DF
-    return query() & required == required
-
-
 def _initial_guess_precision(calculator: typing.Any) -> int:
     """Keep native MINAO/Huckel preparation strict for application-selected work.
 
@@ -226,26 +186,23 @@ def _native_automatic_minao_eligible(
     electron_count: int | None = None,
     multiplicity: int | None = None,
     kind: str = "minao",
-) -> bool | None:
-    """Marshal policy facts, leaving selection to the shared native owner.
-
-    ``None`` means the additive query is absent, not a failed native admission.
-    Query failures stay visible; only old libraries use the compatibility policy.
-    """
+) -> bool:
+    """Marshal system facts to the selected native seed eligibility owner."""
     library = getattr(calculator, "_library", None)
     system_query = electron_count is not None or multiplicity is not None
     if system_query and (electron_count is None or multiplicity is None):
         raise ValueError("automatic system policy requires the complete population")
     version = 2 if kind == "huckel" else 1
-    query = getattr(
-        library,
+    symbol = (
         f"generativeqc_initial_guess_auto_system_kind_v{version}"
         if system_query
-        else f"generativeqc_initial_guess_auto_kind_v{version}",
-        None,
+        else f"generativeqc_initial_guess_auto_kind_v{version}"
     )
+    query = getattr(library, symbol, None)
     if query is None:
-        return None
+        raise NotImplementedError(
+            f"native automatic initial-guess policy lacks {symbol}"
+        )
     request = _automatic_policy_request(
         calculator,
         restricted=restricted,
@@ -270,125 +227,51 @@ def _native_automatic_minao_eligible(
 
 
 def _uses_native_automatic_cpu(calculator: typing.Any) -> bool:
-    """Discover the qualified per-item execution path, never infer it from schema 1."""
-    if (
-        not getattr(calculator, "_automatic_initial_guess", False)
-        or getattr(calculator, "_device_name", None) != "cpu"
-    ):
-        return False
-    native_kind = getattr(calculator, "_native_automatic_initial_guess_kind", None)
-    if native_kind is not None:
-        return native_kind in (
-            _native.INITIAL_GUESS_AUTO_CPU,
-            _native.INITIAL_GUESS_AUTO_HUCKEL_CPU,
-        )
-    library = getattr(calculator, "_library", None)
-    policy = getattr(calculator, "_initial_guess", None)
-    huckel = policy is not None and policy.kind == "huckel"
-    supports = supports_automatic_huckel if huckel else supports_automatic_minao
-    if not supports(library):
-        return False
-    query = library.generativeqc_initial_guess_capabilities_v1
-    capability = (
-        _native.INITIAL_GUESS_CAPABILITY_AUTO_HUCKEL_CPU
-        if huckel
-        else _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
-    )
-    if not query() & capability:
-        return False
-    version = 2 if huckel else 1
-    if not hasattr(library, f"generativeqc_initial_guess_auto_system_kind_v{version}"):
-        raise RuntimeError("native automatic CPU capability lacks its system query")
-    return True
-
-
-def _automatic_minao_model_eligible(
-    calculator: typing.Any, *, restricted: bool, has_ecp: bool
-) -> bool:
-    """Use native model admission, retaining Hcore compatibility with older SDKs."""
-    admitted = _native_automatic_minao_eligible(
-        calculator, restricted=restricted, has_ecp=has_ecp
-    )
-    if admitted is not None:
-        return admitted
-    return (
-        (
-            calculator._device_name == "cpu"
-            or calculator._capabilities.family == "density_functional"
-        )
-        and _initial_guess_precision(calculator) == _native.PRECISION_FP64
-        and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
-        and restricted
-        and not has_ecp
-        and calculator._capabilities.family in ("hartree_fock", "density_functional")
-        and supports_automatic_minao(calculator._library)
+    """Read the CPU transport selected by the native default-policy query."""
+    return getattr(calculator, "_native_automatic_initial_guess_kind", None) in (
+        _native.INITIAL_GUESS_AUTO_CPU,
+        _native.INITIAL_GUESS_AUTO_HUCKEL_CPU,
     )
 
 
 def automatic_initial_guess_candidate(
     calculator: typing.Any, *, restricted: bool, has_ecp: bool
-) -> tuple[InitialGuessSpec | None, int | None]:
-    """Return the seed controls and native transport, if that ABI is available.
-
-    The native result alone chooses the candidate and CPU per-item transport.
-    ``None`` transport means the library predates combined discovery; zero is
-    an authoritative core-density choice. Native errors never use old policy.
-    """
+) -> tuple[InitialGuessSpec | None, int]:
+    """Return the native-selected controls and transport; zero denotes Hcore."""
     library = calculator._library
     query = getattr(library, "generativeqc_initial_guess_default_kind_v1", None)
-    if query is not None:
-        request = _automatic_policy_request(
-            calculator, restricted=restricted, has_ecp=has_ecp
+    if query is None:
+        raise NotImplementedError(
+            "native library lacks generativeqc_initial_guess_default_kind_v1; "
+            "upgrade the library or pass initial_guess=None to select Hcore explicitly"
         )
-        query.argtypes = [
-            ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor),
-            ctypes.POINTER(ctypes.c_uint32),
-        ]
-        query.restype = ctypes.c_int
-        selected = ctypes.c_uint32(2**32 - 1)
-        _native.check(library, query(ctypes.byref(request), ctypes.byref(selected)))
-        if not selected.value:
-            return None, 0
-        kinds = (
-            {
-                _native.INITIAL_GUESS_AUTO_CPU: "minao",
-                _native.INITIAL_GUESS_AUTO_HUCKEL_CPU: "huckel",
-            }
-            if calculator._device_name == "cpu"
-            else {
-                _native.INITIAL_GUESS_MINAO: "minao",
-                _native.INITIAL_GUESS_HUCKEL: "huckel",
-            }
-        )
-        kind = kinds.get(selected.value)
-        if kind is None:
-            raise RuntimeError(
-                "unsupported native automatic initial-guess descriptor kind"
-            )
-        return InitialGuessSpec(kind), selected.value
-
-    # Only older images need to combine the independent provider tests.
-    if supports_automatic_huckel(
-        calculator._library,
-        cuda_rhf=calculator._device_name == "cuda"
-        and calculator._method == _native.METHOD_RHF,
-        density_fitting=calculator._density_fitting_mode
-        != _native.DENSITY_FITTING_NONE,
-    ):
-        admitted = _native_automatic_minao_eligible(
-            calculator, restricted=restricted, has_ecp=has_ecp, kind="huckel"
-        )
-        if admitted is None:
-            raise RuntimeError(
-                "native Huckel capability lacks its automatic policy query"
-            )
-        if admitted:
-            return InitialGuessSpec("huckel"), None
-    if _automatic_minao_model_eligible(
+    request = _automatic_policy_request(
         calculator, restricted=restricted, has_ecp=has_ecp
-    ):
-        return InitialGuessSpec("minao"), None
-    return None, None
+    )
+    query.argtypes = [
+        ctypes.POINTER(_native.InitialGuessAutoPolicyDescriptor),
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    query.restype = ctypes.c_int
+    selected = ctypes.c_uint32(2**32 - 1)
+    _native.check(library, query(ctypes.byref(request), ctypes.byref(selected)))
+    if not selected.value:
+        return None, 0
+    kinds = (
+        {
+            _native.INITIAL_GUESS_AUTO_CPU: "minao",
+            _native.INITIAL_GUESS_AUTO_HUCKEL_CPU: "huckel",
+        }
+        if calculator._device_name == "cpu"
+        else {
+            _native.INITIAL_GUESS_MINAO: "minao",
+            _native.INITIAL_GUESS_HUCKEL: "huckel",
+        }
+    )
+    kind = kinds.get(selected.value)
+    if kind is None:
+        raise RuntimeError("unsupported native automatic initial-guess descriptor kind")
+    return InitialGuessSpec(kind), selected.value
 
 
 def read_initial_guess_diagnostic(
@@ -534,10 +417,10 @@ def _minao_numeric_capacity(
 def initial_guess_for_systems(
     calculator: typing.Any, systems: typing.Any
 ) -> InitialGuessSpec | None:
-    """Delegate qualified CPU defaults; retain conservative old-library/CUDA behavior.
+    """Delegate CPU defaults per item and apply native CUDA eligibility per batch.
 
     Native CPU automatic kinds resolve their provider or Hcore per prepared item.
-    Compatibility batches share an explicit descriptor, so an unsupported item
+    CUDA batches share an explicit descriptor, so an unsupported item
     keeps that whole batch on Hcore. Explicit choices remain fail-closed.
     """
     policy = calculator._initial_guess
@@ -561,11 +444,7 @@ def initial_guess_for_systems(
             atomic_numbers=tuple(atom.atomic_number for atom in atoms),
             kind=policy.kind,
         )
-        if admitted is False:
-            return None
-        if admitted is None and (
-            has_ecp or any(not 1 <= atom.atomic_number <= 18 for atom in atoms)
-        ):
+        if not admitted:
             return None
     return policy
 
@@ -961,10 +840,6 @@ def with_initial_guess_resources(
                     multiplicity=electrons["multiplicity"],
                     kind="huckel",
                 )
-                if admitted is None:
-                    raise RuntimeError(
-                        "native automatic CPU policy lacks its system query"
-                    )
                 resolved_kinds.append(5 if admitted else 0)
                 if not admitted:
                     continue
@@ -1043,10 +918,6 @@ def with_initial_guess_resources(
                     electron_count=electrons["electron_count"],
                     multiplicity=electrons["multiplicity"],
                 )
-                if admitted is None:
-                    raise RuntimeError(
-                        "native automatic CPU policy lacks its system query"
-                    )
                 resolved_kinds.append(3 if admitted else 0)
                 if not admitted:
                     continue

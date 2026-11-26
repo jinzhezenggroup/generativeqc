@@ -244,6 +244,9 @@ def test_missing_inventory_and_foreign_plan_reject_before_preparation(
         pytest.fail("unsupported KS library attempted native preparation")
 
     library = SimpleNamespace(
+        generativeqc_resource_ks_cpu_fleet_v1=(
+            calculator._library.generativeqc_resource_ks_cpu_fleet_v1
+        ),
         generativeqc_context_create=forbidden,
         generativeqc_calculation_prepare=forbidden,
         generativeqc_batch_prepare=forbidden,

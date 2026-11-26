@@ -1,0 +1,8 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "crbh20-cbs-20261125",
+  "owner": "GenerativeQC issue #3182",
+  "reason": "Retain the source-bound CRBH20 endpoint journals, benchmark inputs, acquisition receipts, and offline replay. All files are below the configured legacy large-evidence threshold.",
+  "review_document": "benchmarks/results/crbh20-cbs-20261125/README.md",
+  "files": []
+}

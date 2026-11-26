@@ -302,6 +302,98 @@ def test_native_refusal_never_retries_python_and_cleanup_allows_next_audit(
     assert np.isfinite(observed.fixed_density_energy)
 
 
+@pytest.mark.parametrize("fitted", [False, True])
+@pytest.mark.parametrize("unrestricted", [False, True])
+def test_native_admission_matches_full_planner_at_one_byte_boundary(
+    monkeypatch: pytest.MonkeyPatch, fitted: bool, unrestricted: bool
+) -> None:
+    """Use one audit gate and do not construct a Fock owner below its cap."""
+    from generativeqc import progressive_controller as controller
+
+    calculator = Calculator(
+        basis="sto-3g",
+        method="uhf" if unrestricted else "rhf",
+        density_fitting="cpu" if fitted else "none",
+        initial_guess=None,
+        target_accuracy=ACCURACY,
+    )
+    atoms = tuple(Atom.from_value(a) for a in (("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))))
+    problem = TargetProblem.from_calculator(calculator, atoms)
+    spins = 2 if unrestricted else 1
+    density = np.full((spins, 2, 2), 0.1)
+    planner_bytes = calculator.estimate_resources([atoms]).peak_bytes["host"]
+    with inputs(calculator, atoms) as (_, _, _, _, capacity):
+        assert capacity.provider_bytes == planner_bytes
+        assert capacity.workspace_bytes == 8 * 2**2 * (12 * spins + 8)
+        exact = capacity.provider_bytes + capacity.workspace_bytes
+        assert capacity.required_host_bytes == exact
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("admitted audit called the compatibility planner or owner")
+
+    monkeypatch.setattr(calculator, "estimate_resources", forbidden)
+    monkeypatch.setattr(controller, "_audit_target_physical_residual_python", forbidden)
+    with monkeypatch.context() as injection:
+        injection.setattr(
+            calculator._library, "generativeqc_hf_physical_audit_cpu_v1", forbidden
+        )
+        with pytest.raises(MemoryError, match="budget"):
+            controller._audit_target_physical_residual(
+                problem,
+                calculator,
+                atoms,
+                density,
+                -1,
+                charge=0,
+                multiplicity=1,
+                maximum_host_bytes=exact - 1,
+            )
+    observed = controller._audit_target_physical_residual(
+        problem,
+        calculator,
+        atoms,
+        density,
+        -1,
+        charge=0,
+        multiplicity=1,
+        maximum_host_bytes=exact,
+    )
+    assert np.isfinite(observed.fixed_density_energy)
+
+
+def test_preliminary_reservation_keeps_legacy_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pure fixed-density capacity may not waive the target's guess budget."""
+    from generativeqc import InitialGuessSpec
+    from generativeqc import progressive_controller as controller
+
+    calculator = Calculator(
+        basis="sto-3g", initial_guess=InitialGuessSpec("hf"), target_accuracy=ACCURACY
+    )
+    atoms = tuple(Atom.from_value(a) for a in (("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))))
+    problem = TargetProblem.from_calculator(calculator, atoms)
+    density = np.full((1, 2, 2), 0.1)
+    with inputs(calculator, atoms) as (_, _, _, _, capacity):
+        pure_audit_bytes = capacity.required_host_bytes
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise AssertionError("underfunded preliminary reservation reached native audit")
+
+    monkeypatch.setattr(native, "audit", forbidden)
+    with pytest.raises(MemoryError):
+        controller._audit_target_physical_residual(
+            problem,
+            calculator,
+            atoms,
+            density,
+            -1,
+            charge=0,
+            multiplicity=1,
+            maximum_host_bytes=pure_audit_bytes,
+        )
+
+
 def test_missing_native_protocol_retains_explicit_compatibility() -> None:
     """An older selected library uses its bounded incumbent audit deliberately."""
     from generativeqc import progressive_controller as controller

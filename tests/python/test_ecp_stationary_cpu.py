@@ -8,8 +8,16 @@ import pytest
 from generativeqc import Calculator, GridSpec, KsOptions
 from generativeqc._dft_gradient import StationaryDerivativeContract, StationaryKsState
 from generativeqc._stationary_cpu import complete_rks_gradient_diagnostic
+from generativeqc.basis import (
+    BasisProvenance,
+    BasisSet,
+    BasisShell,
+    ElementBasis,
+    canonical_hash,
+)
 from generativeqc_compiler.dft import NativeAO
 from test_ecp import fixture
+from test_r1_native_forces import forbid_python_force
 
 GRID = GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
 
@@ -45,11 +53,14 @@ def reference(
     initial_guess: str = "1e",
     maximum_cycles: int = 150,
     return_mean_field: bool = False,
+    auxiliary: dict | None = None,
 ) -> typing.Any:
     from pyscf import dft, lib
 
     lib.num_threads(1)
     solver = dft.UKS(mol) if method.endswith("uks") else dft.RKS(mol)
+    if auxiliary is not None:
+        solver = solver.density_fit(auxbasis=auxiliary)
     if method.startswith("b3lyp"):
         # Pin the Gaussian/VWN-RPA definition independently of native admission.
         solver.xc = "0.08*LDA_X+0.72*GGA_X_B88+0.19*LDA_C_VWN_RPA+0.81*GGA_C_LYP+0.2*HF"
@@ -75,12 +86,122 @@ def reference(
     assert solver.converged
     gradient = solver.nuc_grad_method()
     gradient.grid_response = True
+    if auxiliary is not None:
+        gradient.auxbasis_response = True
     derivative = gradient.kernel()
     return (
         (solver.e_tot, derivative, solver)
         if return_mean_field
         else (solver.e_tot, derivative)
     )
+
+
+@pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks"])
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+def test_native_cpu_df_j_preserves_the_ecp_hamiltonian(
+    method: str, representation: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compare the native force to an independent moving-grid and moving-fit oracle."""
+    from pyscf import gto
+
+    forbid_python_force(monkeypatch)
+    spin = int(method.endswith("uks"))
+    atoms, orbital, molecule = fixture(spin=spin, representation=representation)
+    raw_auxiliary = {
+        symbol: gto.basis.load("def2-svp", symbol) for symbol in ("Na", "H")
+    }
+    auxiliary = BasisSet(
+        "Na/H def2-SVP test auxiliary",
+        tuple(
+            ElementBasis(
+                atomic_number,
+                tuple(
+                    BasisShell(
+                        angular,
+                        tuple(str(row[0]) for row in rows),
+                        tuple(
+                            tuple(str(row[column]) for row in rows)
+                            for column in range(1, len(rows[0]))
+                        ),
+                    )
+                    for angular, *rows in raw_auxiliary[symbol]
+                ),
+            )
+            for symbol, atomic_number in (("Na", 11), ("H", 1))
+        ),
+        BasisProvenance(
+            "PySCF test-only installed basis library",
+            "def2-SVP",
+            "local test data, not redistributed",
+            canonical_hash(raw_auxiliary),
+        ),
+        representation=representation,
+    )
+    calculator = Calculator(
+        basis=orbital,
+        auxiliary_basis=auxiliary,
+        density_fitting="cpu",
+        method=method,
+        device="cpu",
+        ks_options=KsOptions(grid=GRID),
+        max_iterations=150,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-13,
+    )
+    with (
+        calculator.prepare_batch(
+            [atoms], charges=[spin], multiplicities=[spin + 1]
+        ) as prepared,
+        NativeAO(
+            atoms,
+            basis=orbital,
+            representation=representation,
+            charge=spin,
+            multiplicity=spin + 1,
+        ) as ao,
+    ):
+        cold, warm = (
+            prepared.execute(strict=True, properties=("energy", "forces")).items[0]
+            for _ in range(2)
+        )
+        state = StationaryKsState.from_native(prepared, ao)
+        try:
+            assert state._source.hamiltonian == "scalar-semilocal-ecp"
+            assert state._source.ecp_cores == (10, 0)
+            expected_energy, expected_gradient = reference(
+                molecule, state, method, auxiliary=raw_auxiliary
+            )
+        finally:
+            state._source.close()
+        energy = prepared.execute(strict=True, properties=("energy",)).items[0]
+        assert energy.forces is None
+        if representation == "spherical" and not spin:
+            moved = np.asarray([position for _, position in atoms])
+            moved[1, 0] += 0.004
+            force_request = {
+                "strict": True,
+                "properties": ("energy", "forces"),
+                "coordinates": [moved],
+            }
+            with monkeypatch.context() as diagnostic:
+                diagnostic.setenv("GENERATIVEQC_CPU_DF_MATERIALIZED_DERIVATIVES", "1")
+                with pytest.raises(NotImplementedError):
+                    prepared.execute(**force_request)
+            resumed = prepared.execute(**force_request).items[0]
+            assert np.max(np.abs(resumed.forces - warm.forces)) > 1e-6
+            with calculator.prepare_batch(
+                [atoms], charges=[spin], multiplicities=[spin + 1], warm_start=False
+            ) as fresh:
+                expected = fresh.execute(**force_request).items[0]
+            assert abs(resumed.energy - expected.energy) < 2e-10
+            np.testing.assert_allclose(
+                resumed.forces, expected.forces, atol=2e-9, rtol=0
+            )
+    for result in (cold, warm):
+        assert result.executed_backend == "cpu_reference"
+        assert abs(result.energy - expected_energy) < 2e-8
+        np.testing.assert_allclose(result.forces, -expected_gradient, atol=1e-7, rtol=0)
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])
