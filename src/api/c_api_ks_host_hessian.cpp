@@ -693,6 +693,30 @@ extern "C" std::uint32_t generativeqc_ks_hessian_cpu_method_v1(const char* ident
 #endif
 }
 
+extern "C" std::uint32_t generativeqc_ks_hessian_cpu_model_match_v1(const char* electronic_identity,
+                                                                    const char* total_identity) {
+#if GENERATIVEQC_HAS_HOST_HESSIAN
+  methods::named_ks::Dispersion electronic_correction;
+  const auto* electronic =
+      electronic_identity ? linked_program(electronic_identity, electronic_correction) : nullptr;
+  if (!electronic || electronic_correction.kind) return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_UNLINKED;
+  if (!total_identity) return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_ELECTRONIC_ONLY;
+  if (std::string_view(electronic_identity) == total_identity)
+    return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_MATCHED;
+
+  methods::named_ks::Dispersion total_correction;
+  const auto* total = linked_program(total_identity, total_correction);
+  // Compare resolved closures, not descriptive names or independent link bits.
+  if (total && total->identity == electronic->identity)
+    return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_MATCHED;
+  return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_ELECTRONIC_ONLY;
+#else
+  (void)electronic_identity;
+  (void)total_identity;
+  return GENERATIVEQC_KS_HESSIAN_CPU_MODEL_UNLINKED;
+#endif
+}
+
 namespace {
 generativeqc_status cpu_hessian_minimum_bytes(
     generativeqc_context* context, const generativeqc_system* system, const char* method,
