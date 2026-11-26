@@ -10,7 +10,6 @@ from types import SimpleNamespace
 import pytest
 from generativeqc import Calculator, InitialGuessSpec, _native
 from generativeqc.initial_guess import (
-    _automatic_minao_model_eligible,
     _native_automatic_minao_eligible,
     _uses_native_automatic_cpu,
     automatic_initial_guess_candidate,
@@ -81,14 +80,18 @@ def calculator(query: PolicyQuery) -> SimpleNamespace:
     )
 
 
-@pytest.mark.parametrize("kind,expected", [(0, False), (3, True)])
-def test_model_selection_uses_native_result(kind: int, expected: bool) -> None:
+@pytest.mark.parametrize(
+    "kind,expected", [(0, (None, 0)), (4, (InitialGuessSpec("minao"), 4))]
+)
+def test_model_selection_uses_native_result(
+    kind: int, expected: tuple[InitialGuessSpec | None, int]
+) -> None:
     query = PolicyQuery(kind)
+    calc = calculator(PolicyQuery(99))
+    setattr(calc._library, DEFAULT_QUERY, query)
     assert (
-        _automatic_minao_model_eligible(
-            calculator(query), restricted=True, has_ecp=False
-        )
-        is expected
+        automatic_initial_guess_candidate(calc, restricted=True, has_ecp=False)
+        == expected
     )
     assert query.requests == [
         {
@@ -136,20 +139,16 @@ def test_explicit_choice_does_not_query_automatic_policy() -> None:
     assert not query.requests
 
 
-def test_absent_query_is_only_compatibility_case() -> None:
+def test_missing_eligibility_query_does_not_reselect_in_python() -> None:
     calc = calculator(PolicyQuery(3))
     calc._library = SimpleNamespace()
-    assert (
-        _native_automatic_minao_eligible(calc, restricted=True, has_ecp=False) is None
-    )
-    assert initial_guess_for_systems(calc, [[("He", (0, 0, 0))]]) is calc._initial_guess
+    with pytest.raises(NotImplementedError, match="policy lacks.*auto_kind_v1"):
+        initial_guess_for_systems(calc, [[("He", (0, 0, 0))]])
 
 
 def test_unknown_policy_result_does_not_silently_fall_back() -> None:
     with pytest.raises(RuntimeError, match="unsupported native automatic"):
-        _automatic_minao_model_eligible(
-            calculator(PolicyQuery(99)), restricted=True, has_ecp=False
-        )
+        initial_guess_for_systems(calculator(PolicyQuery(99)), [[("He", (0, 0, 0))]])
 
 
 def test_failed_query_does_not_silently_fall_back() -> None:
@@ -157,33 +156,23 @@ def test_failed_query_does_not_silently_fall_back() -> None:
     calc = calculator(query)
     calc._library.generativeqc_status_message = lambda status: b"invalid policy"
     with pytest.raises(RuntimeError, match="invalid policy"):
-        _automatic_minao_model_eligible(calc, restricted=True, has_ecp=False)
+        initial_guess_for_systems(calc, [[("He", (0, 0, 0))]])
 
 
-@pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
-def test_legacy_calculator_does_not_reselect_native_declined_policy(
-    monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
+def test_automatic_requires_the_combined_native_policy(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     library = _native.load_library(device="cpu")
-    name = f"generativeqc_initial_guess_auto_kind_v{version}"
-    if not hasattr(library, name):
-        pytest.skip("native automatic-policy export required")
-    query = PolicyQuery(0)
+    query = PolicyQuery(3)
     monkeypatch.setattr(library, DEFAULT_QUERY, None, raising=False)
-    monkeypatch.setattr(
-        library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
-    )
-    monkeypatch.setattr(library, name, query)
-    if version == 2:
-        # The legacy MINAO alternative must also honor its native owner's veto.
-        monkeypatch.setattr(
-            library, "generativeqc_initial_guess_auto_kind_v1", PolicyQuery(0)
-        )
+    monkeypatch.setattr(library, "generativeqc_initial_guess_auto_kind_v1", query)
     monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
-    calc = Calculator("rhf", "sto-3g", device="cpu")
+    with pytest.raises(NotImplementedError, match=DEFAULT_QUERY):
+        Calculator("rhf", "sto-3g", device="cpu")
+    calc = Calculator("rhf", "sto-3g", device="cpu", initial_guess=None)
     assert calc.initial_guess is None
-    assert query.requests and query.requests[0]["method"] == _native.METHOD_RHF
     assert not calc._method_descriptor(systems=[[("He", (0, 0, 0))]]).initial_guess
+    assert not query.requests
 
 
 @pytest.mark.parametrize("kind,provider", [(0, None), (4, "minao"), (6, "huckel")])
@@ -268,12 +257,7 @@ def test_system_population_is_marshaled_without_python_reselection(
 def test_native_per_item_execution_does_not_preselect_the_shared_descriptor() -> None:
     query = PolicyQuery(0)
     calc = calculator(query)
-    calc._library.generativeqc_initial_guess_options_version = lambda: 1
-    calc._library.generativeqc_initial_guess_capabilities_v1 = lambda: (
-        _native.INITIAL_GUESS_CAPABILITY_MINAO
-        | _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
-    )
-    calc._library.generativeqc_initial_guess_auto_system_kind_v1 = SystemPolicyQuery(3)
+    calc._native_automatic_initial_guess_kind = _native.INITIAL_GUESS_AUTO_CPU
     assert _uses_native_automatic_cpu(calc)
     assert (
         initial_guess_for_systems(calc, [[("He", (0, 0, 0))], [("Ca", (0, 0, 0))]])
@@ -281,33 +265,32 @@ def test_native_per_item_execution_does_not_preselect_the_shared_descriptor() ->
     )
     assert not query.requests
     assert calc._initial_guess.native(automatic_cpu=True).kind == 4
-    calc._device_name = "cuda"
+    calc._native_automatic_initial_guess_kind = _native.INITIAL_GUESS_MINAO
     assert not _uses_native_automatic_cpu(calc)
 
 
-def test_positive_execution_capability_without_query_is_an_error() -> None:
+def test_missing_system_query_does_not_guess_capacity_policy() -> None:
     calc = calculator(PolicyQuery(3))
-    calc._library.generativeqc_initial_guess_options_version = lambda: 1
-    calc._library.generativeqc_initial_guess_capabilities_v1 = lambda: (
-        _native.INITIAL_GUESS_CAPABILITY_MINAO
-        | _native.INITIAL_GUESS_CAPABILITY_AUTO_CPU
-    )
-    with pytest.raises(RuntimeError, match="lacks its system query"):
-        _uses_native_automatic_cpu(calc)
+    with pytest.raises(NotImplementedError, match="policy lacks.*auto_system_kind_v1"):
+        _native_automatic_minao_eligible(
+            calc,
+            restricted=True,
+            has_ecp=False,
+            atomic_numbers=(2,),
+            electron_count=2,
+            multiplicity=1,
+        )
 
 
-@pytest.mark.parametrize("version,capabilities", [(1, 15), (2, 255)])
-def test_legacy_resource_planner_obeys_native_system_policy(
-    monkeypatch: pytest.MonkeyPatch, version: int, capabilities: int
+@pytest.mark.parametrize("version,transport", [(1, 4), (2, 6)])
+def test_shape_v1_resource_planner_obeys_native_system_policy(
+    monkeypatch: pytest.MonkeyPatch, version: int, transport: int
 ) -> None:
     """An eligible element/population must not override a native Hcore decision."""
     library = _native.load_library(device="cpu")
-    monkeypatch.setattr(library, DEFAULT_QUERY, None, raising=False)
+    monkeypatch.setattr(library, DEFAULT_QUERY, PolicyQuery(transport))
     monkeypatch.setattr(
         library, "generativeqc_resource_preliminary_cpu_shape_v2", None, raising=False
-    )
-    monkeypatch.setattr(
-        library, "generativeqc_initial_guess_capabilities_v1", lambda: capabilities
     )
     monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: library)
     calc = Calculator("rhf", "sto-3g", device="cpu")

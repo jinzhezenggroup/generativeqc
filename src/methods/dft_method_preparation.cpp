@@ -554,9 +554,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
           "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
     if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
   }
-  // The absent-selector default is deliberately cold-only, not the broader
-  // experimental override. An explicit 0/off suppresses this automatic route,
-  // and an explicit 1/on keeps the original native capability checks.
+  // Preparation bounds automatic Direct storage and the eligible operators.
+  // Each solve selects the active controller from its own seed provenance.
+  // Explicit 0/off disables auto; 1/on keeps the native experimental checks.
   if (!std::getenv("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK") &&
       !std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK")) {
     const bool pure_coulomb =

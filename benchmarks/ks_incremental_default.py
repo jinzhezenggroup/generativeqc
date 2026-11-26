@@ -34,11 +34,12 @@ def incremental_expectation(
 
     Its default-grid water sizes are inside native automatic hybrid admission.
     Mixed budget Focks cannot borrow exact incremental anchors, whereas a Fast
-    candidate with strict SCF is eligible just like Standard. Warm and moved
-    seeds retain the independent native provenance exclusions.
+    candidate with strict SCF is eligible just like Standard. A moved solve
+    borrows its own batch's last converged density. Frozen warm replays and
+    externally imported seeds have separate provenance.
     """
     requested = selector == "unset" and mode == "direct" and not budget_fock
-    return requested, requested and phase in ("cold", "reset")
+    return requested, requested and phase in ("cold", "moved", "reset")
 
 
 def main() -> None:

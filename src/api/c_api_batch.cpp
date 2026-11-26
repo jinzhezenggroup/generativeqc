@@ -125,7 +125,9 @@ generativeqc_status generativeqc_ks_batch_supported_properties_v1(
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   const auto value = batch->plan->supported_properties(index);
   if (!value) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-  *output = batch->cpu_df_host_properties ? *value & batch->cpu_df_host_properties : *value;
+  const auto admitted = batch->cpu_hessian_host_properties ? batch->cpu_hessian_host_properties
+                                                           : batch->cpu_df_host_properties;
+  *output = admitted ? *value & admitted : *value;
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
@@ -136,12 +138,22 @@ generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
   return generativeqc::api::copy_initial_guess_diagnostic(batch->initial_guesses[index], out);
 }
 
+struct HostHessianAdmission {
+  const generativeqc_host_resources& resources;
+  std::uint64_t limit, derivative_workspace;
+  bool forces;
+  std::uint64_t derivative_ceiling{};
+  bool reserve_seed_restore{};
+  bool saddle_ecp_forces{};
+};
+
 static generativeqc_status prepare_batch(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, generativeqc_batch_flags flags,
     const std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>& resource_owner,
     generativeqc_batch** batch, const generativeqc_named_ks_descriptor* named,
-    const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr) {
+    const generativeqc::scf::RksColdFockDamping* cold_damping = nullptr,
+    const HostHessianAdmission* hessian_admission = nullptr) {
   generativeqc::runtime::host_trace::Region trace("batch_prepare");
   if (context == nullptr || systems == nullptr || system_count == 0 || descriptor == nullptr ||
       batch == nullptr) {
@@ -164,11 +176,17 @@ static generativeqc_status prepare_batch(
     }
     generativeqc::runtime::DeviceResourceScope resources(resource_owner);
     std::optional<generativeqc::api::NamedKsInputs> named_inputs;
-    std::optional<generativeqc::api::CpuDfKsHostAdmission> cpu_host_admission;
+    std::optional<generativeqc::api::CpuKsHostAdmission> cpu_host_admission;
     if (named) {
       named_inputs.emplace(*descriptor, named, context->state.executed_backend);
       descriptor = &named_inputs->method.base;
-      if (named_inputs->selection.cpu_df_host_properties)
+      if (hessian_admission)
+        cpu_host_admission.emplace(
+            *named_inputs, context->state.executed_backend, hessian_admission->resources,
+            hessian_admission->limit, hessian_admission->derivative_workspace,
+            hessian_admission->forces, hessian_admission->reserve_seed_restore,
+            hessian_admission->saddle_ecp_forces);
+      else if (named_inputs->selection.cpu_df_host_properties)
         cpu_host_admission.emplace(*named_inputs, context->state.executed_backend);
     }
 
@@ -190,14 +208,16 @@ static generativeqc_status prepare_batch(
         return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       }
       if (cpu_host_admission)
-        cpu_host_admission->append(systems[i]->data,
-                                   generativeqc::api::native_auxiliary_basis(*descriptor));
+        cpu_host_admission->append(
+            systems[i]->data, generativeqc::api::native_auxiliary_basis(*descriptor), cold_damping);
       else
         native_systems.push_back(systems[i]->data);
       atom_counts.push_back(static_cast<std::uint32_t>(systems[i]->data.atoms.size()));
     }
     if (cpu_host_admission) {
       host_workspace = cpu_host_admission->use_workspace();
+      if (hessian_admission && hessian_admission->derivative_ceiling)
+        cpu_host_admission->select_derivative_workspace(hessian_admission->derivative_ceiling);
       host_lease = cpu_host_admission->reserve();
       for (std::uint32_t i = 0; i < system_count; ++i) native_systems.push_back(systems[i]->data);
     }
@@ -205,7 +225,12 @@ static generativeqc_status prepare_batch(
     candidate->context = context;
     candidate->resource_ledger = resource_owner;
     candidate->host_lease = host_lease;
-    if (cpu_host_admission) candidate->cpu_df_host_properties = cpu_host_admission->properties();
+    if (hessian_admission) {
+      candidate->cpu_hessian_workspace_bytes = cpu_host_admission->derivative_workspace();
+      candidate->cpu_hessian_host_properties = cpu_host_admission->properties();
+    } else if (cpu_host_admission) {
+      candidate->cpu_df_host_properties = cpu_host_admission->properties();
+    }
     candidate->flags = flags;
     candidate->atom_counts = std::move(atom_counts);
     candidate->last_fock_builds.resize(system_count);
@@ -229,7 +254,7 @@ static generativeqc_status prepare_batch(
         if (!properties || !(*properties & GENERATIVEQC_PROPERTY_FORCES))
           throw generativeqc::methods::MethodError(
               GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "prepared CPU DF KS item lacks budgeted analytic forces");
+              "prepared CPU KS item lacks budgeted analytic forces");
       }
     }
     *batch = candidate.release();
@@ -257,6 +282,62 @@ generativeqc_status generativeqc_batch_prepare_named_ks_v1(
   return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name);
 }
 
+generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_host_resources* resources,
+    uint64_t maximum_bytes, uint64_t derivative_workspace_bytes, generativeqc_batch** batch) {
+  if (batch) *batch = nullptr;
+  if (!resources || !name || !derivative_workspace_bytes ||
+      derivative_workspace_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  constexpr auto force_flag = GENERATIVEQC_BATCH_RESERVE_HOST_HESSIAN_FORCES;
+  if (flags & ~(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS | force_flag))
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const HostHessianAdmission host{*resources, maximum_bytes, derivative_workspace_bytes,
+                                  bool(flags & force_flag)};
+  return prepare_batch(context, systems, system_count, descriptor, flags & ~force_flag, {}, batch,
+                       name, nullptr, &host);
+}
+
+static generativeqc_status decode_cold_damping(
+    const generativeqc_rks_cold_fock_options_v1* cold,
+    std::optional<generativeqc::scf::RksColdFockDamping>& damping) {
+  if (!cold) return GENERATIVEQC_STATUS_SUCCESS;
+  if (!generativeqc::api::valid_descriptor(cold)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  if (cold->reserved || cold->maximum_bytes > std::numeric_limits<std::size_t>::max())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  damping = generativeqc::scf::RksColdFockDamping{cold->prefix_iterations, cold->previous_weight,
+                                                  static_cast<std::size_t>(cold->maximum_bytes)};
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status generativeqc_saddle_prepare_cpu_host_batch_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    const generativeqc_rks_cold_fock_options_v1* cold, generativeqc_batch_flags flags,
+    const generativeqc_host_resources* resources, std::uint64_t maximum_bytes, std::size_t floor,
+    std::size_t ceiling, generativeqc_batch** batch, std::size_t* selected_workspace) {
+  if (batch) *batch = nullptr;
+  if (!resources || !system || !name || !batch || !selected_workspace || !floor || floor > ceiling)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  constexpr auto warm = GENERATIVEQC_BATCH_ENABLE_WARM_STARTS;
+  if ((flags & ~warm) || (cold && !(flags & warm))) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::optional<generativeqc::scf::RksColdFockDamping> damping;
+  if (const auto status = decode_cold_damping(cold, damping); status != GENERATIVEQC_STATUS_SUCCESS)
+    return status;
+  // The adapter enforces the separately qualified ECP protocols, which
+  // require accepted-frame warm starts.
+  const HostHessianAdmission host{*resources,         maximum_bytes,     floor, true, ceiling,
+                                  bool(flags & warm), bool(flags & warm)};
+  const generativeqc_system* systems[]{system};
+  const auto status = prepare_batch(context, systems, 1, descriptor, flags, {}, batch, name,
+                                    damping ? &*damping : nullptr, &host);
+  if (status == GENERATIVEQC_STATUS_SUCCESS)
+    *selected_workspace = (*batch)->cpu_hessian_workspace_bytes;
+  return status;
+}
+
 generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
@@ -264,14 +345,11 @@ generativeqc_status generativeqc_batch_prepare_named_ks_cold_rks_v1(
     generativeqc_batch** batch) {
   if (batch) *batch = nullptr;
   if (!name || !cold || system_count != 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  if (!generativeqc::api::valid_descriptor(cold)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
-  if (cold->reserved || cold->maximum_bytes > std::numeric_limits<std::size_t>::max())
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  const generativeqc::scf::RksColdFockDamping damping{
-      cold->prefix_iterations, cold->previous_weight,
-      static_cast<std::size_t>(cold->maximum_bytes)};
+  std::optional<generativeqc::scf::RksColdFockDamping> damping;
+  if (const auto status = decode_cold_damping(cold, damping); status != GENERATIVEQC_STATUS_SUCCESS)
+    return status;
   return prepare_batch(context, systems, system_count, descriptor, flags, {}, batch, name,
-                       &damping);
+                       &*damping);
 }
 
 generativeqc_status generativeqc_batch_prepare_with_device_resources(
@@ -908,6 +986,11 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
+    if (compute_forces && batch->cpu_hessian_host_properties &&
+        !(batch->cpu_hessian_host_properties & GENERATIVEQC_PROPERTY_FORCES)) {
+      batch->context->last_detail = "force replay is outside the admitted CPU Hessian host budget";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if (!generativeqc::api::cpu_df_host_replay_allowed(batch->cpu_df_host_properties,
                                                        compute_forces)) {
       batch->context->last_detail = "replay is outside the admitted CPU DF KS host budget";

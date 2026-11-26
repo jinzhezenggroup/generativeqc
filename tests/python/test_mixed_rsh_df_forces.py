@@ -540,7 +540,7 @@ def test_cpu_mixed_dense_limit_rejects_before_snapshot_export(
 )
 @pytest.mark.parametrize(
     "device,force_route",
-    (("cpu", "reference"), ("cuda", "native"), ("cuda", "compatibility")),
+    (("cpu", "compatibility"), ("cuda", "native"), ("cuda", "compatibility")),
 )
 def test_complete_mixed_df_forces_against_independent_energies(
     spin: int,
@@ -587,7 +587,7 @@ def test_complete_mixed_df_forces_against_independent_energies(
         # Keep the native endpoint and retained Python consumer in separate
         # owners: an explicit compatibility call may consume a final-state lease.
         compatibility = device == "cuda" and force_route == "compatibility"
-        if compatibility:
+        if force_route == "compatibility":
             monkeypatch.setattr(
                 batch, "_native_dft_force_eligible", lambda index=None: False
             )

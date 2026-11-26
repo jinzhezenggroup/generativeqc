@@ -36,6 +36,7 @@ from generativeqc.ks_diagnostics import (
 from generativeqc.response_solver import GMRESOptions
 
 from tools.generativeqc_validation.native_registry_stub import (
+    install_initial_guess_default_stub,
     install_registry_stub,
     install_scf_defaults_stub,
 )
@@ -247,6 +248,7 @@ def test_variational_split_hybrid_public_admission(
         ),
     )
     install_registry_stub(library, frozenset({"energy"}))
+    install_initial_guess_default_stub(library)
     install_scf_defaults_stub(library)
     monkeypatch.setattr(_native, "load_library", lambda **_: library)
     angular = {"cartesian-d": 2, "spherical-f": 3, "spherical-g": 4}.get(case)
@@ -423,6 +425,7 @@ def test_cuda_hessian_capabilities_follow_loaded_package(
         generativeqc_method_available=NativeFunction(available),
     )
     install_registry_stub(library, frozenset({"energy"}))
+    install_initial_guess_default_stub(library)
     install_scf_defaults_stub(library)
     if version is not None:
         library.generativeqc_ks_hessian_cuda_version_v2 = NativeFunction(

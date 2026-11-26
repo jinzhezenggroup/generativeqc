@@ -192,7 +192,7 @@ std::size_t grid_points_per_atom(const GridSpec& spec) {
 GridSpec default_grid_spec() {
   GridSpec result;
   result.version = 4;
-  result.radial_points = 3;  // version-4 wire level, not an element's radial count
+  result.radial_points = kDefaultTreutlerLevel;
   result.angular_polar = result.angular_azimuth = 0;
   for (unsigned z = 1; z < std::size(::generativeqc::generated::atomic_grid::xi); ++z)
     result.element_radii[z] = ::generativeqc::generated::atomic_grid::bragg[z];

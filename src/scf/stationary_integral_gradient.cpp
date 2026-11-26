@@ -55,6 +55,27 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
   }
 }
 
+std::size_t cpu_stationary_direct_integral_gradient_capacity(const core::System& system,
+                                                             bool hybrid, bool unrestricted) {
+  using runtime::size_add;
+  using runtime::size_mul;
+  const auto basis = molecule::ao_count(system);
+  const auto matrix = size_mul(basis, basis);
+  const auto coordinates = size_mul(system.atoms.size(), 3);
+  std::size_t largest_shell{};
+  for (const auto& shell : system.shells)
+    largest_shell = std::max(largest_shell, molecule::shell_ao_count(shell.angular_momentum,
+                                                                     system.basis_representation));
+  const auto largest_pair = size_mul(largest_shell, largest_shell);
+  const auto largest_quartet = size_mul(largest_pair, largest_pair);
+  const auto elements =
+      size_add(size_add(size_mul(matrix, unrestricted ? 7 : 3), size_mul(coordinates, 6)),
+               size_mul(size_add(largest_quartet, 12), hybrid ? 2 : 1));
+  const auto offsets = size_mul(size_add(system.shells.size(), 1), sizeof(std::size_t));
+  return size_add(size_add(size_mul(elements, sizeof(double)), offsets),
+                  integrals::ecp_gradient_workspace_capacity(system));
+}
+
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
     std::span<const double> weighted_density, std::size_t maximum_numeric_bytes,
@@ -88,6 +109,11 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
       (unrestricted ? (!valid_matrix(beta_density) || !valid_matrix(beta_weighted_density))
                     : (!beta_density.empty() || !beta_weighted_density.empty())))
     throw std::invalid_argument("stationary Direct D/W is inconsistent or nonfinite");
+  // Admit before allocating offsets or weights. The checked-grid ECP fallback
+  // uses the same producer-specific bound here as in preparation.
+  const auto capacity =
+      cpu_stationary_direct_integral_gradient_capacity(system, hybrid, unrestricted);
+  if (capacity > maximum_numeric_bytes) throw std::bad_alloc();
   runtime::host_trace::Region trace("cpu_direct_stationary_integrals", nbf);
   std::vector<std::size_t> offsets;
   offsets.reserve(runtime::size_add(system.shells.size(), 1));
@@ -102,18 +128,6 @@ CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
   if (offsets.back() != nbf) throw std::invalid_argument("stationary Direct AO ordering mismatch");
   const auto largest_pair = runtime::size_mul(largest_shell, largest_shell);
   const auto largest_quartet = runtime::size_mul(largest_pair, largest_pair);
-  const auto elements =
-      runtime::size_add(runtime::size_add(runtime::size_mul(matrix, unrestricted ? 7 : 3),
-                                          runtime::size_mul(ncoord, 6)),
-                        runtime::size_mul(runtime::size_add(largest_quartet, 12), hybrid ? 2 : 1));
-  // Admit the hcore ECP contraction's actual provider before allocating the
-  // stationary weights. Only the checked-grid fallback retains AO matrices.
-  const auto ecp_workspace = integrals::ecp_gradient_workspace_capacity(system);
-  const auto capacity =
-      runtime::size_add(runtime::size_add(runtime::size_mul(elements, sizeof(double)),
-                                          runtime::vector_bytes(offsets)),
-                        ecp_workspace);
-  if (capacity > maximum_numeric_bytes) throw std::bad_alloc();
   CpuStationaryIntegralGradient result;
   result.numeric_capacity = capacity;
   result.sources.assign(runtime::size_mul(4, ncoord), 0.0);

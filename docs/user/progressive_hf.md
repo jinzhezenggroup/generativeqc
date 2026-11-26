@@ -110,12 +110,14 @@ Stage count, source iterations, total configured iterations, host projection
 workspace, optional Fock builds and optional estimated cost have explicit
 budgets. A plan whose configured maximum work exceeds its budget is rejected
 before execution. Projection and final-verification host work have separate
-bounds. Before creating the verification AO/Fock owners, the controller reserves
-its dense audit matrices/copies and checks the existing HF provider inventory
-against the remaining host capacity. The full HF inventory is a conservative
-admission bound for this fixed-density operation; it is not a measured process
-or driver-memory peak. An unavailable inventory fails closed. Exhausting either
-part returns `budget_exhausted` without starting the verification Fock rebuild.
+bounds. For the all-electron CPU Direct/DF audit with no additional preliminary
+guess reservation, native capacity gates the full HF provider inventory and the
+audit matrices together before constructing the Fock owner. Older libraries,
+other domains, and targets with additional reservations keep the front-end
+resource preflight. The full HF inventory is a conservative bound, not a
+measured process or driver-memory peak. An unavailable inventory fails closed.
+Exhausting the budget returns `budget_exhausted` without the verification Fock
+rebuild.
 Failed source work remains in the execution record and total work count.
 The shared native `generativeqc_hf_plan_query_v1` policy checks source/target
 convergence ordering, configured iteration limits and optional estimated cost

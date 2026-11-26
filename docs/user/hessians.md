@@ -99,9 +99,26 @@ effective host headroom, up to the derivative numerical cap. A prepared HVP
 uses the admitted fleet inventory without changing its providers. Explicit
 derivative numerical caps are checked against the floor before SCF. Optional
 schedules and solver/work limits can still refuse after SCF. A resource refusal
-does not select the Python derivative. This is a modeled admission bound, not a
-shared host lease. Export scratch, implicit BLAS workspace, caller storage and
-process RSS are outside this accounting.
+does not select the Python derivative. This plan alone is not a shared lease.
+To share a host pool for an admitted prepared Direct FP64 batch,
+pass `host_resources=pool` and a positive `host_hessian_workspace_bytes` to
+`Calculator.prepare_batch`. The linked named calculation must not use a
+preliminary guess or incremental J/K. Explicit packed ERIs require real
+spherical s/p/d/f AOs. The lease counts their actual retained values;
+`cpu_packed_eri_maximum_bytes` remains a separate fleet-wide ceiling. Admitted
+scalar ECPs count modeled primal setup workspace without changing derivative
+method, byte, or work admission. The lease includes retained providers and
+serialized workspace; execution applies the smaller of the lease's derivative
+capacity and the call's numerical limit. The leased
+batch supports energy replay and prepared HVP. Internal CPU orbital export
+shares the serialized workspace slot, independent of the caller's root-panel
+limit. Detached coefficients belong to the caller. SDK callers can also reserve
+native force replay for an otherwise admitted all-electron batch with
+`GENERATIVEQC_BATCH_RESERVE_HOST_HESSIAN_FORCES`. This charges the existing
+force inventory without expanding force capability.
+Closing the pool handle does not revoke the batch's lease.
+Other export scratch, implicit BLAS workspace, caller storage and process RSS are
+outside this accounting.
 On CPU, D4, zero damping, ATM and finite-cutoff corrections remain unsupported for
 second order, even when their energy and first gradient are available.
 Imported canonical basis records retain their actual
@@ -334,7 +351,7 @@ exposing one global cap:
 
 | Argument | Bounds |
 | --- | --- |
-| `integral_budget_bytes` | generated second-order integral work |
+| `integral_budget_bytes` | numeric storage for generated second-order integrals; on linked CPU, native sizing can refuse a nondefault cap before SCF |
 | `grid_budget_bytes` | CUDA or CPU composite: numeric AO/grid/AD workspace |
 | `max_nonlocal_pairs` | WB97M-V and r²SCAN+rVV10: ordered nonlocal pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |

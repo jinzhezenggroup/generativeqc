@@ -250,9 +250,12 @@ class Calculator:
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
-        Older libraries retain their previously supported default. Other domains retain
-        Hcore, as does a batch containing an unsupported element. Explicit
-        ``None`` disables preparation; existing densities always take precedence.
+        CPU batches select per system, falling back to Hcore for ineligible
+        systems. In CUDA batches, any ineligible system keeps the batch on Hcore.
+        Automatic selection requires ``generativeqc_initial_guess_default_kind_v1``;
+        if the native library lacks that query, it raises ``NotImplementedError``.
+        Explicit ``None`` selects Hcore without querying the policy; existing
+        densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
@@ -335,6 +338,7 @@ class Calculator:
                 "cpu_packed_eri_maximum_bytes must be a nonnegative uint64 integer"
             )
         self._cpu_packed_eri_maximum_bytes = cpu_packed_eri_maximum_bytes
+        requested_ks_options = ks_options
         self._dispersion_method_ir = None
         if device not in {"cpu", "cuda"}:
             raise ValueError("device must be 'cpu' or 'cuda'")
@@ -343,6 +347,7 @@ class Calculator:
         automatic_libxc_public_name = None
         automatic_libxc_transport = None
         discovered_native_graph = None
+        named_model = None
         selected_library = None
 
         from generativeqc_compiler.method import (
@@ -383,7 +388,7 @@ class Calculator:
                     carrier_id is None
                     or carrier_id in _method_manifest.NATIVE_DFT_METHOD_IDS
                 ):
-                    from ._named_ks import resolve_named_graph
+                    from ._named_ks import resolve_named_model
                     from .ks import (
                         KsOptions,
                         _validate_named_ks_functional,
@@ -417,11 +422,13 @@ class Calculator:
                     selected_library = _native.load_library(
                         device=device, device_id=int(device_id)
                     )
-                    native_graph = resolve_named_graph(
+                    named_model = resolve_named_model(
                         selected_library,
                         canonical_method,
                         _native.BACKEND_CPU_REFERENCE,
                     )
+                    if named_model is not None:
+                        native_graph = named_model.graph
                 if composite is not None:
                     identifier, spin = composite
                     method = (
@@ -434,8 +441,10 @@ class Calculator:
                     # options; only its default graph comes from discovery.
                     discovered_native_graph = native_graph
                 else:
+                    from ._named_ks import CorrectionRole
                     from .ks import (
                         KsOptions,
+                        _dispersion_electronic_projection,
                         _named_dft_carrier_for_ir,
                         resolve_ks_method,
                     )
@@ -448,33 +457,34 @@ class Calculator:
                             discovered_ir, _ = resolve_ks_method(canonical_method)
                         except ValueError as error:
                             raise ValueError(f"unknown method {method!r}") from error
-                    carrier = _named_dft_carrier_for_ir(discovered_ir)
-                    execution_ir = discovered_ir
-                    corrections = tuple(
-                        node
-                        for node in discovered_ir.primitives
-                        if isinstance(node, DispersionCorrectionPrimitive)
-                    )
-                    gcp_nodes = tuple(
-                        node
-                        for node in discovered_ir.primitives
-                        if isinstance(node, GeometricCounterpoisePrimitive)
-                    )
-                    if (
-                        carrier != "pbe-d4-rks"
-                        and len(corrections) == 1
-                        and isinstance(corrections[0].specification, (D3Spec, D4Spec))
-                        and not gcp_nodes
-                    ):
-                        execution_ir = replace(
-                            discovered_ir,
-                            identifier=f"{discovered_ir.identifier}/electronic",
-                            primitives=tuple(
-                                node
-                                for node in discovered_ir.primitives
-                                if not isinstance(node, DispersionCorrectionPrimitive)
-                            ),
+                    carrier = named_model.facade_carrier if named_model else None
+                    if carrier is None:
+                        carrier = _named_dft_carrier_for_ir(discovered_ir)
+                    role = named_model.correction_role if named_model else None
+                    if role is CorrectionRole.DETACHED:
+                        electronic_graph = _dispersion_electronic_projection(
+                            discovered_ir
                         )
+                        if electronic_graph is None:
+                            raise RuntimeError(
+                                "native KS catalog lacks its detached correction"
+                            )
+                    elif (
+                        role is None
+                        and carrier != "pbe-d4-rks"
+                        and not any(
+                            isinstance(node, GeometricCounterpoisePrimitive)
+                            for node in discovered_ir.primitives
+                        )
+                    ):
+                        electronic_graph = _dispersion_electronic_projection(
+                            discovered_ir
+                        )
+                    else:
+                        electronic_graph = None
+                    execution_ir = discovered_ir
+                    if electronic_graph is not None:
+                        execution_ir = electronic_graph
                         self._dispersion_method_ir = discovered_ir
                     if ks_options is None:
                         ks_options = KsOptions(composition=execution_ir)
@@ -845,8 +855,29 @@ class Calculator:
                 if self._automatic_libxc_name is not None
                 else self._method_name
             )
+            named_policy = None
+            if discovered_native_graph is not None and (
+                requested_ks_options is None
+                or (
+                    isinstance(requested_ks_options, KsOptions)
+                    and requested_ks_options.composition is None
+                    and requested_ks_options.functional is None
+                    and requested_ks_options._method_ir is None
+                )
+            ):
+                from ._named_ks import select_execution_policy
+
+                named_policy = select_execution_policy(
+                    selected_library,
+                    canonical_method,
+                    discovered_native_graph.identity,
+                    requested_ks_options,
+                )
             self._ks_options = resolve_ks_options(
-                ks_resolution_name, ks_options, _named_graph=discovered_native_graph
+                ks_resolution_name,
+                ks_options,
+                _named_graph=discovered_native_graph,
+                _named_policy=named_policy,
             )
             from .ks import _automatic_semilocal_name
 
@@ -858,26 +889,38 @@ class Calculator:
         elif ks_options is not None:
             raise ValueError("ks_options requires a supported RKS/UKS method")
         if self._dispersion_method_ir is not None and resource_budget is not None:
-            from ._named_ks import cuda_r2scan3c_resource_graph
+            from ._named_ks import CorrectionRole, cuda_r2scan3c_resource_graph
 
-            correction_nodes = tuple(
-                node
-                for node in self._dispersion_method_ir.primitives
-                if isinstance(node, DispersionCorrectionPrimitive)
-            )
             if (
-                len(correction_nodes) != 1
-                or not isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
-                or (
-                    any(
-                        isinstance(node, GeometricCounterpoisePrimitive)
-                        for node in self._dispersion_method_ir.primitives
-                    )
-                    and not cuda_r2scan3c_resource_graph(
-                        self._dispersion_method_ir, device
+                named_model is not None
+                and named_model.correction_role is not None
+                and self._dispersion_method_ir is named_model.graph
+            ):
+                # This is only the existing correction-shape gate, not a
+                # promise that a particular resource plan can be prepared.
+                correction_budget_supported = (
+                    named_model.correction_role is CorrectionRole.DETACHED
+                )
+            else:
+                correction_nodes = tuple(
+                    node
+                    for node in self._dispersion_method_ir.primitives
+                    if isinstance(node, DispersionCorrectionPrimitive)
+                )
+                correction_budget_supported = (
+                    len(correction_nodes) == 1
+                    and isinstance(correction_nodes[0].specification, (D3Spec, D4Spec))
+                    and (
+                        not any(
+                            isinstance(node, GeometricCounterpoisePrimitive)
+                            for node in self._dispersion_method_ir.primitives
+                        )
+                        or cuda_r2scan3c_resource_graph(
+                            self._dispersion_method_ir, device
+                        )
                     )
                 )
-            ):
+            if not correction_budget_supported:
                 raise NotImplementedError(
                     "global resource_budget supports individual D3/D4 corrections; "
                     "composite gCP planning remains unavailable"
@@ -1907,8 +1950,7 @@ class Calculator:
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             if self._native_automatic_initial_guess_kind is None:
-                # Explicit requests and older images have not passed combined
-                # model admission. Keep their existing frontend errors.
+                # Explicit choices have not passed automatic model admission.
                 backend_ok = self._device_name == "cpu" or (
                     minao
                     and self._device_name == "cuda"
@@ -2138,10 +2180,20 @@ class Calculator:
         )
 
     def _supports_fitted_ecp_basis(self) -> bool:
-        """Recognize electronic models with a qualified fitted ECP provider."""
-        return self._composite_rks_second_order or (
-            self._cuda_rks_second_order
-            and self._precision_mode == _native.PRECISION_FP64
+        """Allow creating an ECP system for a native fitted KS admission check."""
+        # A CPU ECP system describes only the orbital Hamiltonian. Let the
+        # prepared owner authenticate the actual method, auxiliary and bounds.
+        return (
+            (
+                self._device_name == "cpu"
+                and self._capabilities.family == "density_functional"
+                and self._density_fitting_mode == _native.DENSITY_FITTING_CPU_REFERENCE
+            )
+            or self._composite_rks_second_order
+            or (
+                self._cuda_rks_second_order
+                and self._precision_mode == _native.PRECISION_FP64
+            )
         )
 
     def _method_descriptor(
@@ -2926,8 +2978,8 @@ class Calculator:
         correlation_auxiliary = basis is not None and self._auxiliary_basis_consumer(
             "df_metric"
         )
-        if not correlation_auxiliary and _basis_builtin.eligible(
-            self._library, selected_basis
+        if not correlation_auxiliary and _basis_builtin.is_catalog_record(
+            selected_basis
         ):
             return _basis_builtin.create_system(
                 self._library, context, selected_basis, atoms, charge, multiplicity
@@ -2938,14 +2990,6 @@ class Calculator:
                 for atom in atoms
             )
         )
-        bundled_create = getattr(
-            self._library, "generativeqc_system_create_bundled", None
-        )
-        bundled_name = (
-            _model_resolution._bundled_basis_name(selected_basis)
-            if bundled_create is not None and not correlation_auxiliary
-            else None
-        )
         template_create = getattr(
             self._library, "generativeqc_system_create_basis_template_v1", None
         )
@@ -2954,11 +2998,7 @@ class Calculator:
             and isinstance(selected_basis, BasisSet)
             and not correlation_auxiliary
         )
-        if use_template or (
-            bundled_create is not None
-            and bundled_name is not None
-            and not correlation_auxiliary
-        ):
+        if use_template:
             descriptor = _native.SystemDescriptor(
                 struct_size=ctypes.sizeof(_native.SystemDescriptor),
                 abi_version=_native.ABI_VERSION,
@@ -2973,33 +3013,24 @@ class Calculator:
                 ),
             )
             system = ctypes.c_void_p()
-            if bundled_create is not None and bundled_name is not None:
-                status = bundled_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    bundled_name.encode("ascii"),
-                    selected_basis.provenance.checksum.encode("ascii"),
-                    ctypes.byref(system),
-                )
-            else:
-                from ._basis_native import NativeBasisTemplate
+            from ._basis_native import NativeBasisTemplate
 
-                source = NativeBasisTemplate.from_basis(selected_basis, atoms)
-                if (
-                    source.has_ecp
-                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                    and not self._supports_fitted_ecp_basis()
-                    and self._method not in _CORRELATED_METHODS
-                ):
-                    raise NotImplementedError(
-                        "ECP density-fitting execution is not yet validated"
-                    )
-                status = template_create(
-                    context,
-                    ctypes.byref(descriptor),
-                    ctypes.byref(source.descriptor),
-                    ctypes.byref(system),
+            source = NativeBasisTemplate.from_basis(selected_basis, atoms)
+            if (
+                source.has_ecp
+                and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                and not self._supports_fitted_ecp_basis()
+                and self._method not in _CORRELATED_METHODS
+            ):
+                raise NotImplementedError(
+                    "ECP density-fitting execution is not yet validated"
                 )
+            status = template_create(
+                context,
+                ctypes.byref(descriptor),
+                ctypes.byref(source.descriptor),
+                ctypes.byref(system),
+            )
             _native.check(self._library, status, context=context)
             return system
         shells = self._shells_for_atoms(atoms, basis)
@@ -3578,6 +3609,7 @@ class Calculator:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         host_resources: HostResources | None = None,
+        host_hessian_workspace_bytes: int | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
     ) -> typing.Any:  # Return annotation is deferred to avoid an import cycle.
@@ -3597,6 +3629,9 @@ class Calculator:
         Unsupported batch contexts raise NotImplementedError; validation,
         native and resource failures propagate. Close the returned plan or use
         it as a context manager. It is not concurrently re-entrant.
+        With ``host_resources``, ``host_hessian_workspace_bytes`` reserves one
+        shared derivative workspace for a linked Direct CPU KS fleet. This
+        mode admits energy replay and Hessian-vector products, not forces.
         See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
         if getattr(self, "_provider_initialization_intent", None) is not None:
@@ -3621,6 +3656,7 @@ class Calculator:
             ks_export=ks_export,
             resource_plan=resource_plan,
             host_resources=host_resources,
+            host_hessian_workspace_bytes=host_hessian_workspace_bytes,
             _hessian_request=_hessian_request,
             _resource_properties=_resource_properties,
         )

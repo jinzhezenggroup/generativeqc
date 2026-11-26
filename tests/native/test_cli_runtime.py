@@ -188,6 +188,11 @@ class RuntimeTests(unittest.TestCase):
             ("pbe-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
             ("pbe-d3(bj)-rks", ("--charge", "1"), ()),
             ("pbe0-d3(bj)-rks", ("--charge", "1"), ()),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
+            ("pbe0-d4(bj-eeq-atm)-uks", ("--multiplicity", "2"), ()),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
+            ("b3lyp-d4(bj-eeq-atm)-uks", ("--multiplicity", "2"), ()),
+            ("b3lypg-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
             (
                 "b3lyp-d3(bj)-uks",
                 ("--multiplicity", "2"),
@@ -1014,6 +1019,65 @@ class RuntimeTests(unittest.TestCase):
                         ),
                     )
 
+    def test_direct_cpu_uhf_run_enforces_quoted_host_peak(self) -> None:
+        molecule = self.root / "heh.xyz"
+        molecule.write_text("2\nBohr\nHe .03 -.02 .01\nH .15 .13 1.5\n")
+        trace = self.root / "uhf-host.jsonl"
+        self.env["GENERATIVEQC_DF_PROGRESS_TRACE"] = str(trace)
+        common = (
+            str(molecule),
+            "--units",
+            "bohr",
+            "--method",
+            "uhf",
+            "--multiplicity",
+            "2",
+        )
+        for representation, product in (
+            ("cartesian", ()),
+            ("spherical", ("--forces",)),
+        ):
+            with self.subTest(representation=representation, product=product):
+                flags = (*common, "--representation", representation, *product)
+                plan = self.cli("resources", *flags)
+                self.assertEqual(plan.returncode, 0, plan.stderr)
+                peak = json.loads(plan.stdout)["peak_bytes"]["host"]
+                short = self.cli("run", *flags, "--host-bytes", str(peak - 1), "--json")
+                self.assertNotEqual(short.returncode, 0)
+                self.assertEqual(short.stdout, "")
+                self.assertIn("allocation inventory exceeds host budget", short.stderr)
+                self.assertFalse(trace.exists())
+
+                exact = self.cli("run", *flags, "--host-bytes", str(peak), "--json")
+                self.assertEqual(exact.returncode, 0, exact.stderr)
+                self.assertTrue(trace.exists())
+                unbounded = self.cli("run", *flags, "--json")
+                self.assertEqual(unbounded.returncode, 0, unbounded.stderr)
+                result = json.loads(exact.stdout)
+                self.assertEqual(
+                    result.pop("resource_admission"),
+                    {
+                        "modeled_host_peak_bytes": peak,
+                        "effective_host_limit_bytes": peak,
+                    },
+                )
+                self.assertEqual(result, json.loads(unbounded.stdout))
+                trace.unlink()
+
+        fitted = self.cli(
+            "run",
+            *common,
+            "--density-fitting",
+            "cpu",
+            "--host-bytes",
+            "1048576",
+            "--json",
+        )
+        self.assertNotEqual(fitted.returncode, 0)
+        self.assertEqual(fitted.stdout, "")
+        self.assertIn("requires a supported FP64 CPU HF or KS inventory", fitted.stderr)
+        self.assertFalse(trace.exists())
+
     def test_cpu_hf_cli_fleet_uses_shared_native_aggregation(self) -> None:
         """Homogeneous CLI batches and native ragged descriptors have equal bounds."""
         library = ctypes.CDLL(str(CLI.parent / "libgenerativeqc.so"))
@@ -1502,6 +1566,15 @@ class RuntimeTests(unittest.TestCase):
         self._check_named_correction_inventory(
             "generativeqc_ks_d4_resource_query_v1", Diagnostic, "pbe-d4(bj-eeq-atm)"
         )
+        for hybrid in ("pbe0", "b3lyp"):
+            with self.subTest(hybrid=hybrid):
+                self._check_named_correction_inventory(
+                    "generativeqc_ks_d4_resource_query_v1",
+                    Diagnostic,
+                    f"{hybrid}-d4(bj-eeq-atm)",
+                    electronic_method=hybrid,
+                    backends=("cpu",),
+                )
 
     def test_named_d3_cli_adds_native_correction_owners(self) -> None:
         """Both D3 damping programs consume the real per-item native inventory."""
@@ -1642,8 +1715,18 @@ class RuntimeTests(unittest.TestCase):
 
     def test_named_d4_inventory_keeps_electronic_and_composite_boundaries(self) -> None:
         for method, extra in (
-            ("pbe0-d4(bj-eeq-atm)-rks", ()),
-            ("pbe0-d4(bj-eeq-atm)-rks", ("--forces",)),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--backend", "cuda")),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--density-fitting", "cpu")),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--property", "hessian")),
+            (
+                "b3lyp-d4(bj-eeq-atm)-rks",
+                (
+                    "--representation",
+                    "spherical",
+                    "--cpu-packed-eri-budget-bytes",
+                    "48",
+                ),
+            ),
             ("r2scan-3c-rks", ()),
             ("pbe-d4-rks", ()),
             ("pbe-d4(bj-eeq-atm)-rks", ("--backend", "cuda", "--forces")),
@@ -1653,6 +1736,23 @@ class RuntimeTests(unittest.TestCase):
                 result = self.resources("--method", method, *extra)
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+
+        iodine = self.root / "iodine.xyz"
+        iodine.write_text("2\nScalar ECP refusal\nI 0 0 0\nI 0 0 2.7\n")
+        basis = SOURCE / "tests/data/conventional_ecp_cbs/native_basis_dz.json"
+        result = self.cli(
+            "resources",
+            str(iodine),
+            "--method",
+            "b3lyp-d4(bj-eeq-atm)-rks",
+            "--basis",
+            str(basis),
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertTrue(result.stdout, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["status"], "unsupported")
+        self.assertIn("requires an all-electron basis", plan["diagnostic"])
 
     def test_named_d3_inventory_keeps_electronic_and_force_boundaries(self) -> None:
         for method, extra in (
@@ -2417,7 +2517,7 @@ class RuntimeTests(unittest.TestCase):
         for method, extra in (
             ("b3lyp-rks", ("--backend", "cuda")),
             ("b3lyp-d3(bj)-uks", ("--density-fitting", "cpu")),
-            ("b3lyp-d4(bj-eeq-atm)-rks", ()),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--backend", "cuda")),
             ("pbe0-uks", ("--density-fitting", "cpu")),
             ("rccsd", ()),
         ):
@@ -2492,7 +2592,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(payload["forces_hartree_per_bohr"], [[0.0, 0.0, 0.0]])
         planned = self.cli("resources", *flags)
         self.assertEqual(planned.returncode, 0, planned.stderr)
-        self.assertGreater(json.loads(planned.stdout)["ecp_workspace"], 0)
+        ecp_plan = json.loads(planned.stdout)
+        self.assertGreater(ecp_plan["ecp_workspace"], 0)
+        capped = self.cli(
+            "run", *flags, "--host-bytes", str(ecp_plan["peak_bytes"]["host"]), "--json"
+        )
+        self.assertNotEqual(capped.returncode, 0)
+        self.assertEqual(capped.stdout, "")
+        self.assertIn("CPU UHF requires an all-electron basis", capped.stderr)
 
         # The same basis has an analytically solvable two-electron singlet at
         # charge -1. Its ECP disables the automatic seed, not the target RHF.
