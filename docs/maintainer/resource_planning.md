@@ -128,11 +128,12 @@ silently replace a user-selected alternative with a cheaper one. Native
 authority also rechecks changed optional CPU force workspace before a
 force replay, preserving all live owners and selections. The revised plan is
 published only after successful execution; rejection leaves the energy plan
-and warm state usable. Discovered native errors propagate without retrying
-portable selection. Missing symbols
-or libraries retain provider-free portable planning; this adapter never loads a
-library itself. The compiler's separate portable planner remains available for
-offline generation without importing the runtime.
+and warm state usable. A selected library must provide native composition;
+an absent query or a native rejection never retries portable selection or
+validates a supplied plan using Python peaks. Library-free planning remains
+provider-free and offline. This adapter never loads a library itself, and the
+compiler's separate portable planner remains available without importing the
+runtime.
 
 `ResourcePlan` retains its portable data-only schema, independent derived-byte
 validation and serialization. A plan is not a native allocation receipt or

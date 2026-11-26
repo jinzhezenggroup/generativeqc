@@ -1,0 +1,80 @@
+--- run.py
++++ run.py
+@@ -16,0 +17 @@
++from decimal import Decimal
+@@ -84,0 +86,33 @@
++def shells(fixture, role):
++    data = json.loads(basis_file(fixture, role).read_bytes())
++    return {ELEMENT[row["atomic_number"]]: row["shells"] for row in data["elements"]}
++
++
++def psi4_basis(psi4, fixture, role, name, option):
++    lines = ["spherical", "****"]
++    for element, records in shells(fixture, role).items():
++        lines.append(f"{element} 0")
++        for shell in records:
++            l = "SPDFGH"[shell["angular_momentum"]]
++            for contraction in shell["coefficients"]:
++                lines.append(f"{l} {len(contraction)} 1.00")
++                lines.extend(f"{Decimal(e):f} {Decimal(c):f}" for e, c in zip(
++                    shell["exponents"], contraction, strict=True,
++                ))
++        lines.append("****")
++    psi4.basis_helper("\n".join(lines), name=name, key=option, set_option=False)
++
++
++def pyscf_basis(fixture):
++    return {
++        element: [
++            [shell["angular_momentum"], *[
++                [float(e), *map(float, c)]
++                for e, c in zip(shell["exponents"], zip(*shell["coefficients"]), strict=True)
++            ]]
++            for shell in records
++        ]
++        for element, records in shells(fixture, "orbital").items()
++    }
++
++
+@@ -87,0 +122,4 @@
++    orbital_name, auxiliary_name = "issue3167orb", "issue3167aux"
++    psi4_basis(psi4, fixture, "orbital", orbital_name, "BASIS")
++    if fitted:
++        psi4_basis(psi4, fixture, "auxiliary", auxiliary_name, "DF_BASIS_SCF")
+@@ -96,2 +134,2 @@
+-        "basis": BASIS, "puream": True, "reference": "rhf",
+-        "freeze_core": False, "scf_type": "df" if fitted else "pk",
++        "basis": orbital_name, "puream": True, "reference": "rhf",
++        "freeze_core": False, "scf_type": "disk_df" if fitted else "pk",
+@@ -99 +137 @@
+-        "qc_module": "dfocc" if fitted else "ccenergy",
++        "qc_module": "occ" if fitted else "ccenergy",
+@@ -107 +145,2 @@
+-        settings.update(df_basis_scf=AUX, df_basis_cc=AUX, df_fitting_condition=1e-10)
++        settings.update(df_basis_scf=auxiliary_name, df_basis_cc=auxiliary_name,
++                        df_fitting_condition=1e-10)
+@@ -117 +156,2 @@
+-    if any(abs(molecule.geometry().get(i, a) - x) > 1e-12
++    actual_geometry = wfn.molecule().geometry().to_array()
++    if any(abs(actual_geometry[i, a] - x) > 1e-12
+@@ -119,0 +160,9 @@
++    nbf = wfn.basisset().nbf()
++    if nbf != fixture["nao"]:
++        raise RuntimeError(f"Unexpected Psi4 orbital count {nbf}")
++    auxiliary_counts = {}
++    if fitted:
++        for key in ("DF_BASIS_SCF", "DF_BASIS_CC"):
++            auxiliary_counts[key] = wfn.get_basisset(key).nbf()
++        if any(n != fixture["naux"] for n in auxiliary_counts.values()):
++            raise RuntimeError(f"Unexpected Psi4 auxiliary counts {auxiliary_counts}")
+@@ -121 +170 @@
+-        "settings": settings, "nao": wfn.basisset().nbf(),
++        "settings": settings, "nao": nbf, "auxiliary_counts": auxiliary_counts,
+@@ -130,0 +180 @@
++    orbitals = pyscf_basis(fixture)
+@@ -132 +182 @@
+-    mol = gto.M(atom=atoms, unit="Bohr", basis=BASIS, cart=False, symmetry=False,
++    mol = gto.M(atom=atoms, unit="Bohr", basis=orbitals, cart=False, symmetry=False,
+@@ -133,0 +184,2 @@
++    if mol.nao_nr() != fixture["nao"]:
++        raise RuntimeError(f"Unexpected PySCF orbital count {mol.nao_nr()}")

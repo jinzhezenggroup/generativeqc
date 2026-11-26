@@ -228,6 +228,7 @@ def cuda_layout_library(library: typing.Any) -> typing.Any:
         return 1
 
     return SimpleNamespace(
+        generativeqc_resource_compose_v1=library.generativeqc_resource_compose_v1,
         generativeqc_resource_ecp_workspace_v1=library.generativeqc_resource_ecp_workspace_v1,
         generativeqc_resource_small_hf_cuda_v2=layout,
         generativeqc_resource_ks_cuda_v2=layout,

@@ -1061,11 +1061,17 @@ CpuHostAdmission admit_cpu_host_budget(const RunOptions& options,
                                        const NativeBasisData& expanded_basis, Context* context,
                                        const System* system) {
   if (!options.host_bytes || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-      options.method == GENERATIVEQC_METHOD_UHF ||
-      (options.method == GENERATIVEQC_METHOD_RHF &&
+      ((options.method == GENERATIVEQC_METHOD_RHF || options.method == GENERATIVEQC_METHOD_UHF) &&
        options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE) ||
       options.basis_program || options.owned_device_bytes)
-    throw UsageError("run --host-bytes requires a supported FP64 CPU RHF or KS inventory");
+    throw UsageError("run --host-bytes requires a supported FP64 CPU HF or KS inventory");
+  // Use the existing two-spin CPU HF fleet bound for all-electron Direct UHF.
+  // Leave ECP UHF as a planning-only inventory until its run gate is qualified.
+  if (options.method == GENERATIVEQC_METHOD_UHF &&
+      (!expanded_basis.ecp_terms.empty() ||
+       std::any_of(expanded_basis.core_electrons.begin(), expanded_basis.core_electrons.end(),
+                   [](auto core) { return core != 0; })))
+    throw UsageError("run --host-bytes for CPU UHF requires an all-electron basis");
   const auto plan =
       resource_inventory(options, atoms, nullptr, &expanded_basis, std::nullopt, context, system);
   if (plan.at("status") != "feasible")

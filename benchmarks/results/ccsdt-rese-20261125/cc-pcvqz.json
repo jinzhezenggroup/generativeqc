@@ -1,0 +1,1360 @@
+{
+  "checksum": "17af68a5e6c5f605b5134a2edd7c9b7222b620145a0646ddb73ae780d77d234c",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "2006E-6",
+              "15343E-6",
+              "75579E-6",
+              "256875E-6",
+              "497368E-6",
+              "296133E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "8264E-2",
+            "1241E-2",
+            "2824E-3",
+            "7977E-4",
+            "2581E-4",
+            "8989E-5"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2292E-3",
+            "838E-3",
+            "292E-3"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2062E-3",
+            "662E-3"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1397E-3"
+          ],
+          "source_group": 3
+        }
+      ]
+    },
+    {
+      "atomic_number": 6,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 6,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "91E-6",
+              "704E-6",
+              "3693E-6",
+              "1536E-5",
+              "52929E-6",
+              "147043E-6",
+              "305631E-6",
+              "399345E-6",
+              "217051E-6",
+              "15894E-6",
+              "-3084E-6",
+              "978E-6"
+            ],
+            [
+              "-19E-6",
+              "-151E-6",
+              "-785E-6",
+              "-3324E-6",
+              "-11512E-6",
+              "-3416E-5",
+              "-77173E-6",
+              "-141493E-6",
+              "-118019E-6",
+              "273806E-6",
+              "58651E-5",
+              "28543E-5"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3398E1",
+            "5089E0",
+            "1157E0",
+            "3266E-1",
+            "1061E-1",
+            "3811E-2",
+            "1475E-2",
+            "6035E-3",
+            "253E-2",
+            "7355E-4",
+            "2905E-4",
+            "1111E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "5378E-6",
+              "36132E-6",
+              "142493E-6",
+              "34215E-5",
+              "463864E-6",
+              "250028E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3451E-2",
+            "7915E-3",
+            "2368E-3",
+            "8132E-4",
+            "289E-3",
+            "1007E-4"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1848E-3",
+            "649E-3",
+            "228E-3"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1419E-3",
+            "485E-3"
+          ],
+          "source_group": 3
+        },
+        {
+          "angular_momentum": 4,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1011E-3"
+          ],
+          "source_group": 4
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "7216E-3"
+          ],
+          "source_group": 5
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1957E-2"
+          ],
+          "source_group": 6
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "53073E-3"
+          ],
+          "source_group": 7
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "8182E-3"
+          ],
+          "source_group": 8
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "24186E-3"
+          ],
+          "source_group": 9
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "71494E-3"
+          ],
+          "source_group": 10
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "8656E-3"
+          ],
+          "source_group": 11
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "33213E-3"
+          ],
+          "source_group": 12
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "24694E-3"
+          ],
+          "source_group": 13
+        }
+      ]
+    },
+    {
+      "atomic_number": 7,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 7,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "92E-6",
+              "717E-6",
+              "3749E-6",
+              "15532E-6",
+              "53146E-6",
+              "146787E-6",
+              "304663E-6",
+              "397684E-6",
+              "217641E-6",
+              "16963E-6",
+              "-2745E-6",
+              "953E-6"
+            ],
+            [
+              "-2E-5",
+              "-159E-6",
+              "-824E-6",
+              "-3478E-6",
+              "-11966E-6",
+              "-35388E-6",
+              "-80077E-6",
+              "-146722E-6",
+              "-11636E-5",
+              "279919E-6",
+              "585481E-6",
+              "284028E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "4584E1",
+            "6868E0",
+            "1563E0",
+            "4424E-1",
+            "1443E-1",
+            "5218E-2",
+            "2034E-2",
+            "8381E-3",
+            "3529E-3",
+            "1054E-3",
+            "4118E-4",
+            "1552E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "5533E-6",
+              "37962E-6",
+              "149028E-6",
+              "348922E-6",
+              "458972E-6",
+              "244923E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "4933E-2",
+            "1137E-2",
+            "3435E-3",
+            "1182E-3",
+            "4173E-4",
+            "1428E-4"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2837E-3",
+            "968E-3",
+            "335E-3"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2027E-3",
+            "685E-3"
+          ],
+          "source_group": 3
+        },
+        {
+          "angular_momentum": 4,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1427E-3"
+          ],
+          "source_group": 4
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "9862E-3"
+          ],
+          "source_group": 5
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "26627E-3"
+          ],
+          "source_group": 6
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "71894E-3"
+          ],
+          "source_group": 7
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1132E-2"
+          ],
+          "source_group": 8
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "33349E-3"
+          ],
+          "source_group": 9
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "98245E-3"
+          ],
+          "source_group": 10
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "11828E-3"
+          ],
+          "source_group": 11
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "45218E-3"
+          ],
+          "source_group": 12
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "28364E-3"
+          ],
+          "source_group": 13
+        }
+      ]
+    },
+    {
+      "atomic_number": 8,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 8,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "9E-5",
+              "698E-6",
+              "3664E-6",
+              "15218E-6",
+              "52423E-6",
+              "145921E-6",
+              "305258E-6",
+              "398508E-6",
+              "21698E-5",
+              "17594E-6",
+              "-2502E-6",
+              "954E-6"
+            ],
+            [
+              "-2E-5",
+              "-159E-6",
+              "-829E-6",
+              "-3508E-6",
+              "-12156E-6",
+              "-36261E-6",
+              "-82992E-6",
+              "-15209E-5",
+              "-115331E-6",
+              "288979E-6",
+              "586128E-6",
+              "277624E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "6142E1",
+            "9199E0",
+            "2091E0",
+            "5909E-1",
+            "1923E-1",
+            "6932E-2",
+            "2697E-2",
+            "111E-1",
+            "4682E-3",
+            "1428E-3",
+            "5547E-4",
+            "2067E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "6044E-6",
+              "41799E-6",
+              "161143E-6",
+              "356731E-6",
+              "448309E-6",
+              "24494E-5"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "6342E-2",
+            "1466E-2",
+            "4459E-3",
+            "1531E-3",
+            "5302E-4",
+            "175E-3"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3775E-3",
+            "13E-1",
+            "444E-3"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2666E-3",
+            "859E-3"
+          ],
+          "source_group": 3
+        },
+        {
+          "angular_momentum": 4,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "1846E-3"
+          ],
+          "source_group": 4
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "12974E-3"
+          ],
+          "source_group": 5
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "349E-1"
+          ],
+          "source_group": 6
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "93881E-3"
+          ],
+          "source_group": 7
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "14475E-3"
+          ],
+          "source_group": 8
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "4273E-2"
+          ],
+          "source_group": 9
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "12614E-2"
+          ],
+          "source_group": 10
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "14927E-3"
+          ],
+          "source_group": 11
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "57544E-3"
+          ],
+          "source_group": 12
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "26483E-3"
+          ],
+          "source_group": 13
+        }
+      ]
+    },
+    {
+      "atomic_number": 9,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 9,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "95E-6",
+              "738E-6",
+              "3858E-6",
+              "15926E-6",
+              "54289E-6",
+              "149513E-6",
+              "308252E-6",
+              "394853E-6",
+              "211031E-6",
+              "17151E-6",
+              "-2015E-6",
+              "869E-6"
+            ],
+            [
+              "-22E-6",
+              "-172E-6",
+              "-891E-6",
+              "-3748E-6",
+              "-12862E-6",
+              "-38061E-6",
+              "-86239E-6",
+              "-155865E-6",
+              "-110914E-6",
+              "298761E-6",
+              "585013E-6",
+              "271159E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "7453E1",
+            "1117E1",
+            "2543E0",
+            "721E0",
+            "2359E-1",
+            "856E-1",
+            "3355E-2",
+            "1393E-2",
+            "5915E-3",
+            "1843E-3",
+            "7124E-4",
+            "2637E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "6347E-6",
+              "44204E-6",
+              "168514E-6",
+              "361563E-6",
+              "442178E-6",
+              "243435E-6"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "0",
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "8039E-2",
+            "1863E-2",
+            "5694E-3",
+            "1953E-3",
+            "6702E-4",
+            "2166E-4"
+          ],
+          "source_group": 1
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0",
+              "0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "5014E-3",
+            "1725E-3",
+            "586E-3"
+          ],
+          "source_group": 2
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0",
+              "0"
+            ],
+            [
+              "0",
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "3562E-3",
+            "1148E-3"
+          ],
+          "source_group": 3
+        },
+        {
+          "angular_momentum": 4,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2376E-3"
+          ],
+          "source_group": 4
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "16319E-3"
+          ],
+          "source_group": 5
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "43784E-3"
+          ],
+          "source_group": 6
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "117472E-3"
+          ],
+          "source_group": 7
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "18119E-3"
+          ],
+          "source_group": 8
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "53505E-3"
+          ],
+          "source_group": 9
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "158001E-3"
+          ],
+          "source_group": 10
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "18943E-3"
+          ],
+          "source_group": 11
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "72798E-3"
+          ],
+          "source_group": 12
+        },
+        {
+          "angular_momentum": 3,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "25161E-3"
+          ],
+          "source_group": 13
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "cc-pCVQZ",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "f48876fb6854765969d38ad9063a5fcf4fada50bc16973d67c109d2b9209ad22",
+    "license": "BSD-3-Clause",
+    "source": "MolSSI Basis Set Exchange cc-pCVQZ (C,N,O,F) and cc-pVQZ (H)",
+    "version": "BSE data version 0 (core-valence); 1 (hydrogen); basis-data=0"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}

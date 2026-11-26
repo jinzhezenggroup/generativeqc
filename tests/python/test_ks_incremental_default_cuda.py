@@ -1,4 +1,4 @@
-"""GPU qualification of the guarded unset/default cold Direct J/K path."""
+"""GPU qualification of guarded automatic Direct J/K across a batch lifecycle."""
 
 from __future__ import annotations
 
@@ -38,7 +38,8 @@ def test_default_cold_warm_reset_and_explicit_off(
 
     The DF oracle uses the same frozen auxiliary basis, rather than treating
     fitting error as solver error. Fast must retain its own precision receipt.
-    A moved seed cannot borrow automatic cold admission or a frozen warm proof.
+    Each moved anchor belongs to the rebuilt geometry. Frozen warm
+    replays retain their full-density proof.
     """
     import cupy as cp
     from generativeqc import PrecisionCalculator, PrecisionPolicy, TargetErrorBudget
@@ -260,7 +261,9 @@ def test_explicit_incremental_rejects_conflicting_provider(
         calculator.clear_cache()
 
 
-def test_imported_seed_does_not_claim_native_cold_provenance(
+@pytest.mark.parametrize("move_after_restore", (False, True))
+def test_imported_seed_stays_external_after_restore(
+    move_after_restore: bool,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -276,6 +279,11 @@ def test_imported_seed_does_not_claim_native_cold_provenance(
     monkeypatch.delenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK", raising=False)
     calculator = native_calculator("pbe0", "standard", "direct", tmp_path)
     atoms = scaling_cases()["water-12"].atoms
+    target = None
+    if move_after_restore:
+        coordinates = np.array([xyz for _, xyz in atoms])
+        coordinates[1, 0] += 0.02
+        target = [coordinates]
     try:
         with calculator.prepare_batch([atoms], warm_start=True) as original:
             cold = original.execute(strict=True, properties=("energy", "forces")).items[
@@ -283,19 +291,27 @@ def test_imported_seed_does_not_claim_native_cold_provenance(
             ]
             assert cold.incremental_direct_jk["active"]
             snapshot = warm_snapshot(original._owner, 0)
+            expected = cold
+            if move_after_restore:
+                expected = original.execute(
+                    target, strict=True, properties=("energy", "forces")
+                ).items[0]
+                assert expected.incremental_direct_jk["active"]
         with calculator.prepare_batch([atoms], warm_start=True) as restored:
             native_owner = restored._owner
             _native.check(
                 native_owner._library, restore_snapshots(native_owner, [snapshot])
             )
             imported = restored.execute(
-                strict=True, properties=("energy", "forces")
+                target, strict=True, properties=("energy", "forces")
             ).items[0]
             assert imported.converged and imported.warm_start_used
             assert imported.incremental_direct_jk["requested"]
             assert not imported.incremental_direct_jk["active"]
             assert imported.incremental_direct_jk["delta_builds"] == 0
-            assert abs(imported.energy - cold.energy) < 1e-8
-            np.testing.assert_allclose(imported.forces, cold.forces, atol=2e-6, rtol=0)
+            assert abs(imported.energy - expected.energy) < 1e-8
+            np.testing.assert_allclose(
+                imported.forces, expected.forces, atol=2e-6, rtol=0
+            )
     finally:
         calculator.clear_cache()

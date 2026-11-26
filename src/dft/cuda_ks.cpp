@@ -2690,24 +2690,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Incremental storage is a prepared capability, but a previously audited
     // resident density needs the ordinary full-density warm proof. Re-entering
     // the delta controller would discard that energy history and force extra
-    // full builds even when no delta was applied. External/moved seeds do not
-    // carry this immutable owner's warm provenance and retain the cold policy.
-    // Keep unqualified UKS/ECP/range/nonlocal owners on their existing policy.
+    // full builds even when no delta was applied. Keep unqualified
+    // UKS/ECP/range/nonlocal owners on their existing policy.
     // Recompute on every begin so a later cold solve restores the capability.
     const bool ordinary_incremental_warm =
         use_warm && spins == 1 && !has_range_correction && !nonlocal_correlation &&
         provider.system().ecp_terms.empty() &&
         std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
-    // A native cold guess is still a cold solve even when represented by an
-    // explicit density buffer. Its existing provenance comes from the native
-    // initial-guess owner, never from external/imported/moved seeds.
-    // Retained warm states use the existing full-density one-Fock proof. Explicit
-    // opt-in callers retain their original external-seed eligibility.
+    // A moved hybrid may use the bounded delta controller after building its
+    // first full-density anchor at the new geometry. The preceding item's J/K
+    // and energy history never enter this owner. Pure J keeps its cold policy.
+    const bool admitted_owned_seed =
+        seed_origin == CudaKsSeedOrigin::NativeColdGuess ||
+        (seed_origin == CudaKsSeedOrigin::MovedBatchDensity && has_exchange);
     incremental_direct_jk = ks_incremental_solve_active(
         incremental_direct_jk_policy.active, options.incremental_direct_jk_auto,
-        ordinary_incremental_warm, input != nullptr,
-        seed_origin == CudaKsSeedOrigin::NativeColdGuess);
+        ordinary_incremental_warm, input != nullptr, admitted_owned_seed);
     // Only an owner with the complete Standard full-density closure may use a
     // bounded chain of screened proposals. J/K linearity is independent of
     // the XC family; inherit the ordinary Standard owner's existing model

@@ -9,7 +9,10 @@ from types import SimpleNamespace
 import pytest
 from generativeqc import Calculator, _native
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_initial_guess_default_stub,
+    install_registry_stub,
+)
 
 SUPPORTED = frozenset({"energy", "forces"})
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
@@ -64,6 +67,7 @@ def selector(
     )
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
     install_registry_stub(library, SUPPORTED)
+    install_initial_guess_default_stub(library)
     # Basis/system construction is outside this selection contract. The real
     # facade still validates requests and builds the native output descriptors.
     monkeypatch.setattr(
