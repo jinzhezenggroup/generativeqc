@@ -177,6 +177,7 @@ def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNames
         return _native.STATUS_SUCCESS
 
     native = SimpleNamespace(
+        generativeqc_resource_compose_v1=policy_library.generativeqc_resource_compose_v1,
         generativeqc_precision_controls_query_v1=policy_library.generativeqc_precision_controls_query_v1,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_method_available=available,
