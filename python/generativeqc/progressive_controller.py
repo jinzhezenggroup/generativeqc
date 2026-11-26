@@ -923,30 +923,33 @@ def _audit_target_physical_residual(
     maximum_host_bytes: int,
 ) -> HFPhysicalResidualAudit:
     """Rebuild the exact target Fock once and audit FDS-SDF at its final density."""
-    from generativeqc_compiler.common.resources import ResourceBudget
+    from ._hf_physical_native import audit, owns_admission
 
     started = time.perf_counter()
-    unrestricted = problem.model.method == "uhf"
     if type(maximum_host_bytes) is not int or maximum_host_bytes < 1:
         raise ValueError("maximum verification host bytes must be positive")
-    # Reserve the controller's density/Fock snapshots, overlap, commutator
-    # products and immutable/hash copies in addition to the provider envelope.
-    # The full HF inventory is deliberately conservative for a fixed-D audit;
-    # do not create NativeAO/Fock owners first and check only the final overlap.
-    n = density.shape[-1]
-    spin_channels = 2 if unrestricted else 1
-    workspace_bytes = 8 * n * n * (12 * spin_channels + 8)
-    if workspace_bytes > maximum_host_bytes:
-        raise MemoryError("physical verification workspace exceeds host budget")
-    calculator.estimate_resources(
-        [atoms],
-        charges=[charge],
-        multiplicities=[multiplicity],
-        budget=ResourceBudget(
-            host_bytes=maximum_host_bytes, host_reserve_bytes=workspace_bytes
-        ),
-    ).require_feasible()
-    from ._hf_physical_native import audit
+
+    def compatibility_admission() -> None:
+        """Preserve the full provider and publication budget outside native scope."""
+        from generativeqc_compiler.common.resources import ResourceBudget
+
+        orbital_count = density.shape[-1]
+        spin_channels = 2 if problem.model.method == "uhf" else 1
+        workspace_bytes = 8 * orbital_count**2 * (12 * spin_channels + 8)
+        if workspace_bytes > maximum_host_bytes:
+            raise MemoryError("physical verification workspace exceeds host budget")
+        calculator.estimate_resources(
+            [atoms],
+            charges=[charge],
+            multiplicities=[multiplicity],
+            budget=ResourceBudget(
+                host_bytes=maximum_host_bytes, host_reserve_bytes=workspace_bytes
+            ),
+        ).require_feasible()
+
+    native_admission = owns_admission(calculator, maximum_host_bytes)
+    if not native_admission:
+        compatibility_admission()
 
     native = audit(
         problem,
@@ -960,6 +963,10 @@ def _audit_target_physical_residual(
     )
     if native is not None:
         return native
+    if native_admission:
+        # The native metadata query did not admit this topology. No provider
+        # was constructed; apply the old gate before trying compatibility.
+        compatibility_admission()
     return _audit_target_physical_residual_python(
         problem,
         calculator,
