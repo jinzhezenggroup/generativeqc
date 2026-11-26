@@ -24,7 +24,7 @@ are required. All available H100 versus CPU pairs are checked. Limits are
 `1e-7 Eh` for total energy, `3e-6 Eh/Bohr` for the largest absolute force
 component, and `1e-6 Eh/Bohr` for the Cartesian force RMS.
 
-The C5 baseline in `records.json` preserves one H100 endpoint and two
+The C5 baseline in `records-C5.json` preserves one H100 endpoint and two
 independent Psi4 endpoints from #3174. The replay reports a median only
 for configurations with at least two complete samples. Resource records
 separate the run's configured memory admission budget, Linux worker RSS
@@ -36,8 +36,8 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 |---|---:|---|---:|---:|---:|---:|
 | C5 | 3,830.93 median (2) | Psi4 | 2,495.80 median (2) | 3.0241e-11 | 1.7405e-06 | 5.8795e-07 |
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
-| C6 | 11,946.41 (one) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
-| C6 | 11,946.41 (one) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
+| C6 | 11,642.08 median (2) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
+| C6 | 11,642.08 median (2) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
 | C7 | — | — | — | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every
@@ -107,7 +107,7 @@ attempts have been archived and the qz jobs were deleted.
 ## Local raw captures
 
 The complete endpoint rows and their SHA-256 values are retained in
-`records.json`. `provenance.json` records the remote output path for each
+`records-C5.json`, `records-C6.json` and `records-C7.json`. `provenance.json` records the remote output path for each
 job and the hashes of any completed archives under `raw/`. The local archives
 contain the original worker, engine and device telemetry files. They stay
 untracked because they include verbose logs and time series. The original
@@ -120,11 +120,12 @@ H100 attempt failed during MO provider allocation at a 320 GiB allowance.
 Its only GPU sample preceded that allocation. The subsequent 155 GiB C7
 attempts record one-second device samples. The first C5 PySCF launcher
 rejected its trial label before computation and was retried with C5.1.
-The first C6 H100 run completed with a 155 GiB application allowance
-inside a 200 GiB host allocation. Its reported plan was 145.68 GiB.
-Worker RSS peaked at 16.04 GiB and sampled device memory at 74.25 GiB.
-The first C6 run's raw output was archived while its second fresh
-process started in the same allocation. The C7 CPU reference remains
+Both C6 H100 runs used a 155 GiB application allowance inside a 200 GiB
+host allocation. The first reported a 145.68 GiB planning bound. Worker
+RSS peaked at 16.04 and 16.04 GiB. Sampled device
+memory peaked at 74.25 and 74.25 GiB, respectively.
+The runs used two fresh processes in the same job. Both raw outputs
+were retained and the qz GPU job was deleted. The C7 CPU reference remains
 in progress in this local snapshot.
 
 ## Reproduction

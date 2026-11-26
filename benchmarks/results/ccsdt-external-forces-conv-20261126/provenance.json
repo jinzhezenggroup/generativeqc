@@ -93,7 +93,7 @@
     "gqc-3167-conv-h100-c6-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-h100-c6-1126-a",
-        "status": "RUNNING",
+        "status": "SUCCEEDED",
         "project": "CQ-NexChem",
         "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
         "resource": {
@@ -104,21 +104,31 @@
           "shared_memory_gib": 16,
           "gpu_type": "NVIDIA H100 (80GB)"
         },
-        "nodes": [
-          "qb-prod-gpu103"
-        ],
         "priority": 20,
         "priority_level": "NORMAL",
         "public_path_mount_mode": 0,
-        "created_at": "1795656603000"
+        "created_at": "1795656603000",
+        "finished_at": "1795680001000"
       },
       "diagnostics": [],
       "scheduled_utc": "2026-11-26T01:30:07+00:00",
+      "released_utc": "2026-11-26T08:00:01+00:00",
+      "allocated_card_hours": 6.498333333333333,
+      "estimated_points": 6.498333333333333,
+      "cleanup": {
+        "name": "gqc-3167-conv-h100-c6-1126-a",
+        "status": "deleted"
+      },
       "planned": [
         "C6.0",
         "C6.1"
       ],
       "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c6-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-h100-c6-1126-a.tar.gz",
+        "bytes": 6464,
+        "sha256": "a7b2fe7306239f818c7c3a6155d0dabd10836b2bafd0c9ee8c0be38aefe1c0d1"
+      },
       "local_archive_checkpoints": [
         {
           "path": "raw/gqc-3167-conv-h100-c6-1126-a-C6.0-checkpoint.tar.gz",
@@ -324,22 +334,22 @@
       },
       "diagnostics": [
         {
-          "time": "2026-11-25 22:23:48",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1288 Insufficient cpu, 16 Insufficient memory, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
-        },
-        {
-          "time": "2026-11-25 22:24:03",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 12 Insufficient memory, 1292 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
-        },
-        {
-          "time": "2026-11-25 22:24:11",
+          "time": "2026-11-26 00:01:27",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 11 Insufficient memory, 1293 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         },
         {
-          "time": "2026-11-25 22:24:25",
+          "time": "2026-11-26 00:02:12",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 00:02:40",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 11 Insufficient memory, 1293 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 00:03:24",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         }

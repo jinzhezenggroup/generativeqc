@@ -131,10 +131,19 @@ def summarize(attempts: list[Record]) -> Record:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--records", type=Path, default=ROOT / "records.json")
+    parser.add_argument(
+        "--records",
+        metavar="PATH",
+        type=Path,
+        nargs="+",
+        default=[ROOT / f"records-{case}.json" for case in CASES],
+        help="Read one combined record file or multiple case files.",
+    )
     args = parser.parse_args()
-    data = json.loads(args.records.read_text())
-    print(json.dumps(summarize(data["attempts"]), indent=2, allow_nan=False))
+    attempts = []
+    for path in args.records:
+        attempts.extend(json.loads(path.read_text())["attempts"])
+    print(json.dumps(summarize(attempts), indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":
