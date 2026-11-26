@@ -1,4 +1,4 @@
-"""Transport the selected native owner's geometry-independent CBS plan."""
+"""Transport native CBS coefficients and completed component observables."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import ctypes
 import math
 from dataclasses import dataclass
 from typing import Any
+
+import numpy as np
 
 from . import _native
 
@@ -45,6 +47,84 @@ class CBSPlan:
     hf_weights: tuple[float, float]
     mp2_weights: tuple[float, float]
     coefficients: tuple[float, ...]
+
+
+_DoublePointer = ctypes.POINTER(ctypes.c_double)
+
+
+class _Observables(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("energy", ctypes.c_double * 6),
+        ("forces", _DoublePointer * 6),
+        ("force_count", ctypes.c_size_t),
+    ]
+
+
+class _Composition(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("energy", ctypes.c_double * 4),
+        ("force_blocks", _DoublePointer),
+        ("force_capacity", ctypes.c_size_t),
+    ]
+
+
+class NativeCbsComposer:
+    """Use the selected plan and library for every completed CBS replay."""
+
+    def __init__(self, library: ctypes.CDLL, plan: CBSPlan) -> None:
+        compose = getattr(library, "generativeqc_cbs_compose_v1", None)
+        if compose is None:
+            raise RuntimeError("CBS requires the selected native composition owner")
+        compose.argtypes = [
+            ctypes.POINTER(_Plan),
+            ctypes.POINTER(_Observables),
+            ctypes.POINTER(_Composition),
+        ]
+        compose.restype = ctypes.c_int
+        self._library = library
+        self._compose = compose
+        self._plan = _Plan(
+            ctypes.sizeof(_Plan),
+            _native.ABI_VERSION,
+            (ctypes.c_double * 2)(*plan.hf_weights),
+            (ctypes.c_double * 2)(*plan.mp2_weights),
+            (ctypes.c_double * 6)(*plan.coefficients),
+        )
+
+    def __call__(
+        self, energies: tuple[float, ...], forces: tuple[np.ndarray | None, ...] | None
+    ) -> tuple[tuple[float, ...], np.ndarray | None]:
+        """Return total/HF/MP2-correlation/delta blocks without Python arithmetic."""
+        inputs = _Observables(ctypes.sizeof(_Observables), _native.ABI_VERSION)
+        output = _Composition(ctypes.sizeof(_Composition), _native.ABI_VERSION)
+        inputs.energy[:] = energies
+        blocks = None
+        if forces is not None:
+            if len(forces) != 6 or forces[0] is None:
+                raise ValueError("CBS composition requires six matching force blocks")
+            shape = forces[0].shape
+            if any(item is None or item.shape != shape for item in forces):
+                raise ValueError("CBS composition requires six matching force blocks")
+            arrays = tuple(
+                np.require(item, dtype=np.float64, requirements=("C", "A"))
+                for item in forces
+            )
+            inputs.force_count = arrays[0].size
+            inputs.forces[:] = [item.ctypes.data_as(_DoublePointer) for item in arrays]
+            blocks = np.empty((4, *arrays[0].shape), dtype=np.float64)
+            output.force_blocks = blocks.ctypes.data_as(_DoublePointer)
+            output.force_capacity = blocks.size
+        _native.check(
+            self._library,
+            self._compose(
+                ctypes.byref(self._plan), ctypes.byref(inputs), ctypes.byref(output)
+            ),
+        )
+        return tuple(output.energy), blocks
 
 
 def native_cbs_plan(

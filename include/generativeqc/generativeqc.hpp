@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -498,6 +499,51 @@ struct CalculationResult {
   std::optional<double> physical_residual_rms;
 };
 
+/** @native-contract generativeqc::HostResources
+ * @behavior Own the metadata handle for a shared modeled native host cap.
+ * @lifetime Prepared owners retain their leases independently of this handle.
+ * @execution Do not race destruction with borrowing or querying the handle.
+ */
+class HostResources {
+ public:
+  /** @native-contract generativeqc::HostResources::HostResources
+   * @behavior Construct a metadata-only shared host cap.
+   * @inputs maximum_bytes is the effective modeled cap; zero is valid.
+   * @errors Throws Error if the native handle could not be created.
+   * @execution Synchronous; initializes no compute backend.
+   */
+  explicit HostResources(std::uint64_t maximum_bytes) {
+    generativeqc_host_resources* raw = nullptr;
+    check(generativeqc_host_resources_create_v1(maximum_bytes, &raw));
+    handle_.reset(raw);
+  }
+
+  /** @native-contract generativeqc::HostResources::snapshot
+   * @behavior Read one coherent modeled-reservation snapshot.
+   * @outputs Retained bytes, largest serialized workspace, cap and owner count.
+   * @errors Throws Error on native failure or a moved-from object.
+   * @execution Safe with native preparation and execution on separate contexts.
+   */
+  generativeqc_host_resource_snapshot snapshot() const {
+    generativeqc_host_resource_snapshot output{};
+    output.struct_size = sizeof(output);
+    output.abi_version = GENERATIVEQC_ABI_VERSION;
+    check(generativeqc_host_resources_snapshot_v1(handle_.get(), &output));
+    return output;
+  }
+
+  /** @native-contract generativeqc::HostResources::get
+   * @behavior Borrow the native metadata handle for synchronous preparation.
+   * @outputs A non-owning handle, or NULL after move.
+   * @lifetime The wrapper must outlive uses of the borrowed handle.
+   */
+  const generativeqc_host_resources* get() const noexcept { return handle_.get(); }
+
+ private:
+  std::unique_ptr<generativeqc_host_resources, decltype(&generativeqc_host_resources_destroy_v1)>
+      handle_{nullptr, generativeqc_host_resources_destroy_v1};
+};
+
 /** Native single-system plan; context must outlive it. Unsupported properties
  * fail before
  * execution, and absent forces are represented explicitly. */
@@ -537,6 +583,26 @@ class Calculation {
                                                                    resources, &handle_));
     else
       check(generativeqc_calculation_prepare(context_, system.get(), &method, &handle_));
+  }
+  /** @native-contract generativeqc::Calculation::Calculation-host-resources
+   * @behavior Prepare all-electron Direct FP64 CPU RHF/UHF with a shared host lease.
+   * @inputs Supply a live context, system, method descriptor and host cap. The v1 C
+   * admission rules apply; no fitting, ECP, or preliminary guess provider is allowed.
+   * @lifetime The lease survives closing the metadata handle and ends with the calculation.
+   * The context must outlive the calculation.
+   * @errors Throws Error with native detail on capacity or preparation failure.
+   * @execution Synchronous; the shared cap serializes workspace across its owners.
+   * @units Bytes of modeled capacity; not process RSS or allocator telemetry.
+   */
+  Calculation(Context& context, const System& system, const generativeqc_method_descriptor& method,
+              const HostResources& resources)
+      : context_(context.get()),
+        atom_count_(system.atom_count()),
+        capabilities_(method_capabilities(method.method)) {
+    const auto status = generativeqc_calculation_prepare_with_host_resources_v1(
+        context_, system.get(), &method, resources.get(), &handle_);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw Error(status, generativeqc_context_get_last_detail(context_));
   }
   /** @native-contract generativeqc::Calculation::Calculation-named-ks
    * @behavior Prepare a complete named KS graph through the native C API.

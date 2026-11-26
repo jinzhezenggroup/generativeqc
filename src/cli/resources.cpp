@@ -10,6 +10,7 @@
 #include <string_view>
 #include <vector>
 
+#include "api/host_resources.hpp"
 #include "cli/hessian.hpp"
 #include "cli/json.hpp"
 #include "cli/molecular_system.hpp"
@@ -37,9 +38,6 @@ extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::s
                                                 std::size_t, std::uint64_t*, std::size_t);
 extern "C" int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t, std::uint64_t*);
 extern "C" int generativeqc_resource_quadrature_cuda_v1(std::size_t, std::size_t, std::uint64_t*);
-extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
-                                                      std::size_t, std::size_t, int,
-                                                      std::uint64_t*);
 extern "C" generativeqc_status generativeqc_resource_preliminary_cpu_v1(
     generativeqc_context*, const generativeqc_system*, const generativeqc_initial_guess_options*,
     std::uint32_t, std::uint64_t*, std::size_t);
@@ -459,7 +457,12 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
       (cpu_program && matches_ks_inventory(ks_program, {"lda_xc_pw-rks", "lda_xc_pw-uks"}));
   const bool pbe = options.method_name == "pbe-rks" || options.method_name == "pbe-uks" ||
                    (cpu_program && matches_ks_inventory(ks_program, {"pbe-rks", "pbe-uks"}));
+  const bool cpu_hybrid_d4 =
+      cpu_program && options.composition &&
+      matches_ks_inventory(ks_program, {"b3lyp-d4(bj-eeq-atm)-rks", "b3lyp-d4(bj-eeq-atm)-uks",
+                                        "pbe0-d4(bj-eeq-atm)-rks", "pbe0-d4(bj-eeq-atm)-uks"});
   const bool correction_program = pbe_dispersion_inventory(options) || cpu_pbe0_bj ||
+                                  cpu_hybrid_d4 ||
                                   (cpu_b3lyp && options.composition->dispersion.kind);
   const bool d4 = correction_program && options.composition->dispersion.kind == 3;
   const bool gga = pbe || cpu_pbe0 || cpu_b3lyp || correction_program;
@@ -531,10 +534,16 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   if (!hf && !ks) {
     plan["diagnostic"] =
         "native resource inventory requires RHF/UHF, LDA/PBE RKS/UKS, a named "
-        "PBE D3/D4 program, or qualified CPU PBE0/B3LYP energy";
+        "PBE D3/D4 program, or a qualified CPU PBE0/B3LYP program";
     return finish();
   }
   if (ks_program && ks) plan["method_ir_identity"] = ks_program->identity;
+  // Keep the new D4 slice on the ordinary Direct layout; packed resource
+  // admission has separate retained-ERI and derivative-provider contracts.
+  if (cpu_hybrid_d4 && packed_cap) {
+    plan["diagnostic"] = "CPU hybrid D4 inventory excludes packed Coulomb ERIs";
+    return finish();
+  }
   if (!derivative && packed_cap &&
       (!cpu_backend || !ks || !options.composition || options.composition->range_omega != 0 ||
        options.composition->nonlocal.variant)) {
@@ -596,6 +605,12 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
     expanded_basis = &local_basis;
   }
   const auto& basis = *expanded_basis;
+  if (cpu_hybrid_d4 && (!basis.ecp_terms.empty() ||
+                        std::any_of(basis.core_electrons.begin(), basis.core_electrons.end(),
+                                    [](auto core) { return core != 0; }))) {
+    plan["diagnostic"] = "CPU hybrid D4 inventory requires an all-electron basis";
+    return finish();
+  }
   const auto orbital = topology(basis);
   const Bytes spins =
       ks && ks_program
@@ -1001,13 +1016,11 @@ Json resource_inventory(const RunOptions& supplied, std::span<const generativeqc
   }
   if (derivative_program && plan["status"] == "feasible" && options.host_bytes) {
     auto& inventory = plan["derivative_inventory"];
-    const auto floor = inventory.at("minimum_numeric_bytes").get<Bytes>();
-    const auto minimum_peak = plan["peak_bytes"].at("host").get<Bytes>();
-    const auto limit = limits.at("host").get<Bytes>();
-    // Only the slack beyond the full mandatory peak can fund optional derivative storage.
-    const auto optional = std::min(derivative->numeric_bytes - floor, limit - minimum_peak);
-    inventory["selected_numeric_cap_bytes"] = floor + optional;
-    inventory["selected_host_peak_bytes"] = minimum_peak + optional;
+    const auto selected = resource::select_overlapped_host_workspace(
+        composition, inventory.at("minimum_numeric_bytes").get<Bytes>(),
+        inventory.at("numeric_bytes").get<Bytes>());
+    inventory["selected_numeric_cap_bytes"] = selected.workspace_bytes;
+    inventory["selected_host_peak_bytes"] = selected.host_peak_bytes;
   }
   return finish();
 }
@@ -1048,11 +1061,17 @@ CpuHostAdmission admit_cpu_host_budget(const RunOptions& options,
                                        const NativeBasisData& expanded_basis, Context* context,
                                        const System* system) {
   if (!options.host_bytes || options.backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
-      options.method == GENERATIVEQC_METHOD_UHF ||
-      (options.method == GENERATIVEQC_METHOD_RHF &&
+      ((options.method == GENERATIVEQC_METHOD_RHF || options.method == GENERATIVEQC_METHOD_UHF) &&
        options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE) ||
       options.basis_program || options.owned_device_bytes)
-    throw UsageError("run --host-bytes requires a supported FP64 CPU RHF or KS inventory");
+    throw UsageError("run --host-bytes requires a supported FP64 CPU HF or KS inventory");
+  // Use the existing two-spin CPU HF fleet bound for all-electron Direct UHF.
+  // Leave ECP UHF as a planning-only inventory until its run gate is qualified.
+  if (options.method == GENERATIVEQC_METHOD_UHF &&
+      (!expanded_basis.ecp_terms.empty() ||
+       std::any_of(expanded_basis.core_electrons.begin(), expanded_basis.core_electrons.end(),
+                   [](auto core) { return core != 0; })))
+    throw UsageError("run --host-bytes for CPU UHF requires an all-electron basis");
   const auto plan =
       resource_inventory(options, atoms, nullptr, &expanded_basis, std::nullopt, context, system);
   if (plan.at("status") != "feasible")

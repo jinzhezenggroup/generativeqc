@@ -4,6 +4,10 @@
 two larger bases for MP2 extrapolation and one smaller basis for the
 CCSD(T)−MP2 correction. It does **not** run CCSD(T) in both larger bases, or
 use a reference package or finite differences as a production force backend.
+The selected native extrapolation plan also owns final energy and force
+composition (`generativeqc_cbs_compose_v1`). It publishes the total and all
+three contributions together; Python does not reconstruct the composite when
+native composition is unavailable or refuses a result.
 
 ## Run the workflow
 

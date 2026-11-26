@@ -69,6 +69,18 @@ struct Composition {
   std::vector<std::optional<std::uint64_t>> minima, limits;
 };
 
+struct HostWorkspaceCapacity {
+  std::uint64_t workspace_bytes{}, host_peak_bytes{};
+};
+
+/** Expand a pageable workspace whose floor is in the feasible composition's
+ * mandatory peak at every phase. Only the remaining effective host capacity is
+ * available; pinned, device, resident bytes and provider selections do not change.
+ * This is an inventory bound, not a lease or an allocator reservation.
+ */
+HostWorkspaceCapacity select_overlapped_host_workspace(const Composition& mandatory,
+                                                       std::uint64_t floor, std::uint64_t ceiling);
+
 /** Round up capacity*fraction exactly, including subnormal headroom and int64
  * boundary capacities. Reject nonfinite fractions and out-of-domain integers.
  */

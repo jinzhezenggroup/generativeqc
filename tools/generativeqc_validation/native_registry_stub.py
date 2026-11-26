@@ -9,6 +9,16 @@ from generativeqc import _generated_methods as manifest
 from generativeqc import _native
 
 
+def install_initial_guess_default_stub(library: Any) -> None:
+    """Return a fixed Hcore receipt for a facade test, not a seed policy."""
+
+    def query(request: Any, output: Any) -> int:
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = 0
+        return _native.STATUS_SUCCESS
+
+    library.generativeqc_initial_guess_default_kind_v1 = query
+
+
 def install_correlation_policy_stub(library: Any) -> None:
     """Inject a fixed strict receipt, never infer stopping limits from a budget.
 
@@ -63,6 +73,26 @@ def install_scf_defaults_stub(
     library.generativeqc_scf_defaults_query_v1 = query
 
 
+def install_basis_name_stub(library: Any) -> None:
+    """Declare bundled-name metadata on a test double without constructing systems."""
+    from generativeqc._model_resolution import _basis_pack
+    from generativeqc.profiles import canonical_hash
+
+    pack = _basis_pack()
+    digest = canonical_hash(pack).encode("ascii")
+    names = {name.encode("ascii") for name in pack["bases"]}
+
+    def resolve(selector: bytes, count: int) -> bytes | None:
+        canonical = selector[:count].lower().replace(b"_", b"-")
+        return canonical if canonical in names else None
+
+    def checksum() -> bytes:
+        return digest
+
+    library.generativeqc_builtin_basis_resolve_name_v1 = resolve
+    library.generativeqc_bundled_basis_catalog_sha256 = checksum
+
+
 def install_registry_stub(
     library: Any, properties: Any, *, supports_batch: bool = True
 ) -> None:
@@ -70,8 +100,8 @@ def install_registry_stub(
 
     Carrier IDs/families follow the public manifest. A property set, or a callable
     from carrier ID to a property set, controls the test's declared provider view.
-    The absent named-selector protocol deliberately exercises old-library numeric
-    compatibility; real named lookup/provenance is covered by compiled tests.
+    Both registry calls share the same manifest carriers; real native lookup
+    and provenance are covered by compiled tests.
     """
     families = {
         "hartree_fock": _native.METHOD_FAMILY_HARTREE_FOCK,
@@ -80,6 +110,18 @@ def install_registry_stub(
         "perturbation": _native.METHOD_FAMILY_PERTURBATION,
         "semiempirical": _native.METHOD_FAMILY_SEMIEMPIRICAL,
     }
+
+    by_name = {
+        name.encode("ascii"): method
+        for method, name in manifest.METHOD_ID_TO_NAME.items()
+    }
+
+    def lookup(name: bytes, output: Any) -> int:
+        method = by_name.get(name)
+        if method is None or output is None:
+            return _native.STATUS_INVALID_ARGUMENT
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_int32))[0] = method
+        return _native.STATUS_SUCCESS
 
     def query(method: int, output: Any) -> int:
         metadata = manifest.METHOD_METADATA[manifest.METHOD_ID_TO_NAME[method]]
@@ -96,7 +138,9 @@ def install_registry_stub(
         ) | (_native.PROPERTY_FORCES if "forces" in enabled else 0)
         return _native.STATUS_SUCCESS
 
-    library.generativeqc_method_from_name = None
+    if not hasattr(library, "generativeqc_builtin_basis_resolve_name_v1"):
+        install_basis_name_stub(library)
+    library.generativeqc_method_from_name = lookup
     library.generativeqc_method_get_capabilities = query
     if not hasattr(library, "generativeqc_correlation_convergence_query_v1"):
         install_correlation_policy_stub(library)

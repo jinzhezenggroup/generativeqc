@@ -110,6 +110,8 @@ struct generativeqc_calculation {
 struct generativeqc_batch {
   generativeqc_context* context{};
   generativeqc_property_flags cpu_df_host_properties{};
+  generativeqc_property_flags cpu_hessian_host_properties{};
+  std::size_t cpu_hessian_workspace_bytes{};
   std::shared_ptr<generativeqc::runtime::HostResourceLease> host_lease;
   /** Declared before the scientific plan so providers/buffers release first.
    * Frontend metadata handles may close without detaching retained charges. */

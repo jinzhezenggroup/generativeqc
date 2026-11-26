@@ -14,6 +14,7 @@
 #include "generated_nuclear_repulsion.hpp"
 #include "generated_one_electron_st_cpu.hpp"
 #include "generated_stationary_cpu_derivative_dispatch.hpp"
+#include "integrals/cross_overlap_registration.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/eri_symmetry.hpp"
 #include "integrals/generated_df_cpu.hpp"
@@ -1791,8 +1792,61 @@ void position_integrals(const core::System& system, std::span<double> output) {
   }
 }
 
+std::size_t cross_overlap_workspace_bytes(const core::System& target, const core::System& source) {
+  struct Side {
+    std::size_t payload, build_workspace, maximum_angular;
+  };
+  const auto describe = [](const core::System& system) {
+    Side side{checked_product(system.atoms.size(), sizeof(Vec3)), 0, 0};
+    const bool spherical = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL;
+    for (const auto& shell : system.shells) {
+      const auto angular = shell.angular_momentum;
+      side.maximum_angular = std::max(side.maximum_angular, std::size_t{angular});
+      const auto cart = molecule::cartesian_count(angular);
+      const auto public_aos = molecule::shell_ao_count(angular, system.basis_representation);
+      const auto terms = spherical ? cart : 1;
+      side.payload = checked_sum(side.payload, checked_product(cart, sizeof(AoView)));
+      const auto expansion_bytes = sizeof(GlobalAoExpansion) + terms * sizeof(GlobalExpansionTerm);
+      side.payload = checked_sum(side.payload, checked_product(public_aos, expansion_bytes));
+      const auto components = checked_product(cart, sizeof(molecule::CartesianComponent));
+      auto build = components;
+      // Spherical construction temporarily owns both component lists and the
+      // shell-local expansions before packing into the retained global map.
+      if (spherical) {
+        const auto shell_terms =
+            angular > 3 ? std::max(terms, molecule::kMaximumAuxiliaryAoExpansionTerms) : terms;
+        const auto local_expansion_bytes =
+            sizeof(molecule::AoExpansion) + shell_terms * sizeof(molecule::CartesianExpansionTerm);
+        build = checked_sum(checked_product(2, components),
+                            checked_product(public_aos, local_expansion_bytes));
+        if (angular > 3) build = checked_sum(build, checked_product(cart, sizeof(double)));
+      }
+      side.build_workspace = std::max(side.build_workspace, build);
+    }
+    return side;
+  };
+  const auto left = describe(target), right = describe(source);
+  std::size_t recurrence_bytes{};
+  if (left.maximum_angular > 3 || right.maximum_angular > 3) {
+    // High-angular compatibility evaluates one Cartesian axis at a time.
+    // Cross overlap uses value-only Jets, with no derivative arrays.
+    const auto idim = checked_sum(left.maximum_angular, 1);
+    const auto jdim = checked_sum(right.maximum_angular, 1);
+    const auto entries = checked_product(checked_product(idim, jdim), checked_sum(idim, jdim));
+    recurrence_bytes = checked_product(entries, sizeof(Jet));
+  }
+  return checked_sum(checked_sum(left.payload, right.payload),
+                     std::max({left.build_workspace, right.build_workspace, recurrence_bytes}));
+}
+
 void cross_overlap(const core::System& target, const core::System& source,
                    std::span<double> output) {
+  cross_overlap_registered(target, source, output, nullptr);
+}
+
+void cross_overlap_registered(const core::System& target, const core::System& source,
+                              std::span<double> output,
+                              const std::array<double, 3>* subtract_from_target) {
   const auto nt = molecule::ao_count(target), ns = molecule::ao_count(source);
   if (nt == 0 || ns == 0 || nt > std::numeric_limits<std::size_t>::max() / ns ||
       output.size() != nt * ns) {
@@ -1802,16 +1856,24 @@ void cross_overlap(const core::System& target, const core::System& source,
   const auto source_cartesian = expand_cartesian_aos(source);
   const auto target_public = public_ao_expansions(target);
   const auto source_public = public_ao_expansions(source);
-  auto centers = [](const core::System& system) {
+  auto centers = [](const core::System& system, const std::array<double, 3>* shift) {
     std::vector<Vec3> result;
     result.reserve(system.atoms.size());
     for (const auto& atom : system.atoms) {
-      result.push_back(
-          {Jet(atom.position[0], 0), Jet(atom.position[1], 0), Jet(atom.position[2], 0)});
+      auto position = atom.position;
+      if (shift) {
+        for (std::size_t axis = 0; axis < position.size(); ++axis) {
+          position[axis] -= (*shift)[axis];
+          if (!std::isfinite(position[axis]))
+            throw std::invalid_argument("cross-overlap registration produced nonfinite centres");
+        }
+      }
+      result.push_back({Jet(position[0], 0), Jet(position[1], 0), Jet(position[2], 0)});
     }
     return result;
   };
-  const auto target_centers = centers(target), source_centers = centers(source);
+  const auto target_centers = centers(target, subtract_from_target);
+  const auto source_centers = centers(source, nullptr);
   // Expand only the AO pair being written. The bounded sparse spherical terms
   // avoid a second Cartesian rectangular matrix and preserve both AO orders.
   for (std::size_t i = 0; i < nt; ++i) {

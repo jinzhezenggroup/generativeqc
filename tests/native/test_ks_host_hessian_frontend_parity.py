@@ -130,6 +130,55 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             )
             assert diagnostic["d3_pair_visits"] == cpp["panel_d3_pair_visits"]
         if method == "pbe-d3(bj)-rks":
+            inventory_command = (cli, "resources", *command[1:], "--property", "hvp")
+            inventory = run(*inventory_command)
+            peak = inventory["peak_bytes"]["host"]
+            floor = inventory["derivative_inventory"]["minimum_numeric_bytes"]
+            for slack in (0, 4096):
+                host_flags = (
+                    "--host-bytes",
+                    str(2 * (peak + slack + 1024)),
+                    "--host-reserve-bytes",
+                    "1024",
+                    "--headroom-fraction",
+                    "0.5",
+                )
+                dry_run = run(*inventory_command, *host_flags)
+                action = run(*hvp_command, *host_flags)
+                observed = action["diagnostics"]["resource_admission"]
+                sizing = dry_run["derivative_inventory"]
+                assert observed["effective_host_limit_bytes"] == peak + slack
+                assert observed["minimum_host_peak_bytes"] == peak
+                assert (
+                    observed["selected_host_peak_bytes"]
+                    == sizing["selected_host_peak_bytes"]
+                    == peak + slack
+                )
+                assert (
+                    observed["derivative_numeric_cap_bytes"]
+                    == sizing["selected_numeric_cap_bytes"]
+                    == floor + slack
+                )
+                lease = observed["native_host_lease"]
+                assert lease["owner_count"] == 1 and lease["retained_bytes"] > 0
+                assert lease["workspace_bytes"] > floor + slack
+                assert (
+                    lease["retained_bytes"] + lease["workspace_bytes"] <= peak + slack
+                )
+                np.testing.assert_allclose(
+                    np.ravel(action["value"]), cpp["value"], atol=2e-8, rtol=0
+                )
+            shortage = subprocess.run(
+                (*hvp_command, "--host-bytes", str(peak - 1)),
+                env=runtime,
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+            assert shortage.returncode != 0 and not shortage.stdout
+            assert "allocation inventory exceeds host budget" in shortage.stderr
+        if method == "pbe-d3(bj)-rks":
             panel = np.stack(
                 (seed, -0.5 * seed, np.zeros_like(seed), seed[::-1], 2 * seed)
             )
@@ -181,6 +230,31 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
                     and not trace.exists()
                 )
         cli_matrix = run(cli, "hessian", *command[1:])
+        if method == "pbe-d3(bj)-rks":
+            dense_command = (cli, "hessian", *command[1:])
+            dense_plan = run(cli, "resources", *command[1:], "--property", "hessian")
+            dense_peak = dense_plan["peak_bytes"]["host"]
+            dense_budgeted = run(*dense_command, "--host-bytes", str(dense_peak))
+            admission = dense_budgeted["diagnostics"]["resource_admission"]
+            lease = admission["native_host_lease"]
+            assert lease["owner_count"] == 1
+            assert 0 < lease["retained_bytes"] + lease["workspace_bytes"] <= dense_peak
+            assert admission["selected_host_peak_bytes"] == dense_peak
+            np.testing.assert_allclose(
+                dense_budgeted["matrix"], cli_matrix["matrix"], atol=2e-8, rtol=0
+            )
+            short_trace = Path(directory) / "dense-short.jsonl"
+            short = subprocess.run(
+                (*dense_command, "--host-bytes", str(dense_peak - 1)),
+                env=dict(runtime, GENERATIVEQC_DF_PROGRESS_TRACE=str(short_trace)),
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+            assert short.returncode != 0 and not short.stdout
+            assert "allocation inventory exceeds host budget" in short.stderr
+            assert not short_trace.exists()
         if method in ("lda-rks", "pbe-rks", "pbe-d3(bj)-rks", "pbe-d3(bj)-uks"):
             packed = ("--cpu-packed-eri-budget-bytes", "48")
             resource = run(cli, "resources", *command[1:], "--property", "hvp", *packed)
@@ -205,6 +279,14 @@ def compare(sdk: str, cli: str, method: str, *, expected_linked: bool) -> None:
             assert admission["minimum_host_peak_bytes"] == peak
             assert admission["selected_host_peak_bytes"] == peak
             assert admission["effective_host_limit_bytes"] == peak
+            lease = admission["native_host_lease"]
+            assert lease["owner_count"] == 1
+            # The CLI owns the frozen direction separately from the native lease.
+            direction_bytes = np.asarray(direction, dtype=np.float64).nbytes
+            assert (
+                lease["retained_bytes"] + lease["workspace_bytes"] + direction_bytes
+                == peak
+            )
             np.testing.assert_allclose(
                 packed_action["value"], cli_action["value"], atol=2e-8, rtol=0
             )

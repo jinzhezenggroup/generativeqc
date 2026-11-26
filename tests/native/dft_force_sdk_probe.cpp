@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     const bool automatic = method.starts_with("libxc:");
     if ((device != "cpu" && device != "cuda") || (spin != 0 && spin != 1) ||
         (representation != "cartesian" && representation != "spherical") ||
-        (fitting != "none" && fitting != device))
+        (fitting != "none" && fitting != device && fitting != "auto"))
       throw std::invalid_argument("invalid SDK force context");
     const auto backend =
         device == "cpu" ? GENERATIVEQC_BACKEND_CPU_REFERENCE : GENERATIVEQC_BACKEND_CUDA;
@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
     descriptor.energy_tolerance = automatic ? 1e-13 : 1e-12;
     descriptor.density_tolerance = automatic ? 1e-12 : 1e-10;
     descriptor.screening_tolerance = automatic ? 1e-12 : 1e-13;
-    descriptor.density_fitting_mode = fitting == "none" ? GENERATIVEQC_DENSITY_FITTING_NONE
+    descriptor.density_fitting_mode = fitting == "none"   ? GENERATIVEQC_DENSITY_FITTING_NONE
+                                      : fitting == "auto" ? GENERATIVEQC_DENSITY_FITTING_AUTO
                                       : device == "cpu" ? GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE
                                                         : GENERATIVEQC_DENSITY_FITTING_CUDA;
     const generativeqc::KsGrid grid = automatic
