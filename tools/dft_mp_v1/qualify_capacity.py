@@ -2196,6 +2196,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
     from dataclasses import replace
     from unittest.mock import patch
 
+    from generativeqc import _basis_builtin
     from generativeqc import calculator as calculator_module
 
     source = (repository / "python/generativeqc/calculator.py").read_text(
@@ -2337,6 +2338,50 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
         )
         return native_status
 
+    def catalog_descriptor(pointer: Any) -> Any:
+        nonlocal native_seen
+        native_seen = True
+        descriptor = ctypes.cast(
+            pointer, ctypes.POINTER(_basis_builtin.Descriptor)
+        ).contents
+        name = expected_basis.name.encode("ascii")
+        digest = expected_basis.provenance.checksum.encode("ascii")
+        if (
+            expected_route != "catalog"
+            or descriptor.struct_size != ctypes.sizeof(_basis_builtin.Descriptor)
+            or descriptor.abi_version != native.ABI_VERSION
+            or descriptor.name != name
+            or descriptor.name_count != len(name)
+            or descriptor.expected_pack_checksum != digest
+            or descriptor.expected_pack_checksum_count != len(digest)
+            or descriptor.atom_count != len(atoms)
+            or descriptor.charge != -1
+            or descriptor.multiplicity != 2
+            or descriptor.representation != expected_representation
+            or descriptor.maximum_expansion_bytes != 0
+            or tuple(
+                (atom.atomic_number, (atom.x, atom.y, atom.z))
+                for atom in descriptor.atoms[: descriptor.atom_count]
+            )
+            != tuple((atom.atomic_number, atom.position) for atom in atoms)
+        ):
+            raise RuntimeError("native catalog descriptor changed")
+        return descriptor
+
+    def query_catalog(pointer: Any, output: Any) -> int:
+        descriptor = catalog_descriptor(pointer)
+        capacity = ctypes.cast(output, ctypes.POINTER(_basis_builtin.Capacity)).contents
+        capacity.canonical_name = descriptor.name
+        capacity.pack_checksum = descriptor.expected_pack_checksum
+        return native.STATUS_SUCCESS
+
+    def create_catalog(observed_context: Any, pointer: Any, output: Any) -> int:
+        catalog_descriptor(pointer)
+        if observed_context.value != context.value:
+            raise RuntimeError("native catalog context changed")
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = returned_system
+        return native_status
+
     def capture_ecp(
         observed_context: Any,
         descriptor: Any,
@@ -2369,13 +2414,16 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
         for representation in ("spherical", "cartesian"):
             orbital = snapshot_basis("def2-svp", representation)
             auxiliary = snapshot_basis("sto-3g", representation)
+            explicit = replace(
+                orbital, provenance=replace(orbital.provenance, source="capacity probe")
+            )
             expected_representation = (
                 native.BASIS_SPHERICAL
                 if representation == "spherical"
                 else native.BASIS_CARTESIAN
             )
             for device in ("cpu", "cuda"):
-                for form in (orbital, "def2-svp", orbital.shells_for(atoms)):
+                for form in (orbital, "def2-svp", explicit, orbital.shells_for(atoms)):
                     calculator = object.__new__(calculator_type)
                     calculator._basis = form
                     calculator._representation_name = representation
@@ -2392,6 +2440,8 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                     calculator._ks_options = None
                     calculator._library = SimpleNamespace(
                         generativeqc_system_create=capture_system,
+                        generativeqc_builtin_basis_query_v1=query_catalog,
+                        generativeqc_system_create_builtin_basis_v1=create_catalog,
                         generativeqc_system_create_ecp=capture_ecp,
                         generativeqc_correlation_auxiliary_system_create_v1=lambda *args: (
                             capture_system(*args, route="correlation")
@@ -2441,6 +2491,11 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                             derivative_order=0,
                         )
                         label = "_create_native_system"
+                        expected_route = (
+                            "catalog"
+                            if expected_basis in (orbital, auxiliary)
+                            else "ordinary"
+                        )
                         preflight_seen = native_seen = False
                         system = calculator._create_native_system(
                             context, atoms, -1, 2, explicit_basis
@@ -2489,7 +2544,7 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
                 operator="eri" if explicit_basis is None else "df_metric",
                 consumer=None if explicit_basis is None else "correlation_df",
             )
-            expected_route = "ordinary" if explicit_basis is None else "correlation"
+            expected_route = "catalog" if explicit_basis is None else "correlation"
             calculator._create_native_system(context, atoms, -1, 2, explicit_basis)
         del calculator._library.generativeqc_correlation_auxiliary_system_create_v1
         native_seen = False
@@ -2540,28 +2595,31 @@ def _calculator_basis_contract(repository: Path) -> tuple[str, str]:
         else:
             raise RuntimeError("ECP density fitting did not fail closed")
 
-        calculator._basis = expected_basis = orbital
         expected_shells = orbital.shells_for(atoms)
-        expected_route = "ordinary"
-        for charge, multiplicity in ((2**31, 2), (-1, 0)):
-            native_seen = False
+        for basis_form, route in ((orbital, "catalog"), (explicit, "ordinary")):
+            calculator._basis = expected_basis = basis_form
+            expected_route = route
+            for charge, multiplicity in ((2**31, 2), (-1, 0)):
+                native_seen = False
+                try:
+                    calculator._create_native_system(
+                        context, atoms, charge, multiplicity
+                    )
+                except ValueError:
+                    if native_seen:
+                        raise RuntimeError(
+                            "invalid electron state reached native creation"
+                        ) from None
+                else:
+                    raise RuntimeError("invalid electron state did not fail closed")
+            native_status = native.STATUS_INVALID_ARGUMENT
             try:
-                calculator._create_native_system(context, atoms, charge, multiplicity)
-            except ValueError:
-                if native_seen:
-                    raise RuntimeError(
-                        "invalid electron state reached native creation"
-                    ) from None
+                calculator._create_native_system(context, atoms, -1, 2)
+            except RuntimeError as error:
+                if "capacity probe rejected" not in str(error):
+                    raise
             else:
-                raise RuntimeError("invalid electron state did not fail closed")
-        native_status = native.STATUS_INVALID_ARGUMENT
-        try:
-            calculator._create_native_system(context, atoms, -1, 2)
-        except RuntimeError as error:
-            if "capacity probe rejected" not in str(error):
-                raise
-        else:
-            raise RuntimeError("native basis creation failure was swallowed")
+                raise RuntimeError("native basis creation failure was swallowed")
     except Exception as error:
         raise RuntimeError(
             f"{label} basis lowering contract changed: {error}"

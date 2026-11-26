@@ -37,7 +37,7 @@ class _Snapshot(ct.Structure):
 
 
 class HostResources:
-    """Share a modeled host cap across qualified CPU DF-KS prepared batches.
+    """Share a modeled host cap across qualified CPU KS prepared batches.
 
     Pass it to ``Calculator.prepare_batch`` with a matching native resource
     plan. Retained capacity adds across live batches; preparations and replays
