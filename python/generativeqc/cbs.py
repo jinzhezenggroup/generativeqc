@@ -1,7 +1,7 @@
 """MP2-assisted canonical CCSD(T)/CBS energy and analytic forces.
 
-Only component orchestration and application of native-owned coefficients live here.
-Every electronic energy and force comes from the public native calculator;
+Only component orchestration and result presentation live here.
+Electronic energies, forces and focal-point composition come from native owners;
 reference packages and numerical differentiation are not production consumers.
 """
 
@@ -18,7 +18,7 @@ import numpy as np
 
 from . import _native
 from ._api_types import Atom, Result
-from ._cbs_plan import native_cbs_plan
+from ._cbs_plan import NativeCbsComposer, native_cbs_plan
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
@@ -324,6 +324,7 @@ class CCSDTCBSCalculator:
             self.hf_exponent,
             hf_extrapolation,
         )
+        self._compose = NativeCbsComposer(policy_library, self._plan)
         self.mp2_weights = self._plan.mp2_weights
         self.hf_weights = self._plan.hf_weights
 
@@ -538,7 +539,6 @@ class CCSDTCBSCalculator:
                 method for role, method, _, _ in terms if role == "correction_ccsdt"
             )
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
-            by_role: dict[str, Result] = {}
             groups = {basis.identity: basis for _, _, basis, _ in terms}
             execution_groups = []
             warmup_requested = False
@@ -645,8 +645,6 @@ class CCSDTCBSCalculator:
                 )
                 for method, result in results.items():
                     completed[(method, identity)] = result, elapsed
-            for role, method, basis, _ in terms:
-                by_role[role] = completed[(method, basis.identity)][0]
 
             components = tuple(
                 CBSComponent(
@@ -667,45 +665,19 @@ class CCSDTCBSCalculator:
                 )
                 for key, (result, elapsed) in completed.items()
             )
-            hf_energy = math.fsum(
-                weight * by_role[f"hf_{label}"].energy
-                for label, weight in zip(("low", "high"), self.hf_weights, strict=True)
+            ordered = tuple(
+                completed[(method, basis.identity)][0] for _, method, basis, _ in terms
             )
-            mp2_energy = math.fsum(
-                weight
-                * (by_role[f"mp2_{label}"].energy - by_role[f"hf_{label}"].energy)
-                for label, weight in zip(("low", "high"), self.mp2_weights, strict=True)
+            energies, force_blocks = self._compose(
+                tuple(result.energy for result in ordered),
+                tuple(result.forces for result in ordered)
+                if forces_requested
+                else None,
             )
-            delta_energy = (
-                by_role["correction_ccsdt"].energy - by_role["correction_mp2"].energy
-            )
-            energy = math.fsum((hf_energy, mp2_energy, delta_energy))
+            energy, hf_energy, mp2_energy, delta_energy = energies
             hf_forces = mp2_forces = delta_forces = forces = None
-            if forces_requested:
-                hf_forces = sum(
-                    weight * by_role[f"hf_{label}"].forces
-                    for label, weight in zip(
-                        ("low", "high"), self.hf_weights, strict=True
-                    )
-                )
-                mp2_forces = sum(
-                    weight
-                    * (by_role[f"mp2_{label}"].forces - by_role[f"hf_{label}"].forces)
-                    for label, weight in zip(
-                        ("low", "high"), self.mp2_weights, strict=True
-                    )
-                )
-                delta_forces = (
-                    by_role["correction_ccsdt"].forces
-                    - by_role["correction_mp2"].forces
-                )
-                forces = hf_forces + mp2_forces + delta_forces
-            if not math.isfinite(energy) or (
-                forces is not None and not np.all(np.isfinite(forces))
-            ):
-                raise RuntimeError(
-                    "CBS composition produced nonfinite energy or forces"
-                )
+            if force_blocks is not None:
+                forces, hf_forces, mp2_forces, delta_forces = force_blocks
             # Report actual arithmetic from the copied native counters. A
             # resource-refused FP32 request must not be relabelled as mixed.
             arithmetic = "fp64"

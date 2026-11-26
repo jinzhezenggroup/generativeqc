@@ -1,0 +1,162 @@
+{
+  "checksum": "3fc67ccbb0813f6ceac64afacc55d69eb618c428c7742eeb40d4f17476c89a2f",
+  "elements": [
+    {
+      "atomic_number": 1,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 1,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "19685E-6",
+              "137977E-6",
+              "478148E-6"
+            ]
+          ],
+          "exponents": [
+            "1301E-2",
+            "1962E-3",
+            "4446E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "122E-3"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "727E-3"
+          ],
+          "source_group": 0
+        }
+      ]
+    },
+    {
+      "atomic_number": 7,
+      "ecp_core_electrons": 0,
+      "ecp_data": null,
+      "nuclear_charge": 7,
+      "shells": [
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "7E-4",
+              "5389E-6",
+              "27406E-6",
+              "103207E-6",
+              "278723E-6",
+              "44854E-5",
+              "278238E-6",
+              "1544E-5"
+            ],
+            [
+              "-153E-6",
+              "-1208E-6",
+              "-5992E-6",
+              "-24544E-6",
+              "-67459E-6",
+              "-158078E-6",
+              "-121831E-6",
+              "549003E-6"
+            ]
+          ],
+          "exponents": [
+            "9046E0",
+            "1357E0",
+            "3093E-1",
+            "8773E-2",
+            "2856E-2",
+            "1021E-2",
+            "3838E-3",
+            "7466E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 0,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2248E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "39919E-6",
+              "217169E-6",
+              "510319E-6"
+            ]
+          ],
+          "exponents": [
+            "1355E-2",
+            "2917E-3",
+            "7973E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 1,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "2185E-4"
+          ],
+          "source_group": 0
+        },
+        {
+          "angular_momentum": 2,
+          "coefficients": [
+            [
+              "1E0"
+            ]
+          ],
+          "exponents": [
+            "817E-3"
+          ],
+          "source_group": 0
+        }
+      ]
+    }
+  ],
+  "exponent_units": "bohr^-2",
+  "name": "cc-pvdz",
+  "normalization": "normalized-primitives; native-normalized-contractions",
+  "ordering": "CCA-cartesian; libcint-real-spherical",
+  "provenance": {
+    "checksum": "c31cf4131705e68731c7506ce36907d33d167e3c04ea338da49b435dab6a049f",
+    "license": "Apache-2.0",
+    "source": "local PySCF basis library",
+    "version": "2.14.0"
+  },
+  "representation": "spherical",
+  "schema": "generativeqc.basis",
+  "schema_version": 1
+}
