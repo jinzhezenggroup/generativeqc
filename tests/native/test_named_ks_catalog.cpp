@@ -207,6 +207,43 @@ void test_public_alias_bindings() {
   }
 }
 
+void test_correction_bindings() {
+  using Role = generativeqc_ks_catalog_correction_role;
+  for (const auto& [selector, role] : std::array<std::pair<std::string_view, Role>, 5>{{
+           {"pbe-rks", GENERATIVEQC_KS_CATALOG_CORRECTION_NONE},
+           {"b3lyp-d3(bj)-rks", GENERATIVEQC_KS_CATALOG_CORRECTION_DETACHED},
+           {"b3lyp-d4(bj-eeq-atm)-uks", GENERATIVEQC_KS_CATALOG_CORRECTION_DETACHED},
+           {"pbe-d4-rks", GENERATIVEQC_KS_CATALOG_CORRECTION_INTRINSIC},
+           {"r2scan-3c", GENERATIVEQC_KS_CATALOG_CORRECTION_BOUND},
+       }}) {
+    generativeqc_ks_catalog_binding_v2 binding{sizeof(binding),
+                                               GENERATIVEQC_ABI_VERSION,
+                                               nullptr,
+                                               nullptr,
+                                               0,
+                                               GENERATIVEQC_KS_CATALOG_CORRECTION_MISS,
+                                               0};
+    require(generativeqc_ks_catalog_lookup_v2(selector.data(), selector.size(),
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE, &binding) == 0 &&
+                binding.identifier && binding.identity && binding.spin &&
+                binding.correction_role == role && binding.facade_carrier,
+            "missing or invalid correction-role binding");
+    const char invalid[] = {'p', '\0', 'b'};
+    require(generativeqc_ks_catalog_lookup_v2(invalid, sizeof(invalid),
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE,
+                                              &binding) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                binding.identity && binding.correction_role == role,
+            "invalid selector changed the correction-role output");
+    constexpr std::string_view missing = "not-in-the-catalog";
+    require(generativeqc_ks_catalog_lookup_v2(missing.data(), missing.size(),
+                                              GENERATIVEQC_BACKEND_CPU_REFERENCE, &binding) == 0 &&
+                !binding.identifier && !binding.identity && !binding.spin &&
+                binding.correction_role == GENERATIVEQC_KS_CATALOG_CORRECTION_MISS &&
+                !binding.facade_carrier,
+            "catalog miss did not clear the previous correction-role output");
+  }
+}
+
 void test_identity_and_transaction_boundaries() {
   const auto* entry = generativeqc::methods::named_ks::find_method("pbe0-rks");
   require(entry && entry->cpu, "PBE0 fixture unavailable");
@@ -739,6 +776,7 @@ int main(int argc, char**) {
     test_bound_basis_and_system_factory();
     test_complete_catalog();
     test_public_alias_bindings();
+    test_correction_bindings();
     test_cpu_df_inventory_identity();
     test_cpu_df_native_host_budget();
     test_identity_and_transaction_boundaries();
