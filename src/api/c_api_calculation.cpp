@@ -69,8 +69,8 @@ generativeqc_status prepare_candidate(
     std::unique_lock<std::mutex> host_workspace;
     std::shared_ptr<runtime::HostResourceLease> host_lease;
     if (named_inputs && named_inputs->selection.cpu_df_host_properties) {
-      generativeqc::api::CpuDfKsHostAdmission admission(*named_inputs,
-                                                        context->state.executed_backend);
+      generativeqc::api::CpuKsHostAdmission admission(*named_inputs,
+                                                      context->state.executed_backend);
       admission.append(system->data, generativeqc::api::native_auxiliary_basis(*descriptor));
       admitted_properties = admission.properties();
       host_workspace = admission.use_workspace();

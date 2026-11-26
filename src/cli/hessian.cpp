@@ -1,5 +1,6 @@
 #include "cli/hessian.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -14,6 +15,7 @@
 #include "cli/molecular_system.hpp"
 #include "cli/native_basis.hpp"
 #include "cli/resources.hpp"
+#include "generativeqc/ks.hpp"
 
 #if GENERATIVEQC_CLI_NATIVE_HESSIAN
 #include <cuda_runtime_api.h>
@@ -308,8 +310,16 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
   named.cpu_packed_eri_maximum_bytes = invocation.cpu_packed_eri_bytes;
   const generativeqc_system* systems[]{system.get()};
   generativeqc_batch* prepared{};
-  check_status(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named, 0,
-                                                      &prepared));
+  std::optional<HostResources> host_pool;
+  if (host_admission) {
+    host_pool.emplace(host_admission->effective_limit_bytes);
+    check_status(generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+        context.get(), systems, 1, &method, &named, 0, host_pool->get(),
+        host_admission->effective_limit_bytes, controls.numeric_bytes, &prepared));
+  } else {
+    check_status(generativeqc_batch_prepare_named_ks_v1(context.get(), systems, 1, &method, &named,
+                                                        0, &prepared));
+  }
   std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> batch(
       prepared, generativeqc_batch_destroy);
   generativeqc_batch_item_result_descriptor primal{};
@@ -414,6 +424,13 @@ Json execute_cpu(const RunOptions& options, const std::vector<generativeqc_atom>
         {"minimum_host_peak_bytes", host_admission->minimum_peak_bytes},
         {"selected_host_peak_bytes", host_admission->selected_peak_bytes},
         {"derivative_numeric_cap_bytes", host_admission->derivative_cap_bytes}};
+  if (host_pool) {
+    const auto lease = host_pool->snapshot();
+    diagnostics["resource_admission"]["native_host_lease"] = {
+        {"retained_bytes", lease.retained_bytes},
+        {"workspace_bytes", lease.workspace_bytes},
+        {"owner_count", lease.owner_count}};
+  }
   return {{"schema", "generativeqc.native-hessian-result/v1"},
           {"operation", invocation.operation},
           {"units", "hartree/bohr^2"},

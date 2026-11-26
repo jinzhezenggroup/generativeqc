@@ -7,8 +7,10 @@
 
 #include "api/device_resources.hpp"
 #include "api/handles.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "api/provider_initialization_intent.hpp"
 #include "dft/grid.hpp"
+#include "integrals/ecp.hpp"
 #include "methods/dft_method_preparation.hpp"
 #include "methods/named_ks_catalog.hpp"
 #include "methods/provider_initialization_intent.hpp"
@@ -17,6 +19,7 @@
 #include "runtime/resource_ledger.hpp"
 #include "scf/density_fitting.hpp"
 #include "scf/preliminary_guess.hpp"
+#include "scf/stationary_integral_gradient.hpp"
 
 namespace {
 std::weak_ptr<generativeqc::runtime::DeviceResourceLedger> ledger_witness;
@@ -105,8 +108,23 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor&, scf::ScfOpt
 }  // namespace detail
 }  // namespace generativeqc::methods
 
+namespace generativeqc::api {
+// The metadata-only publisher must not enter the scientific host planner.
+void CpuKsHostAdmission::append_direct_d3(const core::System&) { std::abort(); }
+void validate_host_hessian_system(const core::System&, std::string_view) { std::abort(); }
+}  // namespace generativeqc::api
+
+extern "C" int generativeqc_resource_ecp_workspace_v1(std::size_t, std::size_t, std::size_t,
+                                                      std::size_t, std::size_t, int,
+                                                      std::uint64_t*) {
+  std::abort();
+}
+
 namespace generativeqc::scf {
 bool cpu_materialized_df_derivatives_requested() noexcept { std::abort(); }
+std::size_t cpu_stationary_direct_integral_gradient_capacity(const core::System&, bool, bool) {
+  std::abort();
+}
 namespace initial_guess {
 // The fake CUDA context must not enter CPU Direct HF resource admission.
 std::optional<PreliminaryOptions> preliminary_options(const generativeqc_initial_guess_options*) {
@@ -114,6 +132,10 @@ std::optional<PreliminaryOptions> preliminary_options(const generativeqc_initial
 }
 }  // namespace initial_guess
 }  // namespace generativeqc::scf
+
+namespace generativeqc::integrals {
+std::size_t ecp_workspace_capacity(const core::System&) { std::abort(); }
+}  // namespace generativeqc::integrals
 
 namespace generativeqc::dft {
 std::size_t grid_point_count(const core::System&, const GridSpec&) { std::abort(); }
