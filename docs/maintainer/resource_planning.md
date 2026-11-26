@@ -400,9 +400,9 @@ or inconsistent publication never restarts Python arithmetic. This does not
 change density-fitted HF, scientific admission, prepared lease ownership or the
 exclusion of provider/allocator retention and complete simultaneously-live RSS.
 
-CPU KS calculator plans with a discovered
-`generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
-owners as the installed CLI for per-item diagnostics, twelve retained-owner
+Ordinary CPU KS calculator plans require the selected library's
+`generativeqc_resource_ks_cpu_fleet_v1` query. It uses the same allocation-free
+native owners as the installed CLI for per-item diagnostics, twelve retained-owner
 totals and serialized preparation/SCF workspace. The query validates the entire
 fleet and the complete signed-int64 retained-plus-workspace peak before
 publication. For qualified dense Direct CPU named KS force plans,
@@ -426,12 +426,11 @@ LDA/GGA program with full-range J/K and a real-spherical s/p/d/f basis;
 force replay, missing native inventory, and undersized packed caps do not
 fall back to dense storage.
 
-Native rejection never retries Python sizing. Schedule identity records item
-and fleet authority separately. Libraries exposing only
-`generativeqc_resource_ks_cpu_host_v1` keep native per-item sizing and portable
-fleet composition; old/no-library dry runs retain portable metadata sizing
-without implicitly loading a provider. Neither sizing query executes
-quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
+Native rejection never retries Python sizing. A per-item query alone cannot
+admit a live fleet, and CPU ECP fleets require native ECP workspace sizing.
+Explicit library-free dry runs retain portable metadata sizing without loading
+a provider. Schedule identity records the selected inventory. No sizing query
+executes quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
 allocator/RSS receipts remain outside this bridge.
 
 CUDA KS host inventories use the same `scf::KsHostFleetResources` owner through

@@ -1,5 +1,6 @@
 """Native CPU host sizing shares exact portable bounds without scientific work."""
 
+import ctypes
 import json
 import typing
 from types import SimpleNamespace
@@ -14,6 +15,16 @@ def library() -> typing.Any:
     loaded = _native.load_library(device="cpu")
     assert hasattr(loaded, "generativeqc_resource_ks_cpu_host_v1")
     return loaded
+
+
+@pytest.fixture
+def phase_query(library: typing.Any) -> typing.Any:
+    """Bind the standalone C ABI independently of public fleet requests."""
+    operation = library.generativeqc_resource_ks_cpu_host_v1
+    pointer = ctypes.POINTER(ctypes.c_uint64)
+    operation.argtypes = [pointer, ctypes.c_size_t, pointer, ctypes.c_size_t]
+    operation.restype = ctypes.c_int
+    return operation
 
 
 @pytest.mark.parametrize("spins", (1, 2))
@@ -31,6 +42,7 @@ def library() -> typing.Any:
 )
 def test_native_matches_independent_portable_lifetime_bound(
     library: typing.Any,
+    phase_query: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
     spins: int,
     nonlocal_correlation: bool,
@@ -70,70 +82,31 @@ def test_native_matches_independent_portable_lifetime_bound(
     }
     expected = resources_ks._item_host_inventory(item, **options)
 
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("discovered native sizing retried the portable arithmetic")
-
-    monkeypatch.setattr(resources_ks, "byte_product", forbidden)
-    actual = resources_ks._item_host_inventory(item, library=library, **options)
+    options.pop("backend")
+    dimensions = resources_ks._cpu_host_shape(item, library=library, **options)
+    shape = (ctypes.c_uint64 * len(dimensions))(*dimensions)
+    result = (ctypes.c_uint64 * len(resources_ks._CPU_HOST_INVENTORY_KEYS))()
+    assert phase_query(shape, len(shape), result, len(result)) == 0
+    actual = resources_ks._cpu_host_result(result, model)
     assert actual == expected
 
 
-def test_discovered_rejection_never_retries_portable_sizing(
-    monkeypatch: pytest.MonkeyPatch,
+def test_invalid_phase_query_does_not_publish(
+    phase_query: typing.Any,
 ) -> None:
-    def reject(*args: typing.Any) -> int:
-        return -1
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("rejected native inventory silently used a portable estimate")
-
-    monkeypatch.setattr(resources_ks, "byte_product", forbidden)
-    item = {
-        "atoms": 1,
-        "spins": 1,
-        "grid_points": 1,
-        "orbital": {
-            "nbf": 1,
-            "cartesian_nbf": 1,
-            "shells": 1,
-            "primitives": 1,
-            "maximum_angular": 0,
-        },
-    }
-    model = SimpleNamespace(
-        grid=SimpleNamespace(radial_points=1, angular_polar=1),
-        tile_points=1,
-        has_nonlocal_correlation=False,
-    )
-    with pytest.raises(ValueError, match="native CPU KS host inventory rejected"):
-        resources_ks._item_host_inventory(
-            item,
-            library=SimpleNamespace(generativeqc_resource_ks_cpu_host_v1=reject),
-            diis_history=8,
-            max_iterations=100,
-            requires_first_ao_derivatives=False,
-            backend="cpu",
-            model=model,
-        )
+    shape = (ctypes.c_uint64 * 17)()
+    result = (ctypes.c_uint64 * 16)(9, 11, 13)
+    before = bytes(result)
+    assert phase_query(shape, len(shape), result, len(result)) != 0
+    assert bytes(result) == before
 
 
 def test_production_query_and_legacy_metadata_have_equal_bounds_distinct_identity(
     library: typing.Any,
 ) -> None:
-    class LegacyLibrary:
-        """Retain the installed ABI while hiding the additive sizing queries."""
-
-        def __getattr__(self, name: str) -> typing.Any:
-            if name in (
-                "generativeqc_resource_ks_cpu_host_v1",
-                "generativeqc_resource_ks_cpu_fleet_v1",
-            ):
-                raise AttributeError(name)
-            return getattr(library, name)
-
     atoms = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     native = estimate_ks_resources([atoms], library=library)
-    legacy = estimate_ks_resources([atoms], library=LegacyLibrary())
+    legacy = estimate_ks_resources([atoms])
     assert native.status == legacy.status == "feasible"
     assert native.peak_bytes == legacy.peak_bytes
     assert native.resident_bytes == legacy.resident_bytes
@@ -171,16 +144,17 @@ def test_native_nonlocal_bound_still_enforces_explicit_provider_budget(
         nonlocal_memory_budget_bytes=479,
     )
     options = {
-        "library": library,
         "diis_history": 8,
         "max_iterations": 100,
         "requires_first_ao_derivatives": True,
-        "backend": "cpu",
         "model": model,
     }
     with pytest.raises(ValueError, match="nonlocal provider workspace exceeds"):
-        resources_ks._item_host_inventory(item, **options)
+        resources_ks._native_cpu_fleet_inventory(
+            library, [item], workspace_floor=0, **options
+        )
     model.nonlocal_memory_budget_bytes = 480
-    assert (
-        resources_ks._item_host_inventory(item, **options)["nonlocal_provider"] == 480
+    inventories, _, _ = resources_ks._native_cpu_fleet_inventory(
+        library, [item], workspace_floor=0, **options
     )
+    assert inventories[0]["nonlocal_provider"] == 480
