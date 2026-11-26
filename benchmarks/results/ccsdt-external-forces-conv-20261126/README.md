@@ -44,11 +44,42 @@ available H100-to-reference pair and reports incomplete cases explicitly.
 
 ## Resource sizing
 
-The earlier stock Psi4 run hit the DPD allocator's memory limit. In its C1
-gradient, each virtual triple allocates an occupied-triple-sized `E` block.
-Its missing release implies about 250 GiB of cumulative allocation at C6
-and 601 GiB at C7 for the block alone. These source-based estimates exclude
-other allocations and guide node selection. [Psi4 1.10.2 source](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/cc/cctriples/T3_grad_RHF.cc#L950-L955).
+### C7 CPU placement
+
+The stock Psi4 1.10.2 C1 triples-gradient loop allocates an `E` DPD
+heap block of `nocc^3` doubles for each of the `nvir^3` ordered virtual
+triples. The closing frees omit that block and the next iteration overwrites
+its pointer. The accumulated double arrays alone account for 249.91 GiB
+at C6 (`nocc=25, nvir=129`) and 601.09 GiB at C7
+(`nocc=29, nvir=149`). The measured C6 process peaked at 266.98 GiB.
+[Psi4 allocation loop](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/cc/cctriples/T3_grad_RHF.cc#L812-L847),
+[Psi4 loop cleanup](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/cc/cctriples/T3_grad_RHF.cc#L1320-L1345).
+
+The DPD allocator evicts file4 cache entries against the configured
+`memory` and uses the heap for these blocks. A smaller `memory`, a larger
+scratch volume and fewer threads still leave the same accumulated DPD
+blocks. The notebook's 250 GiB total working limit and a 20-CPU HPC
+allocation with at most 100 GiB are too small for this stock C7 path.
+The 1,200 GiB HPC request uses 32 solver threads and a 1,024 GiB Psi4
+allowance. The job remains queued after scheduler reports of the personal
+800-CPU ceiling. No Psi4 worker was launched on the shared notebook.
+[DPD allocator](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/libdpd/block_matrix.cc#L71-L106).
+
+PySCF 2.11.0 sizes triples Lambda and gradient-density blocks from its
+advisory `max_memory`, and its gradient writes the two-particle density
+intermediates through HDF5 scratch. For C7, decreasing `max_memory` from
+172,032 to 70,000 MB would reduce the nominal virtual block edge from 50
+to 37 before deducting other live memory. The two corresponding triples
+arrays would drop from 45.43 to 18.41 GiB, plus other allocations. The
+current 200 GiB job has already sampled above 118 GiB of worker RSS. The
+source allows a smaller block configuration, but a complete endpoint under
+a hard 100 GiB ceiling remains unverified. The original job continues and
+no duplicate PySCF worker was launched.
+[PySCF Lambda sizing](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/cc/ccsd_t_lambda.py#L44-L62),
+[PySCF density sizing](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/cc/ccsd_t_rdm.py#L204-L220),
+[PySCF gradient scratch](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/grad/ccsd_t.py#L21-L36).
+
+### GPU sizing
 
 The C5 native complete-force plan reported a 61.46 GiB bound with a
 72 GiB application allowance. Scaling the bound by the fourth power of
