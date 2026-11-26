@@ -351,7 +351,7 @@ exposing one global cap:
 
 | Argument | Bounds |
 | --- | --- |
-| `integral_budget_bytes` | generated second-order integral work |
+| `integral_budget_bytes` | numeric storage for generated second-order integrals; on linked CPU, native sizing can refuse a nondefault cap before SCF |
 | `grid_budget_bytes` | CUDA or CPU composite: numeric AO/grid/AD workspace |
 | `max_nonlocal_pairs` | WB97M-V and r²SCAN+rVV10: ordered nonlocal pairs per response action |
 | `output_budget_bytes` | (`hessian` only) the dense matrix plus immutable publication |
