@@ -2258,6 +2258,22 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_cbs_compose_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "a30f9c9d9a1f8e8a06b032e1fb5fda29f3fa605fdabcd5477f78748a36d718d6",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_cbs_extrapolation_query_v1": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",

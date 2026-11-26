@@ -197,7 +197,8 @@ def test_cbs_planning_rejects_missing_protocol(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     selected = SimpleNamespace(
-        generativeqc_cbs_extrapolation_query_v1=library.generativeqc_cbs_extrapolation_query_v1
+        generativeqc_cbs_extrapolation_query_v1=library.generativeqc_cbs_extrapolation_query_v1,
+        generativeqc_cbs_compose_v1=library.generativeqc_cbs_compose_v1,
     )
     monkeypatch.setattr(_native, "load_library", lambda **options: selected)
     bases = (
