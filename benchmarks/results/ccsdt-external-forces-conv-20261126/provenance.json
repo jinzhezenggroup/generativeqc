@@ -2,6 +2,35 @@
   "measured_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
   "native_library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
   "baseline_commit": "86016450ecc5af32f8e4528112badad7dec2d279",
+  "prior_acquisition": {
+    "raw_archive": {
+      "path": "raw/3174-c5-baseline.tar.gz",
+      "bytes": 3705,
+      "sha256": "f47b354b1fc0849819d0042f1b7e2f77acd37504b0ce5edf5d821beed06c2296"
+    },
+    "rows": {
+      "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-20261125/master-22f72/run-gpu-conv-c5-m72-v1/native-conv/C5.0.json": "b933d5f5217322de110af33095dd5197b7b17e1824317ca44e9e58019656c726",
+      "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-20261125/run-psi4-conv-mem-a/records/C5.0.json": "1d7eab8e524388750a51d9ed3e3a7ac5eeccdbcda07833b29b6b1d1c3fb76e49",
+      "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-20261125/run-psi4-conv-mem-a/records/C5.1.json": "9f43376df5040a484869765493ff6938ee9d8ee3fcdaefff8c9512e4b07ea17c"
+    },
+    "scheduler_receipt": {
+      "path": "raw/3174-scheduler-extract.json",
+      "bytes": 4574,
+      "sha256": "cbb713ef710b23721a4563d8bf2a546a7a1026ac929d62dbba9b952fbca89b4a"
+    },
+    "prior_issue_totals": {
+      "gpu_card_hours": 3.1397222222222223,
+      "cpu_core_hours": 114.56888888888889
+    },
+    "included_in_prior_gpu_hours": {
+      "job": "gqc-3167-ccsdt-h100-1125",
+      "revision": "d154546d2",
+      "allocated_card_hours": 0.20694444444444443,
+      "estimated_points": 0.20694444444444443,
+      "terminal_status": "CANCELLED",
+      "cleanup": "deleted"
+    }
+  },
   "project": "CQ-NexChem",
   "remote_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126",
   "local_raw_directory": "raw/",
@@ -174,7 +203,7 @@
     "gqc-3167-conv-h100-c7-repeat-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-h100-c7-repeat-1126-a",
-        "status": "RUNNING",
+        "status": "FAILED",
         "project": "CQ-NexChem",
         "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
         "resource": {
@@ -185,13 +214,11 @@
           "shared_memory_gib": 16,
           "gpu_type": "NVIDIA H100 (80GB)"
         },
-        "nodes": [
-          "qb-prod-gpu404"
-        ],
         "priority": 20,
         "priority_level": "NORMAL",
         "public_path_mount_mode": 0,
-        "created_at": "1795657867000"
+        "created_at": "1795657867000",
+        "finished_at": "1795663169000"
       },
       "diagnostics": [
         {
@@ -201,10 +228,22 @@
         }
       ],
       "scheduled_utc": "2026-11-26T01:51:25+00:00",
+      "released_utc": "2026-11-26T03:19:29+00:00",
+      "allocated_card_hours": 1.4677777777777778,
+      "estimated_points": 1.4677777777777778,
+      "cleanup": {
+        "name": "gqc-3167-conv-h100-c7-repeat-1126-a",
+        "status": "deleted"
+      },
       "planned": [
         "C7.1"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-repeat-1126-a"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-repeat-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-h100-c7-repeat-1126-a.tar.gz",
+        "bytes": 21374,
+        "sha256": "e46aebe2dbd65908082d473d8ae4f29430f998d28623430142d0c217e8151393"
+      }
     },
     "gqc-3167-conv-psi4-c6-1126-a": {
       "platform": {
@@ -280,9 +319,9 @@
           "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-292, once minAvailable is satisfied"
         },
         {
-          "time": "2026-11-25 19:05:21",
+          "time": "2026-11-25 19:21:21",
           "reason": "FailedScheduling",
-          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-188, once minAvailable is satisfied"
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-427, once minAvailable is satisfied"
         }
       ],
       "planned": [

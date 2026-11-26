@@ -58,12 +58,13 @@ exceeds the whole device capacity before accounting for any other GPU
 allocation. This layout uses one device even if the job reserves more GPUs.
 See `device-capacity.json` and the local layout calculation in `raw/`.
 
-The 155 GiB C7.0 retry reached the later CUDA path and returned an
-out-of-memory error after 5,271.05 s. The worker RSS high-water reading was
-19.74 GiB and there was no host cgroup OOM event. The 5,295 one-second GPU
-samples reached 53.72 GiB of device use. The 106.46 GiB layout calculation
-describes the requested allocation. The sampled peak describes device memory
-already in use.
+Both 155 GiB C7 one-card runs failed with an out-of-memory error after
+5,271.05 s and 5,269.80 s. Worker RSS reached 19.74 and 19.78 GiB,
+respectively, with zero host cgroup OOM events. The two one-second device
+traces covered 5,295 and 5,265 samples and each reached 53.72 GiB. The
+106.46 GiB layout calculation describes the requested allocation. The
+sampled peak describes device memory already in use. All three C7 GPU
+attempts have been archived and the qz jobs were deleted.
 
 ## Local raw captures
 
@@ -71,7 +72,9 @@ The complete endpoint rows and their SHA-256 values are retained in
 `records.json`. `provenance.json` records the remote output path for each
 job and the hashes of any completed archives under `raw/`. The local archives
 contain the original worker, engine and device telemetry files. They stay
-untracked because they include verbose logs and time series.
+untracked because they include verbose logs and time series. The original
+C5 H100 and two Psi4 record bytes were also copied from their #3174 remote
+output and matched against all three baseline SHA-256 values.
 
 The second C5 H100 run reached 8.76 GiB worker RSS and 44.74 GiB sampled
 device memory at the matching 72 GiB application allowance. The first C7
@@ -79,7 +82,8 @@ H100 attempt failed during MO provider allocation at a 320 GiB allowance.
 Its only GPU sample preceded that allocation. The subsequent 155 GiB C7
 attempts record one-second device samples. The first C5 PySCF launcher
 rejected its trial label before computation and was retried with C5.1.
-C6 and C7 acquisitions remain in progress in this local snapshot.
+C6 acquisition and the C7 CPU reference remain in progress in this local
+snapshot.
 
 ## Reproduction
 
