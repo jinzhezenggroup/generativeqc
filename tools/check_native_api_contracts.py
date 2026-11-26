@@ -300,6 +300,8 @@ def operation_name(owner: str | None, head: list[Token]) -> str:
             and "generativeqc_named_ks_descriptor" in params
         ):
             name += "-named-ks"
+        elif owner == "Calculation" and name == owner and "HostResources" in params:
+            name += "-host-resources"
         elif owner == "System" and name == "System" and "basis_name" in params:
             name += "-bundled"
     return "generativeqc::" + (owner + "::" if owner else "") + name
