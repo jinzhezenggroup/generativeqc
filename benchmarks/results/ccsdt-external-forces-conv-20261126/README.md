@@ -207,3 +207,5 @@ and CCSD amplitude RMS threshold of 1e-11. Both signs at 0.001 Bohr also
 run at 5e-14 Eh and 1e-12 for the convergence check. Every job starts from
 a fresh geometry and solves the energy without a gradient. The replay uses
 the force convention `(E(-h) - E(+h)) / (2*h)` and two Richardson levels.
+
+See [C7 measurement results](C7-addendum.md) for the locally archived addendum.
