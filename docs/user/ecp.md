@@ -484,7 +484,9 @@ the narrower Python compatibility consumer. Standalone all-electron CPU
 defaults are unchanged. The native C method registry is unchanged.
 
 CPU FP64 PBE RKS/UKS also accepts scalar ECPs with Coulomb density fitting
-and an explicit ECP-free auxiliary basis. The prepared native CPU owner
+when you select `density_fitting="cpu"` and provide an explicit ECP-free
+auxiliary basis. `density_fitting="auto"` is not admitted for this route.
+The prepared native CPU owner
 used by Python, the SDK and CLI fits only J; the residual ECP operator and
 its derivative remain in the orbital one-electron Hamiltonian. The force
 includes both orbital and auxiliary-center motion and the metric derivative.

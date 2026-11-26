@@ -3351,6 +3351,9 @@ class KsPreparedBatch final : public PreparedBatch,
     std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
         size(), scf::CoulombExchangeWork::empty());
     std::vector<bool> ready(size(), false);
+#if GENERATIVEQC_HAS_CUDA
+    std::vector<bool> moved_batch_seed(size(), false);
+#endif
     std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
     std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
     std::vector<bool> preliminary_requested(size(), false);
@@ -3368,8 +3371,13 @@ class KsPreparedBatch final : public PreparedBatch,
           // explicit rebuild download is never part of routine SCF iterations.
           materialize_warm(i);
 #if GENERATIVEQC_HAS_CUDA
-          if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr)
+          if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr) {
+            // A resident seed belongs to a successful solve in this batch.
+            // Imported checkpoints and failed geometry rebuilds have no such lease.
+            moved_batch_seed[i] = item.resident_warm && item.warm &&
+                                  item.warm->coordinates != candidates[i].coordinates;
             add_transfers(item.retired_transfers, cuda->transfers());
+          }
 #endif
           item.plan.reset();
           item.resident_warm = false;
@@ -3467,10 +3475,12 @@ class KsPreparedBatch final : public PreparedBatch,
             result.target_fock_work->begin_attempt();
             item.plan->set_following_force_memory(wants_forces(i));
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
-                        !attempt && !reuse && preliminary_seeds[i]
-                            ? dft::CudaKsSeedOrigin::NativeColdGuess
-                            : dft::CudaKsSeedOrigin::External);
+            auto origin = dft::CudaKsSeedOrigin::External;
+            if (!attempt && !reuse && preliminary_seeds[i])
+              origin = dft::CudaKsSeedOrigin::NativeColdGuess;
+            else if (reuse && seed && moved_batch_seed[i])
+              origin = dft::CudaKsSeedOrigin::MovedBatchDensity;
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i], origin);
             running[i] = true;
             continue;
           }

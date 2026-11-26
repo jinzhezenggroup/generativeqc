@@ -1,0 +1,56 @@
+--- run.py
++++ run.py
+@@ -16 +15,0 @@
+-import tarfile
+@@ -20 +18,0 @@
+-from contextlib import suppress
+@@ -42,3 +39,0 @@
+-NATIVE_SOURCE_IDENTITY = (
+-    "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2"
+-)
+@@ -314,19 +309 @@
+-def source_revision(source: Path, archive: Path | None) -> str:
+-    if (source / ".git").exists():
+-        revision = subprocess.check_output(
+-            ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"], text=True
+-        ).strip()
+-        if subprocess.run(
+-            ["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], check=False
+-        ).returncode:
+-            raise RuntimeError(f"Source checkout has tracked changes: {source}")
+-    else:
+-        archive = archive or source.parent / f"source-{REVISION[:5]}.tar.gz"
+-        with tarfile.open(archive) as staged:
+-            revision = staged.pax_headers.get("comment")
+-    if revision != REVISION:
+-        raise RuntimeError(f"Source revision differs: {revision} != {REVISION}")
+-    return revision
+-
+-
+-def native_provenance(source: Path, archive: Path | None) -> Record:
++def native_provenance(source: Path) -> Record:
+@@ -335 +311,0 @@
+-    revision = source_revision(source, archive)
+@@ -342,2 +317,0 @@
+-    if expected != NATIVE_SOURCE_IDENTITY:
+-        raise RuntimeError(f"Source inputs differ from pinned revision {revision}")
+@@ -352 +326 @@
+-        "source_revision": revision,
++        "source_revision": REVISION,
+@@ -483 +457 @@
+-        info.update(native_provenance(args.source, args.source_archive))
++        info.update(native_provenance(args.source))
+@@ -552 +525,0 @@
+-            timed_out = False
+@@ -556,7 +529,2 @@
+-                timed_out = True
+-            finally:
+-                if process.returncode is None:
+-                    with suppress(ProcessLookupError):
+-                        os.killpg(process.pid, signal.SIGKILL)
+-                    process.wait()
+-            if timed_out:
++                os.killpg(process.pid, signal.SIGKILL)
++                process.wait()
+@@ -611 +578,0 @@
+-    p.add_argument("--source-archive", type=Path)

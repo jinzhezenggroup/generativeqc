@@ -107,6 +107,34 @@ def _check(library: typing.Any, status: int, context: typing.Any = None) -> None
     raise error(message)
 
 
+def owns_admission(calculator: typing.Any, maximum_host_bytes: int) -> bool:
+    """Recognize the plain HF fleet budget already included in native capacity.
+
+    Preliminary guesses can add charges to the historic front-end plan even
+    though the fixed-density audit never uses a guess. Keep that admission for
+    those targets and for custom calculators, rather than weakening their cap.
+    """
+    from .calculator import Calculator
+
+    if (
+        type(calculator) is not Calculator
+        or calculator._device_name != "cpu"
+        or calculator._method not in (_native.METHOD_RHF, _native.METHOD_UHF)
+        or calculator._density_fitting_mode
+        not in (_native.DENSITY_FITTING_NONE, _native.DENSITY_FITTING_CPU_REFERENCE)
+        or calculator._initial_guess is not None
+        or not 0 < maximum_host_bytes < 2**63
+        or not 0 <= calculator._diis_history < 2**32
+    ):
+        return False
+    library = calculator._library
+    version = getattr(library, "generativeqc_cpu_resource_inventory_version_v1", None)
+    if version is None or not hasattr(library, "generativeqc_resource_hf_cpu_fleet_v1"):
+        return False
+    version.argtypes, version.restype = [], ct.c_int
+    return version() == 1 and _bind(library)
+
+
 def audit(
     problem: typing.Any,
     calculator: typing.Any,
@@ -120,8 +148,9 @@ def audit(
 ) -> typing.Any:
     """Return native observations, or None only for an unadmitted native domain.
 
-    The caller has already retained the incumbent complete resource preflight.
-    Native capacity independently gates its scope before provider construction.
+    Native capacity gates the complete plain-HF fleet and verification workspace
+    before provider construction. Additional front-end reservations, if any,
+    must already have been checked by the caller.
     Array copies here provide immutable input and detached presentation only.
     """
     library = getattr(calculator, "_library", None)
