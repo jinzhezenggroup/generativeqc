@@ -307,6 +307,8 @@ void print_usage(std::ostream& out) {
          "  --curvature-tolerance F --raw-symmetry-tolerance F (Hartree/Bohr^2)\n"
          "  --minimum-mode-overlap F --minimum-occupied-overlap F --acceptance-ratio F\n"
          "  --max-coordinates N --saddle-budget-bytes N --root-budget-bytes N\n"
+         "  --host-bytes N [--host-reserve-bytes N] [--headroom-fraction F]  Qualified CPU "
+         "SCF\n"
          "  --occupied-state-budget-bytes N  Opt in to bounded occupied coefficients in final "
          "JSON\n"
          "  --accepted-frame-warm-start  Seed SCF from the last accepted derivative frame\n"
@@ -678,17 +680,19 @@ RunOptions parse_run(int argc, char** argv,
       if (options.batch > 100000) throw UsageError("resource dry-run batch must be in [1, 100000]");
     } else if (singlepoint && option == "--owned-device-bytes") {
       options.owned_device_bytes = parse_bytes(value(), "owned device bytes");
-    } else if ((resources || hessian || singlepoint) && option == "--host-bytes") {
+    } else if ((resources || compiler_second_order || singlepoint) && option == "--host-bytes") {
       options.host_bytes = parse_bytes(value(), "host bytes");
     } else if (resources && option == "--device-bytes") {
       options.device_bytes = parse_bytes(value(), "device bytes");
     } else if (resources && option == "--pinned-host-bytes") {
       options.pinned_host_bytes = parse_bytes(value(), "pinned host bytes");
-    } else if ((resources || hessian || singlepoint) && option == "--host-reserve-bytes") {
+    } else if ((resources || compiler_second_order || singlepoint) &&
+               option == "--host-reserve-bytes") {
       options.host_reserve_bytes = parse_bytes(value(), "host reserve bytes");
     } else if (resources && option == "--device-reserve-bytes") {
       options.device_reserve_bytes = parse_bytes(value(), "device reserve bytes");
-    } else if ((resources || hessian || singlepoint) && option == "--headroom-fraction") {
+    } else if ((resources || compiler_second_order || singlepoint) &&
+               option == "--headroom-fraction") {
       const auto text = value();
       const std::string input(text);
       char* end = nullptr;

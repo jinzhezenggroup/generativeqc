@@ -188,6 +188,11 @@ class RuntimeTests(unittest.TestCase):
             ("pbe-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
             ("pbe-d3(bj)-rks", ("--charge", "1"), ()),
             ("pbe0-d3(bj)-rks", ("--charge", "1"), ()),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
+            ("pbe0-d4(bj-eeq-atm)-uks", ("--multiplicity", "2"), ()),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
+            ("b3lyp-d4(bj-eeq-atm)-uks", ("--multiplicity", "2"), ()),
+            ("b3lypg-d4(bj-eeq-atm)-rks", ("--charge", "1"), ()),
             (
                 "b3lyp-d3(bj)-uks",
                 ("--multiplicity", "2"),
@@ -1561,6 +1566,15 @@ class RuntimeTests(unittest.TestCase):
         self._check_named_correction_inventory(
             "generativeqc_ks_d4_resource_query_v1", Diagnostic, "pbe-d4(bj-eeq-atm)"
         )
+        for hybrid in ("pbe0", "b3lyp"):
+            with self.subTest(hybrid=hybrid):
+                self._check_named_correction_inventory(
+                    "generativeqc_ks_d4_resource_query_v1",
+                    Diagnostic,
+                    f"{hybrid}-d4(bj-eeq-atm)",
+                    electronic_method=hybrid,
+                    backends=("cpu",),
+                )
 
     def test_named_d3_cli_adds_native_correction_owners(self) -> None:
         """Both D3 damping programs consume the real per-item native inventory."""
@@ -1701,8 +1715,18 @@ class RuntimeTests(unittest.TestCase):
 
     def test_named_d4_inventory_keeps_electronic_and_composite_boundaries(self) -> None:
         for method, extra in (
-            ("pbe0-d4(bj-eeq-atm)-rks", ()),
-            ("pbe0-d4(bj-eeq-atm)-rks", ("--forces",)),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--backend", "cuda")),
+            ("pbe0-d4(bj-eeq-atm)-rks", ("--density-fitting", "cpu")),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--property", "hessian")),
+            (
+                "b3lyp-d4(bj-eeq-atm)-rks",
+                (
+                    "--representation",
+                    "spherical",
+                    "--cpu-packed-eri-budget-bytes",
+                    "48",
+                ),
+            ),
             ("r2scan-3c-rks", ()),
             ("pbe-d4-rks", ()),
             ("pbe-d4(bj-eeq-atm)-rks", ("--backend", "cuda", "--forces")),
@@ -1712,6 +1736,23 @@ class RuntimeTests(unittest.TestCase):
                 result = self.resources("--method", method, *extra)
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertEqual(json.loads(result.stdout)["status"], "unsupported")
+
+        iodine = self.root / "iodine.xyz"
+        iodine.write_text("2\nScalar ECP refusal\nI 0 0 0\nI 0 0 2.7\n")
+        basis = SOURCE / "tests/data/conventional_ecp_cbs/native_basis_dz.json"
+        result = self.cli(
+            "resources",
+            str(iodine),
+            "--method",
+            "b3lyp-d4(bj-eeq-atm)-rks",
+            "--basis",
+            str(basis),
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertTrue(result.stdout, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(plan["status"], "unsupported")
+        self.assertIn("requires an all-electron basis", plan["diagnostic"])
 
     def test_named_d3_inventory_keeps_electronic_and_force_boundaries(self) -> None:
         for method, extra in (
@@ -2476,7 +2517,7 @@ class RuntimeTests(unittest.TestCase):
         for method, extra in (
             ("b3lyp-rks", ("--backend", "cuda")),
             ("b3lyp-d3(bj)-uks", ("--density-fitting", "cpu")),
-            ("b3lyp-d4(bj-eeq-atm)-rks", ()),
+            ("b3lyp-d4(bj-eeq-atm)-rks", ("--backend", "cuda")),
             ("pbe0-uks", ("--density-fitting", "cpu")),
             ("rccsd", ()),
         ):

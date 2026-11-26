@@ -47,6 +47,10 @@ std::vector<std::pair<std::size_t, std::size_t>> grid_angular_shells(const GridS
 /** Checked point count shared by preparation, resource admission and forces. */
 std::size_t grid_points_per_atom(const GridSpec& spec);
 
+/** Version-4 accuracy levels for the default molecular grid policy. */
+inline constexpr std::uint32_t kDefaultTreutlerLevel = 3;
+inline constexpr std::uint32_t kTightTreutlerLevel = 4;
+
 /** Version-4 level-3 default with pinned Bragg partition radii. */
 GridSpec default_grid_spec();
 /** Actual element-dependent size; never pads one element to another's grid. */

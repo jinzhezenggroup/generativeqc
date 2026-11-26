@@ -784,12 +784,17 @@ packed cap. It requires a linked endpoint that admits a real-spherical s/p/d/f
 basis. This option also applies to linked CPU LDA/PBE spherical contexts.
 Pass `--host-bytes` to CPU `hessian` or `hvp` to enforce the same combined limit
 before SCF, after deducting any `--host-reserve-bytes` and `--headroom-fraction`. Remaining
-capacity can fund optional derivative storage up to `--numeric-budget-bytes`.
+capacity can fund optional derivative storage up to `--numeric-budget-bytes`,
+using the same native capacity policy as the Python `ResourceBudget` path.
 The dry-run reports the minimum modeled peak as `peak_bytes.host` and, with a
 host limit, the selected caps in `derivative_inventory`. Execution reports
-the same admission in `diagnostics.resource_admission`. These modeled caps
-are not an allocation promise for optional response schedules, solver
-convergence, work limits, or process RSS. Without a host limit,
+the same admission in `diagnostics.resource_admission`. For admitted Direct CPU
+execution, including explicit packed ERIs and admitted scalar ECPs, it acquires
+a private native host ledger and reports its retained and workspace bytes as
+`native_host_lease`. The combined CLI limit also counts its own HVP direction
+buffer, which is outside the lease. The lease includes ECP setup capacity but
+does not promise optional response schedules, solver convergence, work limits, or
+process RSS. Without a host limit,
 `--numeric-budget-bytes` still caps the derivative itself. CUDA and methods
 without a matching primal inventory do not accept a combined
 Hessian/HVP host budget.
@@ -802,9 +807,12 @@ carrier enum does not admit hybrid or range-separated graphs. On CPU, canonical
 PBE0-D3(BJ) RKS combines the ordinary CPU PBE0 inventory with the same native D3
 capacity query. The bare and D3(BJ)-corrected canonical CPU B3LYP variants
 use the same full-range hybrid allocation layout, with the D3 owner charged
-only for the corrected variants. This does not admit B3LYP-D4, other B3LYP
-variants, CUDA hybrids or density fitting. Correction plan and
-execution storage remains resident per item, including replicated CUDA tables.
+only for the corrected variants. The canonical B3LYP and PBE0 D4(BJ-EEQ-ATM)
+RKS/UKS programs and their exact aliases use this full-range layout plus the
+native D4 fleet query for Direct FP64 all-electron energy and forces. Their
+inventory does not admit packed ERIs, ECPs, derivatives beyond forces, CUDA
+hybrids, or density fitting. Correction plan and execution storage remains
+resident per item, including replicated CUDA tables.
 `correction_inventory` reports those capacities and the equal-share minimum
 for `--dispersion-memory-bytes`. Both this local limit and the complete host/
 device budgets must fit. The legacy `pbe-d4-rks` selector, gCP composites, CUDA
