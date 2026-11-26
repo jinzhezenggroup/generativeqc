@@ -18,6 +18,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/stationary_integral_gradient.hpp"
 
 namespace {
@@ -124,6 +125,12 @@ bool cpu_materialized_df_derivatives_requested() noexcept { std::abort(); }
 std::size_t cpu_stationary_direct_integral_gradient_capacity(const core::System&, bool, bool) {
   std::abort();
 }
+namespace initial_guess {
+// The fake CUDA context must not enter CPU Direct HF resource admission.
+std::optional<PreliminaryOptions> preliminary_options(const generativeqc_initial_guess_options*) {
+  std::abort();
+}
+}  // namespace initial_guess
 }  // namespace generativeqc::scf
 
 namespace generativeqc::integrals {

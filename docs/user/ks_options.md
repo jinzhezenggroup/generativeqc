@@ -370,16 +370,19 @@ See the [default-selection decision](../../.agents/notes/implemented/performance
 and [stationary pure-J energy confirmation](../../.agents/notes/implemented/numerics/2026-10-16-stationary-pure-j-energy-confirmation.md)
 for their evidence and limits.
 
-### Guarded automatic cold incremental Direct-J/K and resource budgets
+### Guarded automatic incremental Direct-J/K and resource budgets
 
 When both incremental selectors are **unset**, normal CUDA Standard FP64
 full-range Direct global hybrids automatically select bounded incremental
-J/K proposals for an eligible *cold* solve: 64–768 public AOs, 2–96 atoms,
+J/K proposals for an eligible cold or moved solve. The hybrid domain covers
+64–768 public AOs, 2–96 atoms,
 all-electron restricted through-d basis, the canonical default grid and
 qualified energy `1e-9`, density `1e-5` and screening `1e-12` controls.
 The real Direct producer and complete physical/canonical final-state proof
-remain authoritative. This narrow cold default is a guarded performance choice,
-not a globally enabled incremental Fock setting.
+remain authoritative. A moved solve qualifies when the prepared batch
+materializes its own last converged resident density before rebuilding for
+the new coordinates. The first Fock builds a full-density anchor at the new
+geometry, and the solve establishes a fresh physical energy history.
 Restricted pure-Coulomb PBE and r2SCAN owners (including r2SCAN-3c) also admit
 this cold policy at 512–1536 public AOs and 48–128 atoms under the same
 all-electron, through-d, default-grid, FP64 and resource guards. They use the
@@ -388,8 +391,8 @@ and canonical closure. The hybrid size domain is unchanged.
 Native initial guesses, including the default Hückel guess, remain cold solves;
 supplying their density internally does not make them imported warm states.
 
-Same-owner frozen-density Warm retains its one-full-Fock proof. Imported or
-moved seeds, an active public resource ledger, Fast, DF, UKS, range/nonlocal
+Same-owner frozen-density Warm retains its one-full-Fock proof. Imported
+seeds, an active public resource ledger, Fast, DF, UKS, range/nonlocal
 and hybrid D4 owners, strict custom settings and unqualified geometry/size/resource
 domains keep the previous execution. Pure-Coulomb D4 composition does not
 change the eligible electronic operator. Set
@@ -478,15 +481,14 @@ warm calls, final physical proof and analytic forces use the original cutoff.
 The proposal cutoff is a convergence heuristic, not an accumulated-error bound.
 `GENERATIVEQC_KS_INCREMENTAL_COARSE_SCREENING=0` disables this extra screening
 while preserving bounded delta proposals; `1` or unset enables it, and other
-values are errors. Outside the narrow automatic cold domain, the global incremental selector remains opt-in.
+values are errors. Other eligible domains require the explicit incremental selector.
 
 For all-electron RKS without range or nonlocal contributions, a validated
 density reused internally at the same
 geometry follows the ordinary full-density warm path, including its energy
 history. Diagnostics therefore report incremental mode as requested but
-inactive on that call. External seeds, changed geometry and clearing the warm
-state restore the cold incremental policy. This does not expand resource-planning support or activate incremental
-execution in other domains.
+inactive on that call. Clearing the warm state restores cold initialization.
+A changed geometry uses the prepared solver's seed-specific admission above.
 
 ### Model binding
 

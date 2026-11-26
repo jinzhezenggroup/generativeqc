@@ -1,0 +1,56 @@
+{
+  "build_job": "gqc-3182-ae1086-build",
+  "project": "CQ-NexChem",
+  "build_identity_sha256": "702fb797ab7fb21ed7b64a3d2042e45f7ee9904e5f79581609371f64483797ba",
+  "compiler": {
+    "nvcc": "Cuda compilation tools, release 12.9, V12.9.86",
+    "gxx": "g++-12 (Ubuntu 12.3.0-1ubuntu1~22.04.3) 12.3.0",
+    "sccache": "sccache 0.16.0",
+    "compiler_commands_sha256": "6008daa68b4f6c7b64d8e3481f761d649ea56c4a89153cce3dd78b52a398af0e",
+    "cache_stats_sha256": "2b843d1d1b193ed8dc1e88634019619d9b50ee8964ff5c23d1312a9a32bdc0e0",
+    "compiler_cache_counts": [
+      "Compile requests                          678",
+      "Compile requests executed                1826",
+      "Cache hits                                119",
+      "Cache hits (CUBIN)                         87",
+      "Cache hits (CUDA)                          32",
+      "Cache misses                             1420",
+      "Cache misses (C/C++)                      391",
+      "Cache misses (CUBIN)                      200",
+      "Cache misses (CUDA)                       255",
+      "Cache misses (CUDA (Device code))         287",
+      "Cache misses (PTX)                        287",
+      "Cache hits rate                          7.73 %",
+      "Cache hits rate (C/C++)                  0.00 %",
+      "Cache hits rate (CUBIN)                 30.31 %",
+      "Cache hits rate (CUDA)                  11.15 %",
+      "Cache hits rate (CUDA (Device code))     0.00 %",
+      "Cache hits rate (PTX)                    0.00 %"
+    ]
+  },
+  "configure": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_CUDA_ARCHITECTURES": "90",
+    "GENERATIVEQC_AOT_PROFILE": "portable_cuda",
+    "GENERATIVEQC_CUDA_ARCHITECTURES": "90",
+    "GENERATIVEQC_CUDA_DIRECT_DEVICE_LINK": "ON",
+    "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+    "GENERATIVEQC_ENABLE_AOT_SHELLS": "ON",
+    "GENERATIVEQC_ENABLE_CUDA": "ON",
+    "GENERATIVEQC_ENABLE_NATIVE_STATIONARY_CUDA": "ON",
+    "GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT": "OFF",
+    "GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT": "ON",
+    "GENERATIVEQC_STATIONARY_AOT_PROFILES": "b3lyp_rks;m06_2x_rks;pbe0_rks;pbe_rks;r2scan_rks;wb97mv_rks"
+  },
+  "started_utc": "2026-11-26T01:30:02Z",
+  "finished_utc": "2026-11-26T02:24:10Z",
+  "exit_status": 0,
+  "aot_audit": {
+    "status": "passed",
+    "sha256": "afd489bd5d6b92aae298069280d8d7233119fa39462944ff043f8964678b0147",
+    "cubin_architecture": "sm_90",
+    "artifact_count": 12,
+    "native_library_bytes": 902592152,
+    "aot_package_bytes": 159607824
+  }
+}

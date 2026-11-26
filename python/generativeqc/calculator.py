@@ -250,7 +250,8 @@ class Calculator:
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
-        Other domains and batches containing an unsupported element use Hcore.
+        CPU batches select per system, falling back to Hcore for ineligible
+        systems. In CUDA batches, any ineligible system keeps the batch on Hcore.
         Automatic selection requires ``generativeqc_initial_guess_default_kind_v1``;
         if the native library lacks that query, it raises ``NotImplementedError``.
         Explicit ``None`` selects Hcore without querying the policy; existing
@@ -2179,10 +2180,20 @@ class Calculator:
         )
 
     def _supports_fitted_ecp_basis(self) -> bool:
-        """Recognize electronic models with a qualified fitted ECP provider."""
-        return self._composite_rks_second_order or (
-            self._cuda_rks_second_order
-            and self._precision_mode == _native.PRECISION_FP64
+        """Allow creating an ECP system for a native fitted KS admission check."""
+        # A CPU ECP system describes only the orbital Hamiltonian. Let the
+        # prepared owner authenticate the actual method, auxiliary and bounds.
+        return (
+            (
+                self._device_name == "cpu"
+                and self._capabilities.family == "density_functional"
+                and self._density_fitting_mode == _native.DENSITY_FITTING_CPU_REFERENCE
+            )
+            or self._composite_rks_second_order
+            or (
+                self._cuda_rks_second_order
+                and self._precision_mode == _native.PRECISION_FP64
+            )
         )
 
     def _method_descriptor(

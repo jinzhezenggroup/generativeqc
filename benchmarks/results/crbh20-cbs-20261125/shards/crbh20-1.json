@@ -1,0 +1,27 @@
+{
+  "dataset": "CRBH20",
+  "systems": [
+    "CRBH20/19react",
+    "CRBH20/09react",
+    "CRBH20/13react",
+    "CRBH20/15react",
+    "CRBH20/17react",
+    "CRBH20/16react",
+    "CRBH20/03react",
+    "CRBH20/05react",
+    "CRBH20/07react",
+    "CRBH20/14react",
+    "CRBH20/18react",
+    "CRBH20/06react",
+    "CRBH20/20react",
+    "CRBH20/04react",
+    "CRBH20/08react",
+    "CRBH20/12react",
+    "CRBH20/10react",
+    "CRBH20/02react",
+    "CRBH20/11react",
+    "CRBH20/01react"
+  ],
+  "relative_work_estimate": 54478473005868,
+  "inputs_sha256": "ee4aac06d0f7e9fe270f9aec6eb4af827199cf18090df3fba4df21adfa1bc4ce"
+}
