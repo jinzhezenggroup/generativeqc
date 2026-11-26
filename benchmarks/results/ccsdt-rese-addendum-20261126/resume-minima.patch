@@ -1,0 +1,68 @@
+--- a/check_df_minima.py
++++ b/check_df_minima.py
+@@ -204,17 +204,16 @@
+     parser.add_argument("--auxiliary", type=Path, required=True)
+     parser.add_argument("--molecule", action="append", required=True)
+     parser.add_argument("--workers", type=int, default=1)
++    parser.add_argument("--resume", action="store_true")
+     args = parser.parse_args()
+     if args.workers < 1 or len(set(args.molecule)) != len(args.molecule):
+         parser.error("workers must be positive and molecules unique")
+-    args.out.mkdir()
++    args.out.mkdir(exist_ok=args.resume)
+     lib.num_threads(1)
+     if pyscf.__version__ != "2.14.0":
+         raise ValueError(f"expected PySCF 2.14.0, got {pyscf.__version__}")
+     orbital_path = args.payload / "cc-pcvtz.json"
+-    dump(
+-        args.out / "provenance.json",
+-        {
++    provenance = {
+             "python": platform.python_version(),
+             "numpy": np.__version__,
+             "pyscf": pyscf.__version__,
+@@ -229,25 +228,40 @@
+                 "curvature_floor": CURVATURE_FLOOR,
+                 "curvature_stability": CURVATURE_STABILITY,
+             },
+-        },
+-    )
++        }
++    provenance_file = args.out / "provenance.json"
++    if args.resume and provenance_file.is_file():
++        if json.loads(provenance_file.read_text()) != provenance:
++            raise ValueError("checkpoint environment or gates differ")
++    else:
++        dump(provenance_file, provenance)
+     cohort = json.loads((args.payload / "cohort.json").read_text())
+     cases = {case["id"]: case for case in cohort["molecules"]}
+     orbital = load_canonical_basis(orbital_path)
+     auxiliary = load_canonical_basis(args.auxiliary)
+     for name in args.molecule:
+         dest = args.out / name
+-        dest.mkdir()
++        dest.mkdir(exist_ok=args.resume)
+         tick = time.monotonic()
+         try:
+             run = args.native / name / "df-cc-pcvtz"
+             if json.loads((run / "receipt.json").read_text())["status"] != "converged":
+                 raise ValueError("native geometry has not passed its optimizer gate")
+             source = (run / "stdout.json").read_bytes()
++            native_hash = hashlib.sha256(source).hexdigest()
++            check_file = dest / "check.json"
++            if args.resume and check_file.is_file():
++                history = json.loads(check_file.read_text())
++                if history["status"] in ("minimum_verified", "gate_failed"):
++                    if history["native_receipt_sha256"] != native_hash:
++                        raise ValueError("checkpoint is for a different native geometry")
++                    print(name, "already checked", flush=True)
++                    continue
++                raise ValueError("checkpoint contains a previous failure")
+             print(name, "starting", flush=True)
+             with ProcessPoolExecutor(max_workers=args.workers) as pool:
+                 result = check(cases[name], json.loads(source), orbital, auxiliary, dest, pool)
+-            result["native_receipt_sha256"] = hashlib.sha256(source).hexdigest()
++            result["native_receipt_sha256"] = native_hash
+         except (OSError, TypeError, ValueError, RuntimeError) as error:
+             result = {"status": "failed", "error": str(error)}
+         result["seconds"] = time.monotonic() - tick

@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ccsdt-rese-addendum-20261126",
+  "owner": "CCSD(T) equilibrium-geometry addendum for #3166",
+  "reason": "Lossless PySCF energy, coordinate, endpoint, diagnostic, and timing records for reconstructing both projected finite-difference Hessians and checking their stability.",
+  "review_document": "benchmarks/results/ccsdt-rese-addendum-20261126/README.md",
+  "files": [
+    {
+      "bytes": 189916,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ccsdt-rese-addendum-20261126",
+      "path": "benchmarks/results/ccsdt-rese-addendum-20261126/cpu-medium-resume40b.json.xz",
+      "role": "replayable-independent-curvature-records",
+      "sha256": "8b76dfd5690fd5acb29a272dd76f5c4f25d44d6a5d9b7dc40ab6b07a81cba8bf"
+    }
+  ]
+}

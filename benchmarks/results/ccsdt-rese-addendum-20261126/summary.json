@@ -1,0 +1,1768 @@
+{
+  "baseline_cohort_sha256": "26aef3018c752d3d93c692f1f5028b0131f3f367e83e31886bcc9bfadfdff101",
+  "comparison": {
+    "cc-pcvtz/re_se/bonds": {
+      "n": 2,
+      "mae": 0.0005694405148151671,
+      "max_abs": 0.0009282004819103351,
+      "worst": {
+        "molecule": "h2o",
+        "label": "O-H",
+        "error": 0.0009282004819103351
+      }
+    },
+    "cc-pcvtz/re_se/angles": {
+      "n": 1,
+      "mae": 0.8341696656668205,
+      "max_abs": 0.8341696656668205,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.8341696656668205
+      }
+    },
+    "cc-pcvtz/cc-pcvtz/bonds": {
+      "n": 2,
+      "mae": 1.944051481511666e-05,
+      "max_abs": 2.8200481910323205e-05,
+      "worst": {
+        "molecule": "h2o",
+        "label": "O-H",
+        "error": 2.8200481910323205e-05
+      },
+      "gate": 0.0003,
+      "pass": true
+    },
+    "cc-pcvtz/cc-pcvtz/angles": {
+      "n": 1,
+      "mae": 0.008069665666809556,
+      "max_abs": 0.008069665666809556,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.008069665666809556
+      },
+      "gate": 0.05,
+      "pass": true
+    },
+    "df-cc-pcvtz/re_se/bonds": {
+      "n": 46,
+      "mae": 0.002553675059336127,
+      "max_abs": 0.021175819565017573,
+      "worst": {
+        "molecule": "fno",
+        "label": "N-F",
+        "error": -0.021175819565017573
+      }
+    },
+    "df-cc-pcvtz/re_se/angles": {
+      "n": 28,
+      "mae": 0.32425433859043373,
+      "max_abs": 1.4539285440362448,
+      "worst": {
+        "molecule": "nh3",
+        "label": "H-N-H",
+        "error": -1.4539285440362448
+      }
+    },
+    "df-cc-pcvtz/cc-pcvtz/bonds": {
+      "n": 24,
+      "mae": 3.134432907350715e-05,
+      "max_abs": 0.0001154317282867634,
+      "worst": {
+        "molecule": "f2",
+        "label": "F-F",
+        "error": -0.0001154317282867634
+      }
+    },
+    "df-cc-pcvtz/cc-pcvtz/angles": {
+      "n": 1,
+      "mae": 0.008882903965854894,
+      "max_abs": 0.008882903965854894,
+      "worst": {
+        "molecule": "h2o",
+        "label": "H-O-H",
+        "error": -0.008882903965854894
+      }
+    }
+  },
+  "nh3_experimental_angle_sensitivity": {
+    "reference_degrees": 106.7,
+    "comparison": {
+      "n": 28,
+      "mae": 0.3046114814475767,
+      "max_abs": 0.9039285440362477,
+      "worst": {
+        "molecule": "nh3",
+        "label": "H-N-H",
+        "error": -0.9039285440362477
+      }
+    }
+  },
+  "molecules": [
+    {
+      "id": "hf",
+      "optimization": {
+        "attempt": "e",
+        "status": "converged",
+        "wall_seconds": 68.7473232569173,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -100.4001322703141,
+        "max_force": 6.200092354191626e-06,
+        "steps": 3,
+        "evaluations": 4,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.00020199488577576918,
+          "max_abs": 0.00020199488577576918,
+          "worst": {
+            "molecule": "hf",
+            "label": "H-F",
+            "error": -0.00020199488577576918
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 1.9948857756801885e-06,
+          "max_abs": 1.9948857756801885e-06,
+          "worst": {
+            "molecule": "hf",
+            "label": "H-F",
+            "error": -1.9948857756801885e-06
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 4.263256414560601e-13,
+        "center_projected_max_force_hartree_per_bohr": 6.199944256014129e-06,
+        "max_curvature_change_between_steps": 3.382183422218077e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            1.2644314217880037
+          ],
+          [
+            1.2643975999537815
+          ]
+        ],
+        "native_receipt_sha256": "ec5b5c559cbbc62ed263bf87ff7afcb277391ac1a8bc54eef50ecb7ebcc1af84",
+        "seconds": 34.509907223749906
+      }
+    },
+    {
+      "id": "h2o",
+      "optimization": {
+        "attempt": "e",
+        "status": "converged",
+        "wall_seconds": 62.84310576412827,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -76.39002256173671,
+        "max_force": 1.4944780533508269e-05,
+        "steps": 3,
+        "evaluations": 4,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.0009404901357318307,
+          "max_abs": 0.0009404901357318307,
+          "worst": {
+            "molecule": "h2o",
+            "label": "O-H",
+            "error": 0.0009404901357318307
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.8349829039658658,
+          "max_abs": 0.8349829039658658,
+          "worst": {
+            "molecule": "h2o",
+            "label": "H-O-H",
+            "error": -0.8349829039658658
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 4.049013573181881e-05,
+          "max_abs": 4.049013573181881e-05,
+          "worst": {
+            "molecule": "h2o",
+            "label": "O-H",
+            "error": 4.049013573181881e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 1,
+          "mae": 0.008882903965854894,
+          "max_abs": 0.008882903965854894,
+          "worst": {
+            "molecule": "h2o",
+            "label": "H-O-H",
+            "error": -0.008882903965854894
+          }
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 6.963318810448982e-13,
+        "center_projected_max_force_hartree_per_bohr": 1.4944772103171088e-05,
+        "max_curvature_change_between_steps": 3.352559808655897e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.17023806064024846,
+            0.9341976336313141,
+            1.2313124188754003
+          ],
+          [
+            0.17026494896483532,
+            0.9341711001053732,
+            1.2312788932773138
+          ]
+        ],
+        "native_receipt_sha256": "29a8e07c39e4754b9ec9eedc73c0745c25f3b2e45561b66a5a69f12a00d2b1a7",
+        "seconds": 785.2741837101057
+      }
+    },
+    {
+      "id": "co",
+      "optimization": {
+        "attempt": "e",
+        "status": "converged",
+        "wall_seconds": 226.59369168197736,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -113.26453782484725,
+        "max_force": 6.057054768902491e-08,
+        "steps": 4,
+        "evaluations": 6,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.004167251442772413,
+          "max_abs": 0.004167251442772413,
+          "worst": {
+            "molecule": "co",
+            "label": "C-O",
+            "error": 0.004167251442772413
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 3.274855722756875e-05,
+          "max_abs": 3.274855722756875e-05,
+          "worst": {
+            "molecule": "co",
+            "label": "C-O",
+            "error": -3.274855722756875e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 3.126388037344441e-13,
+        "center_projected_max_force_hartree_per_bohr": 6.06851202564337e-08,
+        "max_curvature_change_between_steps": 5.67528246619986e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            2.4281730919284428
+          ],
+          [
+            2.4281163391037808
+          ]
+        ],
+        "native_receipt_sha256": "0e50d0a6c8febd5762b5000aeaa831660e9466cacf6e75ab8e8f302caa021bd2",
+        "seconds": 304.6797857750207
+      }
+    },
+    {
+      "id": "n2",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 204.98188654286787,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -109.48279558198134,
+        "max_force": 7.490528375342537e-07,
+        "steps": 4,
+        "evaluations": 6,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.002914872104035071,
+          "max_abs": 0.002914872104035071,
+          "worst": {
+            "molecule": "n2",
+            "label": "N-N",
+            "error": 0.002914872104035071
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 1.4872104034946432e-05,
+          "max_abs": 1.4872104034946432e-05,
+          "worst": {
+            "molecule": "n2",
+            "label": "N-N",
+            "error": 1.4872104034946432e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 1.8474111129762605e-13,
+        "center_projected_max_force_hartree_per_bohr": 7.495336687657169e-07,
+        "max_curvature_change_between_steps": 7.122125111891364e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            2.938702348131983
+          ],
+          [
+            2.938631126880864
+          ]
+        ],
+        "native_receipt_sha256": "93d868acf00a42022e7d0fdd32bcede5934d37aedca9b667dc32d10987cd792c",
+        "seconds": 151.38925998099148
+      }
+    },
+    {
+      "id": "f2",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 173.62987491767853,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -199.4195451112842,
+        "max_force": 9.636352231723328e-07,
+        "steps": 4,
+        "evaluations": 5,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.0007845682717131375,
+          "max_abs": 0.0007845682717131375,
+          "worst": {
+            "molecule": "f2",
+            "label": "F-F",
+            "error": 0.0007845682717131375
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 0.0001154317282867634,
+          "max_abs": 0.0001154317282867634,
+          "worst": {
+            "molecule": "f2",
+            "label": "F-F",
+            "error": -0.0001154317282867634
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 3.893774191965349e-12,
+        "center_projected_max_force_hartree_per_bohr": 9.633241570012564e-07,
+        "max_curvature_change_between_steps": 1.2422063377925951e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.6160206940108992
+          ],
+          [
+            0.6160082719475213
+          ]
+        ],
+        "native_receipt_sha256": "97bc4cecb593619033c67dfd4b61c9adb4de059d429e6f18953060bfc67c4f61",
+        "seconds": 286.62719041854143
+      }
+    },
+    {
+      "id": "hcn",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 352.5973525289446,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -93.38082422748947,
+        "max_force": 1.818989245272462e-05,
+        "steps": 5,
+        "evaluations": 7,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.002511670832760937,
+          "max_abs": 0.003529076867251124,
+          "worst": {
+            "molecule": "hcn",
+            "label": "C-N",
+            "error": 0.003529076867251124
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 1.7406034490186073e-05,
+          "max_abs": 2.9076867251065508e-05,
+          "worst": {
+            "molecule": "hcn",
+            "label": "C-N",
+            "error": 2.9076867251065508e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 2.1316282072803006e-13,
+        "center_projected_max_force_hartree_per_bohr": 1.8189819059835653e-05,
+        "max_curvature_change_between_steps": 5.659365530918947e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.08063011911450732,
+            0.08063432590743115,
+            0.5357254378124553,
+            2.680024708686894
+          ],
+          [
+            0.08063160606200827,
+            0.08063281680983353,
+            0.5357469226086478,
+            2.679968115031585
+          ]
+        ],
+        "native_receipt_sha256": "54892b962f15e71ac64177b063401d0ce01e6a7d1517f774def4625033370a61",
+        "seconds": 1959.2721840813756
+      }
+    },
+    {
+      "id": "hnc",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 352.07332355203107,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -93.35685322006607,
+        "max_force": 1.3515983924961006e-05,
+        "steps": 5,
+        "evaluations": 7,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.002243850001489911,
+          "max_abs": 0.003640533818755065,
+          "worst": {
+            "molecule": "hnc",
+            "label": "N-C",
+            "error": 0.003640533818755065
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 4.3850001489986745e-05,
+          "max_abs": 4.7166184224733954e-05,
+          "worst": {
+            "molecule": "hnc",
+            "label": "H-N",
+            "error": 4.7166184224733954e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 2.984279490192421e-13,
+        "center_projected_max_force_hartree_per_bohr": 1.35158108356312e-05,
+        "max_curvature_change_between_steps": 4.127811126997116e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.03353522729106631,
+            0.03357176670086025,
+            0.6422662050135528,
+            2.5884884194509867
+          ],
+          [
+            0.033561102666294806,
+            0.033570195522659746,
+            0.6422709851262718,
+            2.5884471413397168
+          ]
+        ],
+        "native_receipt_sha256": "7b0c3ef8a490b3f133fa29e5425720af7ce93fb8d6579604fd5b955817658239",
+        "seconds": 2014.5662491302937
+      }
+    },
+    {
+      "id": "ch4",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 51.83156803436577,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -40.48921220737893,
+        "max_force": 1.1556840723212596e-05,
+        "steps": 2,
+        "evaluations": 3,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.0016332707352477716,
+          "max_abs": 0.0016332707352477716,
+          "worst": {
+            "molecule": "ch4",
+            "label": "C-H",
+            "error": 0.0016332707352477716
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 3.327073524794777e-05,
+          "max_abs": 3.327073524794777e-05,
+          "worst": {
+            "molecule": "ch4",
+            "label": "C-H",
+            "error": 3.327073524794777e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 7.105427357601002e-13,
+        "center_projected_max_force_hartree_per_bohr": 1.155692160446217e-05,
+        "max_curvature_change_between_steps": 4.885867484372142e-06,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.09431952951394705,
+            0.09431954396977399,
+            0.11778092768394645,
+            0.11778096370105595,
+            0.11778097999978818,
+            0.3526036885090695,
+            0.8361212771452948,
+            0.8361212813180731,
+            0.8361246045975913
+          ],
+          [
+            0.09432157060544964,
+            0.09432169491662211,
+            0.11778402323831798,
+            0.11778409278839025,
+            0.11778418897390854,
+            0.35260137475832226,
+            0.8361188243150748,
+            0.836118867309564,
+            0.8361197187301069
+          ]
+        ],
+        "native_receipt_sha256": "0455b56a9d1458f3d914811ff38fbe4fab428bbcb66e20e3f0021b0b3ec88d17",
+        "seconds": 5579.376094782725
+      }
+    },
+    {
+      "id": "nh3",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 116.00987363513559,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -56.52742983748473,
+        "max_force": 3.0514196258807715e-07,
+        "steps": 5,
+        "evaluations": 6,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.0010062080254122918,
+          "max_abs": 0.0010062080254122918,
+          "worst": {
+            "molecule": "nh3",
+            "label": "N-H",
+            "error": 0.0010062080254122918
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 1.4539285440362448,
+          "max_abs": 1.4539285440362448,
+          "worst": {
+            "molecule": "nh3",
+            "label": "H-N-H",
+            "error": -1.4539285440362448
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 6.208025412401952e-06,
+          "max_abs": 6.208025412401952e-06,
+          "worst": {
+            "molecule": "nh3",
+            "label": "N-H",
+            "error": 6.208025412401952e-06
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 7.602807272633072e-13,
+        "center_projected_max_force_hartree_per_bohr": 3.0512296814873453e-07,
+        "max_curvature_change_between_steps": 1.2073585174743329e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.1166217659807751,
+            0.14208295645443933,
+            0.14209298112819044,
+            0.6075370650408661,
+            1.049912264799693,
+            1.0499215224614127
+          ],
+          [
+            0.1166322055411578,
+            0.14209313975312385,
+            0.14209566696805587,
+            0.6075278304694673,
+            1.0499062057260449,
+            1.049909448876238
+          ]
+        ],
+        "native_receipt_sha256": "a813746b4400a675d82c6f6d00c4373d21fc1753f0ebec1248eac8d25fe3b04c",
+        "seconds": 1464.7164719626307
+      }
+    },
+    {
+      "id": "hno",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 443.09154350403696,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -130.41004042721934,
+        "max_force": 1.953748428200995e-05,
+        "steps": 7,
+        "evaluations": 8,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.0028905178788956043,
+          "max_abs": 0.0032511820188469986,
+          "worst": {
+            "molecule": "hno",
+            "label": "N-O",
+            "error": 0.0032511820188469986
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.3384367083805273,
+          "max_abs": 0.3384367083805273,
+          "worst": {
+            "molecule": "hno",
+            "label": "H-N-O",
+            "error": -0.3384367083805273
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 4.051787889558511e-05,
+          "max_abs": 5.1182018846906985e-05,
+          "worst": {
+            "molecule": "hno",
+            "label": "N-O",
+            "error": 5.1182018846906985e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 2.2168933355715126e-12,
+        "center_projected_max_force_hartree_per_bohr": 1.953749428019827e-05,
+        "max_curvature_change_between_steps": 3.410714872420506e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.22336246747894836,
+            0.6688517966440535,
+            1.403391219359175
+          ],
+          [
+            0.22336306795052205,
+            0.6688390185673968,
+            1.403357112210451
+          ]
+        ],
+        "native_receipt_sha256": "fbb0256c579bd50769848e470074de4e5277d9ffdf2f2df0306ccff823c5f509",
+        "seconds": 1830.531498460099
+      }
+    },
+    {
+      "id": "hof",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 350.8800920988433,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -175.45363357116221,
+        "max_force": 1.2742784472337206e-06,
+        "steps": 5,
+        "evaluations": 6,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.0010118525018849023,
+          "max_abs": 0.001175030433741342,
+          "worst": {
+            "molecule": "hof",
+            "label": "O-H",
+            "error": -0.001175030433741342
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.2764343129042288,
+          "max_abs": 0.2764343129042288,
+          "worst": {
+            "molecule": "hof",
+            "label": "H-O-F",
+            "error": -0.2764343129042288
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 3.8147498115148615e-05,
+          "max_abs": 5.132542997166034e-05,
+          "worst": {
+            "molecule": "hof",
+            "label": "O-F",
+            "error": -5.132542997166034e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 3.0127011996228248e-12,
+        "center_projected_max_force_hartree_per_bohr": 1.27423895621959e-06,
+        "max_curvature_change_between_steps": 2.410243393979883e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.15553478769859333,
+            0.5596272722664737,
+            1.0596194404647998
+          ],
+          [
+            0.15554419537895353,
+            0.5596157355586064,
+            1.05959533803086
+          ]
+        ],
+        "native_receipt_sha256": "aea6a0506eebfbe4781fcdef47bb36776d63f00f6fa7edfbd58fff1be6246f62",
+        "seconds": 1725.2420788090676
+      }
+    },
+    {
+      "id": "co2",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 362.1715595787391,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -188.494549422026,
+        "max_force": 1.2462297430460012e-05,
+        "steps": 3,
+        "evaluations": 4,
+        "re_se_bonds": {
+          "n": 1,
+          "mae": 0.003599900870223438,
+          "max_abs": 0.003599900870223438,
+          "worst": {
+            "molecule": "co2",
+            "label": "C-O",
+            "error": 0.003599900870223438
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 1,
+          "mae": 9.912977660953004e-08,
+          "max_abs": 9.912977660953004e-08,
+          "worst": {
+            "molecule": "co2",
+            "label": "C-O",
+            "error": -9.912977660953004e-08
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 1.2789769243681803e-12,
+        "center_projected_max_force_hartree_per_bohr": 1.2462240884152145e-05,
+        "max_curvature_change_between_steps": 5.538501691715325e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.22015362138657024,
+            0.2201843632894178,
+            1.1052016224647638,
+            2.850596779334539
+          ],
+          [
+            0.22017608747775977,
+            0.2201838029862742,
+            1.1051970627882763,
+            2.850541394317622
+          ]
+        ],
+        "native_receipt_sha256": "d6d817b038a9dff41c6a98705ea2545b8337c61c9eca3100315d5e65db92fa3a",
+        "seconds": 1092.412202810403
+      }
+    },
+    {
+      "id": "c2h2",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 314.1067687962204,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -77.29017973488652,
+        "max_force": 7.798437274442183e-06,
+        "steps": 6,
+        "evaluations": 8,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.0025174851855256364,
+          "max_abs": 0.003010506903092125,
+          "worst": {
+            "molecule": "c2h2",
+            "label": "C-C",
+            "error": 0.003010506903092125
+          }
+        },
+        "re_se_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 1.748518552557865e-05,
+          "max_abs": 2.4463467959146e-05,
+          "worst": {
+            "molecule": "c2h2",
+            "label": "C-H",
+            "error": 2.4463467959146e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 5,
+        "center_energy_difference_hartree": 6.536993168992922e-13,
+        "center_projected_max_force_hartree_per_bohr": 7.79857873644813e-06,
+        "max_curvature_change_between_steps": 2.454742215363126e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.03930485296280153,
+            0.03931030315301101,
+            0.06919039273663348,
+            0.06919706590067519,
+            0.3288476575323936,
+            0.8205005608358488,
+            2.613282807283849
+          ],
+          [
+            0.03930843838481384,
+            0.03930985367828509,
+            0.0691926511506811,
+            0.06919426297520205,
+            0.3288532768392987,
+            0.8205024690568089,
+            2.6132582598616954
+          ]
+        ],
+        "native_receipt_sha256": "f607730baa0224ebae84e6a4609c9a60b69973a0d49feafcc84498a40b27c553",
+        "seconds": 2254.258883540053
+      }
+    },
+    {
+      "id": "ch2o",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 392.8578210901469,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -114.44260118889244,
+        "max_force": 7.172407476999778e-06,
+        "steps": 8,
+        "evaluations": 9,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.001981254960712331,
+          "max_abs": 0.00239241282641256,
+          "worst": {
+            "molecule": "ch2o",
+            "label": "C-O",
+            "error": 0.00239241282641256
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.5505655026691727,
+          "max_abs": 0.5505655026691727,
+          "worst": {
+            "molecule": "ch2o",
+            "label": "H-C-H",
+            "error": -0.5505655026691727
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 3.884213429972139e-05,
+          "max_abs": 7.009709501204497e-05,
+          "worst": {
+            "molecule": "ch2o",
+            "label": "C-H",
+            "error": 7.009709501204497e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 1.3926637620897964e-12,
+        "center_projected_max_force_hartree_per_bohr": 7.172465998235554e-06,
+        "max_curvature_change_between_steps": 2.7229553008378815e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.13729589623883984,
+            0.16842579206247663,
+            0.22805905884134245,
+            0.4021345497060328,
+            0.8512438432387655,
+            1.6699148745248027
+          ],
+          [
+            0.13730598942302247,
+            0.16842720571965963,
+            0.22808352938263166,
+            0.4021256291404686,
+            0.85123564311672,
+            1.6698876449717943
+          ]
+        ],
+        "native_receipt_sha256": "9fd33f09cf1ac2e4872de35b352e2496efbfb3188ad73a13b6134abef30b32c9",
+        "seconds": 1705.341604006011
+      }
+    },
+    {
+      "id": "trans-n2h2",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 325.05950232595205,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -110.58605468000535,
+        "max_force": 2.8934548266304887e-06,
+        "steps": 7,
+        "evaluations": 8,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.003015299103103053,
+          "max_abs": 0.0048430995156694134,
+          "worst": {
+            "molecule": "trans-n2h2",
+            "label": "N-N",
+            "error": 0.0048430995156694134
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.512211227739229,
+          "max_abs": 0.512211227739229,
+          "worst": {
+            "molecule": "trans-n2h2",
+            "label": "H-N-N",
+            "error": -0.512211227739229
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 3.470089689694422e-05,
+          "max_abs": 5.6900484330491e-05,
+          "worst": {
+            "molecule": "trans-n2h2",
+            "label": "N-N",
+            "error": -5.6900484330491e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 9.876544027065393e-12,
+        "center_projected_max_force_hartree_per_bohr": 2.8937154312396977e-06,
+        "max_curvature_change_between_steps": 2.8922840897394053e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.1260145581515743,
+            0.1300642139499617,
+            0.1967796708451012,
+            0.7757634681520719,
+            0.84246442185162,
+            1.347738052420228
+          ],
+          [
+            0.1260302215512766,
+            0.1300697491810469,
+            0.1967794399531859,
+            0.7757463567835651,
+            0.8424530046172044,
+            1.3477091295793306
+          ]
+        ],
+        "native_receipt_sha256": "836bee3e73637509ee8ec8f585526845af7a3dcfa02abf74567f712bfac07c92",
+        "seconds": 1977.2666352041997
+      }
+    },
+    {
+      "id": "c2h4",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 535.2173714819364,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -78.54099572024825,
+        "max_force": 1.8821466071765595e-05,
+        "steps": 7,
+        "evaluations": 8,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.0022673596688018716,
+          "max_abs": 0.0031947350003798114,
+          "worst": {
+            "molecule": "c2h4",
+            "label": "C-C",
+            "error": 0.0031947350003798114
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.08290770196605024,
+          "max_abs": 0.08290770196605024,
+          "worst": {
+            "molecule": "c2h4",
+            "label": "H-C-H",
+            "error": -0.08290770196605024
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 2,
+          "mae": 2.2624668422066563e-05,
+          "max_abs": 3.998433722385286e-05,
+          "worst": {
+            "molecule": "c2h4",
+            "label": "C-H",
+            "error": 3.998433722385286e-05
+          }
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 1.2363443602225743e-12,
+        "center_projected_max_force_hartree_per_bohr": 1.8821433086085716e-05,
+        "max_curvature_change_between_steps": 8.543753710288371e-06,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.03050112094585197,
+            0.0420831586105308,
+            0.07818363453012823,
+            0.0920210573482367,
+            0.13872606971836174,
+            0.14373875842106582,
+            0.17033856383074758,
+            0.3093450566045471,
+            0.5846818843654386,
+            0.8841465842543166,
+            1.003930245522863,
+            1.4451642314227886
+          ],
+          [
+            0.03050290168485684,
+            0.04208314852029149,
+            0.07818697122250971,
+            0.09202265392618432,
+            0.13873452434533678,
+            0.14373850943742653,
+            0.17034616914734516,
+            0.30934365941405106,
+            0.5846740367886591,
+            0.8841380405006063,
+            1.0039265992360962,
+            1.44515670051165
+          ]
+        ],
+        "native_receipt_sha256": "7ad5c26b2e72500beae3f9feee313c1c7c1f248d63af5991e00b385421cc5f4e",
+        "seconds": 11979.630773905199
+      }
+    },
+    {
+      "id": "fno",
+      "optimization": {
+        "attempt": "f",
+        "status": "converged",
+        "wall_seconds": 885.2589258560911,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -229.60236783743687,
+        "max_force": 2.8884602708725795e-06,
+        "steps": 8,
+        "evaluations": 9,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.014036136697109458,
+          "max_abs": 0.021175819565017573,
+          "worst": {
+            "molecule": "fno",
+            "label": "N-F",
+            "error": -0.021175819565017573
+          }
+        },
+        "re_se_angles": {
+          "n": 1,
+          "mae": 0.21723266940750818,
+          "max_abs": 0.21723266940750818,
+          "worst": {
+            "molecule": "fno",
+            "label": "F-N-O",
+            "error": 0.21723266940750818
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 2.1316282072803006e-12,
+        "center_projected_max_force_hartree_per_bohr": 2.8883137589288005e-06,
+        "max_curvature_change_between_steps": 5.492642028936956e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.20060452894540057,
+            0.3710632315864918,
+            1.9537896204655167
+          ],
+          [
+            0.20060292221599094,
+            0.37106396048608126,
+            1.9537346940452274
+          ]
+        ],
+        "native_receipt_sha256": "ce98f5581f6ee9ff7bfd4b1cf2f113b653bb47a6384b2dfab4ad63679a5fec4d",
+        "seconds": 1717.6787834600545
+      }
+    },
+    {
+      "id": "trans-hono",
+      "optimization": {
+        "attempt": "i",
+        "status": "converged",
+        "wall_seconds": 1687.8120900485665,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -205.6030443029894,
+        "max_force": 8.743071320835765e-06,
+        "steps": 11,
+        "evaluations": 13,
+        "re_se_bonds": {
+          "n": 3,
+          "mae": 0.001233844909518833,
+          "max_abs": 0.0028683381957805842,
+          "worst": {
+            "molecule": "trans-hono",
+            "label": "N=O",
+            "error": 0.0028683381957805842
+          }
+        },
+        "re_se_angles": {
+          "n": 2,
+          "mae": 0.23307465024459617,
+          "max_abs": 0.46115119590284337,
+          "worst": {
+            "molecule": "trans-hono",
+            "label": "H-O-N",
+            "error": -0.46115119590284337
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 4.121147867408581e-12,
+        "center_projected_max_force_hartree_per_bohr": 8.74304289679563e-06,
+        "max_curvature_change_between_steps": 3.9600926034832895e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.03740389395230696,
+            0.10167632551137261,
+            0.21166125883692788,
+            0.45175517720141106,
+            1.099793011584918,
+            1.6668226417230274
+          ],
+          [
+            0.03742993747533889,
+            0.10168403960587015,
+            0.21166783855087387,
+            0.4517511294912056,
+            1.0997689030455098,
+            1.6667830407969926
+          ]
+        ],
+        "native_receipt_sha256": "fe0cb2462deb274ddb4191f6902ec66ea96911054da435a0ce4f10c54b58676a",
+        "seconds": 10744.910524023231
+      }
+    },
+    {
+      "id": "ch2f2",
+      "optimization": {
+        "attempt": "g",
+        "status": "converged",
+        "wall_seconds": 1134.247894462198,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -238.87355700174948,
+        "max_force": 1.798814015093546e-05,
+        "steps": 6,
+        "evaluations": 7,
+        "re_se_bonds": {
+          "n": 2,
+          "mae": 0.0012286262313212504,
+          "max_abs": 0.0016642892801248532,
+          "worst": {
+            "molecule": "ch2f2",
+            "label": "C-H",
+            "error": 0.0016642892801248532
+          }
+        },
+        "re_se_angles": {
+          "n": 3,
+          "mae": 0.3533566118625468,
+          "max_abs": 0.6460199211735329,
+          "worst": {
+            "molecule": "ch2f2",
+            "label": "H-C-H",
+            "error": -0.6460199211735329
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 1.1652900866465643e-12,
+        "center_projected_max_force_hartree_per_bohr": 1.7988090919578132e-05,
+        "max_curvature_change_between_steps": 9.921026280501621e-06,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.10389850040396816,
+            0.10502131736831387,
+            0.17130476289559718,
+            0.1884835414722236,
+            0.18994724475471947,
+            0.42710081400685745,
+            0.731261213385496,
+            0.899790531892574,
+            0.9503447844855517
+          ],
+          [
+            0.10389902100833824,
+            0.10502893946953136,
+            0.1713068473302614,
+            0.18849195543539912,
+            0.18994739622577456,
+            0.4270949265485311,
+            0.7312512923592155,
+            0.8997817401702131,
+            0.9503383441376289
+          ]
+        ],
+        "native_receipt_sha256": "951674978738e7913f66a25e418023205e9eec3c7797c327be3c54d9a947b7a7",
+        "seconds": 16255.221048448235
+      }
+    },
+    {
+      "id": "syn-ethenol",
+      "optimization": {
+        "attempt": "gpu-syn-ethenol",
+        "status": "converged",
+        "wall_seconds": 6031.84943145141,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -153.7305361558147,
+        "max_force": 5.263660933392254e-06,
+        "steps": 20,
+        "evaluations": 23,
+        "re_se_bonds": {
+          "n": 6,
+          "mae": 0.001830918047111163,
+          "max_abs": 0.002207524961311602,
+          "worst": {
+            "molecule": "syn-ethenol",
+            "label": "C2-H",
+            "error": 0.002207524961311602
+          }
+        },
+        "re_se_angles": {
+          "n": 5,
+          "mae": 0.2595338060076472,
+          "max_abs": 0.6582764000922623,
+          "worst": {
+            "molecule": "syn-ethenol",
+            "label": "C2-O-H",
+            "error": -0.6582764000922623
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      }
+    },
+    {
+      "id": "trans-formic-acid",
+      "optimization": {
+        "attempt": "j",
+        "status": "converged",
+        "wall_seconds": 2180.43972599227,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -189.66865879951837,
+        "max_force": 1.112790174378314e-05,
+        "steps": 11,
+        "evaluations": 13,
+        "re_se_bonds": {
+          "n": 4,
+          "mae": 0.002260272502620231,
+          "max_abs": 0.0028731548359595127,
+          "worst": {
+            "molecule": "trans-formic-acid",
+            "label": "C-O",
+            "error": 0.0028731548359595127
+          }
+        },
+        "re_se_angles": {
+          "n": 3,
+          "mae": 0.33817248026053903,
+          "max_abs": 0.5523796394492564,
+          "worst": {
+            "molecule": "trans-formic-acid",
+            "label": "C-O-H",
+            "error": -0.5523796394492564
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      },
+      "minimum": {
+        "status": "minimum_verified",
+        "rigid_rank": 6,
+        "center_energy_difference_hartree": 7.105427357601002e-13,
+        "center_projected_max_force_hartree_per_bohr": 1.1127977405423182e-05,
+        "max_curvature_change_between_steps": 2.3129143490008275e-05,
+        "curvatures_hartree_per_bohr2": [
+          [
+            0.038679688228643365,
+            0.05232507440832485,
+            0.13148061922920878,
+            0.2475941581753724,
+            0.2636037008845946,
+            0.5447236345373787,
+            0.8490967174474429,
+            1.1142012466450353,
+            1.7625223068874403
+          ],
+          [
+            0.038684950895024064,
+            0.05232920675563167,
+            0.13148401386783756,
+            0.2476042758051693,
+            0.26361340568862535,
+            0.5447216062821003,
+            0.8490810928062312,
+            1.1141781175015453,
+            1.7625039043193138
+          ]
+        ],
+        "native_receipt_sha256": "a31189ede4f189a0e51f710b38f1edbf1ada5713a6632c71570e91fa26a3e13f",
+        "seconds": 15759.291062457953
+      }
+    },
+    {
+      "id": "aziridine",
+      "optimization": {
+        "attempt": "gpu-aziridine",
+        "status": "converged",
+        "wall_seconds": 6177.6377094350755,
+        "returncode": 0,
+        "error": null,
+        "energy_hartree": -133.8458693309601,
+        "max_force": 1.734558382062744e-05,
+        "steps": 17,
+        "evaluations": 21,
+        "re_se_bonds": {
+          "n": 5,
+          "mae": 0.002216851422727162,
+          "max_abs": 0.003567492621188606,
+          "worst": {
+            "molecule": "aziridine",
+            "label": "C-N",
+            "error": 0.003567492621188606
+          }
+        },
+        "re_se_angles": {
+          "n": 7,
+          "mae": 0.13914518608094742,
+          "max_abs": 0.4875616572675767,
+          "worst": {
+            "molecule": "aziridine",
+            "label": "C-N-H",
+            "error": -0.4875616572675767
+          }
+        },
+        "cc-pcvtz_bonds": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        },
+        "cc-pcvtz_angles": {
+          "n": 0,
+          "mae": null,
+          "max_abs": null,
+          "worst": null
+        }
+      }
+    }
+  ],
+  "trace": {
+    "syn-ethenol": {
+      "completed_evaluations": 23,
+      "incomplete_last_record": false,
+      "accepted_steps": 20,
+      "recorded_rejected_trials": 2,
+      "force_increase_steps": 3,
+      "accepted_step_direction_cosine": {
+        "minimum": -0.7572818449583663,
+        "median": 0.7673551981287945,
+        "maximum": 0.9538764282407154
+      },
+      "sum_evaluation_seconds": 6030.615326874999,
+      "evaluation_seconds": {
+        "minimum": 261.351689062,
+        "median": 261.959443162,
+        "maximum": 263.776647744
+      },
+      "step_seconds": {
+        "minimum": 261.388265759,
+        "median": 262.0916201105,
+        "maximum": 785.517329517
+      },
+      "reference_scf_iterations": null,
+      "ccsd_iterations": {
+        "minimum": 24,
+        "median": 24,
+        "maximum": 24
+      },
+      "progress_at_legacy_limits_by_summed_evaluation_time": [
+        {
+          "seconds": 1200,
+          "completed_evaluations": 4,
+          "accepted_steps": 3,
+          "last_accepted_force": 0.0016725206334509413
+        },
+        {
+          "seconds": 2400,
+          "completed_evaluations": 9,
+          "accepted_steps": 8,
+          "last_accepted_force": 0.0007139315607581964
+        }
+      ],
+      "preoptimization_scf_iterations": {
+        "minimum": 28,
+        "median": 29,
+        "maximum": 31
+      },
+      "preoptimization_against_previous_attempts": {
+        "g": {
+          "max_absolute_component_bohr": 1.1337597527472099e-12,
+          "energy_difference_hartree": 2.2737367544323206e-13
+        },
+        "k": {
+          "max_absolute_component_bohr": 2.97850633046437e-12,
+          "energy_difference_hartree": 5.684341886080802e-14
+        }
+      }
+    },
+    "aziridine": {
+      "completed_evaluations": 21,
+      "incomplete_last_record": false,
+      "accepted_steps": 17,
+      "recorded_rejected_trials": 3,
+      "force_increase_steps": 5,
+      "accepted_step_direction_cosine": {
+        "minimum": -0.7031356217279726,
+        "median": 0.7444385012157523,
+        "maximum": 0.9574431099186803
+      },
+      "sum_evaluation_seconds": 6176.537412911,
+      "evaluation_seconds": {
+        "minimum": 292.469094801,
+        "median": 294.245442975,
+        "maximum": 295.259483596
+      },
+      "step_seconds": {
+        "minimum": 292.471386382,
+        "median": 294.470882916,
+        "maximum": 590.147604274
+      },
+      "reference_scf_iterations": null,
+      "ccsd_iterations": {
+        "minimum": 19,
+        "median": 22,
+        "maximum": 22
+      },
+      "progress_at_legacy_limits_by_summed_evaluation_time": [
+        {
+          "seconds": 1200,
+          "completed_evaluations": 4,
+          "accepted_steps": 3,
+          "last_accepted_force": 0.0018358244911019152
+        },
+        {
+          "seconds": 2400,
+          "completed_evaluations": 8,
+          "accepted_steps": 6,
+          "last_accepted_force": 0.0008273405008789781
+        }
+      ],
+      "preoptimization_scf_iterations": {
+        "minimum": 23,
+        "median": 23,
+        "maximum": 25
+      },
+      "preoptimization_against_previous_attempts": {
+        "f": {
+          "max_absolute_component_bohr": 1.1619594175726888e-12,
+          "energy_difference_hartree": -1.4210854715202004e-13
+        },
+        "l": {
+          "max_absolute_component_bohr": 9.39054389803573e-13,
+          "energy_difference_hartree": -1.7053025658242404e-13
+        }
+      }
+    }
+  },
+  "counts": {
+    "df_converged": 22,
+    "df_minimum_verified": 20,
+    "df_minimum_checked": 20,
+    "df_minimum_attempted": 20
+  }
+}

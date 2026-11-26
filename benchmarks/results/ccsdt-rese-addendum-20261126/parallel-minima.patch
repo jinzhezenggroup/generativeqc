@@ -1,0 +1,161 @@
+--- a/check_df_minima.py
++++ b/check_df_minima.py
+@@ -5,13 +5,13 @@
+ import json
+ import platform
+ import time
++from concurrent.futures import ProcessPoolExecutor
+ from itertools import combinations, product
+ from pathlib import Path
+ 
+ import numpy as np
+ import pyscf
+ from check_minima import (
+-    CPU_CONTROLS,
+     CURVATURE_FLOOR,
+     CURVATURE_STABILITY,
+     ENERGY_GATE,
+@@ -24,6 +24,7 @@
+ from run import JsonObject, dump
+ 
+ STEPS = (0.004, 0.002)
++LINEAR = {"hf", "co", "n2", "f2", "hcn", "hnc", "co2", "c2h2"}
+ 
+ 
+ def energy(
+@@ -74,6 +75,22 @@
+     }
+ 
+ 
++def point_energy(
++    case: JsonObject, xyz: np.ndarray, orbital: dict, auxiliary: dict, path: Path
++) -> float:
++    if path.is_file():
++        receipt = json.loads(path.read_text())
++        if receipt["coordinates_bohr"] != xyz.tolist():
++            raise ValueError(f"stale coordinates in {path.name}")
++    else:
++        receipt = energy(case, xyz, orbital, auxiliary)
++        temporary = path.with_suffix(".partial")
++        temporary.unlink(missing_ok=True)
++        dump(temporary, receipt)
++        temporary.replace(path)
++    return receipt["energy_hartree"]
++
++
+ def differences(
+     case: JsonObject,
+     xyz: np.ndarray,
+@@ -83,43 +100,59 @@
+     step: float,
+     center: float,
+     destination: Path,
++    pool: ProcessPoolExecutor,
+ ) -> tuple[np.ndarray, np.ndarray]:
+     dim = active.shape[1]
+     grad = np.zeros(dim)
+     hess = np.zeros((dim, dim))
+     directions = active.T.reshape((dim, *xyz.shape)) * step
+ 
+-    def displaced(delta: np.ndarray, stem: str) -> float:
+-        record = energy(case, xyz + delta, orbital, auxiliary)
+-        dump(destination / f"{step:g}-{stem}.json", record)
+-        return record["energy_hartree"] - center
+-
++    futures = {}
+     for i, direction in enumerate(directions):
+-        plus = displaced(direction, f"{i}+")
+-        minus = displaced(-direction, f"{i}-")
++        for sign, label in ((1, "+"), (-1, "-")):
++            stem = f"{i}{label}"
++            futures[stem] = pool.submit(
++                point_energy, case, xyz + sign * direction, orbital, auxiliary,
++                destination / f"{step:g}-{stem}.json",
++            )
++    for i, j in combinations(range(dim), 2):
++        for a, b in product((-1, 1), repeat=2):
++            stem = f"{i}{a:+d}-{j}{b:+d}"
++            point = a * directions[i] + b * directions[j]
++            futures[stem] = pool.submit(
++                point_energy, case, xyz + point, orbital, auxiliary,
++                destination / f"{step:g}-{stem}.json",
++            )
++
++    def relative(stem: str) -> float:
++        return futures[stem].result() - center
++
++    for i in range(dim):
++        plus = relative(f"{i}+")
++        minus = relative(f"{i}-")
+         grad[i] = (plus - minus) / (2 * step)
+         hess[i, i] = (plus + minus) / step**2
+     for i, j in combinations(range(dim), 2):
+         numerator = 0.0
+         for a, b in product((-1, 1), repeat=2):
+-            point = a * directions[i] + b * directions[j]
+-            numerator += a * b * displaced(point, f"{i}{a:+d}-{j}{b:+d}")
++            numerator += a * b * relative(f"{i}{a:+d}-{j}{b:+d}")
+         hess[i, j] = hess[j, i] = numerator / (4 * step**2)
+     return grad, hess
+ 
+ 
+ def check(
+-    case: JsonObject, native: JsonObject, orbital: dict, auxiliary: dict, dest: Path
++    case: JsonObject, native: JsonObject, orbital: dict, auxiliary: dict, dest: Path,
++    pool: ProcessPoolExecutor
+ ) -> JsonObject:
+     xyz = np.array(native["coordinates_bohr"])
+     rank, active = vibrational_basis(xyz)
+-    expected_rank = 5 if len(xyz) == 2 else 6
++    expected_rank = 5 if case['id'] in LINEAR else 6
+     if rank != expected_rank:
+         raise RuntimeError(
+             f"unexpected rigid mode rank {rank}, expected {expected_rank}"
+         )
+-    center = energy(case, xyz, orbital, auxiliary)
+-    dump(dest / "center.json", center)
++    point_energy(case, xyz, orbital, auxiliary, dest / "center.json")
++    center = json.loads((dest / "center.json").read_text())
+     results = [
+         differences(
+             case,
+@@ -130,6 +163,7 @@
+             step,
+             center["energy_hartree"],
+             dest,
++            pool,
+         )
+         for step in STEPS
+     ]
+@@ -168,7 +202,11 @@
+     parser.add_argument("native", type=Path)
+     parser.add_argument("out", type=Path)
+     parser.add_argument("--auxiliary", type=Path, required=True)
++    parser.add_argument("--molecule", action="append", required=True)
++    parser.add_argument("--workers", type=int, default=1)
+     args = parser.parse_args()
++    if args.workers < 1 or len(set(args.molecule)) != len(args.molecule):
++        parser.error("workers must be positive and molecules unique")
+     args.out.mkdir()
+     lib.num_threads(1)
+     if pyscf.__version__ != "2.14.0":
+@@ -197,7 +235,7 @@
+     cases = {case["id"]: case for case in cohort["molecules"]}
+     orbital = load_canonical_basis(orbital_path)
+     auxiliary = load_canonical_basis(args.auxiliary)
+-    for name in CPU_CONTROLS:
++    for name in args.molecule:
+         dest = args.out / name
+         dest.mkdir()
+         tick = time.monotonic()
+@@ -206,7 +244,9 @@
+             if json.loads((run / "receipt.json").read_text())["status"] != "converged":
+                 raise ValueError("native geometry has not passed its optimizer gate")
+             source = (run / "stdout.json").read_bytes()
+-            result = check(cases[name], json.loads(source), orbital, auxiliary, dest)
++            print(name, "starting", flush=True)
++            with ProcessPoolExecutor(max_workers=args.workers) as pool:
++                result = check(cases[name], json.loads(source), orbital, auxiliary, dest, pool)
+             result["native_receipt_sha256"] = hashlib.sha256(source).hexdigest()
+         except (OSError, TypeError, ValueError, RuntimeError) as error:
+             result = {"status": "failed", "error": str(error)}

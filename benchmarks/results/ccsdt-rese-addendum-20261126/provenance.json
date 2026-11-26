@@ -1,0 +1,1359 @@
+{
+  "platform_receipts": {
+    "path": "raw/scheduler-receipts.tar.gz",
+    "sha256": "d4d0a08667013e73bab0e428f2608df6c6f8fcba2c59f425317380db38312736"
+  },
+  "schema": "generativeqc.ccsdt-rese-addendum.v1",
+  "scope": "Local experiment addendum to #3166 and #3178.",
+  "scientific_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+  "baseline_commit": "99dfcb803c8c176891bc5da951f89d4307cfe54e",
+  "baseline_sha256": {
+    "cohort.json": "26aef3018c752d3d93c692f1f5028b0131f3f367e83e31886bcc9bfadfdff101",
+    "records.json.xz": "6e9edf362c06b798aec7d690741300a9045991aea1928104f8770052d5e026d7",
+    "minima.json.xz": "ab6c55daf3358c201396ea2a9abb5899b7704161221bfe25bab5b51b9ad9c0cf",
+    "check_df_minima.py": "8066588b8a75d4be3dcd5addfc35efac4ec776932fe4cec56f367f18b28faa6d",
+    "replay.py": "5cd5e602798c1e1c4cbc74c2f63a7cb6233fb38cab2c8f8528293a21b0a23060"
+  },
+  "remote_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126",
+  "remote_native_baseline": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f",
+  "deployment_sha256": {
+    "cpu-payload.sha256": "d51bbeaa715b2f1477ee60be5fe8a244bb40336fe17e07b8587e6534d8bf2b6b",
+    "launch-cpu-v2.sh": "4486e43abafba7082fcd2a08b08b6f3facbc5344caf3513d0b32b7bcbcb49dcb",
+    "launch-cpu-v3.sh": "f0102ac619041c3625af8a5c9aad07a371067c694f8dd08dcaa41a4cfeeacea2",
+    "launch-cpu.sh": "24248e5d0589a40141ca9f8ade64017e71d0e98ec3db961b8fdab4377c776f2f",
+    "launch-gpu.sh": "222b2a73f40e58599ce02fdd883a25aff24818edd48864b25a4e6a2cbf987509",
+    "optimizer-trace.patch": "6a49c38aeca06f1c72798a3a3445ccd6f08d31fea9ce09145194931cab1a78b2",
+    "parallel-minima.patch": "05e8c1ed5079bd05e205bc0c99492926056d55060efcfd12f35717d7a507013e",
+    "relink-trace.py": "a6007090136fb83bda7b6afe418f9ee93fd692bb4a24be17bf95000bfb799a21",
+    "resume-minima.patch": "1235fb1a6ee25aff555ebeac1930b6b52b4135d9ac4f51b1f8a3459d3647d2d6",
+    "split_curvature.py": "5df97835fb9988dff31f6b712c68a3e8c790fb0e4268bdb8a2082083a7196e98"
+  },
+  "published_relink_driver_note": "Formatting and import order match local lint. Parsed Python syntax is identical to the executed driver.",
+  "cpu_payload_sha256": [
+    "8066588b8a75d4be3dcd5addfc35efac4ec776932fe4cec56f367f18b28faa6d  ./check_df_minima.py",
+    "3bd297264e6762e0ce1738b1e96b8f44c1e0029cfc4f11bc7235f5b79431e969  ./check_minima.py",
+    "3e1ae8fc67d9dcea224a9b36b3809936ac0cf306a7c7a8e36a2933b4602a56c8  ./run.py",
+    "73c9b0b0f813d906f15143cf68583f670f051e9ce7318d2362e5f20114e67549  ./cc-pcvtz.json",
+    "591404d35e1856778703f8eb28015fab17ecdd8adeca5c97723b939f10d1c592  ./cc-pwcvtz-rifit.json",
+    "26aef3018c752d3d93c692f1f5028b0131f3f367e83e31886bcc9bfadfdff101  ./cohort.json"
+  ],
+  "gpu_policy": {
+    "requested_priority": 4,
+    "optimizer_target_timeout_seconds": 28800,
+    "platform_limit_hours": 8.25
+  },
+  "cpu_policy": {
+    "requested_priority": 10,
+    "model": "Intel Xeon CPU Max 9462",
+    "initial_batches_hours": 8,
+    "new_seven_atom_cases_hours": 16
+  },
+  "compute": [
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-aziridine",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "开发区-H100-cuda13.2版本-183核",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 0,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795658188000",
+        "finished_at": "1795664415000"
+      },
+      "platform_type": "gpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-aziridine",
+      "entrypoint_utc": "2026-11-26T01:56:47Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T03:40:07Z",
+      "exit_code": "0",
+      "accounting_interval": "Scheduled to ExitedWithCode",
+      "accounting_seconds": 6211.0,
+      "card_hours": 1.7252777777777777,
+      "allocated_cpu_hours": null,
+      "points_per_instance_hour": 1,
+      "estimated_points": 1.7252777777777777,
+      "scheduler_events": {
+        "Unschedulable": [
+          "2026-11-25 17:56:33",
+          "2026-11-25 17:56:36"
+        ],
+        "FailedScheduling": [
+          "2026-11-25 17:56:33"
+        ],
+        "Scheduled": [
+          "2026-11-25 17:56:44"
+        ],
+        "Started": [
+          "2026-11-25 17:56:47",
+          "2026-11-25 17:56:47"
+        ],
+        "ExitedWithCode": [
+          "2026-11-25 19:40:15"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-aziridine/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "raw_outputs": {
+        "relink.log": "660b1d6c4368ef03a882a2f38aef769f83a3d92d88484a11bb97142e72c61b21",
+        "cpu.txt": "91407ced54ea2eed02f510b986b49c103ccc38fc744348741a323b2acc76ab12",
+        "gpu.txt": "67c740af5142bd7e00af09acb19b4e62a30080365529f439ab013778e8d1993a",
+        "binaries.sha256": "d1918820707654fd4d983c52cd2ff97bf691b6859662e06c7bbe6be0c41ed185",
+        "entry.txt": "3b1bd46eca70573c9b30d068759c52024451d27e6219d37ecff68daa8c803485",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "f44944137ef3c1888d4b8564273442edcf2044fd1cc16684a6f54dbb5125c72b"
+      },
+      "local_original_tar": "raw/gpu-aziridine.tar.gz",
+      "local_original_tar_sha256": "86b1733b848b86e18719fbfcb3455750ea16307258d61583b65556a1a431815f",
+      "delete_receipt": "OK Job deleted: gqc-rese-add-1126-aziridine"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-aziridine",
+        "status": "STOPPED",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 11:40:25"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-aziridine",
+      "entrypoint_utc": null,
+      "stop_request_utc": "2026-11-26T04:06:06Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "stopped before science entrypoint",
+      "accounting_seconds": 0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 0.0,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 19:40:33",
+          "2026-11-25 19:40:33",
+          "2026-11-25 19:40:39",
+          "2026-11-25 19:40:45",
+          "2026-11-25 19:40:51",
+          "2026-11-25 19:40:58",
+          "2026-11-25 19:41:04",
+          "2026-11-25 19:41:10",
+          "2026-11-25 19:41:17",
+          "2026-11-25 19:41:30",
+          "2026-11-25 19:54:32",
+          "2026-11-25 20:04:35"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=793.00, Memory=3816.00GB, GPU=0.00) + requested (CPU=40.00, Memory=200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 19:40:33",
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=778.00, Memory=3516.00GB, GPU=0.00) + requested (CPU=40.00, Memory=200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 19:54:32"
+      },
+      "hardware": {},
+      "raw_outputs": {},
+      "local_original_tar": "raw/cpu-aziridine.tar.gz",
+      "local_original_tar_sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-aziridine"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-difluoro-resume",
+        "status": "STOPPED",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 55,
+          "memory_gib": 300,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:20:49"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro-resume",
+      "entrypoint_utc": null,
+      "stop_request_utc": "2026-11-26T02:30:42Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "stopped before science entrypoint",
+      "accounting_seconds": 0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 0.0,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 18:21:00",
+          "2026-11-25 18:21:00",
+          "2026-11-25 18:21:06",
+          "2026-11-25 18:21:13",
+          "2026-11-25 18:21:19",
+          "2026-11-25 18:21:25",
+          "2026-11-25 18:21:31",
+          "2026-11-25 18:21:37",
+          "2026-11-25 18:21:44",
+          "2026-11-25 18:21:50",
+          "2026-11-25 18:22:34",
+          "2026-11-25 18:25:53",
+          "2026-11-25 18:29:05",
+          "2026-11-25 18:30:07",
+          "2026-11-25 18:30:13"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1195 Insufficient cpu, 123 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:21:00",
+        "0/1350 nodes are unavailable: 1196 Insufficient cpu, 122 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:22:34",
+        "0/1350 nodes are unavailable: 1195 Insufficient cpu, 122 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 7 Insufficient memory.": "2026-11-25 18:25:53",
+        "0/1350 nodes are unavailable: 10 Insufficient memory, 1194 Insufficient cpu, 120 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable.": "2026-11-25 18:30:07",
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=753.00, Memory=3616.00GB, GPU=0.00) + requested (CPU=55.00, Memory=300.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 18:30:13"
+      },
+      "hardware": {},
+      "raw_outputs": {},
+      "local_original_tar": "raw/cpu-difluoro-resume.tar.gz",
+      "local_original_tar_sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-difluoro-resume"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-difluoro-resume40",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:30:45",
+        "finished_at": "2026-11-26 16:00:10"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro-resume40",
+      "entrypoint_utc": "2026-11-26T03:28:36Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T07:59:50Z",
+      "exit_code": "0",
+      "accounting_interval": "program entrypoint to exit",
+      "accounting_seconds": 16274.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 180.82222222222222,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 18:30:51",
+          "2026-11-25 18:30:51",
+          "2026-11-25 18:30:57",
+          "2026-11-25 18:31:03",
+          "2026-11-25 18:31:09",
+          "2026-11-25 18:31:15",
+          "2026-11-25 18:31:21",
+          "2026-11-25 18:31:28",
+          "2026-11-25 18:31:34",
+          "2026-11-25 18:31:40",
+          "2026-11-25 19:26:55"
+        ],
+        "Scheduled": [
+          "2026-11-25 19:27:33",
+          "2026-11-25 19:27:34",
+          "2026-11-25 19:27:58"
+        ],
+        "Started": [
+          "2026-11-25 19:27:34",
+          "2026-11-25 19:27:35",
+          "2026-11-25 19:27:49",
+          "2026-11-25 19:28:00"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 19:27:50"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-26 00:00:10"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=793.00, Memory=3816.00GB, GPU=0.00) + requested (CPU=40.00, Memory=200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 18:30:51"
+      },
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "0b69cac0e9a6d07e5aa2aca1c30fd5f90270d8d51cea841c46ea7f39a512815f",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "c43a52077a21931680870c41ba4f233ff3c3b9a3a1b8f046b67222e58b6ec8a8"
+      },
+      "local_original_tar": "raw/cpu-difluoro-resume40.tar.gz",
+      "local_original_tar_sha256": "470cb801ebee66d9f68711000ced044fbba91978dc55982b9b03ff6d7254620c",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-difluoro-resume40"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-difluoro",
+        "status": "STOPPED",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 8,
+          "memory_gib": 32,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:57:05"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro",
+      "entrypoint_utc": "2026-11-26T01:57:40Z",
+      "stop_request_utc": "2026-11-26T02:20:49Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "program entrypoint to stop request (approximate)",
+      "accounting_seconds": 1389.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 3.0866666666666664,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 17:57:07",
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:26"
+        ],
+        "Started": [
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:23",
+          "2026-11-25 17:57:28"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 17:57:24"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "9c75bc3e2ab6507ccfea71ee7fe18f4ee02520ab790f73a4111a7e35ea124c8c"
+      },
+      "local_original_tar": "raw/cpu-difluoro.tar.gz",
+      "local_original_tar_sha256": "cef3e38a973204952258b00f35eded671d901d79b5155850663de90cfab840a3",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-difluoro"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-formic-resume",
+        "status": "STOPPED",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 55,
+          "memory_gib": 300,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:18:49"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic-resume",
+      "entrypoint_utc": null,
+      "stop_request_utc": "2026-11-26T02:30:27Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "stopped before science entrypoint",
+      "accounting_seconds": 0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 0.0,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 18:18:55",
+          "2026-11-25 18:18:55",
+          "2026-11-25 18:19:01",
+          "2026-11-25 18:19:08",
+          "2026-11-25 18:19:14",
+          "2026-11-25 18:19:20",
+          "2026-11-25 18:19:26",
+          "2026-11-25 18:19:32",
+          "2026-11-25 18:19:38",
+          "2026-11-25 18:19:45",
+          "2026-11-25 18:20:16",
+          "2026-11-25 18:22:34",
+          "2026-11-25 18:25:53",
+          "2026-11-25 18:27:00",
+          "2026-11-25 18:30:07",
+          "2026-11-25 18:30:13"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1194 Insufficient cpu, 123 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 7 Insufficient memory.": "2026-11-25 18:18:55",
+        "0/1350 nodes are unavailable: 1195 Insufficient cpu, 123 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:20:16",
+        "0/1350 nodes are unavailable: 1196 Insufficient cpu, 122 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:22:34",
+        "0/1350 nodes are unavailable: 1195 Insufficient cpu, 122 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 7 Insufficient memory.": "2026-11-25 18:25:53",
+        "0/1350 nodes are unavailable: 10 Insufficient memory, 1194 Insufficient cpu, 120 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable.": "2026-11-25 18:30:07",
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=753.00, Memory=3616.00GB, GPU=0.00) + requested (CPU=55.00, Memory=300.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 18:30:13"
+      },
+      "hardware": {},
+      "raw_outputs": {},
+      "local_original_tar": "raw/cpu-formic-resume.tar.gz",
+      "local_original_tar_sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-formic-resume"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-formic-resume40",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:30:32",
+        "finished_at": "2026-11-26 14:54:29"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic-resume40",
+      "entrypoint_utc": "2026-11-26T02:31:07Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T06:54:03Z",
+      "exit_code": "0",
+      "accounting_interval": "program entrypoint to exit",
+      "accounting_seconds": 15776.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 175.2888888888889,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 18:30:34",
+          "2026-11-25 18:30:35",
+          "2026-11-25 18:30:48"
+        ],
+        "Started": [
+          "2026-11-25 18:30:35",
+          "2026-11-25 18:30:36",
+          "2026-11-25 18:30:45",
+          "2026-11-25 18:30:50"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 18:30:46"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-25 22:54:29"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "418c41b995659bc5f789967419245868c597498a0a89dd2d786c70334545e022",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "95a2d8f0a42b716d5c549393a9ccc547568adb667c52b498b54476c1093d3666"
+      },
+      "local_original_tar": "raw/cpu-formic-resume40.tar.gz",
+      "local_original_tar_sha256": "9fb0dd7819b15d06e3738d85a22be2ffc8e90827be7a388af8766eee643eff6e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-formic-resume40"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-formic",
+        "status": "STOPPED",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 8,
+          "memory_gib": 32,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:57:06"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic",
+      "entrypoint_utc": "2026-11-26T01:57:40Z",
+      "stop_request_utc": "2026-11-26T02:18:48Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "program entrypoint to stop request (approximate)",
+      "accounting_seconds": 1268.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 2.8177777777777777,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 17:57:07",
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:26"
+        ],
+        "Started": [
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:23",
+          "2026-11-25 17:57:27",
+          "2026-11-25 17:57:28"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 17:57:24"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "9c75bc3e2ab6507ccfea71ee7fe18f4ee02520ab790f73a4111a7e35ea124c8c"
+      },
+      "local_original_tar": "raw/cpu-formic.tar.gz",
+      "local_original_tar_sha256": "b2cf03db3567bf94459e7645687b885ecc662ff551a233b292e41c788410d608",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-formic"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-medium-resume",
+        "status": "STOPPED",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 55,
+          "memory_gib": 300,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:15:49"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume",
+      "entrypoint_utc": null,
+      "stop_request_utc": "2026-11-26T02:25:51Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "stopped before science entrypoint",
+      "accounting_seconds": 0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 0.0,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 18:15:58",
+          "2026-11-25 18:16:04",
+          "2026-11-25 18:16:10",
+          "2026-11-25 18:16:17",
+          "2026-11-25 18:16:23",
+          "2026-11-25 18:16:29",
+          "2026-11-25 18:16:35",
+          "2026-11-25 18:16:41",
+          "2026-11-25 18:16:48",
+          "2026-11-25 18:17:44",
+          "2026-11-25 18:17:51",
+          "2026-11-25 18:18:11",
+          "2026-11-25 18:20:16",
+          "2026-11-25 18:22:34",
+          "2026-11-25 18:24:01"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1194 Insufficient cpu, 124 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:17:44",
+        "0/1350 nodes are unavailable: 1193 Insufficient cpu, 124 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 7 Insufficient memory.": "2026-11-25 18:17:51",
+        "0/1350 nodes are unavailable: 1194 Insufficient cpu, 123 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 7 Insufficient memory.": "2026-11-25 18:18:11",
+        "0/1350 nodes are unavailable: 1195 Insufficient cpu, 123 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:20:16",
+        "0/1350 nodes are unavailable: 1196 Insufficient cpu, 122 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable, 6 Insufficient memory.": "2026-11-25 18:22:34"
+      },
+      "hardware": {},
+      "raw_outputs": {},
+      "local_original_tar": "raw/cpu-medium-resume.tar.gz",
+      "local_original_tar_sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-medium-resume"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-medium-resume40",
+        "status": "STOPPED",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:25:53"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume40",
+      "entrypoint_utc": "2026-11-26T02:26:29Z",
+      "stop_request_utc": "2026-11-26T02:30:01Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "program entrypoint to stop request (approximate)",
+      "accounting_seconds": 212.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 2.3555555555555556,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 18:25:56",
+          "2026-11-25 18:25:57",
+          "2026-11-25 18:26:15"
+        ],
+        "Started": [
+          "2026-11-25 18:25:57",
+          "2026-11-25 18:25:59",
+          "2026-11-25 18:26:12",
+          "2026-11-25 18:26:16"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 18:26:13"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "517001278899bde77040fbc6897c9aecc1b9e0a6eb5fdd9f6d32f8f78bc8e6a5"
+      },
+      "local_original_tar": "raw/cpu-medium-resume40.tar.gz",
+      "local_original_tar_sha256": "f64aef4ce6fe69c5c10637c20fd291b6474ae43594341b4b9e48cd517706d571",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-medium-resume40"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-medium-resume40b",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:30:02",
+        "finished_at": "2026-11-26 15:48:40"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume40b",
+      "entrypoint_utc": "2026-11-26T02:31:06Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T07:48:12Z",
+      "exit_code": "0",
+      "accounting_interval": "program entrypoint to exit",
+      "accounting_seconds": 19026.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 211.4,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 18:30:03",
+          "2026-11-25 18:30:04",
+          "2026-11-25 18:30:29"
+        ],
+        "Started": [
+          "2026-11-25 18:30:05",
+          "2026-11-25 18:30:05",
+          "2026-11-25 18:30:19",
+          "2026-11-25 18:30:29",
+          "2026-11-25 18:30:30"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 18:30:20"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-25 23:48:40"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "640e856c8e9197df362e143c3f440b459dcc734d09b3dafe6722328993bafb8f",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "956656f47d0119b855113d002a0092475e3868d64a00fdd267319a7c9733c4ad"
+      },
+      "local_original_tar": "raw/cpu-medium-resume40b.tar.gz",
+      "local_original_tar_sha256": "9b02dc6ef8a051c3586ede997974965b71787acd03b1ddd5b9f255439ccd3d0b",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-medium-resume40b"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-medium",
+        "status": "STOPPED",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 8,
+          "memory_gib": 32,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:57:02"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium",
+      "entrypoint_utc": "2026-11-26T01:58:10Z",
+      "stop_request_utc": "2026-11-26T02:15:49Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "program entrypoint to stop request (approximate)",
+      "accounting_seconds": 1059.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 2.3533333333333335,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 17:57:07",
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:33"
+        ],
+        "Started": [
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:10",
+          "2026-11-25 17:57:30",
+          "2026-11-25 17:57:34",
+          "2026-11-25 17:57:35"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 17:57:31"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "961acd5c9d79fbf91215faef1d7c261d0cd54c459ee56070fe4bbb80f79c2b3b"
+      },
+      "local_original_tar": "raw/cpu-medium.tar.gz",
+      "local_original_tar_sha256": "3165c5367b861b66a04cb00c6457f98464043bda239a5378104787bc27dadab0",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-medium"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-nox-resume",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 10:13:00",
+        "finished_at": "2026-11-26 13:42:19"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-nox-resume",
+      "entrypoint_utc": "2026-11-26T02:14:06Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T05:42:06Z",
+      "exit_code": "0",
+      "accounting_interval": "program entrypoint to exit",
+      "accounting_seconds": 12480.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 138.66666666666666,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 18:13:03",
+          "2026-11-25 18:13:04",
+          "2026-11-25 18:13:23"
+        ],
+        "Started": [
+          "2026-11-25 18:13:04",
+          "2026-11-25 18:13:05",
+          "2026-11-25 18:13:19",
+          "2026-11-25 18:13:24",
+          "2026-11-25 18:13:39"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 18:13:20"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-25 21:42:19"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "e4abee0a8def46323d53d795a2e736740aef730d61658a0ad96a09ccf9450d2d",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "dee47adc120fd16d26e54a8155b07d5774c3cdcc508e8c5b218e0134ce6d5f22"
+      },
+      "local_original_tar": "raw/cpu-nox-resume.tar.gz",
+      "local_original_tar_sha256": "b97c9cf7009313de33c3af3faa11169527e537fe1bbd3450e70f308c02aed813",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-nox-resume"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-nox",
+        "status": "STOPPED",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 8,
+          "memory_gib": 32,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:57:02"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-nox",
+      "entrypoint_utc": "2026-11-26T01:58:10Z",
+      "stop_request_utc": "2026-11-26T02:13:00Z",
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "program entrypoint to stop request (approximate)",
+      "accounting_seconds": 890.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 1.9777777777777779,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 17:57:07",
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:26"
+        ],
+        "Started": [
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:23",
+          "2026-11-25 17:57:27",
+          "2026-11-25 17:57:42"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 17:57:24"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "961acd5c9d79fbf91215faef1d7c261d0cd54c459ee56070fe4bbb80f79c2b3b"
+      },
+      "local_original_tar": "raw/cpu-nox.tar.gz",
+      "local_original_tar_sha256": "a9f2b5a1f24268f5ba02e5c4b01f6def8cc241d557fa5291234f4057685f6f45",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-nox"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-small",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 8,
+          "memory_gib": 32,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:57:00",
+        "finished_at": "2026-11-26 14:08:38"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-small",
+      "entrypoint_utc": "2026-11-26T01:57:39Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T06:08:11Z",
+      "exit_code": "0",
+      "accounting_interval": "program entrypoint to exit",
+      "accounting_seconds": 15032.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 33.404444444444444,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "Scheduled": [
+          "2026-11-25 17:57:07",
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:26"
+        ],
+        "Started": [
+          "2026-11-25 17:57:08",
+          "2026-11-25 17:57:09",
+          "2026-11-25 17:57:23",
+          "2026-11-25 17:57:27",
+          "2026-11-25 17:57:28"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 17:57:24"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-25 22:08:38"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "validated-model.txt": "model name\t: Intel(R) Xeon(R) CPU Max 9462",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               128\nOn-line CPU(s) list:                  0-63\nOff-line CPU(s) list:                 64-127\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) CPU Max 9462\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   1\nCore(s) per socket:                   32\nSocket(s):                            2\nStepping:                             8\nCPU max MHz:                          3500.0000\nCPU min MHz:                          0.0000\nBogoMIPS:                             5400.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            3 MiB (64 instances)\nL1i cache:                            2 MiB (64 instances)\nL2 cache:                             128 MiB (64 instances)\nL3 cache:                             150 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-31\nNUMA node1 CPU(s):                    32-63\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP disabled; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "packages.txt": "h5py==3.14.0\nnumpy==2.2.6\npyscf==2.14.0\nscipy==1.15.3\nsetuptools==84.2.1"
+      },
+      "raw_outputs": {
+        "cpu.txt": "042d415df0cf7ed542658a09b7b5b33a0afaaecf0c4c3cf16482daf6df88d8de",
+        "validated-model.txt": "35b4ef2f5f89e9ced296b42fe391ca2802e76736f826248ad4a3a1b89a728c2c",
+        "packages.txt": "c4347dfdc57a2e6a6b35a7495ce4e623a09a7335a0c3eebb585c1235f12f8c8c",
+        "entry.txt": "184dfafcd3928c6b43f4a45e9444db8abe2d80253821ff277008ce5cce6cb4ca",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "4286fe25c886e5667b0e846f69747e61c4ca90102377b3fd0fbd4e7bf5e1102a"
+      },
+      "local_original_tar": "raw/cpu-small.tar.gz",
+      "local_original_tar_sha256": "f8e82d304cc619fa515b333e95a4177edf24cb8611b393cb5ca15b594ea4f028",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-small"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-cpu-syn-ethenol-fine",
+        "status": "FAILED",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 12:36:16",
+        "finished_at": "2026-11-26 13:30:11"
+      },
+      "platform_type": "cpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-syn-ethenol-fine",
+      "entrypoint_utc": null,
+      "stop_request_utc": null,
+      "exit_utc": null,
+      "exit_code": null,
+      "accounting_interval": "Slurm scheduled to cluster deletion before science entrypoint",
+      "accounting_seconds": 17.0,
+      "card_hours": 0.0,
+      "allocated_cpu_hours": 0.18888888888888888,
+      "points_per_instance_hour": 0,
+      "estimated_points": 0,
+      "scheduler_events": {
+        "FailedScheduling": [
+          "2026-11-25 20:36:23",
+          "2026-11-25 20:36:23",
+          "2026-11-25 20:36:31",
+          "2026-11-25 20:36:37",
+          "2026-11-25 20:36:44",
+          "2026-11-25 20:36:51",
+          "2026-11-25 20:36:57",
+          "2026-11-25 20:37:05",
+          "2026-11-25 20:37:12",
+          "2026-11-25 20:37:18",
+          "2026-11-25 21:19:57",
+          "2026-11-25 21:21:20",
+          "2026-11-25 21:22:51",
+          "2026-11-25 21:23:00",
+          "2026-11-25 21:23:39",
+          "2026-11-25 21:24:27",
+          "2026-11-25 21:27:26",
+          "2026-11-25 21:28:25",
+          "2026-11-25 21:29:07"
+        ],
+        "Scheduled": [
+          "2026-11-25 21:29:55",
+          "2026-11-25 21:29:56"
+        ],
+        "Started": [
+          "2026-11-25 21:29:56",
+          "2026-11-25 21:29:57",
+          "2026-11-25 21:30:10"
+        ],
+        "CreatedSlurmJobSubmitter": [
+          "2026-11-25 21:30:11"
+        ],
+        "DeletedSlurmCluster": [
+          "2026-11-25 21:30:12"
+        ]
+      },
+      "scheduler_capacity_failures": {
+        "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=778.00, Memory=3516.00GB, GPU=0.00) + requested (CPU=40.00, Memory=200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00).": "2026-11-25 20:36:23",
+        "task check failed: quota check failed: user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=762.00, Memory=3432.00GB, GPU=0.00) + requested (CPU=40.00, Memory=200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)": "2026-11-25 21:19:57"
+      },
+      "hardware": {},
+      "raw_outputs": {},
+      "local_original_tar": "raw/cpu-syn-ethenol-fine.tar.gz",
+      "local_original_tar_sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e",
+      "delete_receipt": "OK HPC deleted: gqc-rese-add-1126-cpu-syn-ethenol-fine"
+    },
+    {
+      "job": {
+        "name": "gqc-rese-add-1126-syn-ethenol",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "开发区-H100-cuda13.2版本-183核",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 0,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795658161000",
+        "finished_at": "1795664254000"
+      },
+      "platform_type": "gpu",
+      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-syn-ethenol",
+      "entrypoint_utc": "2026-11-26T01:56:22Z",
+      "stop_request_utc": null,
+      "exit_utc": "2026-11-26T03:37:26Z",
+      "exit_code": "0",
+      "accounting_interval": "Scheduled to SuccessfulDeletePod",
+      "accounting_seconds": 6078.0,
+      "card_hours": 1.6883333333333332,
+      "allocated_cpu_hours": null,
+      "points_per_instance_hour": 1,
+      "estimated_points": 1.6883333333333332,
+      "scheduler_events": {
+        "Unschedulable": [
+          "2026-11-25 17:56:09",
+          "2026-11-25 17:56:12"
+        ],
+        "FailedScheduling": [
+          "2026-11-25 17:56:09"
+        ],
+        "Scheduled": [
+          "2026-11-25 17:56:20"
+        ],
+        "Started": [
+          "2026-11-25 17:56:22",
+          "2026-11-25 17:56:22"
+        ],
+        "ExitedWithCode": [
+          "2026-11-25 19:37:34"
+        ],
+        "SuccessfulDeletePod": [
+          "2026-11-25 19:37:38"
+        ]
+      },
+      "scheduler_capacity_failures": {},
+      "hardware": {
+        "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
+        "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
+        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-syn-ethenol/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+      },
+      "raw_outputs": {
+        "relink.log": "229c54241ae5117c72663f2dada91974db539ddad167bfa32e3e18b7ab3000a1",
+        "cpu.txt": "91407ced54ea2eed02f510b986b49c103ccc38fc744348741a323b2acc76ab12",
+        "gpu.txt": "67c740af5142bd7e00af09acb19b4e62a30080365529f439ab013778e8d1993a",
+        "binaries.sha256": "2e5c1cd51123d7beb2efb7817a4dd597bdfe50645028a9465b1b7a7ba4babeb2",
+        "entry.txt": "c209933b88f1ec27f5399b628d29303ca2b7c77b94449a00da1a1501c4a86ecf",
+        "exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "exit.txt": "6eb3c852a6b7cfbaf06c506ae9b24ec70539393518dc8c5a0b15fd14355df2ea"
+      },
+      "local_original_tar": "raw/gpu-syn-ethenol.tar.gz",
+      "local_original_tar_sha256": "3e6ff96533ddaf71d425a8cb110353f90a1ee3d3e1fb50ff444e8ced20b2266a",
+      "delete_receipt": "OK Job deleted: gqc-rese-add-1126-syn-ethenol"
+    }
+  ],
+  "notebook_redirect": "The aziridine CPU request was stopped before allocation after scheduler rejection by the personal 800-CPU cap. The separately authorized existing xshengrui notebook served as the compute host.",
+  "cpu_checkpoint_shifts": {
+    "original_five_worker_batches": "Measured center times showed a likely overrun of the eight-hour cap. Successful point files were copied from stopped jobs.",
+    "fifty_five_cpu_requests": "Requests which remained queued were stopped, and the original checkpoints moved to forty-CPU allocations.",
+    "medium_resume40": "A missing resume environment value started a redundant center calculation. Stopped and replaced with medium-resume40b, which loaded the original checkpoint.",
+    "syn_ethenol_first_fine": "The first submission reached Slurm scheduling, failed before the scientific entrypoint and produced no displacements. The bounded retry used the same verified coarse center and unchanged fine grid."
+  },
+  "retained_files_sha256": {
+    "cpu-difluoro-resume40.json.xz": "4ba70019d72574356375076338e94b7abe67ce1d7939187f513e28b786530ad2",
+    "cpu-formic-resume40.json.xz": "64e6592f96a4084ab9d5dec50065663b8f88f65345df5bd74dec8cbb0d615fab",
+    "cpu-medium-resume40b.json.xz": "8b76dfd5690fd5acb29a272dd76f5c4f25d44d6a5d9b7dc40ab6b07a81cba8bf",
+    "cpu-nox-resume.json.xz": "f591821b6e85457273bcb6351efb8c3d2763f0d7f18e63f0f423baf16c2de707",
+    "cpu-small.json.xz": "3ac419bcd474628d55b7eda7258cacbb9baf345af8fc8a6979247102f1e4ba2b",
+    "gpu-records.json.xz": "fa3e9e1224694cc8e7fed746bc441cd78801a643ec4aa04a0fe1c700a7735544",
+    "launch-cpu.sh": "f0102ac619041c3625af8a5c9aad07a371067c694f8dd08dcaa41a4cfeeacea2",
+    "launch-gpu.sh": "222b2a73f40e58599ce02fdd883a25aff24818edd48864b25a4e6a2cbf987509",
+    "launch-notebook.sh": "b61440dd5a5063678821413750639bd8c1ea003c1a062271d87711767a68f7a0",
+    "limit_notebook_cpu.py": "9de5a9e252f27a78340344495215206606e185d1409f15d3850666eaee35a276",
+    "optimizer-trace.patch": "6a49c38aeca06f1c72798a3a3445ccd6f08d31fea9ce09145194931cab1a78b2",
+    "parallel-minima.patch": "05e8c1ed5079bd05e205bc0c99492926056d55060efcfd12f35717d7a507013e",
+    "relink-trace.py": "eb9888db5c6bee5c681581d163e83af07751bf56fdb5f23211a90c4118123435",
+    "replay_addendum.py": "b84461426142742e08defdd233b511a3ec93a9b17072909f2ae5728c00c08194",
+    "resume-minima.patch": "1235fb1a6ee25aff555ebeac1930b6b52b4135d9ac4f51b1f8a3459d3647d2d6",
+    "split_curvature.py": "5df97835fb9988dff31f6b712c68a3e8c790fb0e4268bdb8a2082083a7196e98",
+    "summary.json": "30bd94cef992779d1445366403a0c3e40cfaa2e02a937c1c5b82bad9273c3235",
+    "superseded-cpu-difluoro.json.xz": "7912018246d5d7f2848d62fe46904a0a24c4a6c163c41191aec4658c0705bfc6",
+    "superseded-cpu-formic.json.xz": "36171f3e2beb68a694e2e46938165ecaf9d744891e5d97b32c65355dacb71b39",
+    "superseded-cpu-medium-resume40.json.xz": "c33e53b8dc84cd7a98929d8932d92a7ca1c4daf91be795a5db971c58d6ce9ea8",
+    "superseded-cpu-medium.json.xz": "9ce73defe7d942fa34c5a87797561c32d7702c516e239c803124b503660b45f2",
+    "superseded-cpu-nox.json.xz": "6104fac26c56b885abdd51647caa38027c7b3cec81c7325af576edd5c1ab5e74"
+  },
+  "checkpoint_utc": "2026-11-26T08:13:21.788701+00:00",
+  "active_curvature": {
+    "syn-ethenol": {
+      "status": "running",
+      "remote_output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-syn-ethenol",
+      "geometry_center": {
+        "coordinates_bohr": [
+          [
+            0.017455115631229326,
+            0.005535439071560606,
+            -2.9471742110196386e-12
+          ],
+          [
+            2.537964197971868,
+            0.01108477494747499,
+            -7.172307046373473e-13
+          ],
+          [
+            4.067253572266184,
+            2.080916504790291,
+            3.2973760002053766e-12
+          ],
+          [
+            3.6384293547609765,
+            -1.7101978077939721,
+            3.3200999323131905e-12
+          ],
+          [
+            -1.06858403137018,
+            1.7398248625745933,
+            -1.6274939185173666e-12
+          ],
+          [
+            -0.988972582523326,
+            -1.7664675348642045,
+            -1.8192573237769373e-12
+          ],
+          [
+            3.0115904804732354,
+            3.5609268060013615,
+            4.936802254787935e-13
+          ]
+        ],
+        "energy_hartree": -153.7305361558149,
+        "rhf_energy_hartree": -152.95629031849728,
+        "ccsd_correlation_hartree": -0.7482883490067369,
+        "triples_hartree": -0.025957488310865782,
+        "seconds": 2441.836570424959
+      },
+      "completed_displacements": {
+        "0.004": 144,
+        "0.002": 96
+      },
+      "local_checkpoint_path": "raw/cpu-syn-ethenol-checkpoint.tar.gz",
+      "local_checkpoint_sha256": "34ccf70c0e5a68fd4c59dd796dbef73eb203b8b30250bee64b874ffe54b8fd42",
+      "fine_job": {
+        "name": "gqc-rese-add-1126-cpu-syn-ethenol-fine2",
+        "status": "RUNNING",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "HPC-可上网区资源-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "nodes": [
+          "hpc-compute595"
+        ],
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 13:38:36"
+      }
+    },
+    "aziridine": {
+      "status": "running",
+      "remote_output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-aziridine-notebook",
+      "geometry_center": {
+        "coordinates_bohr": [
+          [
+            1.0207652725930789e-11,
+            2.2242582839356384,
+            -0.01975480036142001
+          ],
+          [
+            -1.3992660315794345,
+            -0.18609940317606674,
+            0.014681551528849937
+          ],
+          [
+            1.3992660317078256,
+            -0.1860994032065237,
+            0.014681551467074153
+          ],
+          [
+            1.5043126943535698e-11,
+            2.958830074660329,
+            1.7496782033042224
+          ],
+          [
+            -2.3535444593115744,
+            -0.7324296632406857,
+            1.738460826697507
+          ],
+          [
+            -2.4076424830451577,
+            -0.6053198519823745,
+            -1.7110355394340302
+          ],
+          [
+            2.353544459248178,
+            -0.732429663269335,
+            1.7384608266243882
+          ],
+          [
+            2.4076424829549254,
+            -0.6053198520063531,
+            -1.711035539329772
+          ]
+        ],
+        "energy_hartree": -133.84586933096134,
+        "rhf_energy_hartree": -133.09036890273353,
+        "ccsd_correlation_hartree": -0.7300191523651867,
+        "triples_hartree": -0.02548127586263736,
+        "seconds": 3578.4441584162414
+      },
+      "completed_displacements": {
+        "0.004": 82,
+        "0.002": 0
+      },
+      "local_checkpoint_path": "raw/cpu-aziridine-notebook-checkpoint.tar.gz",
+      "local_checkpoint_sha256": "1cf355a75110cdb36b0bddb5221f3584b94020c910b7feec9b053862bd881f5b",
+      "process_supervisor_pid": 1566817
+    }
+  }
+}

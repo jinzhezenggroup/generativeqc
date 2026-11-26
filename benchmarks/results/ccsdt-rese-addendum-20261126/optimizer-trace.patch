@@ -1,0 +1,105 @@
+--- a/include/generativeqc/geometry_optimizer.hpp
++++ b/include/generativeqc/geometry_optimizer.hpp
+@@ -57,7 +57,9 @@
+ // atom-wise step bounds. A fresh call resets all Hessian history at stage changes.
+ // Exhaustion and native electronic failures never masquerade as convergence.
+ inline Result minimize(std::span<const double> initial, const Options& options,
+-                       const Evaluator& evaluate) {
++                       const Evaluator& evaluate,
++                       const std::function<void(std::size_t, std::size_t, std::span<const double>,
++                                                const EnergyForces&)>& observe) {
+   if (initial.empty() || initial.size() % 3 != 0 ||
+       !std::all_of(initial.begin(), initial.end(), [](double x) { return std::isfinite(x); }))
+     throw std::invalid_argument("initial geometry must be finite atom-major Bohr coordinates");
+@@ -81,6 +83,7 @@
+   };
+ 
+   EnergyForces current = checked(x);
++  observe(0, evaluations, x, current);
+   struct Pair {
+     std::vector<double> s, y;
+     double inv_sy{};
+@@ -167,6 +170,7 @@
+     }
+     x = std::move(trial);
+     current = std::move(accepted);
++    observe(step + 1, evaluations, x, current);
+   }
+   throw std::logic_error("unreachable geometry convergence branch");
+ }
+--- a/src/cli/geometry_command.cpp
++++ b/src/cli/geometry_command.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include <algorithm>
+ #include <cctype>
++#include <chrono>
+ #include <cerrno>
+ #include <cmath>
+ #include <cstdint>
+@@ -240,6 +241,10 @@
+   }
+ 
+   geometry::EnergyForces operator()(std::span<const double> coords) {
++    const auto tick = std::chrono::steady_clock::now();
++    const auto evaluation = ++evaluations_;
++    std::cerr << "{\"event\":\"evaluation_start\",\"evaluation\":" << evaluation
++              << ",\"method\":\"" << json_escape(inputs_.method_name) << "\"}\n" << std::flush;
+     if (coords.size() != atoms_.size() * 3)
+       throw std::invalid_argument("geometry callback coordinate dimension mismatch");
+     for (std::size_t i = 0; i < atoms_.size(); ++i) {
+@@ -265,6 +270,17 @@
+                   "analytic forces are unavailable in this prepared geometry stage");
+     auto result = calculation.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+     if (!result.forces) throw std::runtime_error("native force owner returned no analytic forces");
++    const auto seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tick);
++    std::cerr << std::setprecision(17)
++              << "{\"event\":\"evaluation_end\",\"evaluation\":" << evaluation
++              << ",\"seconds\":" << seconds.count() << ",\"reference_scf_iterations\":"
++              << result.iterations << ",\"ccsd_iterations\":";
++    if (result.correlation)
++      std::cerr << result.correlation->ccsd_iterations;
++    else
++      std::cerr << "null";
++    std::cerr << ",\"energy_hartree\":" << result.energy << ",\"max_force\":"
++              << geometry::maximum_atomic_norm(*result.forces) << "}\n" << std::flush;
+     executed_backend_ = result.executed_backend;
+     return {result.energy, std::move(*result.forces)};
+   }
+@@ -287,6 +303,7 @@
+             inputs_.multiplicity,
+             xtb ? GENERATIVEQC_BASIS_CARTESIAN : representation};
+   }
++  std::size_t evaluations_{};
+   RunOptions inputs_;
+   std::vector<generativeqc_atom> atoms_;
+   Context context_;
+@@ -380,12 +397,28 @@
+         continue;
+       }
+       bool use_first = true;
++      const auto started = std::chrono::steady_clock::now();
++      auto last = started;
+       final = geometry::minimize(coords, stage.optimizer, [&](std::span<const double> position) {
+         if (use_first) {
+           use_first = false;
+           return *initial;
+         }
+         return objective(position);
++      }, [&](std::size_t step, std::size_t evaluations, std::span<const double> position,
++             const geometry::EnergyForces& state) {
++        const auto now = std::chrono::steady_clock::now();
++        const auto seconds = std::chrono::duration<double>(now - last);
++        last = now;
++        std::cerr << std::setprecision(17) << "{\"event\":\"accepted\",\"step\":" << step
++                  << ",\"evaluations\":" << evaluations << ",\"step_seconds\":" << seconds.count()
++                  << ",\"energy_hartree\":" << state.energy << ",\"max_force\":"
++                  << geometry::maximum_atomic_norm(state.forces) << ",\"coordinates_bohr\":[";
++        for (std::size_t i = 0; i < position.size(); ++i) {
++          if (i) std::cerr << ',';
++          std::cerr << position[i];
++        }
++        std::cerr << "]}\n" << std::flush;
+       });
+       record.backend = objective.executed_backend();
+     } catch (const std::exception& error) {
