@@ -58,7 +58,17 @@ def test_cpu_consumers_share_master_namespace_without_publishing() -> None:
 def test_master_cpu_seed_executes_consumer_compiler_and_coverage_modes(
     tmp_path: Path,
 ) -> None:
-    build = _step("master-cpu-cache", "Compile GCC, instrumented GCC, and Clang")
+    job = _job("master-cpu-cache")
+    build_name = "Compile GCC, instrumented GCC, and Clang"
+    prepare_name = "Prepare native CPU seed codegen"
+    assert (
+        job.index("      - name: Prepare Python 3.11 environment\n")
+        < job.index(f"      - name: {prepare_name}\n")
+        < job.index(f"      - name: {build_name}\n")
+    )
+    prepare = _step("master-cpu-cache", prepare_name)
+    assert "uv pip install --python .venv/bin/python numpy" in prepare
+    build = _step("master-cpu-cache", build_name)
     script = textwrap.dedent(build.split("        run: |\n", 1)[1])
     calls = tmp_path / "calls.jsonl"
     cmake = tmp_path / "cmake"
@@ -103,6 +113,7 @@ def test_master_cpu_seed_executes_consumer_compiler_and_coverage_modes(
     for _, args in configures:
         assert "-DGENERATIVEQC_ENABLE_CUDA=OFF" in args
         assert "-DCMAKE_BUILD_TYPE=Release" in args
+        assert f"-DPython3_EXECUTABLE={tmp_path / '.venv/bin/python'}" in args
         assert "-DGENERATIVEQC_COMPILER_CACHE=ccache" in args
     plain, coverage, clang = [args for _, args in configures]
     assert "-DCMAKE_CXX_FLAGS=" in plain and "-DCMAKE_CXX_FLAGS=" in clang

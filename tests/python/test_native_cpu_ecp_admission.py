@@ -8,7 +8,8 @@ from typing import Any
 import numpy as np
 import pytest
 import test_global_hybrid_ecp_basis as canonical_basis
-from generativeqc import Calculator
+from generativeqc import Calculator, GridSpec, HostResources, KsOptions
+from generativeqc._native_cpu_hessian import linked_method
 from generativeqc.saddle import RksColdFockDamping, SaddleOptions, optimize_saddle
 from generativeqc_compiler.method import resolve_method
 from test_integral_autodiff_second import require_native_library  # noqa: F401
@@ -92,6 +93,55 @@ def test_canonical_ecp_dispatches_only_to_the_native_owner(
         assert (
             calculator.hessian_vector_product(atoms, direction, **context) is published
         )
+
+
+def test_canonical_ecp_hvp_shared_host_lease(canonical_records: tuple) -> None:
+    calculator = _calculator(
+        canonical_records,
+        55,
+        resolve_method("B3LYP-D3(BJ)"),
+        ks_options=KsOptions(grid=GridSpec(12, 4, 8)),
+        initial_guess=None,
+    )
+    if not linked_method(calculator._library, calculator.method_ir.identity):
+        pytest.skip("linked CPU Hessian is unavailable")
+    atoms = ((55, (0.03, -0.02, 0.01)), (1, (0.17, 0.11, 3.4)))
+    directions = np.array([[[0.02, -0.03, 0.1], [-0.02, 0.03, -0.1]]])
+    with calculator.prepare_batch([atoms]) as reference_batch:
+        reference_batch.execute(strict=True, properties=("energy",))
+        reference = reference_batch.hessian_vector_products(0, directions)
+    floor = reference.diagnostics["minimum_numeric_bytes"]
+
+    def prepare(pool: HostResources) -> Any:
+        return calculator.prepare_batch(
+            [atoms], host_resources=pool, host_hessian_workspace_bytes=floor
+        )
+
+    with HostResources(1 << 31) as pool:
+        with prepare(pool):
+            reserved = pool.snapshot()
+            assert reserved.owner_count == 1
+        assert pool.snapshot().owner_count == 0
+    exact = reserved.retained_bytes + reserved.workspace_bytes
+    with HostResources(exact - 1) as pool:
+        with pytest.raises(MemoryError, match="shared host capacity"):
+            prepare(pool)
+        assert pool.snapshot().owner_count == 0
+    with HostResources(exact) as pool:
+        with prepare(pool) as batch:
+            before = pool.snapshot()
+            with pytest.raises(MemoryError, match="shared host capacity"):
+                prepare(pool)
+            assert pool.snapshot() == before
+            batch.execute(strict=True)
+            value = batch.hessian_vector_products(0, directions)
+            np.testing.assert_array_equal(value.value, reference.value)
+            assert value.diagnostics["scf_fock_builds"] == 0
+            assert (
+                value.diagnostics["d3_pair_visits"]
+                == reference.diagnostics["d3_pair_visits"]
+            )
+        assert pool.snapshot().owner_count == 0
 
 
 @pytest.mark.parametrize("multiplicity", (1, 2))

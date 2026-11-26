@@ -3,6 +3,7 @@
 #include <exception>
 #include <limits>
 #include <new>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -10,7 +11,7 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_planning.hpp"
 
-extern "C" {
+namespace {
 
 /** Private metadata-only global composition ABI. Input rows are request
  * candidate counts; candidate (cost, lexical rank, buffer count) triples;
@@ -25,15 +26,13 @@ extern "C" {
  * rejects the whole query without touching output: 1 invalid, 2 overflow,
  * 3 metadata allocation failure. Search-limit status is not allocation failure.
  */
-int generativeqc_resource_compose_v1(const std::uint64_t* request_counts, std::size_t request_count,
-                                     const std::uint64_t* candidate_values,
-                                     std::size_t candidate_value_count,
-                                     const std::uint64_t* buffer_values,
-                                     std::size_t buffer_value_count,
-                                     const std::uint64_t* limit_values,
-                                     std::size_t limit_value_count, std::size_t space_count,
-                                     double headroom_fraction, std::uint64_t maximum_combinations,
-                                     std::uint64_t* values, std::size_t value_count) {
+int compose_wire(const std::uint64_t* request_counts, std::size_t request_count,
+                 const std::uint64_t* candidate_values, std::size_t candidate_value_count,
+                 const std::uint64_t* buffer_values, std::size_t buffer_value_count,
+                 const std::uint64_t* limit_values, std::size_t limit_value_count,
+                 std::size_t space_count, double headroom_fraction,
+                 std::uint64_t maximum_combinations, std::uint64_t* values, std::size_t value_count,
+                 std::optional<std::pair<std::uint64_t, std::uint64_t>> workspace) {
   using namespace generativeqc::runtime;
   try {
     if (!request_counts || !request_count || !candidate_values || candidate_value_count % 3 ||
@@ -41,7 +40,8 @@ int generativeqc_resource_compose_v1(const std::uint64_t* request_counts, std::s
         (!limit_values && limit_value_count) || !values ||
         space_count < resources::kFirstDeviceSpace)
       return 1;
-    const auto expected = size_add(size_add(2, request_count), size_mul(8, space_count));
+    const auto expected =
+        size_add(size_add(workspace ? 4 : 2, request_count), size_mul(8, space_count));
     if (value_count != expected) return 1;
     const auto output_bytes = size_mul(value_count, sizeof(std::uint64_t));
     for (const auto& input :
@@ -85,6 +85,10 @@ int generativeqc_resource_compose_v1(const std::uint64_t* request_counts, std::s
     const auto result =
         resources::compose(requests, limits, space_count, headroom_fraction, maximum_combinations);
     constexpr auto absent = std::numeric_limits<std::uint64_t>::max();
+    resources::HostWorkspaceCapacity selected_workspace{absent, absent};
+    if (workspace && result.status == resources::Status::feasible)
+      selected_workspace =
+          resources::select_overlapped_host_workspace(result, workspace->first, workspace->second);
     values[0] = static_cast<std::uint64_t>(result.status);
     values[1] = result.combinations;
     for (std::size_t index = 0; index < request_count; ++index)
@@ -102,6 +106,10 @@ int generativeqc_resource_compose_v1(const std::uint64_t* request_counts, std::s
       row[6] = result.minima[index].value_or(absent);
       row[7] = result.limits[index].value_or(absent);
     }
+    if (workspace) {
+      values[value_count - 2] = selected_workspace.workspace_bytes;
+      values[value_count - 1] = selected_workspace.host_peak_bytes;
+    }
     return 0;
   } catch (const std::bad_alloc&) {
     return 3;
@@ -112,4 +120,35 @@ int generativeqc_resource_compose_v1(const std::uint64_t* request_counts, std::s
   }
 }
 
-}  // extern "C"
+}  // namespace
+
+extern "C" int generativeqc_resource_compose_v1(
+    const std::uint64_t* request_counts, std::size_t request_count,
+    const std::uint64_t* candidate_values, std::size_t candidate_value_count,
+    const std::uint64_t* buffer_values, std::size_t buffer_value_count,
+    const std::uint64_t* limit_values, std::size_t limit_value_count, std::size_t space_count,
+    double headroom_fraction, std::uint64_t maximum_combinations, std::uint64_t* values,
+    std::size_t value_count) {
+  return compose_wire(request_counts, request_count, candidate_values, candidate_value_count,
+                      buffer_values, buffer_value_count, limit_values, limit_value_count,
+                      space_count, headroom_fraction, maximum_combinations, values, value_count,
+                      std::nullopt);
+}
+
+/** Private compose ABI for a fully overlapped pageable workspace. Its floor
+ * must already be charged in the input buffers. The original output prefix
+ * still describes the mandatory plan; the two additional slots report the
+ * workspace cap and adjusted host peak (both absent if the floor cannot fit).
+ */
+extern "C" int generativeqc_resource_compose_host_workspace_v1(
+    const std::uint64_t* request_counts, std::size_t request_count,
+    const std::uint64_t* candidate_values, std::size_t candidate_value_count,
+    const std::uint64_t* buffer_values, std::size_t buffer_value_count,
+    const std::uint64_t* limit_values, std::size_t limit_value_count, std::size_t space_count,
+    double headroom_fraction, std::uint64_t maximum_combinations, std::uint64_t floor,
+    std::uint64_t ceiling, std::uint64_t* values, std::size_t value_count) {
+  return compose_wire(request_counts, request_count, candidate_values, candidate_value_count,
+                      buffer_values, buffer_value_count, limit_values, limit_value_count,
+                      space_count, headroom_fraction, maximum_combinations, values, value_count,
+                      std::pair{floor, ceiling});
+}
