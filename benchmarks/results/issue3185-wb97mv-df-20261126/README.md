@@ -44,4 +44,83 @@ one cold and three warm calls. Prewarm processes are kept separate.
 maximum Cartesian force error and 3e-5 Eh/Bohr force RMS. Grid stability uses
 one quarter of each gate.
 
-The source-matched H100 trajectory and cold3 timing campaign is in progress.
+## Complete trajectory results
+
+Both candidate repeats per trajectory completed all eleven geometries (cold
+step 0 plus moves 1–10), for 44/44 successful energy and analytic-force
+endpoints. The baseline completed 36/44 attempts. It was allowed to continue
+from its last good density after a failed endpoint. The moved sums exclude
+step 0. Only the candidate has complete moved sums.
+
+| System | Baseline failed moves in each repeat | Baseline time at first failure, s | Candidate time and iterations at first failure geometry | Candidate moved sums, s |
+| --- | --- | ---: | --- | ---: |
+| paper-water96 | 8 | 33.447 / 33.269 | 31.481 / 31.394 s, 10 / 10 iterations | 224.092 / 224.010 |
+| n-C32H66 | 3, 5, 10 | 37.618 / 37.554 | 56.681 / 57.001 s, 10 / 10 iterations | 459.023 / 464.171 |
+
+The failed public baseline endpoints do not publish a converged iteration
+count. The terminal cold attempts at the first failure retain 23 history
+rows for water96 and 24 for n-C32H66 in both repeats. Later alkane failures at
+steps 5 and 10 also report the same native rank guard. Their independent LR
+spectral distances are 0.330 and 0.743 resolution bands.
+
+After the one-way retreat, successive exact LR steps can take longer than a
+successful fitted step. In repeat 1, water96 step 10 is 18.317 s on the baseline
+and 30.410 s on the candidate. The corresponding successful alkane step 8 is
+16.084 s and 48.974 s. The two routes retain their own density histories.
+
+Both minimal tests fail on the baseline and pass on the candidate. The
+candidate completes the isolated, moved-cold and preceding-density inputs.
+Native snapshots at the two moved target geometries authenticate fitted
+full-range J/K, a 1e-10 relative cutoff, and exact LR. The preceding geometries
+use fitted LR. Energy-only and force requests make the same admission decision
+before SCF. All sixteen candidate comparisons at moves 1, 5, 10 and the
+original failure move pass the independent grid and observable gates.
+
+| System | Worst energy error, Eh/atom | Worst max component force error, Eh/Bohr | Worst force RMS, Eh/Bohr |
+| --- | ---: | ---: | ---: |
+| paper-water96 | 3.3481e-6 | 2.6477e-5 | 1.0946e-5 |
+| n-C32H66 | 8.1072e-6 | 3.1587e-5 | 9.5321e-6 |
+
+The historical dense Direct oracles for moves 1, 5 and 10 have the same
+frozen coordinate hashes and independent scientific controls. The target
+moves 8 and 3 were solved fresh in a separate GPU4PySCF 1.9.0 allocation. Native
+timings always use the pinned release images and their own densities.
+
+## Cold3 water96 timing
+
+All three processes per arm report 15 SCF iterations/Focks cold and one
+iteration/Fock in each of the three unchanged-geometry warm calls. The two
+profiles used the same stock water96 fixture, auxiliary input and H100 UUID
+as each other, following the [cold3 protocol](../paper-hfdft-cold3-20261120/README.md).
+
+| Timing population | Baseline median, s | Candidate median, s | Relative change |
+| --- | ---: | ---: | ---: |
+| Cold | 20.3656 | 20.3045 | −0.30% |
+| Warm process medians | 4.4049 | 4.4136 | +0.20% |
+
+The 0.009 s warm-median change is within the observed same-card repeat spread.
+The timing population is descriptive and has three fresh processes per arm.
+
+## Retained evidence
+
+[Per-step times and iterations](steps.csv), [gate and cold3 results](summary.json),
+and the hash-bound [publication manifest](publication.json) capture both arms.
+Run `python report.py` from this directory to recompute the summary from the
+compressed samples. The provenance includes source and library digests,
+compiler inputs, AOT audits, driver hashes, point-rate estimates and receipt
+hashes. The complete raw acquisition and build logs remain in task-local ignored
+storage and the task qz directory. Only the two regression geometry pairs enter
+the checkout. The branch incorporates later upstream CPU/resource-planning
+changes, and the H100 numbers remain pinned to the two measured source commits.
+
+The first build attempt failed to find the configured compiler-cache executable
+because the staged path was one level shallow. It exited before compiling. The
+first oracle attempt resolved GPU4PySCF 1.8.1 and was stopped. The two verified
+1.9.0 oracles are from the re-run. The scheduler receipts preserve transient
+queue warnings and the actual effective priorities. All eight task jobs were
+deleted after terminal receipts were collected. Their total container runtime
+was approximately 3.269 H100-hours, or 3.269 points at the listed one-point
+hourly rate. Container runtime estimates are not billed transaction records.
+
+This publication requests an aggregate storage increase equal to its indexed
+result files. The per-file limit and incoming review budget still apply.
