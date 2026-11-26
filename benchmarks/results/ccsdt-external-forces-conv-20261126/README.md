@@ -50,6 +50,21 @@ the orbital-basis dimension suggests planning allowances above roughly
 121 GiB at C6 and 216 GiB at C7. The projection guides allocation choice
 and the driver separately records the observed process and device peaks.
 
+The pinned CUDA Hamiltonian response owner reserves one device allocation.
+Replaying its aligned layout from the build's generated arena functions gives
+30.30 GiB for C5, 59.66 GiB for C6 and 106.46 GiB for C7. Each tested H100
+reports 81,559 MiB of total device memory, or 79.65 GiB. The C7 allocation
+exceeds the whole device capacity before accounting for any other GPU
+allocation. This layout uses one device even if the job reserves more GPUs.
+See `device-capacity.json` and the local layout calculation in `raw/`.
+
+The 155 GiB C7.0 retry reached the later CUDA path and returned an
+out-of-memory error after 5,271.05 s. The worker RSS high-water reading was
+19.74 GiB and there was no host cgroup OOM event. The 5,295 one-second GPU
+samples reached 53.72 GiB of device use. The 106.46 GiB layout calculation
+describes the requested allocation. The sampled peak describes device memory
+already in use.
+
 ## Local raw captures
 
 The complete endpoint rows and their SHA-256 values are retained in

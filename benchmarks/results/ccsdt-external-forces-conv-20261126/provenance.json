@@ -135,7 +135,7 @@
     "gqc-3167-conv-h100-c7-retry-1126-r2": {
       "platform": {
         "name": "gqc-3167-conv-h100-c7-retry-1126-r2",
-        "status": "RUNNING",
+        "status": "FAILED",
         "project": "CQ-NexChem",
         "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
         "resource": {
@@ -146,20 +146,30 @@
           "shared_memory_gib": 16,
           "gpu_type": "NVIDIA H100 (80GB)"
         },
-        "nodes": [
-          "qb-prod-gpu488"
-        ],
         "priority": 20,
         "priority_level": "NORMAL",
         "public_path_mount_mode": 0,
-        "created_at": "1795656864000"
+        "created_at": "1795656864000",
+        "finished_at": "1795662258000"
       },
       "diagnostics": [],
       "scheduled_utc": "2026-11-26T01:34:29+00:00",
+      "released_utc": "2026-11-26T03:04:18+00:00",
+      "allocated_card_hours": 1.4969444444444444,
+      "estimated_points": 1.4969444444444444,
+      "cleanup": {
+        "name": "gqc-3167-conv-h100-c7-retry-1126-r2",
+        "status": "deleted"
+      },
       "planned": [
         "C7.0"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-retry-1126-r2"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-retry-1126-r2",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-h100-c7-retry-1126-r2.tar.gz",
+        "bytes": 20442,
+        "sha256": "8d2182ad0de60f414b324faa47d0f241fc96b298feb4d7af2470c3f20a98688f"
+      }
     },
     "gqc-3167-conv-h100-c7-repeat-1126-a": {
       "platform": {
@@ -255,11 +265,6 @@
       },
       "diagnostics": [
         {
-          "time": "2026-11-25 18:30:07",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=713.00, Memory=3416.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
-        },
-        {
           "time": "2026-11-25 18:30:13",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=753.00, Memory=3616.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
@@ -273,6 +278,11 @@
           "time": "2026-11-25 18:33:23",
           "reason": "FailedScheduling",
           "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-292, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 19:05:21",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-188, once minAvailable is satisfied"
         }
       ],
       "planned": [
