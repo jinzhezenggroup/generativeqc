@@ -14,6 +14,7 @@ from generativeqc._ks_snapshot import NativeKsSnapshot
 from generativeqc.fock import FockBuildSpec, FockPlan, FockTerm
 from generativeqc_compiler.dft import NativeAO
 from test_mixed_rsh_df_forces import _mixed_pyscf_energy
+from test_r1_native_forces import forbid_python_force
 
 from benchmarks._retained_basis import load_retained_basis
 
@@ -603,6 +604,8 @@ def test_complete_ri_jk_vv10_energy_and_force(
         pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
         assert os.environ.get("SLURM_JOB_ID") or os.environ.get("LSB_JOBID")
+    else:
+        forbid_python_force(monkeypatch)
     monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "df")
     atoms = [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]
     if spin:
@@ -632,16 +635,6 @@ def test_complete_ri_jk_vv10_energy_and_force(
     with calculator.prepare_batch(
         [atoms], multiplicities=[spin + 1], warm_start=True
     ) as batch:
-        cpu_work = []
-        if device == "cpu":
-            original_force = batch._public_dft_cpu_force
-
-            def collect_force(index: int, geometry: Any) -> Any:
-                result = original_force(index, geometry)
-                cpu_work.append(result[1])
-                return result
-
-            batch._public_dft_cpu_force = collect_force
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         with closing(NativeKsSnapshot(batch, 0)) as snapshot:
             assert snapshot.density_fitted
@@ -655,22 +648,12 @@ def test_complete_ri_jk_vv10_energy_and_force(
             warm = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             with pytest.raises(ValueError, match="stale"):
                 _ = snapshot.range_density_fitted
-        if device == "cpu":
-            work = cpu_work[-1]
-            assert work["stationary_integral_derivative_route"] == "prepared-full-ri-jk"
-            assert work["integral_quartet_passes"] == 0
-            assert work["range_exchange_primitive_records"] == 0
-            resources = work["native_integral_resources"]
-        else:
-            # The complete CUDA endpoint now owns force execution in native
-            # code. Query its live radial owners, not an unused Python runner.
-            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
-                components, resources = (
-                    snapshot.mixed_density_fitted_integral_derivatives(
-                        len(atoms), 256 << 20
-                    )
-                )
-                assert np.isfinite(components).all()
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert snapshot.range_density_fitted
+            components, resources = snapshot.mixed_density_fitted_integral_derivatives(
+                len(atoms), 256 << 20
+            )
+            assert np.isfinite(components).all()
         assert not resources["additional_device_peak_includes_lazy_lr"]
         moved = list(atoms)
         moved[1] = (
