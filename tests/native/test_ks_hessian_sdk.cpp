@@ -1,14 +1,16 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
 
-#include "generativeqc/generativeqc.hpp"
+#include "generativeqc/ks.hpp"
 
 namespace {
 void require(bool condition, const char* message) {
@@ -219,6 +221,124 @@ void run_linked_cpu(const char* selector) {
               solved[0].executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
           "named SDK batch did not solve on CPU");
   const auto hvp = batch.ks_cpu_hvp(0, direction, action, options);
+  if (method_name == "b3lyp-d3(bj)-rks" || method_name == "pbe-rks") {
+    const auto force_reference = batch.execute({}, true);
+    require(force_reference[0].converged && force_reference[0].forces.size() == direction.size(),
+            "force reference did not publish a complete native force");
+    const generativeqc_system* inputs[]{system.get()};
+    const auto prepare = [&](const generativeqc::HostResources& pool, std::uint64_t limit,
+                             generativeqc_batch_flags flags, generativeqc_batch** output) {
+      return generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+          context.get(), inputs, 1, &method, &named, flags, pool.get(), limit, hvp_floor, output);
+    };
+    constexpr auto reserve_forces = GENERATIVEQC_BATCH_RESERVE_HOST_HESSIAN_FORCES;
+    using OwnedBatch = std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)>;
+    generativeqc::HostResources probe(1ULL << 32);
+    generativeqc_batch* prepared{};
+    generativeqc::check(prepare(probe, 1ULL << 32, 0, &prepared));
+    OwnedBatch energy_only(prepared, generativeqc_batch_destroy);
+    const auto energy_lease = probe.snapshot();
+    std::array<double, 6> force_output;
+    force_output.fill(37);
+    generativeqc_batch_item_result_descriptor item{};
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+    item.forces = force_output.data();
+    item.force_count = force_output.size();
+    require(generativeqc_batch_execute(energy_only.get(), nullptr, 0, &item, 1) ==
+                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                force_output == sentinel,
+            "energy-only Hessian lease executed an unreserved force");
+    energy_only.reset();
+
+    generativeqc::check(prepare(probe, 1ULL << 32, reserve_forces, &prepared));
+    OwnedBatch leased(prepared, generativeqc_batch_destroy);
+    const auto force_lease = probe.snapshot();
+    require(force_lease.owner_count == 1 &&
+                force_lease.retained_bytes > energy_lease.retained_bytes &&
+                force_lease.workspace_bytes > energy_lease.workspace_bytes,
+            "force opt-in did not charge the result and additional native workspace");
+    const auto exact = force_lease.retained_bytes + force_lease.workspace_bytes;
+    leased.reset();
+    generativeqc::HostResources pool(exact);
+    require(
+        prepare(pool, exact - 1, reserve_forces, &prepared) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+            !prepared && pool.snapshot().owner_count == 0,
+        "one-byte-short force and Hessian reservation modified the pool");
+    generativeqc::check(prepare(pool, exact, reserve_forces, &prepared));
+    leased.reset(prepared);
+    generativeqc::check(generativeqc_batch_execute(leased.get(), nullptr, 0, &item, 1));
+    require(
+        item.status == GENERATIVEQC_STATUS_SUCCESS && item.converged &&
+            std::equal(force_output.begin(), force_output.end(), force_reference[0].forces.begin()),
+        "force lease changed the native scientific result");
+    auto leased_action = sentinel;
+    auto receipt = hvp;
+    generativeqc::check(generativeqc_ks_hessian_cpu_v1(leased.get(), 0, &options, direction.data(),
+                                                       direction.size(), leased_action.data(),
+                                                       leased_action.size(), &receipt));
+    require(leased_action == action && receipt.numeric_reservation_bytes == hvp_floor,
+            "force and Hessian lease changed the prepared native HVP");
+    leased.reset();
+    require(pool.snapshot().owner_count == 0, "combined lease survived batch destruction");
+  }
+  if (method_name == "pbe-d3(bj)-rks") {
+    const auto prepare = [&](const generativeqc::HostResources& pool, std::uint64_t limit,
+                             std::uint64_t workspace, generativeqc_batch** output) {
+      const generativeqc_system* inputs[]{system.get()};
+      return generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+          context.get(), inputs, 1, &method, &named, 0, pool.get(), limit, workspace, output);
+    };
+    std::uint64_t exact{};
+    {
+      generativeqc::HostResources probe(1ULL << 32);
+      generativeqc_batch* raw{};
+      generativeqc::check(prepare(probe, 1ULL << 32, hvp_floor, &raw));
+      const std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> owned(
+          raw, generativeqc_batch_destroy);
+      const auto leased = probe.snapshot();
+      require(
+          leased.owner_count == 1 && leased.retained_bytes && leased.workspace_bytes > hvp_floor,
+          "CPU Direct Hessian did not reserve primal and derivative capacity");
+      exact = leased.retained_bytes + leased.workspace_bytes;
+    }
+    std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> leased(
+        nullptr, generativeqc_batch_destroy);
+    {
+      generativeqc::HostResources pool(exact);
+      generativeqc_batch* raw{};
+      require(prepare(pool, exact - 1, hvp_floor, &raw) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                  !raw && pool.snapshot().owner_count == 0,
+              "short local limit left a live Direct Hessian lease");
+      generativeqc::check(prepare(pool, exact, hvp_floor, &raw));
+      leased.reset(raw);
+      require(prepare(pool, exact, hvp_floor, &raw) == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !raw &&
+                  pool.snapshot().owner_count == 1,
+              "shared cap overcommitted the retained D3 provider");
+    }
+    generativeqc_batch_item_result_descriptor item{};
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+    generativeqc::check(generativeqc_batch_execute(leased.get(), nullptr, 0, &item, 1));
+    require(item.converged, "metadata handle close revoked the live batch's lease");
+    auto leased_action = sentinel;
+    auto receipt = hvp;
+    receipt.completed_directions = 999;
+    auto short_options = options;
+    short_options.numeric_bytes = hvp_floor - 1;
+    require(
+        generativeqc_ks_hessian_cpu_v1(leased.get(), 0, &short_options, direction.data(),
+                                       direction.size(), leased_action.data(), leased_action.size(),
+                                       &receipt) == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+            leased_action == sentinel && receipt.completed_directions == 999,
+        "rejected leased HVP modified the output transaction");
+    generativeqc::check(generativeqc_ks_hessian_cpu_v1(leased.get(), 0, &options, direction.data(),
+                                                       direction.size(), leased_action.data(),
+                                                       leased_action.size(), &receipt));
+    require(leased_action == action && receipt.numeric_reservation_bytes == hvp_floor &&
+                receipt.d3_pair_visits == hvp.d3_pair_visits && hvp.d3_pair_visits > 0,
+            "leased D3 HVP failed to replay at its reserved floor");
+  }
   std::array<double, 12> seeds{}, actions{};
   for (std::size_t index = 0; index < direction.size(); ++index) {
     seeds[index] = direction[index];

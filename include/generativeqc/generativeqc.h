@@ -404,7 +404,10 @@ enum {
   /** CPU KS energy-only owner: do not retain or certify a derivative snapshot.
    * Forces and stationary-state export are unavailable for this owner. Ordinary
    * SCF convergence gates remain unchanged, including stabilized occupations. */
-  GENERATIVEQC_BATCH_DISABLE_KS_EXPORT = 1u << 3
+  GENERATIVEQC_BATCH_DISABLE_KS_EXPORT = 1u << 3,
+  /** Reserve force replay as well as energy/Hessian workspace. Only interpreted
+   * by generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1. */
+  GENERATIVEQC_BATCH_RESERVE_HOST_HESSIAN_FORCES = 1u << 4
 };
 
 /** Number of pair/pair-exchange-reduced s/p/d/f quartet shell classes. */
@@ -3480,6 +3483,31 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_v1(
     generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
     const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
     generativeqc_batch_flags flags, generativeqc_batch** batch);
+
+/** @native-contract generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1
+ * @behavior Prepare a linked CPU Direct FP64 KS fleet for energy replay and
+ * Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
+ * derivative workspace against the local effective limit and the supplied shared host ledger.
+ * An explicit packed ERI request charges the actual packed value array and independently
+ * enforces the named descriptor's fleet-wide packed value cap.
+ * Admitted scalar ECP systems include their conservative setup workspace in the lease.
+ * For admitted all-electron methods, RESERVE_HOST_HESSIAN_FORCES additionally models
+ * the native force workspace and enables force replay on the same batch.
+ * @inputs A live CPU context, named systems, a live host ledger, an effective
+ * local byte limit and a positive derivative workspace. Only the warm-start and
+ * host-Hessian force-reservation batch flags are allowed.
+ * @outputs Clears the output slot on entry; success publishes one owning batch.
+ * @lifetime The batch outlives the borrowed resources handle; the context must outlive the batch.
+ * @errors Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
+ * @execution Synchronous; admitted primal replay and derivatives serialize on the same host lease.
+ * @units Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1(
+    generativeqc_context* context, const generativeqc_system* const* systems, uint32_t system_count,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_named_ks_descriptor* name,
+    generativeqc_batch_flags flags, const generativeqc_host_resources* resources,
+    uint64_t maximum_bytes, uint64_t derivative_workspace_bytes, generativeqc_batch** batch);
 
 /** Bounded cold B3LYP RKS orbital proposal policy. The prefix includes the
  * first, unmixed proposal and counts against the ordinary iteration limit.
