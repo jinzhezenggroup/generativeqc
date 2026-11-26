@@ -39,9 +39,19 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 | C6 | 11,642.08 median (2) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
 | C6 | 11,642.08 median (2) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
 | C7 | — | Psi4 | 18,777.03 (one) | — | — | — |
+| C7 | — | PySCF | 44,309.32 (one) | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every
 available H100-to-reference pair and reports incomplete cases explicitly.
+C5 and C6 pass the energy and force limits with both CPU programs.
+
+Both C7 CPU programs returned the full 69 force components. The CPU-to-CPU
+energy difference was `4.1496e-11 Eh`. The force RMS difference was
+`8.6069e-7 Eh/Bohr`, and the largest component difference was
+`3.6041e-6 Eh/Bohr` on the fourth atom (carbon), along `z`. This exceeds
+the `3e-6 Eh/Bohr` component threshold used for the H100 comparisons.
+The replay reports this pair under `cpu_reference_pairs`. C7 remains
+incomplete for H100 validation and endpoint timing.
 
 ## Resource sizing
 
@@ -62,12 +72,11 @@ scratch volume and fewer threads still leave the same accumulated DPD
 blocks. The notebook's 250 GiB total working limit and a 20-CPU HPC
 allocation with at most 100 GiB are too small for this stock C7 path.
 The 1,200 GiB HPC request uses 32 solver threads and a 1,024 GiB Psi4
-allowance. The original job queued behind the personal 800-CPU ceiling and then behind
-large-node placement constraints. It started at 08:09 UTC, after about
-6 h 40 min in queue. The worker reported Xeon Gold 6530, 32 solver threads
-and a 1,200 GiB cgroup limit. It finished the complete 69-component
-gradient and peaked at 634.56 GiB worker RSS. No Psi4 worker was
-launched on the shared notebook.
+allowance. The original job queued behind the personal 800-CPU ceiling
+and then waited for a node with enough free CPU and memory. It started at
+08:09 UTC after about 6 h 40 min in queue. The Xeon Gold 6530 worker
+finished the gradient and peaked at 634.56 GiB RSS. The shared notebook
+was not used for this calculation.
 [DPD allocator](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/libdpd/block_matrix.cc#L71-L106).
 
 PySCF 2.11.0 sizes triples Lambda and gradient-density blocks from its
@@ -76,10 +85,9 @@ intermediates through HDF5 scratch. For C7, decreasing `max_memory` from
 172,032 to 70,000 MB would reduce the nominal virtual block edge from 50
 to 37 before deducting other live memory. The two corresponding triples
 arrays would drop from 45.43 to 18.41 GiB, plus other allocations. The
-current 200 GiB job has already sampled above 118 GiB of worker RSS. The
-source allows a smaller block configuration, but a complete endpoint under
-a hard 100 GiB ceiling remains unverified. The original job continues and
-no duplicate PySCF worker was launched.
+original 200 GiB job finished with 32 solver threads on Xeon Gold 6530
+and 118.45 GiB peak RSS. The source allows smaller blocks. A 100 GiB
+configuration was not tested while that job was running.
 [PySCF Lambda sizing](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/cc/ccsd_t_lambda.py#L44-L62),
 [PySCF density sizing](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/cc/ccsd_t_rdm.py#L204-L220),
 [PySCF gradient scratch](https://github.com/pyscf/pyscf/blob/v2.11.0/pyscf/grad/ccsd_t.py#L21-L36).
@@ -111,8 +119,9 @@ attempts have been archived and the qz jobs were deleted.
 ## Local raw captures
 
 The complete endpoint rows and their SHA-256 values are retained in
-`records-C5.json`, `records-C6.json` and `records-C7.json`. `provenance.json` records the remote output path for each
-job and the hashes of any completed archives under `raw/`. The local archives
+`records-C5.json`, `records-C6.json` and `records-C7.json`.
+`provenance.json` records each remote output path and the hashes of
+the archives under `raw/`. The local archives
 contain the original worker, engine and device telemetry files. They stay
 untracked because they include verbose logs and time series. The original
 C5 H100 and two Psi4 record bytes were also copied from their #3174 remote
@@ -125,13 +134,45 @@ Its only GPU sample preceded that allocation. The subsequent 155 GiB C7
 attempts record one-second device samples. The first C5 PySCF launcher
 rejected its trial label before computation and was retried with C5.1.
 Both C6 H100 runs used a 155 GiB application allowance inside a 200 GiB
-host allocation. The first reported a 145.68 GiB planning bound. Worker
-RSS peaked at 16.04 and 16.04 GiB. Sampled device
-memory peaked at 74.25 and 74.25 GiB, respectively.
-The runs used two fresh processes in the same job. Both raw outputs
-were retained and the qz GPU job was deleted. The C7 CPU reference remains
-available from Psi4. The C7 PySCF cross-check remains in progress in
-this local snapshot.
+host allocation. The first reported a 145.68 GiB planning bound. Both runs peaked at
+16.04 GiB worker RSS and 74.25 GiB sampled device memory to two decimal
+places. They used two fresh processes in the same job. All five
+follow-up GPU jobs were deleted after archiving their output.
+
+## Resource accounting
+
+The allocations used qz CQ-NexChem. GPU receipts returned NORMAL/20
+for requested priority 4. CPU Slurm receipts returned HIGH/35 for
+requested priority 10. Card-hours use scheduling through terminal
+status. Allocated CPU core-hours use the compute worker's scheduled
+and release events and exclude Slurm control-plane resources.
+The quota rates were one point per H100 card-hour and zero points
+for CPU HPC. Points are estimated from these rates and wall times.
+The first C5 PySCF launcher used 0.789 core-hours before its rejected
+trial label was corrected. The scheduler reported its Slurm step as
+succeeded. The scientific record contains no endpoint for that step.
+
+| qz task | Scheduler status | Card-hours | CPU core-hours | Estimated points |
+|---|---|---:|---:|---:|
+| `gqc-3167-conv-h100-c5-1126-a` | SUCCEEDED | 1.146 | — | 1.146 |
+| `gqc-3167-conv-h100-c6-1126-a` | SUCCEEDED | 6.498 | — | 6.498 |
+| `gqc-3167-conv-h100-c7-1126-a` | FAILED | 0.072 | — | 0.072 |
+| `gqc-3167-conv-h100-c7-retry-1126-r2` | FAILED | 1.497 | — | 1.497 |
+| `gqc-3167-conv-h100-c7-repeat-1126-a` | FAILED | 1.468 | — | 1.468 |
+| `gqc-3167-conv-psi4-c6-1126-a` | SUCCEEDED | — | 132.978 | 0.000 |
+| `gqc-3167-conv-psi4-c7-1126-a` | SUCCEEDED | — | 524.250 | 0.000 |
+| `gqc-3167-conv-pyscf-c5-1126-a` | SUCCEEDED | — | 0.789 | 0.000 |
+| `gqc-3167-conv-pyscf-c5-1126-r2` | SUCCEEDED | — | 76.133 | 0.000 |
+| `gqc-3167-conv-pyscf-c6-1126-a` | SUCCEEDED | — | 195.356 | 0.000 |
+| `gqc-3167-conv-pyscf-c7-1126-a` | SUCCEEDED | — | 493.044 | 0.000 |
+| Follow-up total | | 10.681 | 1422.550 | 10.681 |
+
+#3174 separately recorded 3.140 card-hours and 114.569 CPU
+core-hours. Those past costs are outside the follow-up total. They
+include 0.207 card-hours for
+`gqc-3167-ccsdt-h100-1125` at the superseded `d154546d2`.
+The prior job was cancelled and deleted. Its results are excluded
+from the follow-up comparisons.
 
 ## Reproduction
 

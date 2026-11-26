@@ -52,22 +52,23 @@ def completed(attempts: list[Record], case: str, arm: str) -> list[Record]:
     return accepted
 
 
-def compare(native: Record, reference: Record) -> Record:
-    diffs = [
+def errors(left: Record, right: Record) -> Record:
+    differences = [
         x - y
-        for left, right in zip(
-            native["force_hartree_per_bohr"],
-            reference["force_hartree_per_bohr"],
+        for left_xyz, right_xyz in zip(
+            left["force_hartree_per_bohr"],
+            right["force_hartree_per_bohr"],
             strict=True,
         )
-        for x, y in zip(left, right, strict=True)
+        for x, y in zip(left_xyz, right_xyz, strict=True)
     ]
+    index = max(range(len(differences)), key=lambda i: abs(differences[i]))
     return {
-        "native_trial": native["trial"],
-        "reference_trial": reference["trial"],
-        "energy": abs(native["energy_hartree"] - reference["energy_hartree"]),
-        "max_force": max(map(abs, diffs)),
-        "rms_force": math.sqrt(statistics.mean(x * x for x in diffs)),
+        "energy": abs(left["energy_hartree"] - right["energy_hartree"]),
+        "max_force": abs(differences[index]),
+        "rms_force": math.sqrt(statistics.mean(x * x for x in differences)),
+        "max_force_atom_index": index // 3,
+        "max_force_axis": "xyz"[index % 3],
     }
 
 
@@ -92,7 +93,11 @@ def summarize(attempts: list[Record]) -> Record:
         references = {}
         for arm in ARMS[1:]:
             pairs = [
-                compare(native, reference)
+                {
+                    "native_trial": native["trial"],
+                    "reference_trial": reference["trial"],
+                    **errors(native, reference),
+                }
                 for native, reference in itertools.product(
                     selected["native-conv"], selected[arm]
                 )
@@ -125,6 +130,16 @@ def summarize(attempts: list[Record]) -> Record:
             "status": verdict,
             "timing_seconds": timings,
             "comparisons": references,
+            "cpu_reference_pairs": [
+                {
+                    "psi4_trial": psi4["trial"],
+                    "pyscf_trial": pyscf["trial"],
+                    **errors(psi4, pyscf),
+                }
+                for psi4, pyscf in itertools.product(
+                    selected["psi4-conv"], selected["pyscf-conv"]
+                )
+            ],
         }
     return {"limits": LIMITS, "cases": molecules}
 
