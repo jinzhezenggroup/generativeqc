@@ -188,3 +188,22 @@ output paths for independently launched samples.
 ```bash
 python3 benchmarks/results/ccsdt-external-forces-conv-20261126/replay.py
 ```
+
+## C7 H200 and directional finite-difference addendum
+
+The H200 runs use the same pinned SM90 production library, spherical cc-pVDZ
+basis, FP64 method, reference convergence settings and 155 GiB host
+correlation allowance as the one-card C7 H100 trials. Each run owns an H200
+and its own fresh Python process. The wrapper records the installed driver,
+compute capability and SM90 ELF image count, verifies the native build identity,
+and samples single-device memory at 1 Hz.
+
+For the independent directional check, Psi4 conventional RHF-CCSD(T) energy
+jobs displace only the fourth atom's z coordinate in the fixed C1 geometry.
+The basis and electron count match the analytic measurements. The three
+central-difference steps are 0.004, 0.002 and 0.001 Bohr. The main energies
+use SCF and CCSD energy-change thresholds of 1e-13 Eh and a SCF density
+and CCSD amplitude RMS threshold of 1e-11. Both signs at 0.001 Bohr also
+run at 5e-14 Eh and 1e-12 for the convergence check. Every job starts from
+a fresh geometry and solves the energy without a gradient. The replay uses
+the force convention `(E(-h) - E(+h)) / (2*h)` and two Richardson levels.

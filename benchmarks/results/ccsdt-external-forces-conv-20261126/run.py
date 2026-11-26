@@ -113,17 +113,20 @@ def hardware(args: argparse.Namespace, module: ModuleType) -> Record:
     if args.arm == "native-conv":
         info.update(module.native_provenance(args.source, args.source_archive))
         if info["library_sha256"] != LIBRARY_SHA:
-            raise ValueError("Native library differs from the #3174 H100 binary")
-        name, total, driver, uuid = device(
-            args, "name,memory.total,driver_version,uuid"
+            raise ValueError("Native library differs from the #3174 SM90 binary")
+        name, total, driver, uuid, capability = device(
+            args, "name,memory.total,driver_version,uuid,compute_cap"
         ).split(", ")
-        if "H100" not in name:
-            raise ValueError(f"Expected H100, found {name}")
+        if args.expected_gpu not in name or capability != "9.0":
+            raise ValueError(
+                f"Expected {args.expected_gpu} SM90, found {name} SM{capability}"
+            )
         info["gpu"] = {
             "model": name,
             "total_mib": int(total),
             "driver": driver,
             "uuid": uuid,
+            "compute_capability": capability,
         }
         info["correlation_budget_gib"] = args.correlation_budget_gib
         info["cublas_workspace_config"] = os.environ.get("CUBLAS_WORKSPACE_CONFIG")
@@ -256,6 +259,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path)
     parser.add_argument("--source-archive", type=Path)
     parser.add_argument("--gpu-index", type=int, default=0)
+    parser.add_argument("--expected-gpu", choices=("H100", "H200"), default="H100")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.threads <= 0 or args.timeout <= 0:
