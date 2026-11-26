@@ -317,7 +317,7 @@
     "gqc-3167-conv-psi4-c7-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-psi4-c7-1126-a",
-        "status": "QUEUEING",
+        "status": "RUNNING",
         "steps": "-/1",
         "project": "cq-nex-chem",
         "compute_group": "CPU\u8d44\u6e90-2",
@@ -328,21 +328,14 @@
           "nodes": 1,
           "gpu_type": "CPU"
         },
+        "nodes": [
+          "cpu-nat-464"
+        ],
         "priority": 35,
         "priority_level": "HIGH",
         "created_at": "2026-11-26 09:29:10"
       },
       "diagnostics": [
-        {
-          "time": "2026-11-26 00:01:27",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 11 Insufficient memory, 1293 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
-        },
-        {
-          "time": "2026-11-26 00:02:12",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
-        },
         {
           "time": "2026-11-26 00:02:40",
           "reason": "FailedScheduling",
@@ -352,8 +345,19 @@
           "time": "2026-11-26 00:03:24",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 00:05:03",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 11 Insufficient memory, 1293 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 00:05:12",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         }
       ],
+      "scheduled_utc": "2026-11-26T08:08:28+00:00",
       "planned": [
         "C7.0"
       ],

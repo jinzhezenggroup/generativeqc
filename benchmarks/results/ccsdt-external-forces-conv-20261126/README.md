@@ -62,8 +62,10 @@ scratch volume and fewer threads still leave the same accumulated DPD
 blocks. The notebook's 250 GiB total working limit and a 20-CPU HPC
 allocation with at most 100 GiB are too small for this stock C7 path.
 The 1,200 GiB HPC request uses 32 solver threads and a 1,024 GiB Psi4
-allowance. The job remains queued after scheduler reports of the personal
-800-CPU ceiling. No Psi4 worker was launched on the shared notebook.
+allowance. The original job queued behind the personal 800-CPU ceiling and then behind
+large-node placement constraints. It started at 08:09 UTC, after about
+6 h 40 min in queue. The worker reported Xeon Gold 6530, 32 solver threads
+and a 1,200 GiB cgroup limit. No Psi4 worker was launched on the shared notebook.
 [DPD allocator](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/libdpd/block_matrix.cc#L71-L106).
 
 PySCF 2.11.0 sizes triples Lambda and gradient-density blocks from its
