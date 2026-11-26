@@ -117,6 +117,13 @@ jobs:
           github-token: ${{ github.token }}
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
+      - name: Prepare Python 3.11 environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/prepare_ci_tools.py python-venv
+      - name: Prepare native CPU seed codegen
+        # CMake imports NumPy when enumerating host Hessian sources, before any build.
+        run: uv pip install --python .venv/bin/python numpy
       - name: Compile GCC, instrumented GCC, and Clang
         id: cpu_seed
         run: |
@@ -141,15 +148,12 @@ jobs:
               -DGENERATIVEQC_ENABLE_CUDA=OFF \
               -DCMAKE_BUILD_TYPE=Release \
               -DGENERATIVEQC_COMPILER_CACHE=ccache \
+              -DPython3_EXECUTABLE="$PWD/.venv/bin/python" \
               -DCMAKE_CXX_FLAGS="$compile_flags" \
               -DCMAKE_EXE_LINKER_FLAGS="$link_flags" \
               -DCMAKE_SHARED_LINKER_FLAGS="$link_flags"
             cmake --build build --parallel
           done
-      - name: Prepare Python 3.11 environment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/prepare_ci_tools.py python-venv
       - name: Prepare Python native cache seed
         run: |
           uv pip install --python .venv/bin/python \
@@ -233,7 +237,7 @@ jobs:
     # build and full CTest execution, skipping the ownership receipt. Give
     # both compilers finite headroom for complete build/test/receipt work;
     # cache availability must not determine whether qualification can finish.
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.compiler == 'clang' && 35 || 30 }}
     strategy:
       fail-fast: false
       matrix:

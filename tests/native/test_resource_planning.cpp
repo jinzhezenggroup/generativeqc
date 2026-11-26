@@ -14,6 +14,10 @@ extern "C" int generativeqc_resource_compose_v1(const std::uint64_t*, std::size_
                                                 const std::uint64_t*, std::size_t,
                                                 const std::uint64_t*, std::size_t, std::size_t,
                                                 double, std::uint64_t, std::uint64_t*, std::size_t);
+extern "C" int generativeqc_resource_compose_host_workspace_v1(
+    const std::uint64_t*, std::size_t, const std::uint64_t*, std::size_t, const std::uint64_t*,
+    std::size_t, const std::uint64_t*, std::size_t, std::size_t, double, std::uint64_t,
+    std::uint64_t, std::uint64_t, std::uint64_t*, std::size_t);
 
 namespace {
 using namespace generativeqc::runtime::resources;
@@ -146,6 +150,36 @@ void test_wire_transaction() {
   buffers = {64, 3, 0, 0, 1, maximum, 3, 0, 0, 1, 1, 3, 0, 0, 1};
   unchanged([&] { return query(output.data(), output.size()); });
 }
+void test_overlapped_host_workspace() {
+  const std::array<std::uint64_t, 1> request{1};
+  const std::array<std::uint64_t, 3> candidate{0, 0, 2};
+  // A workspace floor of 32 always overlaps the 64 bytes of primal storage.
+  std::array<std::uint64_t, 10> buffers{64, kPinnedSpace, 3, 3, 1, 32, kPageableSpace, 0, 4, 0};
+  std::array<std::uint64_t, 3> limit{kHostSpace, 208, 8};
+  std::array<std::uint64_t, 37> output{};
+  auto query = [&](std::uint64_t ceiling, bool limited = true) {
+    return generativeqc_resource_compose_host_workspace_v1(
+        request.data(), request.size(), candidate.data(), candidate.size(), buffers.data(),
+        buffers.size(), limit.data(), limited ? limit.size() : 0, 4, limited ? 0.5 : 0.0, 1, 32,
+        ceiling, output.data(), output.size());
+  };
+  require(query(48) == 0 && output[0] == 0 && output[35] == 32 && output[36] == 96,
+          "exact mandatory peak did not deduct headroom and reserve");
+  limit[1] = 207;
+  require(query(48) == 0 && output[0] == 1 && output[35] == UINT64_MAX && output[36] == UINT64_MAX,
+          "short mandatory plan published optional workspace");
+  limit[1] = 220;
+  require(query(48) == 0 && output[0] == 0 && output[35] == 38 && output[36] == 102,
+          "optional workspace did not fill remaining effective capacity");
+  require(query(34) == 0 && output[35] == 34 && output[36] == 98,
+          "host headroom overrode the independent workspace cap");
+  require(query(48, false) == 0 && output[35] == 48 && output[36] == 112,
+          "an omitted host limit clipped the requested workspace");
+  const auto before = output;
+  require(query(31) != 0 && output == before, "invalid ceiling published a partial plan");
+  buffers[0] = maximum - 32;
+  require(query(33, false) != 0 && output == before, "host peak overflow published a partial plan");
+}
 }  // namespace
 
 int main() {
@@ -153,6 +187,7 @@ int main() {
     test_headroom_and_lifetimes();
     test_coupled_choice_and_wide_objectives();
     test_wire_transaction();
+    test_overlapped_host_workspace();
     std::cout
         << "Native resource composition, lifetimes, exact budgets and transactional ABI passed\n";
     return 0;
