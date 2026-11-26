@@ -240,7 +240,7 @@ void print_usage(std::ostream& out) {
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --owned-device-bytes N   Run-only native numeric allocation cap (not total GPU/RSS)\n"
-         "  --host-bytes N           Admit a supported CPU RHF or KS endpoint before setup\n"
+         "  --host-bytes N           Admit a supported CPU HF or KS endpoint before setup\n"
          "  --host-reserve-bytes N --headroom-fraction F  Optional host budget margins\n"
          "  --cpu-packed-eri-budget-bytes N  Run with bounded exact spherical CPU KS values\n"
          "  --charge N               Molecular charge (default: 0)\n"

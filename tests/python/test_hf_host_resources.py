@@ -1,11 +1,18 @@
-"""CPU HF phase sizing has one native owner and an explicit legacy fallback."""
+"""CPU HF sizing has one live native owner and an offline comparison."""
 
+import ctypes
 import json
 import typing
 from types import SimpleNamespace
 
 import pytest
-from generativeqc import _native, estimate_hf_resources, resources_hf
+from generativeqc import (
+    Calculator,
+    ResourceBudget,
+    _native,
+    estimate_hf_resources,
+    resources_hf,
+)
 
 
 @pytest.fixture(scope="module")
@@ -15,6 +22,16 @@ def library() -> typing.Any:
     assert hasattr(loaded, "generativeqc_resource_hf_cpu_host_v1")
     assert hasattr(loaded, "generativeqc_resource_hf_cpu_fleet_v1")
     return loaded
+
+
+@pytest.fixture(scope="module")
+def phase_query(library: typing.Any) -> typing.Any:
+    """Exercise the standalone leaf ABI directly, not the fleet fallback."""
+    operation = library.generativeqc_resource_hf_cpu_host_v1
+    pointer = ctypes.POINTER(ctypes.c_uint64)
+    operation.argtypes = [pointer, ctypes.c_size_t, pointer, ctypes.c_size_t]
+    operation.restype = ctypes.c_int
+    return operation
 
 
 @pytest.mark.parametrize("spins", (1, 2))
@@ -32,7 +49,7 @@ def library() -> typing.Any:
     ),
 )
 def test_native_matches_independent_portable_phase_bound(
-    library: typing.Any,
+    phase_query: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
     spins: int,
     history: int,
@@ -61,52 +78,37 @@ def test_native_matches_independent_portable_phase_bound(
     monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item, **kwargs: 768)
     expected = resources_hf._cpu_item_inventory(item, history)
 
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("discovered native sizing retried the portable arithmetic")
+    shape = (ctypes.c_uint64 * 10)(
+        3,
+        orbital_aos,
+        cartesian_aos,
+        spins,
+        angular,
+        history,
+        *(auxiliary or (0, 0, 0)),
+        768,
+    )
+    result = (ctypes.c_uint64 * 4)()
+    assert phase_query(shape, len(shape), result, len(result)) == 0
+    assert tuple(result) == tuple(expected.values())
 
-    monkeypatch.setattr(resources_hf, "byte_product", forbidden)
-    assert resources_hf._cpu_item_inventory(item, history, library=library) == expected
 
-
-def test_discovered_rejection_never_retries_portable_sizing(
-    monkeypatch: pytest.MonkeyPatch,
+def test_invalid_standalone_phase_query_does_not_publish(
+    phase_query: typing.Any,
 ) -> None:
-    def reject(*args: typing.Any) -> int:
-        return -1
-
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("rejected native inventory silently used portable sizing")
-
-    monkeypatch.setattr(resources_hf, "byte_product", forbidden)
-    monkeypatch.setattr(resources_hf, "_ecp_workspace", lambda item, **kwargs: 0)
-    item = {
-        "atoms": 2,
-        "spins": 1,
-        "orbital": {"nbf": 2, "cartesian_nbf": 2, "maximum_angular": 0},
-    }
-    with pytest.raises(ValueError, match="native CPU HF host inventory rejected"):
-        resources_hf._cpu_item_inventory(
-            item,
-            8,
-            library=SimpleNamespace(generativeqc_resource_hf_cpu_host_v1=reject),
-        )
+    shape = (ctypes.c_uint64 * 10)(2, 2, 2, 3, 0, 8, 0, 0, 0, 0)
+    result = (ctypes.c_uint64 * 4)(5, 7, 11, 13)
+    before = bytes(result)
+    assert phase_query(shape, len(shape), result, len(result)) != 0
+    assert bytes(result) == before
 
 
 @pytest.mark.parametrize("method,charge,multiplicity", (("rhf", 0, 1), ("uhf", 1, 2)))
 @pytest.mark.parametrize("fitted", (False, True))
-def test_legacy_and_native_plans_share_bounds_but_not_owner_identity(
+def test_offline_and_native_plans_share_bounds_but_not_owner_identity(
     library: typing.Any, method: str, charge: int, multiplicity: int, fitted: bool
 ) -> None:
-    """Fleet aggregation and old-library dry runs retain their capacity contract."""
-
-    class LegacyLibrary:
-        def __getattr__(self, name: str) -> typing.Any:
-            if name in (
-                "generativeqc_resource_hf_cpu_host_v1",
-                "generativeqc_resource_hf_cpu_fleet_v1",
-            ):
-                raise AttributeError(name)
-            return getattr(library, name)
+    """The independent library-free dry run retains its capacity contract."""
 
     atoms = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     controls = {
@@ -116,7 +118,7 @@ def test_legacy_and_native_plans_share_bounds_but_not_owner_identity(
         "density_fitting": "cpu" if fitted else "none",
     }
     native = estimate_hf_resources([atoms] * 3, library=library, **controls)
-    legacy = estimate_hf_resources([atoms] * 3, library=LegacyLibrary(), **controls)
+    legacy = estimate_hf_resources([atoms] * 3, **controls)
     assert native.status == legacy.status == "feasible"
     assert native.peak_bytes == legacy.peak_bytes
     assert native.resident_bytes == legacy.resident_bytes
@@ -223,31 +225,40 @@ def test_discovered_fleet_rejection_never_retries_phase_or_portable_queries(
         )
 
 
-def test_phase_only_library_retains_explicit_portable_fleet_composition(
+def test_phase_only_library_refuses_instead_of_composing_in_python(
     library: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("phase-only library cannot authorize a live fleet")
+
     class PhaseOnlyLibrary:
         """Model the first additive phase-query ABI without the fleet query."""
 
         def __getattr__(self, name: str) -> typing.Any:
             if name == "generativeqc_resource_hf_cpu_fleet_v1":
                 raise AttributeError(name)
+            if name.startswith(
+                (
+                    "generativeqc_batch_prepare",
+                    "generativeqc_system_create",
+                    "generativeqc_calculation_create",
+                )
+            ):
+                return forbidden
             return getattr(library, name)
 
     atoms = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
-    native = estimate_hf_resources([atoms] * 3, library=library)
 
-    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
-        pytest.fail("phase-only library should not use portable phase sizing")
-
-    monkeypatch.setattr(resources_hf, "byte_product", forbidden)
+    monkeypatch.setattr(resources_hf, "_cpu_item_inventory", forbidden)
     phase_only = estimate_hf_resources([atoms] * 3, library=PhaseOnlyLibrary())
-    assert phase_only.peak_bytes == native.peak_bytes
-    assert phase_only.resident_bytes == native.resident_bytes
-    assert phase_only.identity != native.identity
-    schedule = json.loads(phase_only.requests[0].identity.schedule)
-    assert schedule["host_inventory"] == "native-cpu-v1"
-    assert schedule["fleet_inventory"] == "portable-metadata-v1"
+    assert phase_only.status == "unsupported" and not phase_only.requests[0].candidates
+    with pytest.raises(NotImplementedError, match="CPU HF fleet inventory"):
+        phase_only.require_feasible()
+
+    calculator = Calculator(resource_budget=ResourceBudget(host_bytes=2**30))
+    monkeypatch.setattr(calculator, "_library", PhaseOnlyLibrary())
+    with pytest.raises(NotImplementedError, match="CPU HF fleet inventory"):
+        calculator.prepare_batch([atoms])
 
 
 def test_public_fleet_planning_uses_one_native_owner(

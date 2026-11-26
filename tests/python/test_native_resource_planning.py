@@ -334,7 +334,7 @@ def test_native_rejection_never_retries_a_portable_selection(
         )
 
 
-def test_old_library_and_library_free_planning_remain_provider_free(
+def test_library_free_planning_remains_provider_free(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     choices = (request("owner", (candidate("fixed", 0, buffer("bytes", 1)),)),)
@@ -344,13 +344,31 @@ def test_old_library_and_library_free_planning_remain_provider_free(
         pytest.fail("portable dry run loaded a native provider")
 
     monkeypatch.setattr(_native, "load_library", forbidden)
-    for library in (None, SimpleNamespace()):
-        assert (
-            resources_planning.plan_resources(
-                choices, ResourceBudget(), library=library
-            )
-            == expected
-        )
+    assert resources_planning.plan_resources(choices, ResourceBudget()) == expected
+
+
+def test_selected_library_without_composition_cannot_admit_a_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Offline metadata remains valid but cannot fund a selected runtime."""
+    choices = (request("owner", (candidate("fixed", 0, buffer("bytes", 1)),)),)
+    budget = ResourceBudget(host_bytes=1)
+    plan = portable_plan_resources(choices, budget)
+    original = plan.to_dict()
+    selected = SimpleNamespace()
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("missing native composition retried the offline planner")
+
+    monkeypatch.setattr(resources_planning, "_portable_plan_resources", forbidden)
+    monkeypatch.setattr(_native, "load_library", forbidden)
+    with pytest.raises(NotImplementedError, match="required resource composition"):
+        plan_resources(choices, budget, library=selected)
+    with pytest.raises(NotImplementedError, match="required resource composition"):
+        resources_planning.validate_resource_plan(plan, library=selected)
+    with pytest.raises(NotImplementedError, match="required resource composition"):
+        resources_planning.revalidate_resource_plan(plan, library=selected)
+    assert plan.to_dict() == original
 
 
 def test_explicit_selection_is_validated_without_replacement(
@@ -411,8 +429,10 @@ def test_public_production_entries_use_the_loaded_native_owner(
             calculator.estimate_resources([H2])
 
 
+@pytest.mark.parametrize("query_available", (False, True))
 def test_production_supplied_plan_rejection_precedes_scientific_preparation(
     library: typing.Any,
+    query_available: bool,
 ) -> None:
     calculator = Calculator(method="pbe-rks")
     plan = calculator.estimate_resources([H2], properties=("energy",))
@@ -422,7 +442,7 @@ def test_production_supplied_plan_rejection_precedes_scientific_preparation(
             return 2
 
     class Library:
-        generativeqc_resource_compose_v1 = Query()
+        generativeqc_resource_compose_v1 = Query() if query_available else None
 
         def __getattr__(self, name: str) -> typing.Any:
             if name.startswith(
@@ -437,11 +457,14 @@ def test_production_supplied_plan_rejection_precedes_scientific_preparation(
             return getattr(library, name)
 
     calculator._library = Library()
-    with pytest.raises(ValueError, match="native resource composition"):
+    expected = ValueError if query_available else NotImplementedError
+    with pytest.raises(expected, match="resource composition"):
         calculator.prepare_batch([H2], resource_plan=plan)
 
 
-@pytest.mark.parametrize("mode", ("native-reject", "below-budget", "accepted"))
+@pytest.mark.parametrize(
+    "mode", ("missing-query", "native-reject", "below-budget", "accepted")
+)
 def test_force_workspace_replay_uses_native_admission_and_preserves_rollback(
     mode: str,
 ) -> None:
@@ -481,7 +504,9 @@ def test_force_workspace_replay_uses_native_admission_and_preserves_rollback(
                 return 2
 
         class Library:
-            generativeqc_resource_compose_v1 = Query()
+            generativeqc_resource_compose_v1 = (
+                None if mode == "missing-query" else Query()
+            )
 
             def __getattr__(self, name: str) -> typing.Any:
                 if name.startswith(
@@ -495,10 +520,15 @@ def test_force_workspace_replay_uses_native_admission_and_preserves_rollback(
                     return ForbiddenExecution()
                 return getattr(library, name)
 
-        if mode == "native-reject":
+        if mode in ("missing-query", "native-reject"):
             batch._library = Library()
         if mode != "accepted":
-            with pytest.raises(ValueError if mode == "native-reject" else MemoryError):
+            error = {
+                "missing-query": NotImplementedError,
+                "native-reject": ValueError,
+                "below-budget": MemoryError,
+            }[mode]
+            with pytest.raises(error):
                 batch.execute(properties=("energy", "forces"), strict=True)
             assert batch.resource_plan.to_dict() == original
             batch._library = library

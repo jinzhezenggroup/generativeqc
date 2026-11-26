@@ -95,7 +95,6 @@ def test_ragged_native_fleet_matches_independent_portable_bounds(
         pytest.fail("native fleet retried per-item sizing or loaded a provider")
 
     monkeypatch.setattr(resources_ks, "_item_host_inventory", forbidden)
-    monkeypatch.setattr(resources_ks, "_native_cpu_host_inventory", forbidden)
     monkeypatch.setattr(resources_ks, "byte_product", forbidden)
     monkeypatch.setattr(_native, "load_library", forbidden)
     assert resources_ks._native_cpu_fleet_inventory(
@@ -105,7 +104,7 @@ def test_ragged_native_fleet_matches_independent_portable_bounds(
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))
 @pytest.mark.parametrize("history,iterations", ((0, 1), (64, 250)))
-def test_public_native_phase_only_and_legacy_fleets_keep_bounds_and_provenance(
+def test_public_cpu_fleets_require_native_sizing_after_library_selection(
     library: typing.Any, method: str, history: int, iterations: int
 ) -> None:
     """Source ownership is distinct from unchanged public capacity contracts."""
@@ -136,21 +135,17 @@ def test_public_native_phase_only_and_legacy_fleets_keep_bounds_and_provenance(
     ).require_feasible()
     phase = estimate_ks_resources(
         systems, library=LibraryView("generativeqc_resource_ks_cpu_fleet_v1"), **options
-    ).require_feasible()
-    legacy = estimate_ks_resources(
-        systems,
-        library=LibraryView(
-            "generativeqc_resource_ks_cpu_fleet_v1",
-            "generativeqc_resource_ks_cpu_host_v1",
-        ),
-        **options,
-    ).require_feasible()
+    )
+    with pytest.raises(NotImplementedError, match="CPU KS fleet inventory"):
+        phase.require_feasible()
+    assert not phase.requests[0].candidates
+    offline = estimate_ks_resources(systems, **options).require_feasible()
     fleet_only = estimate_ks_resources(
         systems, library=LibraryView("generativeqc_resource_ks_cpu_host_v1"), **options
     ).require_feasible()
     assert native.identity == fleet_only.identity
-    assert len({native.identity, phase.identity, legacy.identity}) == 3
-    for plan in (phase, legacy, fleet_only):
+    assert len({native.identity, phase.identity, offline.identity}) == 3
+    for plan in (offline, fleet_only):
         assert native.peak_bytes == plan.peak_bytes
         assert native.resident_bytes == plan.resident_bytes
         assert (
@@ -159,8 +154,7 @@ def test_public_native_phase_only_and_legacy_fleets_keep_bounds_and_provenance(
         )
     for plan, host_owner, fleet_owner in (
         (native, "native-cpu-v1", "native-cpu-v1"),
-        (phase, "native-cpu-v1", "portable-metadata-v1"),
-        (legacy, "portable-metadata-v1", "portable-metadata-v1"),
+        (offline, "portable-metadata-v1", "portable-metadata-v1"),
     ):
         controls = json.loads(plan.requests[0].identity.schedule)
         assert controls["host_inventory"] == host_owner
@@ -193,7 +187,6 @@ def test_discovered_fleet_rejection_never_retries_older_paths(
         pytest.fail("rejected fleet query retried per-item or portable sizing")
 
     monkeypatch.setattr(resources_ks, "_item_host_inventory", forbidden)
-    monkeypatch.setattr(resources_ks, "_native_cpu_host_inventory", forbidden)
     with pytest.raises(ValueError, match="native CPU KS fleet inventory rejected"):
         estimate_ks_resources(
             [[(1, (0, 0, -0.7)), (1, (0, 0, 0.7))]],
@@ -213,12 +206,17 @@ def test_native_fleet_does_not_waive_nonlocal_provider_sub_budget(
 
 
 @pytest.mark.parametrize("oversized", (False, True))
-def test_invalid_native_aggregate_cannot_become_a_budget(oversized: bool) -> None:
+def test_invalid_native_aggregate_cannot_become_a_budget(
+    library: typing.Any, oversized: bool
+) -> None:
     def malformed(*args: typing.Any) -> int:
         args[3][14] = (1 << 63) if oversized else 1
         return 0
 
-    loaded = SimpleNamespace(generativeqc_resource_ks_cpu_fleet_v1=malformed)
+    loaded = SimpleNamespace(
+        generativeqc_resource_ks_cpu_fleet_v1=malformed,
+        generativeqc_resource_ecp_workspace_v1=library.generativeqc_resource_ecp_workspace_v1,
+    )
     with pytest.raises(ValueError, match="CPU KS fleet"):
         resources_ks._native_cpu_fleet_inventory(
             loaded, [topology(2, 2, 0, 1, 10)], workspace_floor=0, **model_options()
