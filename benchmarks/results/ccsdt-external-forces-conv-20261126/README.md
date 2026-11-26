@@ -36,7 +36,7 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 |---|---:|---|---:|---:|---:|---:|
 | C5 | 3,830.93 median (2) | Psi4 | 2,495.80 median (2) | 3.0241e-11 | 1.7405e-06 | 5.8795e-07 |
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
-| C6 | — | Psi4 | 8,607.15 (one) | — | — | — |
+| C6 | 11,946.41 (one) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
 | C7 | — | — | — | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every
@@ -119,8 +119,12 @@ H100 attempt failed during MO provider allocation at a 320 GiB allowance.
 Its only GPU sample preceded that allocation. The subsequent 155 GiB C7
 attempts record one-second device samples. The first C5 PySCF launcher
 rejected its trial label before computation and was retried with C5.1.
-C6 acquisition and the C7 CPU reference remain in progress in this local
-snapshot.
+The first C6 H100 run completed with a 155 GiB application allowance
+inside a 200 GiB host allocation. Its reported plan was 145.68 GiB.
+Worker RSS peaked at 16.04 GiB and sampled device memory at 74.25 GiB.
+The first C6 run's raw output was archived while its second fresh
+process started in the same allocation. The C7 CPU reference remains
+in progress in this local snapshot.
 
 ## Reproduction
 

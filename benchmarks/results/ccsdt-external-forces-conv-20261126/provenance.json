@@ -118,7 +118,17 @@
         "C6.0",
         "C6.1"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c6-1126-a"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c6-1126-a",
+      "local_archive_checkpoints": [
+        {
+          "path": "raw/gqc-3167-conv-h100-c6-1126-a-C6.0-checkpoint.tar.gz",
+          "labels": [
+            "C6.0"
+          ],
+          "bytes": 5577,
+          "sha256": "67217aebe519034a0086248f136ea876680c1546150d6f652bacafc4a41601bf"
+        }
+      ]
     },
     "gqc-3167-conv-h100-c7-1126-a": {
       "platform": {
@@ -314,16 +324,6 @@
       },
       "diagnostics": [
         {
-          "time": "2026-11-25 19:27:43",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=793.00, Memory=3816.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
-        },
-        {
-          "time": "2026-11-25 19:53:25",
-          "reason": "FailedScheduling",
-          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-335, once minAvailable is satisfied"
-        },
-        {
           "time": "2026-11-25 19:54:32",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=738.00, Memory=3316.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
@@ -332,6 +332,16 @@
           "time": "2026-11-25 19:54:39",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=778.00, Memory=3516.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 20:41:23",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-362, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 20:49:24",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-106, once minAvailable is satisfied"
         }
       ],
       "planned": [
