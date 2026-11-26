@@ -127,6 +127,10 @@ class _PackedEriCapacityExceeded(ValueError):
     """The exact retained fleet does not fit its separate provider cap."""
 
 
+class _MissingCpuKsInventory(NotImplementedError):
+    """A selected CPU runtime cannot authoritatively size this KS fleet."""
+
+
 def _cpu_host_shape(
     item: typing.Any,
     *,
@@ -189,34 +193,6 @@ def _cpu_host_result(
     return inventory
 
 
-def _native_cpu_host_inventory(
-    library: typing.Any,
-    item: typing.Any,
-    **options: typing.Any,
-) -> dict[str, int] | None:
-    """Use discovered authority, retaining absent/old-library metadata sizing.
-
-    A rejected discovered query is never retried. This adapter neither loads a
-    provider nor performs numerical work during metadata-only planning.
-    """
-    query = getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
-    if query is None:
-        return None
-    dimensions = _cpu_host_shape(item, library=library, **options)
-    shape = (ctypes.c_uint64 * len(dimensions))(*dimensions)
-    values = (ctypes.c_uint64 * len(_CPU_HOST_INVENTORY_KEYS))()
-    query.argtypes = [
-        ctypes.POINTER(ctypes.c_uint64),
-        ctypes.c_size_t,
-        ctypes.POINTER(ctypes.c_uint64),
-        ctypes.c_size_t,
-    ]
-    query.restype = ctypes.c_int
-    if query(shape, len(shape), values, len(values)):
-        raise ValueError("native CPU KS host inventory rejected shape or capacity")
-    return _cpu_host_result(values, options["model"])
-
-
 def _native_cpu_fleet_inventory(
     library: typing.Any,
     items: typing.Sequence[typing.Any],
@@ -248,7 +224,8 @@ def _native_host_fleet_inventory(
 
     Consumer allowances describe lifetimes, not provider admission. CUDA cache
     and force owners remain retained across replay; CPU force scratch remains
-    a transient floor. Only missing symbols permit the older per-item path.
+    a transient floor. A selected CPU runtime must provide fleet sizing and
+    any active ECP workspace sizing. CUDA retains its separate compatibility.
     Transport consistency checks validate publication without retrying sizing.
     """
     if backend not in ("cpu", "cuda"):
@@ -276,7 +253,20 @@ def _native_host_fleet_inventory(
             raise NotImplementedError(
                 "packed ERI plans require a native host inventory"
             )
+        if not cuda and library is not None:
+            raise _MissingCpuKsInventory(
+                f"selected library lacks the CPU KS fleet inventory {symbol}"
+            )
         return None
+    if (
+        not cuda
+        and any(item["orbital"].get("ecp_terms") for item in items)
+        and getattr(library, "generativeqc_resource_ecp_workspace_v1", None) is None
+    ):
+        raise _MissingCpuKsInventory(
+            "selected library lacks the CPU KS ECP workspace inventory "
+            "generativeqc_resource_ecp_workspace_v1"
+        )
     if not cuda and retained_allowance:
         raise ValueError("the CPU fleet ABI has no retained consumer allowance")
     dimensions = tuple(
@@ -415,17 +405,6 @@ def _item_host_inventory(
     histories coexist for all active streams. A geometry rebuild destroys its
     old owner before allocating the new one, retaining only its last-good seed.
     """
-    if backend == "cpu":
-        inventory = _native_cpu_host_inventory(
-            library,
-            item,
-            diis_history=diis_history,
-            max_iterations=max_iterations,
-            requires_first_ao_derivatives=requires_first_ao_derivatives,
-            model=model,
-        )
-        if inventory is not None:
-            return inventory
     orbital = item["orbital"]
     a, n, c = item["atoms"], orbital["nbf"], orbital["cartesian_nbf"]
     s, p, spins = orbital["shells"], orbital["primitives"], item["spins"]
@@ -1732,17 +1711,15 @@ def ks_resource_request(
         controls["application_precision_budget"] = asdict(_application_precision_budget)
     if backend == "cpu":
         controls["ao_grid_cache_cap"] = _CPU_AO_GRID_CACHE_CAP
-        native_fleet = getattr(library, "generativeqc_resource_ks_cpu_fleet_v1", None)
-        controls["host_inventory"] = (
-            "native-cpu-v1"
-            if native_fleet is not None
-            or getattr(library, "generativeqc_resource_ks_cpu_host_v1", None)
+        cpu_inventory = (
+            "portable-metadata-v1"
+            if library is None
+            else "native-cpu-v1"
+            if getattr(library, "generativeqc_resource_ks_cpu_fleet_v1", None)
             is not None
-            else "portable-metadata-v1"
+            else "unavailable"
         )
-        controls["fleet_inventory"] = (
-            "native-cpu-v1" if native_fleet is not None else "portable-metadata-v1"
-        )
+        controls.update(host_inventory=cpu_inventory, fleet_inventory=cpu_inventory)
         if cpu_df_name is not None:
             inventory_name = (
                 "native-cpu-df-force-v1" if cpu_fitted_forces else "native-cpu-df-v1"
@@ -1902,6 +1879,10 @@ def ks_resource_request(
     except _PackedEriCapacityExceeded as error:
         return ResourceRequest(
             name, identity, (), exclusions, infeasible_reason=str(error)
+        )
+    except _MissingCpuKsInventory as error:
+        return ResourceRequest(
+            name, identity, (), exclusions, unsupported_reason=str(error)
         )
     if native_inventory is not None:
         host, totals, host_phase_peak = native_inventory

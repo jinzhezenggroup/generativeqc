@@ -1,7 +1,7 @@
 """Admission, API routing and budgets for optional CPU KS forces.
 
-Resource composition uses the native query; execution returns fixed dummy
-results. These are control-flow regressions, not numerical qualification.
+Capacity planning uses the native CPU fleet and composition queries. Execution
+returns fixed dummy results; this tests control flow, not numerical accuracy.
 """
 
 from __future__ import annotations
@@ -89,6 +89,9 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         generativeqc_method_available=available,
         generativeqc_ks_options_version=Mock(return_value=1),
         generativeqc_ks_resource_inventory_version_v1=Mock(return_value=1),
+        generativeqc_resource_ks_cpu_fleet_v1=(
+            native.generativeqc_resource_ks_cpu_fleet_v1
+        ),
         generativeqc_context_create=handle,
         generativeqc_context_destroy=Mock(return_value=0),
         generativeqc_system_destroy=Mock(return_value=0),
