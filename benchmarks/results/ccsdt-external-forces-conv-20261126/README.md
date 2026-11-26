@@ -14,8 +14,10 @@ inside the scientific call and ends after the energy and full Cartesian force
 return. Each sample runs in a fresh Python process. The timing table compares
 the recorded CPU and H100 configurations. The reused C5 Psi4 trials
 used eight threads on a Xeon CPU Max 9462 with a 92 GiB program memory
-limit. The follow-up C5 PySCF reference used 32 threads with a 168 GiB
-program limit (PySCF's memory setting is advisory).
+limit. The C5 PySCF reference used 32 threads on a Xeon Gold 6530.
+The wrapper passes `--memory-mib` numerically to both CPU engines.
+Psi4 interprets it in MiB. PySCF interprets its advisory `max_memory`
+value in decimal MB, so its configured value of 172,032 MB is 160.22 GiB.
 
 For each molecule, two H100 endpoints and a complete analytic CPU reference
 are required. All available H100 versus CPU pairs are checked. Limits are
@@ -34,7 +36,7 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 |---|---:|---|---:|---:|---:|---:|
 | C5 | 3,830.93 median (2) | Psi4 | 2,495.80 median (2) | 3.0241e-11 | 1.7405e-06 | 5.8795e-07 |
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
-| C6 | — | — | — | — | — | — |
+| C6 | — | Psi4 | 8,607.15 (one) | — | — | — |
 | C7 | — | — | — | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every

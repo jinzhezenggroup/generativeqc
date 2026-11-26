@@ -38,6 +38,10 @@
     "psi4": "Psi4 1.10.2 with the #3174 cpu-env-v3 lock",
     "pyscf": "PySCF 2.11.0 with the #3174 cpu-env-v4 lock"
   },
+  "application_memory_units": {
+    "psi4": "Wrapper value in application_memory_mib is used in MiB.",
+    "pyscf": "Wrapper value in application_memory_mib is passed unchanged as PySCF max_memory in decimal MB."
+  },
   "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
   "accounting": "GPU scheduled-to-terminal with 1 point per card-hour. CPU compute-worker scheduled-to-release at 0 points per core-hour. Estimates exclude Slurm control-plane overhead.",
   "jobs": {
@@ -248,8 +252,8 @@
     "gqc-3167-conv-psi4-c6-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-psi4-c6-1126-a",
-        "status": "RUNNING",
-        "steps": "0/1",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
         "project": "cq-nex-chem",
         "compute_group": "CPU\u8d44\u6e90-2",
         "resource": {
@@ -259,12 +263,10 @@
           "nodes": 1,
           "gpu_type": "CPU"
         },
-        "nodes": [
-          "cpu-nat-451"
-        ],
         "priority": 35,
         "priority_level": "HIGH",
-        "created_at": "2026-11-26 09:29:13"
+        "created_at": "2026-11-26 09:29:13",
+        "finished_at": "2026-11-26 11:54:24"
       },
       "diagnostics": [
         {
@@ -279,10 +281,18 @@
         }
       ],
       "scheduled_utc": "2026-11-26T01:29:21+00:00",
+      "released_utc": "2026-11-26T03:54:25+00:00",
+      "allocated_core_hours": 132.9777777777778,
+      "estimated_points": 0.0,
       "planned": [
         "C6.0"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c6-1126-a"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c6-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-psi4-c6-1126-a.tar.gz",
+        "bytes": 12407,
+        "sha256": "661512ef755fa93645d2b6699b88289cb49fca101ca3c441767aa0ca72846d5c"
+      }
     },
     "gqc-3167-conv-psi4-c7-1126-a": {
       "platform": {
@@ -304,24 +314,24 @@
       },
       "diagnostics": [
         {
-          "time": "2026-11-25 18:33:23",
-          "reason": "FailedScheduling",
-          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-292, once minAvailable is satisfied"
-        },
-        {
-          "time": "2026-11-25 19:21:21",
-          "reason": "FailedScheduling",
-          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-427, once minAvailable is satisfied"
-        },
-        {
-          "time": "2026-11-25 19:27:37",
-          "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=753.00, Memory=3616.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
-        },
-        {
           "time": "2026-11-25 19:27:43",
           "reason": "FailedScheduling",
           "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=793.00, Memory=3816.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 19:53:25",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-335, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 19:54:32",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=738.00, Memory=3316.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 19:54:39",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=778.00, Memory=3516.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
         }
       ],
       "planned": [

@@ -2421,6 +2421,483 @@
       }
     },
     {
+      "source": "gqc-3167-conv-psi4-c6-1126-a",
+      "arm": "psi4-conv",
+      "label": "C6.0",
+      "record_sha256": "290f6e7d264619bbb6af60c326fab2787fe2cb4625cc3a04e6ce75333b169f24",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -236.39011820274348,
+        "force_hartree_per_bohr": [
+          [
+            -0.002277891723259984,
+            -0.004847104540618652,
+            0.0006973597645147933
+          ],
+          [
+            -0.0020725913584178635,
+            0.010559627649344705,
+            0.00028182109334318195
+          ],
+          [
+            0.002030732208474939,
+            -0.016333899373761618,
+            -5.274210219197162e-05
+          ],
+          [
+            -0.002326776815297915,
+            0.016181328570763043,
+            7.615680107184164e-05
+          ],
+          [
+            0.0025421611746536676,
+            -0.010692947010546128,
+            -0.00028470278437819907
+          ],
+          [
+            0.002256279098227232,
+            0.004890722874084208,
+            -0.0007082011050507653
+          ],
+          [
+            -0.007370475776076191,
+            -0.003536100108212814,
+            0.0017839535723186972
+          ],
+          [
+            -0.0026198333740916624,
+            0.004901999627584974,
+            -0.00557354555007783
+          ],
+          [
+            0.00013877257517813657,
+            0.0050283748393722405,
+            0.005955450038601651
+          ],
+          [
+            0.0008524587023485131,
+            -0.005377436948414083,
+            -0.006198373079294717
+          ],
+          [
+            0.0036485146460349116,
+            -0.0051291729690372545,
+            0.005285624687053625
+          ],
+          [
+            0.0006002317707131111,
+            0.005290007520819318,
+            0.006196529954807017
+          ],
+          [
+            -0.002214924191663137,
+            0.0050235171866295225,
+            -0.006059800774470769
+          ],
+          [
+            -0.000595526250586037,
+            -0.005318258467355008,
+            -0.006148922713343552
+          ],
+          [
+            0.0022788999349899752,
+            -0.0049398633662995906,
+            0.006047222735254376
+          ],
+          [
+            -0.0009850034667577834,
+            0.005527038761693026,
+            0.006211259700426464
+          ],
+          [
+            -0.003644832092300182,
+            0.005130727939222757,
+            -0.005491040594492125
+          ],
+          [
+            0.0025626732262507,
+            -0.0047181664004745105,
+            0.005618943831448231
+          ],
+          [
+            0.007279133217304334,
+            0.0034818485595482507,
+            -0.0018169710061533562
+          ],
+          [
+            -8.200150565174091e-05,
+            -0.005122244344995419,
+            -0.005820022469056774
+          ]
+        ],
+        "endpoint_seconds": 8607.148136589676,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 154,
+          "auxiliary_counts": {},
+          "electrons": 50,
+          "rhf_energy": -235.38360322628628
+        },
+        "case": "C6",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+        "affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "host_topology": {
+          "lscpu": [
+            {
+              "field": "Architecture:",
+              "data": "x86_64"
+            },
+            {
+              "field": "CPU op-mode(s):",
+              "data": "32-bit, 64-bit"
+            },
+            {
+              "field": "Address sizes:",
+              "data": "52 bits physical, 57 bits virtual"
+            },
+            {
+              "field": "Byte Order:",
+              "data": "Little Endian"
+            },
+            {
+              "field": "CPU(s):",
+              "data": "128"
+            },
+            {
+              "field": "On-line CPU(s) list:",
+              "data": "0-127"
+            },
+            {
+              "field": "Vendor ID:",
+              "data": "GenuineIntel"
+            },
+            {
+              "field": "Model name:",
+              "data": "INTEL(R) XEON(R) GOLD 6530"
+            },
+            {
+              "field": "CPU family:",
+              "data": "6"
+            },
+            {
+              "field": "Model:",
+              "data": "207"
+            },
+            {
+              "field": "Thread(s) per core:",
+              "data": "2"
+            },
+            {
+              "field": "Core(s) per socket:",
+              "data": "32"
+            },
+            {
+              "field": "Socket(s):",
+              "data": "2"
+            },
+            {
+              "field": "Stepping:",
+              "data": "2"
+            },
+            {
+              "field": "CPU max MHz:",
+              "data": "4000.0000"
+            },
+            {
+              "field": "CPU min MHz:",
+              "data": "800.0000"
+            },
+            {
+              "field": "BogoMIPS:",
+              "data": "4200.00"
+            },
+            {
+              "field": "Flags:",
+              "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities"
+            },
+            {
+              "field": "Virtualization:",
+              "data": "VT-x"
+            },
+            {
+              "field": "L1d cache:",
+              "data": "3 MiB (64 instances)"
+            },
+            {
+              "field": "L1i cache:",
+              "data": "2 MiB (64 instances)"
+            },
+            {
+              "field": "L2 cache:",
+              "data": "128 MiB (64 instances)"
+            },
+            {
+              "field": "L3 cache:",
+              "data": "320 MiB (2 instances)"
+            },
+            {
+              "field": "NUMA node(s):",
+              "data": "2"
+            },
+            {
+              "field": "NUMA node0 CPU(s):",
+              "data": "0-31,64-95"
+            },
+            {
+              "field": "NUMA node1 CPU(s):",
+              "data": "32-63,96-127"
+            },
+            {
+              "field": "Vulnerability Gather data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Itlb multihit:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability L1tf:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Meltdown:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mmio stale data:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Reg file data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Retbleed:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec rstack overflow:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec store bypass:",
+              "data": "Mitigation; Speculative Store Bypass disabled via prctl and seccomp"
+            },
+            {
+              "field": "Vulnerability Spectre v1:",
+              "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+            },
+            {
+              "field": "Vulnerability Spectre v2:",
+              "data": "Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline"
+            },
+            {
+              "field": "Vulnerability Srbds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Tsx async abort:",
+              "data": "Not affected"
+            }
+          ]
+        },
+        "cgroup_memory": {
+          "memory.max": "536870912000",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        },
+        "threads": 24,
+        "process_id": 44,
+        "qz_job_name": "gqc-3167-conv-psi4-c6-1126-a",
+        "qz_project": "CQ-NexChem",
+        "slurm_job_id": "1",
+        "slurm_cpus_per_task": "24",
+        "scratch_free_bytes": 6308335267840,
+        "python": "3.11.18",
+        "driver_sha256": "d3b2353074ab2cca9ea19aa5c0da3c6f2c2e00a19e4e3a354075156e0f27c3c0",
+        "protocol_sha256": {
+          "run.py": "0b9b8d6d1fb9d3ea13b875e6ffa29eec5209301523dd5cf881aeca14333d23fd",
+          "fixtures.json": "559cb9a7c952654fadd79559d7f52973d6d5ab6faca6fcc40ba408b304f45695"
+        },
+        "arm": "psi4-conv",
+        "trial": "C6.0",
+        "wall_limit_seconds": 169200,
+        "application_memory_mib": 450560
+      },
+      "resource": {
+        "duration_seconds": 8642.396563135087,
+        "sample_interval_seconds": 30,
+        "samples": 289,
+        "sampled_peak": {
+          "rss_high_water_kib": 279947452
+        },
+        "cgroup_memory_after": {
+          "memory.max": "536870912000",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        }
+      },
+      "worker-memory": {
+        "process_rss_high_water_kib": 279947452
+      }
+    },
+    {
       "source": "gqc-3167-conv-pyscf-c5-1126-a",
       "arm": "pyscf-conv",
       "label": "C5.0",
