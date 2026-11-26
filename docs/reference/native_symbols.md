@@ -87,9 +87,11 @@ capability authorities, serialization, and status handling.
 - [generativeqc_basis_project_cpu_v1](#native-c-generativeqc-basis-project-cpu-v1)
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
+- [generativeqc_calculation_prepare_with_host_resources_v1](#native-c-generativeqc-calculation-prepare-with-host-resources-v1)
 - [generativeqc_system_create_named_ks_v1](#native-c-generativeqc-system-create-named-ks-v1)
 - [generativeqc_calculation_prepare_named_ks_v1](#native-c-generativeqc-calculation-prepare-named-ks-v1)
 - [generativeqc_batch_prepare_named_ks_v1](#native-c-generativeqc-batch-prepare-named-ks-v1)
+- [generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1](#native-c-generativeqc-batch-prepare-named-ks-with-host-hessian-resources-v1)
 - [generativeqc_batch_prepare_named_ks_cold_rks_v1](#native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)
 - [generativeqc_ks_d3_resource_query_v1](#native-c-generativeqc-ks-d3-resource-query-v1)
 - [generativeqc_ks_d4_resource_query_v1](#native-c-generativeqc-ks-d4-resource-query-v1)
@@ -200,8 +202,13 @@ capability authorities, serialization, and status handling.
 - [generativeqc::System::get](#native-cpp-generativeqc-system-get)
 - [generativeqc::System::atom_count](#native-cpp-generativeqc-system-atom-count)
 - [generativeqc::CalculationResult](#native-cpp-generativeqc-calculationresult)
+- [generativeqc::HostResources](#native-cpp-generativeqc-hostresources)
+- [generativeqc::HostResources::HostResources](#native-cpp-generativeqc-hostresources-hostresources)
+- [generativeqc::HostResources::snapshot](#native-cpp-generativeqc-hostresources-snapshot)
+- [generativeqc::HostResources::get](#native-cpp-generativeqc-hostresources-get)
 - [generativeqc::Calculation](#native-cpp-generativeqc-calculation)
 - [generativeqc::Calculation::Calculation](#native-cpp-generativeqc-calculation-calculation)
+- [generativeqc::Calculation::Calculation-host-resources](#native-cpp-generativeqc-calculation-calculation-host-resources)
 - [generativeqc::Calculation::Calculation-named-ks](#native-cpp-generativeqc-calculation-calculation-named-ks)
 - [generativeqc::Calculation::~Calculation](#native-cpp-generativeqc-calculation-destructor-calculation)
 - [generativeqc::Calculation::Calculation-copy](#native-cpp-generativeqc-calculation-calculation-copy)
@@ -233,10 +240,6 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
 - [generativeqc::Batch::last_density_fitting_metric_diagnostics](#native-cpp-generativeqc-batch-last-density-fitting-metric-diagnostics)
 - [generativeqc::KsGrid](#native-cpp-generativeqc-ksgrid)
-- [generativeqc::HostResources](#native-cpp-generativeqc-hostresources)
-- [generativeqc::HostResources::HostResources](#native-cpp-generativeqc-hostresources-hostresources)
-- [generativeqc::HostResources::snapshot](#native-cpp-generativeqc-hostresources-snapshot)
-- [generativeqc::HostResources::get](#native-cpp-generativeqc-hostresources-get)
 - [generativeqc::prepare_named_ks](#native-cpp-generativeqc-prepare-named-ks)
 - [generativeqc::KsComposition](#native-cpp-generativeqc-kscomposition)
 - [generativeqc::KsComposition::KsComposition](#native-cpp-generativeqc-kscomposition-kscomposition)
@@ -251,6 +254,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_ks_hessian_cuda_v2](#native-c-generativeqc-ks-hessian-cuda-v2)
 - [generativeqc_ks_hessian_cpu_version_v1](#native-c-generativeqc-ks-hessian-cpu-version-v1)
 - [generativeqc_ks_hessian_cpu_method_v1](#native-c-generativeqc-ks-hessian-cpu-method-v1)
+- [generativeqc_ks_hessian_cpu_model_match_v1](#native-c-generativeqc-ks-hessian-cpu-model-match-v1)
 - [generativeqc_ks_hessian_cpu_default_options_v1](#native-c-generativeqc-ks-hessian-cpu-default-options-v1)
 - [generativeqc_ks_hessian_cpu_minimum_bytes_v1](#native-c-generativeqc-ks-hessian-cpu-minimum-bytes-v1)
 - [generativeqc_ks_hessian_cpu_v1](#native-c-generativeqc-ks-hessian-cpu-v1)
@@ -2396,6 +2400,34 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 **Units.** Method energy tolerances use Hartree; geometries use Bohr. Resource limits are bytes,
 and convergence residuals retain the method-specific descriptor meanings.
 
+(native-c-generativeqc-calculation-prepare-with-host-resources-v1)=
+## generativeqc_calculation_prepare_with_host_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_host_resources_v1 ( generativeqc_context * context , const generativeqc_system * system , const generativeqc_method_descriptor * descriptor , const generativeqc_host_resources * resources , generativeqc_calculation * * calculation ) ;
+```
+
+**Behavior.** Prepare one all-electron Direct FP64 CPU RHF/UHF provider with a shared
+modeled host lease covering energy and analytic force replay. Derive capacity from
+the actual system and method controls before preparing the provider.
+
+**Inputs.** Follow generativeqc_calculation_prepare descriptor rules and provide a live
+shared host resource handle. V1 excludes fitting, ECP, and preliminary guess providers.
+
+**Outputs.** Clears the output slot on entry; success publishes one owning calculation.
+
+**Lifetime.** The calculation holds its lease until destruction, even if the host metadata
+handle is destroyed. No lease survives a failed preparation.
+
+**Errors.** Unsupported contexts return NOT_IMPLEMENTED, an insufficient shared cap returns
+OUT_OF_MEMORY, and invalid input/ABI statuses follow the ordinary prepare contract.
+
+**Execution.** Synchronous. Owners sharing a cap serialize numerical workspace across contexts.
+
+**Units.** Bytes of modeled capacity, not an allocator, free-memory, or process RSS limit.
+
 (native-c-generativeqc-system-create-named-ks-v1)=
 ## generativeqc_system_create_named_ks_v1
 
@@ -2478,6 +2510,38 @@ covers the aggregate retained fleet plus the largest serialized workspace.
 **Execution.** Synchronous; replay and failure isolation use the ordinary native batch API.
 
 **Units.** Coordinates in Bohr, energies in Hartree and capacities in bytes.
+
+(native-c-generativeqc-batch-prepare-named-ks-with-host-hessian-resources-v1)=
+## generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_batch_prepare_named_ks_with_host_hessian_resources_v1 ( generativeqc_context * context , const generativeqc_system * const * systems , uint32_t system_count , const generativeqc_method_descriptor * descriptor , const generativeqc_named_ks_descriptor * name , generativeqc_batch_flags flags , const generativeqc_host_resources * resources , uint64_t maximum_bytes , uint64_t derivative_workspace_bytes , generativeqc_batch * * batch ) ;
+```
+
+**Behavior.** Prepare a linked CPU Direct FP64 KS fleet for energy replay and
+Hessian/HVP. Charge retained providers and serialized primal workspace plus the declared
+derivative workspace against the local effective limit and the supplied shared host ledger.
+An explicit packed ERI request charges the actual packed value array and independently
+enforces the named descriptor's fleet-wide packed value cap.
+Admitted scalar ECP systems include their conservative setup workspace in the lease.
+For admitted all-electron methods, RESERVE_HOST_HESSIAN_FORCES additionally models
+the native force workspace and enables force replay on the same batch.
+
+**Inputs.** A live CPU context, named systems, a live host ledger, an effective
+local byte limit and a positive derivative workspace. Only the warm-start and
+host-Hessian force-reservation batch flags are allowed.
+
+**Outputs.** Clears the output slot on entry; success publishes one owning batch.
+
+**Lifetime.** The batch outlives the borrowed resources handle; the context must outlive the batch.
+
+**Errors.** Refuses insufficient capacity, out-of-scope providers and nonpositive derivative caps.
+
+**Execution.** Synchronous; admitted primal replay and derivatives serialize on the same host lease.
+
+**Units.** Capacities in bytes; energy and derivatives follow the named KS and Hessian APIs.
 
 (native-c-generativeqc-batch-prepare-named-ks-cold-rks-v1)=
 ## generativeqc_batch_prepare_named_ks_cold_rks_v1
@@ -5455,6 +5519,70 @@ destruction. Default zero initialization alone does not mean a solve succeeded.
 **Units.** Energy is Hartree and forces Hartree/Bohr; residual meanings remain method-specific,
 with SCF density-update and physical measures separate.
 
+(native-cpp-generativeqc-hostresources)=
+## generativeqc::HostResources
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+class HostResources
+```
+
+**Behavior.** Own the metadata handle for a shared modeled native host cap.
+
+**Lifetime.** Prepared owners retain their leases independently of this handle.
+
+**Execution.** Do not race destruction with borrowing or querying the handle.
+
+(native-cpp-generativeqc-hostresources-hostresources)=
+## generativeqc::HostResources::HostResources
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+explicit HostResources ( std :: uint64_t maximum_bytes )
+```
+
+**Behavior.** Construct a metadata-only shared host cap.
+
+**Inputs.** maximum_bytes is the effective modeled cap; zero is valid.
+
+**Errors.** Throws Error if the native handle could not be created.
+
+**Execution.** Synchronous; initializes no compute backend.
+
+(native-cpp-generativeqc-hostresources-snapshot)=
+## generativeqc::HostResources::snapshot
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+generativeqc_host_resource_snapshot snapshot ( ) const
+```
+
+**Behavior.** Read one coherent modeled-reservation snapshot.
+
+**Outputs.** Retained bytes, largest serialized workspace, cap and owner count.
+
+**Errors.** Throws Error on native failure or a moved-from object.
+
+**Execution.** Safe with native preparation and execution on separate contexts.
+
+(native-cpp-generativeqc-hostresources-get)=
+## generativeqc::HostResources::get
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+const generativeqc_host_resources * get ( ) const noexcept
+```
+
+**Behavior.** Borrow the native metadata handle for synchronous preparation.
+
+**Outputs.** A non-owning handle, or NULL after move.
+
+**Lifetime.** The wrapper must outlive uses of the borrowed handle.
+
 (native-cpp-generativeqc-calculation)=
 ## generativeqc::Calculation
 
@@ -5506,6 +5634,29 @@ Allocation failures may throw standard exceptions.
 
 **Units.** Uses C descriptor atomic units: Bohr geometry, Hartree energies and Hartree/Bohr
 forces; memory limits are bytes.
+
+(native-cpp-generativeqc-calculation-calculation-host-resources)=
+## generativeqc::Calculation::Calculation-host-resources
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+Calculation ( Context & context , const System & system , const generativeqc_method_descriptor & method , const HostResources & resources )
+```
+
+**Behavior.** Prepare all-electron Direct FP64 CPU RHF/UHF with a shared host lease.
+
+**Inputs.** Supply a live context, system, method descriptor and host cap. The v1 C
+admission rules apply; no fitting, ECP, or preliminary guess provider is allowed.
+
+**Lifetime.** The lease survives closing the metadata handle and ends with the calculation.
+The context must outlive the calculation.
+
+**Errors.** Throws Error with native detail on capacity or preparation failure.
+
+**Execution.** Synchronous; the shared cap serializes workspace across its owners.
+
+**Units.** Bytes of modeled capacity; not process RSS or allocator telemetry.
 
 (native-cpp-generativeqc-calculation-calculation-named-ks)=
 ## generativeqc::Calculation::Calculation-named-ks
@@ -6210,70 +6361,6 @@ selects the force schedule independently with automatic SCF tiling.
 
 **Units.** coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
 
-(native-cpp-generativeqc-hostresources)=
-## generativeqc::HostResources
-
-Source: [ks.hpp](../../include/generativeqc/ks.hpp)
-
-```cpp
-class HostResources
-```
-
-**Behavior.** Own the metadata handle for a shared modeled native host cap.
-
-**Lifetime.** Prepared owners retain their leases independently of this handle.
-
-**Execution.** Do not race destruction with borrowing or querying the handle.
-
-(native-cpp-generativeqc-hostresources-hostresources)=
-## generativeqc::HostResources::HostResources
-
-Source: [ks.hpp](../../include/generativeqc/ks.hpp)
-
-```cpp
-explicit HostResources ( std :: uint64_t maximum_bytes )
-```
-
-**Behavior.** Construct a metadata-only shared host cap.
-
-**Inputs.** maximum_bytes is the effective modeled cap; zero is valid.
-
-**Errors.** Throws Error if the native handle could not be created.
-
-**Execution.** Synchronous; initializes no compute backend.
-
-(native-cpp-generativeqc-hostresources-snapshot)=
-## generativeqc::HostResources::snapshot
-
-Source: [ks.hpp](../../include/generativeqc/ks.hpp)
-
-```cpp
-generativeqc_host_resource_snapshot snapshot ( ) const
-```
-
-**Behavior.** Read one coherent modeled-reservation snapshot.
-
-**Outputs.** Retained bytes, largest serialized workspace, cap and owner count.
-
-**Errors.** Throws Error on native failure or a moved-from object.
-
-**Execution.** Safe with native preparation and execution on separate contexts.
-
-(native-cpp-generativeqc-hostresources-get)=
-## generativeqc::HostResources::get
-
-Source: [ks.hpp](../../include/generativeqc/ks.hpp)
-
-```cpp
-const generativeqc_host_resources * get ( ) const noexcept
-```
-
-**Behavior.** Borrow the native metadata handle for synchronous preparation.
-
-**Outputs.** A non-owning handle, or NULL after move.
-
-**Lifetime.** The wrapper must outlive uses of the borrowed handle.
-
 (native-cpp-generativeqc-prepare-named-ks)=
 ## generativeqc::prepare_named_ks
 
@@ -6591,6 +6678,27 @@ GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_method_v1 ( const char * i
 **Outputs.** Returns 1 if linked for the identity, 0 for null, missing or unknown identity.
 
 **Execution.** Host metadata query; prepared state and capacity admission are separate.
+
+(native-c-generativeqc-ks-hessian-cpu-model-match-v1)=
+## generativeqc_ks_hessian_cpu_model_match_v1
+
+Source: [ks_hessian.h](../../include/generativeqc/ks_hessian.h)
+
+```cpp
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_model_match_v1 ( const char * electronic_identity , const char * total_identity ) ;
+```
+
+**Behavior.** Authenticate a linked bare electronic Hessian closure and a total
+method that uses that same closure, with any correction resolved natively.
+
+**Inputs.** Two NUL-terminated MethodIR identities; use the same value for a
+bare method. The first identity must not carry a correction.
+
+**Outputs.** UNLINKED if the library cannot bind the electronic identity;
+ELECTRONIC_ONLY if it binds but the total method is missing or uses another
+closure; MATCHED if both identities select the same linked electronic owner.
+
+**Execution.** Host metadata only; no SCF, Hessian, capacity or system admission.
 
 (native-c-generativeqc-ks-hessian-cpu-default-options-v1)=
 ## generativeqc_ks_hessian_cpu_default_options_v1

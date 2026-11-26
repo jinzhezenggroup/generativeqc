@@ -93,16 +93,32 @@ def test_aliases_query_existing_native_carrier(
     )
 
 
-def test_old_named_protocol_keeps_numeric_compatibility(library: typing.Any) -> None:
-    class OldLibrary:
+@pytest.mark.parametrize("consumer", ("query", "calculator"))
+def test_missing_named_protocol_rejects_numeric_fallback(
+    library: typing.Any, monkeypatch: pytest.MonkeyPatch, consumer: str
+) -> None:
+    class NumericOnlyLibrary:
         generativeqc_method_from_name = None
 
         def __getattr__(self, name: str) -> typing.Any:
+            if name == "generativeqc_method_get_capabilities":
+                raise AssertionError("selected library used a numeric-only lookup")
             return getattr(library, name)
 
-    assert capabilities(OldLibrary(), "rhf", _native.METHOD_RHF) == capabilities(
-        library, "rhf", _native.METHOD_RHF
-    )
+    selected = NumericOnlyLibrary()
+
+    def selected_loader(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        if kwargs.get("device") == ("cpu" if consumer == "calculator" else None):
+            return selected
+        raise AssertionError("missing named registry tried another library")
+
+    method_capabilities.cache_clear()
+    monkeypatch.setattr(_native, "load_library", selected_loader)
+    with pytest.raises(RuntimeError, match="lacks the named method registry"):
+        if consumer == "calculator":
+            Calculator(method="rhf", basis="sto-3g", device="cpu")
+        else:
+            method_capabilities("rhf")
 
 
 @pytest.mark.parametrize("stage", ("lookup", "capabilities"))

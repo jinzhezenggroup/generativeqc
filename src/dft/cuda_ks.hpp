@@ -236,10 +236,10 @@ struct CudaKsFixedDensityProfile {
   std::uint32_t present_mask{};
 };
 
-/** Only the native initial-guess owner may identify its generated cold seed.
- * Caller-supplied and warm-projected densities retain External provenance.
- */
-enum class CudaKsSeedOrigin { External, NativeColdGuess };
+/** The native initial-guess owner attests cold guesses. The batch owner
+ * attests moved seeds materialized from its last converged resident density.
+ * Restored and caller-supplied densities have external provenance. */
+enum class CudaKsSeedOrigin { External, NativeColdGuess, MovedBatchDensity };
 
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
