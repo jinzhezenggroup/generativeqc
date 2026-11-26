@@ -1955,6 +1955,90 @@ GENERATIVEQC_API generativeqc_status generativeqc_cbs_extrapolation_query_v1(
     const generativeqc_cbs_extrapolation_descriptor_v1* descriptor,
     generativeqc_cbs_extrapolation_plan_v1* output);
 
+/** Six completed component observables in extrapolation-plan role order.
+ * Each forces pointer is NULL for energy only, or points to force_count
+ * contiguous xyz values. A shared component may supply the same input twice.
+ */
+typedef struct generativeqc_cbs_observables_v1 {
+  uint32_t struct_size, abi_version;
+  double energy[6];
+  const double* forces[6];
+  size_t force_count;
+} generativeqc_cbs_observables_v1;
+
+/** Four outputs in order: total, HF limit, MP2 correlation limit, CCSD(T)
+ * correction. force_blocks has four consecutive blocks of force_count values
+ * each, or is NULL for energy only. force_capacity counts values, not bytes.
+ */
+typedef struct generativeqc_cbs_composition_v1 {
+  uint32_t struct_size, abi_version;
+  double energy[4];
+  double* force_blocks;
+  size_t force_capacity;
+} generativeqc_cbs_composition_v1;
+
+/** @native-contract generativeqc_cbs_compose_v1
+ * @behavior Assemble completed focal-point energy and analytic force components
+ * with the selected extrapolation plan. Form correlation differences before
+ * weighting. No component execution or convergence certification is implied.
+ * @inputs Current-ABI plan, six finite completed components, and output header.
+ * Forces are all omitted (count and capacity zero) or match one nonzero xyz
+ * extent. Caller authenticates model, geometry, backend and convergence.
+ * @outputs Four energies and, if requested, four equal contiguous force blocks.
+ * On failure all output bytes remain unchanged.
+ * @errors INVALID_ARGUMENT for missing data or invalid dimensions;
+ * ABI_MISMATCH for incompatible headers; NUMERICAL_FAILURE for nonfinite
+ * values or intermediates; OUT_OF_MEMORY if force staging cannot be allocated.
+ * @lifetime No storage retained. The force output and output descriptor must
+ * be disjoint. Input component arrays may share storage with one another.
+ * @execution Synchronous host composition with at most four force blocks of
+ * staging. No electronic solve, device, compiler or implicit retry.
+ * @units Hartree and Hartree/Bohr; weights are dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_cbs_compose_v1(
+    const generativeqc_cbs_extrapolation_plan_v1* plan,
+    const generativeqc_cbs_observables_v1* components, generativeqc_cbs_composition_v1* output);
+
+/** Stopping-policy inputs using a previously published extrapolation plan.
+ * correction_basis is 0 (low), 1 (high), or 2 (distinct). The caller declares
+ * basis identity. default_standard is 0 (strict) or 1 (routine Standard),
+ * used only when total_budget is NULL. */
+typedef struct generativeqc_cbs_convergence_descriptor_v1 {
+  uint32_t struct_size, abi_version, correction_basis, default_standard;
+  const generativeqc_cbs_extrapolation_plan_v1* extrapolation;
+  const generativeqc_correlation_budget_v1* total_budget;
+} generativeqc_cbs_convergence_descriptor_v1;
+
+/** Detached correlated stopping plan. Zero budget records mean no allowance.
+ * A positive budget can still select strict stopping if below the supported bracket. */
+typedef struct generativeqc_cbs_convergence_result_v1 {
+  uint32_t struct_size, abi_version;
+  double coefficient_l1;
+  generativeqc_correlation_budget_v1 total_budget, component_budget;
+  generativeqc_correlation_limits_v1 limits;
+} generativeqc_cbs_convergence_result_v1;
+
+/** @native-contract generativeqc_cbs_convergence_query_v1
+ * @behavior Use the rounded plan coefficients to allocate one observable
+ * allowance to each unique correlated component. Combine a reused MP2 role
+ * before computing the coefficient L1 amplification. Apply the existing
+ * correlated stopping policy to the resulting per-component allowance.
+ * @inputs Complete current-ABI input and output headers, a finite native
+ * extrapolation plan, and a declared correction basis role. A supplied total
+ * budget requires positive energy and max-force allowances; zero omits RMS.
+ * @outputs Publishes both budgets, amplification and stopping limits together.
+ * Not an observed error or a basis/scientific accuracy certificate.
+ * @errors Invalid arguments, unrepresentable amplification or allocation, and
+ * incompatible ABI headers reject without publishing any portion of the result.
+ * @lifetime Borrows pointers during this call only. Inputs may overlap outputs.
+ * @execution Constant-storage host policy query only; no solve, context, basis
+ * lookup, callback, compiler or device work.
+ * @units Allowances use Hartree and Hartree/Bohr; amplification is dimensionless.
+ */
+GENERATIVEQC_API generativeqc_status
+generativeqc_cbs_convergence_query_v1(const generativeqc_cbs_convergence_descriptor_v1* descriptor,
+                                      generativeqc_cbs_convergence_result_v1* output);
+
 /** Optional cost metadata for numerical two-stage HF plan admission. */
 enum {
   GENERATIVEQC_HF_PLAN_SOURCE_COST_PRESENT = 1u << 0,
@@ -3428,6 +3512,25 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_df_gradient_cuda(
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
+
+/** @native-contract generativeqc_calculation_prepare_with_host_resources_v1
+ * @behavior Prepare one all-electron Direct FP64 CPU RHF/UHF provider with a shared
+ * modeled host lease covering energy and analytic force replay. Derive capacity from
+ * the actual system and method controls before preparing the provider.
+ * @inputs Follow generativeqc_calculation_prepare descriptor rules and provide a live
+ * shared host resource handle. V1 excludes fitting, ECP, and preliminary guess providers.
+ * @outputs Clears the output slot on entry; success publishes one owning calculation.
+ * @lifetime The calculation holds its lease until destruction, even if the host metadata
+ * handle is destroyed. No lease survives a failed preparation.
+ * @errors Unsupported contexts return NOT_IMPLEMENTED, an insufficient shared cap returns
+ * OUT_OF_MEMORY, and invalid input/ABI statuses follow the ordinary prepare contract.
+ * @execution Synchronous. Owners sharing a cap serialize numerical workspace across contexts.
+ * @units Bytes of modeled capacity, not an allocator, free-memory, or process RSS limit.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare_with_host_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_host_resources* resources,
+    generativeqc_calculation** calculation);
 
 /** @native-contract generativeqc_system_create_named_ks_v1
  * @behavior Create a system with the immutable orbital basis defining a named composite.

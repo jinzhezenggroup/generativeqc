@@ -30,10 +30,12 @@ def ordinary_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _inventory_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """Stub allocator leaves, not native composition; no CUDA execution is claimed."""
+    """Keep composition native on CPU while stubbing CUDA allocator leaves."""
+    composition = _native.load_library(device="cpu").generativeqc_resource_compose_v1
     library = SimpleNamespace(
         generativeqc_ks_resource_inventory_version_v1=lambda: 1,
         generativeqc_ks_options_version=lambda: 1,
+        generativeqc_resource_compose_v1=composition,
     )
     monkeypatch.setattr(resources_ks, "_cuda_library_identity", lambda _: {})
     monkeypatch.setattr(

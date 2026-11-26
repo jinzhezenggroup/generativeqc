@@ -6,6 +6,8 @@ KS calculations. `auto` follows the calculation backend; explicit
 `cpu`/`cuda` DF selections must match `device`. Omitting the auxiliary basis
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
+For the explicit mode and auxiliary-basis requirements of CPU PBE with scalar
+ECPs, see [public CPU semilocal ECP forces](ecp.md#public-cpu-semilocal-ecp-forces).
 
 CUDA HF/KS accepts orbital shells through f and full-range SCF fitting
 auxiliaries through h (`l=5`) for energies and first nuclear derivatives,

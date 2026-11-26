@@ -230,6 +230,7 @@ def cuda_layout_library(library: typing.Any) -> typing.Any:
         return 1
 
     return SimpleNamespace(
+        generativeqc_resource_compose_v1=library.generativeqc_resource_compose_v1,
         generativeqc_resource_ecp_workspace_v1=library.generativeqc_resource_ecp_workspace_v1,
         generativeqc_resource_small_hf_cuda_v2=layout,
         generativeqc_resource_ks_cuda_v2=layout,
@@ -463,7 +464,7 @@ def test_public_plans_route_ecp_independently_of_enclosing_inventory(
     method: str,
     host_owner: str,
 ) -> None:
-    """Mixed-age libraries keep exact bounds and explicit ECP owner identity."""
+    """HF refuses incomplete owners; KS keeps its separately scoped behavior."""
     hidden = set()
     if method in ("pbe-rks", "pbe-uks"):
         # Exercise the ordinary fleet, not the separately qualified dense force owner.
@@ -542,7 +543,17 @@ def test_public_plans_route_ecp_independently_of_enclosing_inventory(
     estimate = (
         estimate_hf_resources if method in ("rhf", "uhf") else estimate_ks_resources
     )
-    legacy = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
+    if method in ("rhf", "uhf"):
+        incomplete = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
+        with pytest.raises(
+            NotImplementedError, match="CPU HF (ECP workspace|fleet) inventory"
+        ):
+            incomplete.require_feasible()
+        if host_owner != "current":
+            return
+        legacy = estimate(systems, **options)
+    else:
+        legacy = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
     legacy.require_feasible()
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:

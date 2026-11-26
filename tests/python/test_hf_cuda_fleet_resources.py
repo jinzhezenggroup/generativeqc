@@ -33,7 +33,7 @@ def topology(aos: int, cartesian: int, spins: int) -> dict[str, typing.Any]:
 
 
 def layout_library(library: typing.Any = None) -> typing.Any:
-    """Replace only the GPU allocator leaf, retaining the actual fleet ABI."""
+    """Stub the GPU allocator but use native plan composition in both arms."""
 
     def layout(*args: typing.Any) -> int:
         aos, history, spins = args[0], args[6], args[7]
@@ -43,7 +43,11 @@ def layout_library(library: typing.Any = None) -> typing.Any:
         output[1] = 256 + 64 * aos
         return 0
 
-    selected = SimpleNamespace(generativeqc_resource_small_hf_cuda_v2=layout)
+    composition = library if library is not None else _native.load_library(device="cpu")
+    selected = SimpleNamespace(
+        generativeqc_resource_compose_v1=composition.generativeqc_resource_compose_v1,
+        generativeqc_resource_small_hf_cuda_v2=layout,
+    )
     if library is not None:
         selected.generativeqc_resource_hf_cuda_fleet_v1 = (
             library.generativeqc_resource_hf_cuda_fleet_v1

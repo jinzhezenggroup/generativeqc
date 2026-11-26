@@ -1,0 +1,1514 @@
+{
+  "native-conv": {
+    "gpu": {
+      "C1.0": {
+        "status": "completed",
+        "energy_hartree": -40.39003662127893,
+        "force_hartree_per_bohr": [
+          [
+            -0.00021421103708078138,
+            -0.00031137949472888967,
+            -0.0005235960534276341
+          ],
+          [
+            0.007347459872985093,
+            1.494611029642132e-05,
+            8.216545390564648e-05
+          ],
+          [
+            -0.0024405185595763926,
+            0.006935824890248861,
+            8.207805996159726e-05
+          ],
+          [
+            -0.002480294245954012,
+            -0.003509303939402751,
+            0.005945231223385709
+          ],
+          [
+            -0.002212436030371985,
+            -0.0031300875664104317,
+            -0.005585878683826486
+          ]
+        ],
+        "endpoint_seconds": 4.4951264737173915,
+        "versions": {
+          "generativeqc": "0.1.0"
+        },
+        "work": {
+          "correlation": {
+            "reference_energy": -40.19870616683578,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.7345434974166403,
+            "reference_residual": 5.44242428901498e-12,
+            "numeric_capacity_bytes": 557286472,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 161166080,
+            "correlation_provider_retained_bytes": 7172408,
+            "mo_transfer_bytes": 7301880,
+            "host_to_device_ms": 0.06707199662923813,
+            "device_to_host_ms": 0.8354560136795044,
+            "transform_library_ms": 1.0964159965515137,
+            "tensor_kernel_ms": 0.20716799795627594,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 10,
+            "response_restarts": 0,
+            "response_absolute_residual": 8.2844775824584e-13,
+            "response_relative_residual": 4.797640400090014e-10,
+            "response_workspace_bytes": 91928,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 557286472,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+            "measured_response_workspace_peak_bytes": 90768,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 15,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.1875708619324311,
+            "ccsd_energy_change": 5.191680418903388e-13,
+            "ccsd_singles_residual_max": 1.907513370750159e-12,
+            "ccsd_doubles_residual_max": 3.71182934649078e-12,
+            "ccsd_replay_singles_residual_max": 1.9075133707476775e-12,
+            "ccsd_replay_doubles_residual_max": 3.711826527565132e-12,
+            "ccsd_setup_h2d_bytes": 7351288,
+            "ccsd_scalar_d2h_bytes": 664,
+            "ccsd_amplitude_d2h_bytes": 169360,
+            "ccsd_synchronizations": 46,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.003759592510723432,
+            "ccsd_t_virtual_triples": 4495,
+            "ccsd_t_workspace_bytes": 1380864,
+            "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 34928744
+          },
+          "cc_performance": {
+            "reference_seconds": 0.716832251,
+            "problem_seconds": 0.188414731,
+            "provider_seconds": 0.185357818,
+            "source_seconds": 0.00657036,
+            "solver_seconds": 0.200351227,
+            "iteration_seconds": 0.18190379997671513,
+            "replay_seconds": 0.013577159,
+            "update_seconds": 0.00042737299999999993,
+            "diis_seconds": 0.0014066150232849113,
+            "triples_seconds": 0.002574701,
+            "source_scans": 1,
+            "source_reads": 1,
+            "source_values": 1336336,
+            "transform_fmas": 150529866,
+            "transform_stages": 17,
+            "mo_blocks": 7,
+            "cuda_transform_calls": 7,
+            "cuda_batch_calls": 1,
+            "iteration_graph_calls": 28,
+            "replay_graph_calls": 1,
+            "update_calls": 14,
+            "generated_error_checks": 15,
+            "diis_gram_calls": 14,
+            "diis_coefficient_calls": 13,
+            "diis_combine_calls": 26,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": null,
+            "source_response_seconds": null,
+            "orbital_seconds": null,
+            "lambda_fp32_requested": null,
+            "lambda_fp32_executed": null,
+            "lambda_fp32_refused": null,
+            "lambda_fp32_iterations": null,
+            "lambda_fp64_iterations": null,
+            "lambda_fp32_actions": null,
+            "lambda_fp64_actions": null,
+            "lambda_fp32_gemm_calls": null,
+            "lambda_fp32_cast_elements": null,
+            "lambda_auxiliary_batch_size": null,
+            "lambda_numeric_capacity_bytes": null,
+            "lambda_owned_device_bytes": null
+          },
+          "rhf_energy": -40.19870616683578,
+          "hf_cycles": 15,
+          "hf_density_rms": 3.71182934649078e-12,
+          "executed_backend": "cuda"
+        },
+        "case": "C1",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      },
+      "C2.0": {
+        "status": "completed",
+        "energy_hartree": -79.58728899554497,
+        "force_hartree_per_bohr": [
+          [
+            -0.002320379011660307,
+            -4.433813688521222e-06,
+            -3.509298871214282e-05
+          ],
+          [
+            0.002320064652669055,
+            -3.408769212043754e-05,
+            8.620433024335826e-06
+          ],
+          [
+            -0.004709333920279986,
+            0.006462338272746973,
+            1.3335355555258812e-06
+          ],
+          [
+            -0.004757576210710542,
+            -0.003230482132416444,
+            0.005550771519577093
+          ],
+          [
+            -0.0046996218562987205,
+            -0.0031801926082625155,
+            -0.005596628054317749
+          ],
+          [
+            0.004709707622629681,
+            0.003185297726399816,
+            0.005625804482423393
+          ],
+          [
+            0.00475684464923895,
+            0.003239034185397824,
+            -0.005543360046805402
+          ],
+          [
+            0.004700294074427837,
+            -0.006437473938072477,
+            -1.1448880744866257e-05
+          ]
+        ],
+        "endpoint_seconds": 32.32423376664519,
+        "versions": {
+          "generativeqc": "0.1.0"
+        },
+        "work": {
+          "correlation": {
+            "reference_energy": -79.23463017214067,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.6696440730940502,
+            "reference_residual": 3.718303442923343e-12,
+            "numeric_capacity_bytes": 3381657415,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 1331613952,
+            "correlation_provider_retained_bytes": 59594936,
+            "mo_transfer_bytes": 59971704,
+            "host_to_device_ms": 0.11407999694347382,
+            "device_to_host_ms": 19.095584869384766,
+            "transform_library_ms": 3.743040084838867,
+            "tensor_kernel_ms": 0.21807999908924103,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 11,
+            "response_restarts": 0,
+            "response_absolute_residual": 5.654764911232318e-13,
+            "response_relative_residual": 2.532379181382656e-10,
+            "response_workspace_bytes": 262424,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 3381657415,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+            "measured_response_workspace_peak_bytes": 258896,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 17,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.3443059031039826,
+            "ccsd_energy_change": 4.509725926027386e-13,
+            "ccsd_singles_residual_max": 3.786204934694085e-12,
+            "ccsd_doubles_residual_max": 5.721489254595369e-12,
+            "ccsd_replay_singles_residual_max": 3.786204934694085e-12,
+            "ccsd_replay_doubles_residual_max": 5.721530887958792e-12,
+            "ccsd_setup_h2d_bytes": 61181688,
+            "ccsd_scalar_d2h_bytes": 752,
+            "ccsd_amplitude_d2h_bytes": 1559376,
+            "ccsd_synchronizations": 52,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.00835292030030463,
+            "ccsd_t_virtual_triples": 20825,
+            "ccsd_t_workspace_bytes": 12401664,
+            "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 93713512
+          },
+          "cc_performance": {
+            "reference_seconds": 0.915793252,
+            "problem_seconds": 1.363752655,
+            "provider_seconds": 1.359514816,
+            "source_seconds": 0.008077742,
+            "solver_seconds": 1.04699256,
+            "iteration_seconds": 0.9417499410483399,
+            "replay_seconds": 0.083893472,
+            "update_seconds": 0.0005393049999999999,
+            "diis_seconds": 0.003857643951660151,
+            "triples_seconds": 0.091338882,
+            "source_scans": 1,
+            "source_reads": 1,
+            "source_values": 11316496,
+            "transform_fmas": 2156352130,
+            "transform_stages": 17,
+            "mo_blocks": 7,
+            "cuda_transform_calls": 7,
+            "cuda_batch_calls": 1,
+            "iteration_graph_calls": 32,
+            "replay_graph_calls": 1,
+            "update_calls": 16,
+            "generated_error_checks": 17,
+            "diis_gram_calls": 16,
+            "diis_coefficient_calls": 15,
+            "diis_combine_calls": 30,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": null,
+            "source_response_seconds": null,
+            "orbital_seconds": null,
+            "lambda_fp32_requested": null,
+            "lambda_fp32_executed": null,
+            "lambda_fp32_refused": null,
+            "lambda_fp32_iterations": null,
+            "lambda_fp64_iterations": null,
+            "lambda_fp32_actions": null,
+            "lambda_fp64_actions": null,
+            "lambda_fp32_gemm_calls": null,
+            "lambda_fp32_cast_elements": null,
+            "lambda_auxiliary_batch_size": null,
+            "lambda_numeric_capacity_bytes": null,
+            "lambda_owned_device_bytes": null
+          },
+          "rhf_energy": -79.23463017214067,
+          "hf_cycles": 17,
+          "hf_density_rms": 5.721489254595369e-12,
+          "executed_backend": "cuda"
+        },
+        "case": "C2",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      },
+      "C3.0": {
+        "status": "completed",
+        "energy_hartree": -118.78806333182075,
+        "force_hartree_per_bohr": [
+          [
+            0.0002941752180331447,
+            -0.005166202677658265,
+            3.0329216802444785e-05
+          ],
+          [
+            -0.002950896395959781,
+            0.004229037683976796,
+            -6.335885608482407e-06
+          ],
+          [
+            0.004614709922982809,
+            -0.0019721341306548857,
+            1.5814186735797677e-05
+          ],
+          [
+            -0.004914593109086207,
+            -0.006509430132093023,
+            -1.9044479869944744e-05
+          ],
+          [
+            -0.003289683110911025,
+            0.003927285236149761,
+            -0.006028500383882534
+          ],
+          [
+            -0.0033326130494460166,
+            0.003920311064887273,
+            0.005978606250657941
+          ],
+          [
+            0.0034603568532643393,
+            -0.004854501563065568,
+            -0.005703757532092692
+          ],
+          [
+            0.003407349663881888,
+            -0.004844845069639092,
+            0.005746188977068103
+          ],
+          [
+            -0.002556852921789442,
+            0.004397256433649141,
+            -0.006003360461993456
+          ],
+          [
+            0.007879845401204717,
+            0.0024686077231140836,
+            4.2372817464868156e-05
+          ],
+          [
+            -0.002611798472205516,
+            0.0044046154312405075,
+            0.005947687294699437
+          ]
+        ],
+        "endpoint_seconds": 200.6776623497717,
+        "versions": {
+          "generativeqc": "0.1.0"
+        },
+        "work": {
+          "correlation": {
+            "reference_energy": -118.27215672265265,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.6501218428838809,
+            "reference_residual": 5.4375948188578604e-12,
+            "numeric_capacity_bytes": 12854603882,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 5304965120,
+            "correlation_provider_retained_bytes": 236253752,
+            "mo_transfer_bytes": 237006840,
+            "host_to_device_ms": 0.21769599616527557,
+            "device_to_host_ms": 74.87004852294922,
+            "transform_library_ms": 2.5133440494537354,
+            "tensor_kernel_ms": 0.3553920090198517,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 13,
+            "response_restarts": 0,
+            "response_absolute_residual": 5.430540677764605e-13,
+            "response_relative_residual": 1.825955480748762e-10,
+            "response_workspace_bytes": 525080,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 12854603882,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+            "measured_response_workspace_peak_bytes": 517904,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 19,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.5026322404548239,
+            "ccsd_energy_change": 9.873213357991517e-13,
+            "ccsd_singles_residual_max": 3.2551935053471326e-12,
+            "ccsd_doubles_residual_max": 9.47656883520942e-13,
+            "ccsd_replay_singles_residual_max": 3.2551935053471326e-12,
+            "ccsd_replay_doubles_residual_max": 9.47664689776584e-13,
+            "ccsd_setup_h2d_bytes": 242752248,
+            "ccsd_scalar_d2h_bytes": 840,
+            "ccsd_amplitude_d2h_bytes": 6444048,
+            "ccsd_synchronizations": 58,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.013274368713273144,
+            "ccsd_t_virtual_triples": 57155,
+            "ccsd_t_workspace_bytes": 48793088,
+            "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 181248240
+          },
+          "cc_performance": {
+            "reference_seconds": 1.161391064,
+            "problem_seconds": 5.032756536,
+            "provider_seconds": 5.01444696,
+            "source_seconds": 0.008253253,
+            "solver_seconds": 4.751411265,
+            "iteration_seconds": 4.301592230183593,
+            "replay_seconds": 0.369633022,
+            "update_seconds": 0.000999315,
+            "diis_seconds": 0.013657072816406199,
+            "triples_seconds": 1.885601611,
+            "source_scans": 1,
+            "source_reads": 1,
+            "source_values": 45212176,
+            "transform_fmas": 12138473530,
+            "transform_stages": 17,
+            "mo_blocks": 7,
+            "cuda_transform_calls": 7,
+            "cuda_batch_calls": 1,
+            "iteration_graph_calls": 36,
+            "replay_graph_calls": 1,
+            "update_calls": 18,
+            "generated_error_checks": 19,
+            "diis_gram_calls": 18,
+            "diis_coefficient_calls": 17,
+            "diis_combine_calls": 34,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": null,
+            "source_response_seconds": null,
+            "orbital_seconds": null,
+            "lambda_fp32_requested": null,
+            "lambda_fp32_executed": null,
+            "lambda_fp32_refused": null,
+            "lambda_fp32_iterations": null,
+            "lambda_fp64_iterations": null,
+            "lambda_fp32_actions": null,
+            "lambda_fp64_actions": null,
+            "lambda_fp32_gemm_calls": null,
+            "lambda_fp32_cast_elements": null,
+            "lambda_auxiliary_batch_size": null,
+            "lambda_numeric_capacity_bytes": null,
+            "lambda_owned_device_bytes": null
+          },
+          "rhf_energy": -118.27215672265265,
+          "hf_cycles": 19,
+          "hf_density_rms": 3.2551935053471326e-12,
+          "executed_backend": "cuda"
+        },
+        "case": "C3",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      }
+    },
+    "long": {
+      "C5.0": {
+        "status": "failed",
+        "exception": "RuntimeError('GENERATIVEQC error 7: RCCSD(T) complete force exceeds simultaneous host budget')",
+        "case": "C5",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      }
+    }
+  },
+  "psi4-conv": {
+    "small-a": {
+      "C1.0": {
+        "status": "completed",
+        "energy_hartree": -40.390036621288,
+        "force_hartree_per_bohr": [
+          [
+            -0.0002144218828000785,
+            -0.00031167788049007105,
+            -0.0005241019710525876
+          ],
+          [
+            0.007347592818780058,
+            1.4979429356542433e-05,
+            8.219487046653984e-05
+          ],
+          [
+            -0.002440549577162998,
+            0.006935947993214953,
+            8.213761061897501e-05
+          ],
+          [
+            -0.002480310839712785,
+            -0.0035093555970746593,
+            0.00594534825632409
+          ],
+          [
+            -0.0022123105191094172,
+            -0.0031298939450136176,
+            -0.005585578766349908
+          ]
+        ],
+        "endpoint_seconds": 2.856519650667906,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 34,
+          "auxiliary_counts": {},
+          "electrons": 10,
+          "rhf_energy": -40.19870616683587
+        },
+        "case": "C1",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      },
+      "C2.0": {
+        "status": "completed",
+        "energy_hartree": -79.5872889955441,
+        "force_hartree_per_bohr": [
+          [
+            -0.002320404409402954,
+            -4.449335069883417e-06,
+            -3.5099009424631455e-05
+          ],
+          [
+            0.0023200485003869176,
+            -3.4096440075100445e-05,
+            8.629360446349432e-06
+          ],
+          [
+            -0.004709327111677153,
+            0.006462352230526047,
+            1.320252397545539e-06
+          ],
+          [
+            -0.004757560081854462,
+            -0.003230471043203731,
+            0.005550783570439144
+          ],
+          [
+            -0.0046996112973954896,
+            -0.0031801953789606374,
+            -0.0055966294189502275
+          ],
+          [
+            0.004709714040612711,
+            0.003185277601915004,
+            0.00562580678348934
+          ],
+          [
+            0.004756840792857875,
+            0.0032390504831388833,
+            -0.0055433506585609305
+          ],
+          [
+            0.004700299566552046,
+            -0.006437468118385414,
+            -1.1460879796742595e-05
+          ]
+        ],
+        "endpoint_seconds": 22.775157663971186,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 58,
+          "auxiliary_counts": {},
+          "electrons": 18,
+          "rhf_energy": -79.23463017214067
+        },
+        "case": "C2",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      },
+      "C3.0": {
+        "status": "completed",
+        "energy_hartree": -118.78806333181579,
+        "force_hartree_per_bohr": [
+          [
+            0.00029444197349448586,
+            -0.005166013476062714,
+            3.0240457215264735e-05
+          ],
+          [
+            -0.002951022195810893,
+            0.004229121289283988,
+            -6.166412940506599e-06
+          ],
+          [
+            0.004614461840099171,
+            -0.001972161619689494,
+            1.5640378602643952e-05
+          ],
+          [
+            -0.0049145681645208494,
+            -0.0065093931558373175,
+            -1.906108154478732e-05
+          ],
+          [
+            -0.0032895795744249945,
+            0.003927319300431664,
+            -0.006028338860976312
+          ],
+          [
+            -0.00333291780412015,
+            0.003920183996518389,
+            0.005978539870880484
+          ],
+          [
+            0.003460286505644561,
+            -0.0048545881558219595,
+            -0.005703741550151742
+          ],
+          [
+            0.003407602861867254,
+            -0.004845049329277318,
+            0.005746291634953993
+          ],
+          [
+            -0.002556958501415907,
+            0.004397493666885577,
+            -0.006003375411424594
+          ],
+          [
+            0.007879793250900047,
+            0.0024685379526026008,
+            4.2572361420988025e-05
+          ],
+          [
+            -0.002611540191648054,
+            0.00440454953125391,
+            0.005947398613935118
+          ]
+        ],
+        "endpoint_seconds": 150.7581579517573,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 82,
+          "auxiliary_counts": {},
+          "electrons": 26,
+          "rhf_energy": -118.27215672265282
+        },
+        "case": "C3",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      }
+    },
+    "main": {
+      "C4.0": {
+        "status": "failed",
+        "exception": "RuntimeError('\\nFatal Error: Error in: dpd_block_matrix: No memory left.\\nError occurred in file: /home/conda/feedstock_root/build_artifacts/psi4_1782177184276/work/psi4/src/psi4/libdpd/error.cc on line: 45\\nThe most recent 5 function calls were:\\n\\npsi::PsiException::PsiException(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, char const*, int)\\npsi::DPD::dpd_block_matrix(unsigned long, unsigned long)\\n')",
+        "case": "C4",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      }
+    }
+  },
+  "psi4-df": {
+    "small-a": {
+      "C1.0": {
+        "status": "completed",
+        "energy_hartree": -40.390074055624304,
+        "force_hartree_per_bohr": [
+          [
+            -0.00021425324856740252,
+            -0.0003114408169179784,
+            -0.0005236997724010744
+          ],
+          [
+            0.007331032439472196,
+            1.4959356522051346e-05,
+            8.206075152239478e-05
+          ],
+          [
+            -0.0024350228038493293,
+            0.006920344352185914,
+            8.197330132335076e-05
+          ],
+          [
+            -0.0024746969697480026,
+            -0.003501383582281914,
+            0.005931970880786341
+          ],
+          [
+            -0.002207059417310142,
+            -0.00312247930951004,
+            -0.005572305161231528
+          ]
+        ],
+        "endpoint_seconds": 5.993172701448202,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "disk_df",
+            "cc_type": "df",
+            "qc_module": "occ",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10,
+            "df_basis_scf": "issue3167aux",
+            "df_basis_cc": "issue3167aux",
+            "df_fitting_condition": 1e-10
+          },
+          "nao": 34,
+          "auxiliary_counts": {
+            "DF_BASIS_SCF": 162,
+            "DF_BASIS_CC": 162
+          },
+          "electrons": 10,
+          "rhf_energy": -40.19871127470689
+        },
+        "case": "C1",
+        "trial": "0",
+        "arm": "psi4-df",
+        "displacement": null
+      },
+      "C2.0": {
+        "status": "completed",
+        "energy_hartree": -79.58732702734785,
+        "force_hartree_per_bohr": [
+          [
+            -0.0023373822141672385,
+            -4.388415823133873e-06,
+            -3.5175475211941115e-05
+          ],
+          [
+            0.0023370677906218162,
+            -3.413781788352832e-05,
+            8.699925291028726e-06
+          ],
+          [
+            -0.004694962596585084,
+            0.006447652462410858,
+            1.3096973535565298e-06
+          ],
+          [
+            -0.004743085903529121,
+            -0.0032231174526864415,
+            0.005538199759370421
+          ],
+          [
+            -0.0046852505071333095,
+            -0.0031729866131358087,
+            -0.005583829722787925
+          ],
+          [
+            0.004695336127662486,
+            0.0031780444403053387,
+            0.005613034995235466
+          ],
+          [
+            0.0047423543577678196,
+            0.0032317199767890603,
+            -0.005530758749523468
+          ],
+          [
+            0.004685922945314891,
+            -0.006422786579993733,
+            -1.1480429726721023e-05
+          ]
+        ],
+        "endpoint_seconds": 13.296683635562658,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "disk_df",
+            "cc_type": "df",
+            "qc_module": "occ",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10,
+            "df_basis_scf": "issue3167aux",
+            "df_basis_cc": "issue3167aux",
+            "df_fitting_condition": 1e-10
+          },
+          "nao": 58,
+          "auxiliary_counts": {
+            "DF_BASIS_SCF": 278,
+            "DF_BASIS_CC": 278
+          },
+          "electrons": 18,
+          "rhf_energy": -79.23462114332825
+        },
+        "case": "C2",
+        "trial": "0",
+        "arm": "psi4-df",
+        "displacement": null
+      },
+      "C3.0": {
+        "status": "completed",
+        "energy_hartree": -118.78810058465544,
+        "force_hartree_per_bohr": [
+          [
+            0.00027783789290136696,
+            -0.005164139425156811,
+            3.0342358042992e-05
+          ],
+          [
+            -0.0029407182046070623,
+            0.004214645373169734,
+            -6.290929181902369e-06
+          ],
+          [
+            0.004618171528100845,
+            -0.001956007275609295,
+            1.5738326942909978e-05
+          ],
+          [
+            -0.004900865699943413,
+            -0.006493778473771972,
+            -1.8993284551746883e-05
+          ],
+          [
+            -0.00327774699915806,
+            0.003918275115778913,
+            -0.006018229368858652
+          ],
+          [
+            -0.003320596772182327,
+            0.003911363868200679,
+            0.005968349882704338
+          ],
+          [
+            0.003448002298526154,
+            -0.004837067073816481,
+            -0.005695435882641764
+          ],
+          [
+            0.003395042361223455,
+            -0.004827446932989865,
+            0.005737717776860052
+          ],
+          [
+            -0.0025524480400502814,
+            0.004383002838240113,
+            -0.005993009200385924
+          ],
+          [
+            0.007860530069712546,
+            0.0024608496143513903,
+            4.228506809961577e-05
+          ],
+          [
+            -0.0026072084343921054,
+            0.0043903023717342116,
+            0.0059375252529858535
+          ]
+        ],
+        "endpoint_seconds": 54.86195772513747,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "disk_df",
+            "cc_type": "df",
+            "qc_module": "occ",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10,
+            "df_basis_scf": "issue3167aux",
+            "df_basis_cc": "issue3167aux",
+            "df_fitting_condition": 1e-10
+          },
+          "nao": 82,
+          "auxiliary_counts": {
+            "DF_BASIS_SCF": 394,
+            "DF_BASIS_CC": 394
+          },
+          "electrons": 26,
+          "rhf_energy": -118.27212679577362
+        },
+        "case": "C3",
+        "trial": "0",
+        "arm": "psi4-df",
+        "displacement": null
+      }
+    },
+    "middle-a": {
+      "C4.0": {
+        "status": "completed",
+        "energy_hartree": -157.988758564445,
+        "force_hartree_per_bohr": [
+          [
+            -7.215630309431731e-05,
+            -0.005385709542892192,
+            5.768529334302351e-05
+          ],
+          [
+            -0.007185220411024096,
+            0.008273220020857952,
+            0.0002208040970934702
+          ],
+          [
+            0.007045526711077166,
+            -0.008233173978597907,
+            -0.0001048273355533369
+          ],
+          [
+            -0.00023131185740776772,
+            0.005358516493908505,
+            0.00010749320181591832
+          ],
+          [
+            -0.004806461831468711,
+            -0.006568208274236653,
+            -0.0001299851890367576
+          ],
+          [
+            -0.0032955836131116634,
+            0.0037621518778117036,
+            -0.005682121065621715
+          ],
+          [
+            -0.003346432915262154,
+            0.00366731685912991,
+            0.005848159300773315
+          ],
+          [
+            0.004792840488171191,
+            -0.003497096794339294,
+            -0.006253492661556059
+          ],
+          [
+            0.004681503413257682,
+            -0.0035448928959462833,
+            0.0059124841638462655
+          ],
+          [
+            -0.004635132231039618,
+            0.003400894663567966,
+            0.006102240519726632
+          ],
+          [
+            -0.004692907988825823,
+            0.0035910600941795323,
+            -0.005990714268522712
+          ],
+          [
+            0.003444278933411704,
+            -0.0038189876320515737,
+            0.005795622594281458
+          ],
+          [
+            0.004896737314571409,
+            0.006647401579564782,
+            7.184281766182271e-05
+          ],
+          [
+            0.0034043202906051118,
+            -0.0036524924709542272,
+            -0.005955191468223209
+          ]
+        ],
+        "endpoint_seconds": 194.5460076960735,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "disk_df",
+            "cc_type": "df",
+            "qc_module": "occ",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10,
+            "df_basis_scf": "issue3167aux",
+            "df_basis_cc": "issue3167aux",
+            "df_fitting_condition": 1e-10
+          },
+          "nao": 106,
+          "auxiliary_counts": {
+            "DF_BASIS_SCF": 510,
+            "DF_BASIS_CC": 510
+          },
+          "electrons": 34,
+          "rhf_energy": -157.30929110930808
+        },
+        "case": "C4",
+        "trial": "0",
+        "arm": "psi4-df",
+        "displacement": null
+      },
+      "C5.0": {
+        "status": "completed",
+        "energy_hartree": -197.1894711045187,
+        "force_hartree_per_bohr": [
+          [
+            5.838865786866876e-05,
+            -0.005552582994997612,
+            0.00018962384775314035
+          ],
+          [
+            -0.007228733757252193,
+            0.008650260145192767,
+            -0.000723380419405284
+          ],
+          [
+            0.009553223053361926,
+            -0.013131992596612019,
+            0.0004032241186473634
+          ],
+          [
+            -0.004872171484343379,
+            0.00839103323725876,
+            0.00010072131738800977
+          ],
+          [
+            0.004506653807332395,
+            -0.002096640704047914,
+            6.458803468217811e-05
+          ],
+          [
+            -0.0049807111889581535,
+            -0.006382017549111385,
+            0.0001690476105467159
+          ],
+          [
+            -0.0032713406921436317,
+            0.0036044967291217755,
+            -0.005972489312095597
+          ],
+          [
+            -0.0033928787089632095,
+            0.003956989316716175,
+            0.005720336462780473
+          ],
+          [
+            0.004583050274795442,
+            -0.0037944558386446836,
+            -0.0058359111559247445
+          ],
+          [
+            0.00462246993191151,
+            -0.003675552299769791,
+            0.006476876964574441
+          ],
+          [
+            -0.00308385780530096,
+            0.004417371946965343,
+            0.006222745587851186
+          ],
+          [
+            -0.0031166220033831404,
+            0.0040462413223969484,
+            -0.0064979848875941215
+          ],
+          [
+            0.0017541784666481597,
+            -0.005305441899557062,
+            -0.005505054760875705
+          ],
+          [
+            0.001653103545377288,
+            -0.0048884592759863565,
+            0.0054757163672274345
+          ],
+          [
+            -0.002519659357443804,
+            0.00443087629454908,
+            -0.006129380103550908
+          ],
+          [
+            0.00822962085629797,
+            0.0026190284696472887,
+            -7.174606317379359e-05
+          ],
+          [
+            -0.0024947135955577515,
+            0.0047108456970330614,
+            0.005913066391175725
+          ]
+        ],
+        "endpoint_seconds": 627.2145041641779,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "disk_df",
+            "cc_type": "df",
+            "qc_module": "occ",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10,
+            "df_basis_scf": "issue3167aux",
+            "df_basis_cc": "issue3167aux",
+            "df_fitting_condition": 1e-10
+          },
+          "nao": 130,
+          "auxiliary_counts": {
+            "DF_BASIS_SCF": 626,
+            "DF_BASIS_CC": 626
+          },
+          "electrons": 42,
+          "rhf_energy": -196.34641986282026
+        },
+        "case": "C5",
+        "trial": "0",
+        "arm": "psi4-df",
+        "displacement": null
+      }
+    },
+    "tail-a": {}
+  },
+  "pyscf-conv": {
+    "small-a": {
+      "C1.0": {
+        "status": "completed",
+        "energy_hartree": -40.39003662127838,
+        "force_hartree_per_bohr": [
+          [
+            -0.00021420617228269992,
+            -0.00031137242561071494,
+            -0.0005235841680488623
+          ],
+          [
+            0.007347480620588875,
+            1.494557282803933e-05,
+            8.216470684641736e-05
+          ],
+          [
+            -0.002440525948469996,
+            0.0069358441702895846,
+            8.207731800071588e-05
+          ],
+          [
+            -0.0024803018725725323,
+            -0.0035093147389485546,
+            0.005945247553371669
+          ],
+          [
+            -0.0022124466272603893,
+            -0.0031301025785599457,
+            -0.00558590541017101
+          ]
+        ],
+        "endpoint_seconds": 4.8449890073388815,
+        "versions": {
+          "pyscf": "2.11.0"
+        },
+        "work": {
+          "nao": 34,
+          "electrons": 10,
+          "rhf_energy": -40.19870616683592,
+          "ccsd_energy": -40.38627702876735,
+          "triples_energy": -0.0037595925110248127,
+          "hf_cycles": 27,
+          "ccsd_cycles": 35,
+          "ccsdt_lambda_converged": true
+        },
+        "case": "C1",
+        "trial": "0",
+        "arm": "pyscf-conv",
+        "displacement": null
+      },
+      "C2.0": {
+        "status": "completed",
+        "energy_hartree": -79.58728899554905,
+        "force_hartree_per_bohr": [
+          [
+            -0.0023203457193412547,
+            -4.433948324347736e-06,
+            -3.5092683381282574e-05
+          ],
+          [
+            0.0023200313731153166,
+            -3.408745898626775e-05,
+            8.620193944899185e-06
+          ],
+          [
+            -0.004709339475337582,
+            0.006462341979033948,
+            1.333371219565567e-06
+          ],
+          [
+            -0.004757581785574616,
+            -0.0032304838193574215,
+            0.005550774663335423
+          ],
+          [
+            -0.004699627455498345,
+            -0.003180194547233506,
+            -0.005596631249930706
+          ],
+          [
+            0.004709713165726881,
+            0.003185299393395402,
+            0.0056258077655677585
+          ],
+          [
+            0.00475685022377792,
+            0.0032390360835493626,
+            -0.005543363062310069
+          ],
+          [
+            0.004700299673132569,
+            -0.006437477682085024,
+            -1.144899843154827e-05
+          ]
+        ],
+        "endpoint_seconds": 68.23245911300182,
+        "versions": {
+          "pyscf": "2.11.0"
+        },
+        "work": {
+          "nao": 58,
+          "electrons": 18,
+          "rhf_energy": -79.23463017214092,
+          "ccsd_energy": -79.5789360752486,
+          "triples_energy": -0.00835292030043918,
+          "hf_cycles": 36,
+          "ccsd_cycles": 45,
+          "ccsdt_lambda_converged": true
+        },
+        "case": "C2",
+        "trial": "0",
+        "arm": "pyscf-conv",
+        "displacement": null
+      },
+      "C3.0": {
+        "status": "completed",
+        "energy_hartree": -118.78806333182473,
+        "force_hartree_per_bohr": [
+          [
+            0.00029417126239739133,
+            -0.005166199859612863,
+            3.0329312068564512e-05
+          ],
+          [
+            -0.002950890037103804,
+            0.00422902868453745,
+            -6.335863667793207e-06
+          ],
+          [
+            0.004614708737885831,
+            -0.001972129574667747,
+            1.5814075146728095e-05
+          ],
+          [
+            -0.004914592777621518,
+            -0.0065094309438653575,
+            -1.904448608915088e-05
+          ],
+          [
+            -0.0032896832067574877,
+            0.003927283309959173,
+            -0.006028498257508508
+          ],
+          [
+            -0.003332613145736296,
+            0.003920309119946008,
+            0.005978604020737688
+          ],
+          [
+            0.003460354035040858,
+            -0.004854497615981224,
+            -0.005703751414471103
+          ],
+          [
+            0.0034073469158875103,
+            -0.004844841132197075,
+            0.0057461828393901015
+          ],
+          [
+            -0.002556851096891799,
+            0.004397255947335088,
+            -0.0060033582685190545
+          ],
+          [
+            0.007879845948931319,
+            0.002468607148930102,
+            4.237282610946441e-05
+          ],
+          [
+            -0.0026117966360261757,
+            0.004404614915650695,
+            0.005947685216796339
+          ]
+        ],
+        "endpoint_seconds": 469.69080226123333,
+        "versions": {
+          "pyscf": "2.11.0"
+        },
+        "work": {
+          "nao": 82,
+          "electrons": 26,
+          "rhf_energy": -118.27215672265233,
+          "ccsd_energy": -118.77478896311125,
+          "triples_energy": -0.013274368713484388,
+          "hf_cycles": 39,
+          "ccsd_cycles": 44,
+          "ccsdt_lambda_converged": true
+        },
+        "case": "C3",
+        "trial": "0",
+        "arm": "pyscf-conv",
+        "displacement": null
+      }
+    },
+    "one-thread-probe": {
+      "C3.0": {
+        "status": "completed",
+        "energy_hartree": -118.78806333182325,
+        "force_hartree_per_bohr": [
+          [
+            0.0002941712628050652,
+            -0.00516619985870026,
+            3.0329312056796148e-05
+          ],
+          [
+            -0.00295089003638882,
+            0.004229028683558678,
+            -6.3358636601534846e-06
+          ],
+          [
+            0.00461470873686709,
+            -0.0019721295747698875,
+            1.5814075153830487e-05
+          ],
+          [
+            -0.004914592777796489,
+            -0.006509430944652728,
+            -1.9044486091492757e-05
+          ],
+          [
+            -0.003289683206897376,
+            0.003927283309791085,
+            -0.006028498257417025
+          ],
+          [
+            -0.003332613145885732,
+            0.003920309119793242,
+            0.005978604020667966
+          ],
+          [
+            0.003460354034612756,
+            -0.004854497615385922,
+            -0.005703751413767222
+          ],
+          [
+            0.0034073469154696223,
+            -0.004844841131607547,
+            0.005746182838684888
+          ],
+          [
+            -0.002556851096697399,
+            0.004397255947425904,
+            -0.006003358268444892
+          ],
+          [
+            0.007879845949732456,
+            0.0024686071488353445,
+            4.237282611482471e-05
+          ],
+          [
+            -0.002611796635824226,
+            0.0044046149157266345,
+            0.00594768521670308
+          ]
+        ],
+        "endpoint_seconds": 588.1981541542336,
+        "versions": {
+          "pyscf": "2.11.0"
+        },
+        "work": {
+          "nao": 82,
+          "electrons": 26,
+          "rhf_energy": -118.27215672265085,
+          "ccsd_energy": -118.77478896310977,
+          "triples_energy": -0.01327436871347623,
+          "hf_cycles": 36,
+          "ccsd_cycles": 44,
+          "ccsdt_lambda_converged": true
+        },
+        "case": "C3",
+        "trial": "0",
+        "arm": "pyscf-conv",
+        "displacement": null
+      }
+    }
+  }
+}

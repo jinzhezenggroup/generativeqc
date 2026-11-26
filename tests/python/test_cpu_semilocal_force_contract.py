@@ -1,7 +1,7 @@
 """Admission, API routing and budgets for optional CPU KS forces.
 
-Capacity planning uses the native CPU fleet query; execution returns fixed dummy
-results. These are control-flow regressions, not numerical qualification.
+Capacity planning uses the native CPU fleet and composition queries. Execution
+returns fixed dummy results; this tests control flow, not numerical accuracy.
 """
 
 from __future__ import annotations
@@ -40,8 +40,12 @@ from generativeqc_compiler.method import (
     original_nonlocal_correlation,
     resolve_method,
 )
+from test_native_initial_guess_policy import PolicyQuery
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_initial_guess_default_stub,
+    install_registry_stub,
+)
 
 H2 = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 WATER = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.7)), ("H", (1.6, 0.0, -0.5))]
@@ -81,6 +85,7 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         return 0
 
     library = SimpleNamespace(
+        generativeqc_resource_compose_v1=native.generativeqc_resource_compose_v1,
         generativeqc_method_available=available,
         generativeqc_ks_options_version=Mock(return_value=1),
         generativeqc_ks_resource_inventory_version_v1=Mock(return_value=1),
@@ -109,6 +114,7 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         generativeqc_status_message=Mock(return_value=b"dummy native status"),
     )
     state.library = library
+    install_initial_guess_default_stub(library)
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: library)
 
     install_registry_stub(
@@ -166,13 +172,14 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     [(None, None), (0, 7), (2, 7), (1, None), (1, 0), (1, 3), (1, 1 << 31)],
 )
 @pytest.mark.parametrize("selection", ["omitted", "auto"])
-def test_automatic_guess_preserves_older_native_library(
+def test_missing_seed_policy_requires_explicit_choice(
     fake_native: typing.Any,
     method: str,
     schema: int | None,
     capabilities: int | None,
     selection: str,
 ) -> None:
+    del fake_native.library.generativeqc_initial_guess_default_kind_v1
     if schema is not None:
         fake_native.library.generativeqc_initial_guess_options_version = Mock(
             return_value=schema
@@ -182,18 +189,16 @@ def test_automatic_guess_preserves_older_native_library(
             return_value=capabilities
         )
     options = {} if selection == "omitted" else {"initial_guess": "auto"}
-    automatic = Calculator(method=method, **options)
+    with pytest.raises(NotImplementedError, match="initial_guess_default_kind_v1"):
+        Calculator(method=method, **options)
     core = Calculator(method=method, initial_guess=None)
-    assert automatic.initial_guess is None
-    assert automatic.capabilities == core.capabilities
+    assert core.initial_guess is None
     for systems in ([WATER], [[("Ca", (0.0, 0.0, 0.0))]]):
-        assert not automatic._method_descriptor(systems=systems).initial_guess
+        assert not core._method_descriptor(systems=systems).initial_guess
     target = object()
     from generativeqc.initial_guess import with_initial_guess_resources
 
-    assert (
-        with_initial_guess_resources(target, automatic, [WATER], None, None) is target
-    )
+    assert with_initial_guess_resources(target, core, [WATER], None, None) is target
     for kind in ("minao", "hf", "lda"):
         if schema == 1:
             # A pre-query library may already support an explicit provider;
@@ -217,25 +222,31 @@ def test_automatic_guess_uses_supported_native_schema(
     fake_native.library.generativeqc_initial_guess_capabilities_v1 = Mock(
         return_value=capabilities
     )
+    policy = PolicyQuery(_native.INITIAL_GUESS_AUTO_CPU)
+    fake_native.library.generativeqc_initial_guess_default_kind_v1 = policy
     options = {} if selection == "omitted" else {"initial_guess": "auto"}
     automatic = Calculator(method=method, **options)
-    # These older SDKs advertise MINAO, but no Huckel provider/domain bits.
     assert automatic.initial_guess == InitialGuessSpec("minao")
     assert (
-        automatic._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
+        automatic._method_descriptor(systems=[WATER]).initial_guess.contents.kind
+        == _native.INITIAL_GUESS_AUTO_CPU
     )
-    assert not automatic._method_descriptor(
-        systems=[[("Ca", (0.0, 0.0, 0.0))]]
-    ).initial_guess
+    assert (
+        automatic._method_descriptor(
+            systems=[[("Ca", (0.0, 0.0, 0.0))]]
+        ).initial_guess.contents.kind
+        == _native.INITIAL_GUESS_AUTO_CPU
+    )
+    assert len(policy.requests) == 1
     assert Calculator(method=method, initial_guess=None).initial_guess is None
     explicit = Calculator(method=method, initial_guess=InitialGuessSpec("minao"))
-    assert automatic._resource_request([WATER]) == explicit._resource_request([WATER])
+    assert explicit._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
 
 
 @pytest.mark.parametrize("method", ["rhf", "pbe-rks"])
 @pytest.mark.parametrize("selection", ["omitted", "auto"])
 @pytest.mark.parametrize("fitted", [False, True])
-@pytest.mark.parametrize("native_kind", [0, 5])
+@pytest.mark.parametrize("native_kind", [0, _native.INITIAL_GUESS_AUTO_HUCKEL_CPU])
 def test_supported_huckel_bits_obey_native_policy(
     fake_native: typing.Any,
     method: str,
@@ -253,11 +264,9 @@ def test_supported_huckel_bits_obey_native_policy(
         return_value=capabilities
     )
 
-    def policy(request: object, output: object) -> int:
-        output._obj.value = native_kind
-        return 0
-
-    fake_native.library.generativeqc_initial_guess_auto_kind_v2 = policy
+    fake_native.library.generativeqc_initial_guess_default_kind_v1 = PolicyQuery(
+        native_kind
+    )
     options = {} if selection == "omitted" else {"initial_guess": "auto"}
     automatic = Calculator(
         method=method, density_fitting="cpu" if fitted else "none", **options
@@ -266,7 +275,7 @@ def test_supported_huckel_bits_obey_native_policy(
     assert automatic.initial_guess == expected
     descriptor = automatic._method_descriptor(systems=[WATER])
     if native_kind:
-        assert descriptor.initial_guess.contents.kind == 5
+        assert descriptor.initial_guess.contents.kind == native_kind
     else:
         assert not descriptor.initial_guess
 
@@ -297,25 +306,21 @@ def test_positive_capability_does_not_expand_automatic_domains(
     assert not automatic._method_descriptor(systems=[WATER]).initial_guess
 
 
-@pytest.mark.parametrize("query", ["options_version", "capabilities_v1"])
 @pytest.mark.parametrize("error", [RuntimeError, NotImplementedError])
 def test_automatic_guess_does_not_hide_unexpected_native_query_failure(
-    fake_native: typing.Any, query: str, error: type[Exception]
+    fake_native: typing.Any, error: type[Exception]
 ) -> None:
     fake_native.library.generativeqc_initial_guess_options_version = Mock(
         return_value=1
     )
-    setattr(
-        fake_native.library,
-        f"generativeqc_initial_guess_{query}",
-        Mock(side_effect=error("native feature query failed")),
+    fake_native.library.generativeqc_initial_guess_default_kind_v1 = Mock(
+        side_effect=error("native feature query failed")
     )
     with pytest.raises(error, match="native feature query failed"):
         Calculator(method="pbe-rks")
     assert Calculator(method="pbe-rks", initial_guess=None).initial_guess is None
-    if query == "capabilities_v1":
-        explicit = Calculator(method="pbe-rks", initial_guess=InitialGuessSpec("minao"))
-        assert explicit.initial_guess == InitialGuessSpec("minao")
+    explicit = Calculator(method="pbe-rks", initial_guess=InitialGuessSpec("minao"))
+    assert explicit.initial_guess == InitialGuessSpec("minao")
 
 
 @pytest.mark.parametrize(

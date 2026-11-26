@@ -1,4 +1,4 @@
-"""Executable automatic cold Direct J/K admission contract, without a GPU."""
+"""Executable automatic Direct J/K admission contract, without a GPU."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def test_campaign_incremental_expectation_uses_numerical_route(
         assert not requested and not active
     else:
         assert requested
-        assert active == (phase in ("cold", "reset"))
+        assert active == (phase in ("cold", "moved", "reset"))
 
 
 def test_auto_cold_guard_truth_table(tmp_path: Path, native_cxx: NativeCxx) -> None:

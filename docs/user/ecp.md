@@ -225,7 +225,9 @@ ordinary Gaussian AO basis; it does not reconstruct a core density or apply a
 nonlinear core correction. Atomic number still determines grid element identity.
 
 AO capability checks permit values and first spatial jets needed by LDA/GGA
-energies. They still validate ECP metadata and angular limits. Higher AO jets, DF/ECP and other DFT methods do not inherit support.
+energies. They still validate ECP metadata and angular limits. Higher AO jets,
+other DFT methods and fitted models outside the CPU DF-J domain below do not
+inherit support.
 Complete first forces use the separately qualified CPU/CUDA consumers below.
 
 ```python
@@ -480,6 +482,18 @@ An older library without that native capability retains energy-only defaults
 for f-shell ECP records and rejects explicit force requests; it cannot enter
 the narrower Python compatibility consumer. Standalone all-electron CPU
 defaults are unchanged. The native C method registry is unchanged.
+
+CPU FP64 PBE RKS/UKS also accepts scalar ECPs with Coulomb density fitting
+when you select `density_fitting="cpu"` and provide an explicit ECP-free
+auxiliary basis. `density_fitting="auto"` is not admitted for this route.
+The prepared native CPU owner
+used by Python, the SDK and CLI fits only J; the residual ECP operator and
+its derivative remain in the orbital one-electron Hamiltonian. The force
+includes both orbital and auxiliary-center motion and the metric derivative.
+This route uses ordinary streamed fitted derivatives and checks the added
+ECP setup workspace before constructing those providers. Explicit CPU DF
+host-capacity promises still exclude ECP systems. Neither other fitted
+functionals nor higher derivatives inherit this admission.
 
 Native force promotion also revalidates derivative resource capacity. An
 energy-only plan cannot cover forces merely because the prepared provider
