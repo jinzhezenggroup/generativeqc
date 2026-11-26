@@ -1,0 +1,76 @@
+{
+  "initial_commit": {
+    "sha": "6fb870c431c72659cb48b88f2b680fa23e490b67",
+    "authored_at": "2026-09-19T05:45:31Z",
+    "url": "https://github.com/jinzhezenggroup/generativeqc/pull/537/commits/6fb870c431c72659cb48b88f2b680fa23e490b67"
+  },
+  "stages": [
+    {
+      "pr": 537,
+      "title": "feat(dft): add generated r2SCAN meta-GGA energy",
+      "merge_commit": "7572c61c15ba2dfca97852b169fa4c0ab07dd4d2",
+      "merged_at": "2026-09-19T09:02:21Z",
+      "url": "https://github.com/jinzhezenggroup/generativeqc/pull/537"
+    },
+    {
+      "pr": 620,
+      "title": "feat(dft): integrate r2SCAN public RKS/UKS and CUDA KS (#164)",
+      "merge_commit": "371308bf2dd309e275dfd66ba267eea3b799774e",
+      "merged_at": "2026-09-20T08:38:08Z",
+      "url": "https://github.com/jinzhezenggroup/generativeqc/pull/620"
+    },
+    {
+      "pr": 646,
+      "title": "feat(dft): extend stationary gradient plan to r2SCAN tau geometry",
+      "merge_commit": "850a9b6b0219277c7afbb24d7ca471f84475c297",
+      "merged_at": "2026-09-20T10:15:12Z",
+      "url": "https://github.com/jinzhezenggroup/generativeqc/pull/646"
+    },
+    {
+      "pr": 650,
+      "title": "feat(dft): lower r2SCAN tau geometry through stationary CUDA",
+      "merge_commit": "e586971cb5f8ce36687ccc2c2563ce3fea9163c8",
+      "merged_at": "2026-09-20T11:40:56Z",
+      "url": "https://github.com/jinzhezenggroup/generativeqc/pull/650"
+    },
+    {
+      "pr": 747,
+      "title": "test(dft): qualify public r2SCAN CUDA forces",
+      "merge_commit": "05a1c20239947033d0555d018da661e709438b6d",
+      "merged_at": "2026-09-20T20:26:50Z",
+      "url": "https://github.com/jinzhezenggroup/generativeqc/pull/747"
+    }
+  ],
+  "qualification": [
+    {
+      "pr": 650,
+      "review_url": "https://github.com/jinzhezenggroup/generativeqc/pull/650#pullrequestreview-5260455404",
+      "reported_at": "2026-09-20T11:24:14Z",
+      "scope": "Internal CUDA stationary path, RKS/UKS matched PySCF/Libxc complete-gradient cases plus reconverged RKS directional finite difference",
+      "hardware": "RTX 5090",
+      "cuda": "12.9.1",
+      "slurm_job": 10423,
+      "github_artifact": 10603820663,
+      "passed": 3,
+      "deselected": 16,
+      "wall_seconds": 209.94
+    },
+    {
+      "pr": 747,
+      "review_url": "https://github.com/jinzhezenggroup/generativeqc/pull/747#pullrequestreview-5261652043",
+      "reported_at": "2026-09-20T20:26:17Z",
+      "tested_pr_head": "0d9a117a50ec4be7f894bf69f0669d9728725272",
+      "scope": "Public CUDA Calculator r2SCAN RKS/UKS energy and force, matched explicit grid",
+      "hardware": "RTX 5090",
+      "cuda": "12.9.1",
+      "reference": "PySCF 2.11.0/Libxc",
+      "passed": 2,
+      "deselected": 21,
+      "wall_seconds": 39.16,
+      "prior_attempt": "Review reports an earlier environment-only attempt without NVCC/PySCF; no numerical outcome reported.",
+      "test": "test_public_cuda_calculator_forces_match_independent_gradient",
+      "energy_abs_tolerance_hartree": 2e-9,
+      "force_absolute_tolerance_hartree_per_bohr": 1e-7
+    }
+  ]
+}
