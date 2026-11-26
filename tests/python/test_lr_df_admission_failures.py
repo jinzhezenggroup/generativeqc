@@ -112,13 +112,13 @@ struct PackedEriRequest { std::size_t maximum_bytes; };
 struct KsPreparedState : Owner {
   KsPreparedState(int,const core::System&,ExecutionPlan plan,Options,int,
                   generativeqc_backend backend,int,const core::System*,const int*,
-                  std::optional<PackedEriRequest> packed_eri) {
+                  std::optional<PackedEriRequest> packed_eri, bool initial_geometry) {
     assert(!packed_eri);  // Optional LR admission does not request packed exact ERIs.
     execution_plan_=plan;
     backend_=backend;
     if (plan.density_fitted_range_exchange && failure==Failure::primary_allocation)
       throw std::bad_alloc();
-    prepare_range_exchange(0);
+    prepare_range_exchange(0, initial_geometry);
   }
   generativeqc_status native_cuda_stationary_limit(std::size_t,std::string&) {
     return GENERATIVEQC_STATUS_SUCCESS;
