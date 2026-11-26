@@ -250,9 +250,12 @@ class Calculator:
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
-        Older libraries retain their previously supported default. Other domains retain
-        Hcore, as does a batch containing an unsupported element. Explicit
-        ``None`` disables preparation; existing densities always take precedence.
+        CPU batches select per system, falling back to Hcore for ineligible
+        systems. In CUDA batches, any ineligible system keeps the batch on Hcore.
+        Automatic selection requires ``generativeqc_initial_guess_default_kind_v1``;
+        if the native library lacks that query, it raises ``NotImplementedError``.
+        Explicit ``None`` selects Hcore without querying the policy; existing
+        densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
@@ -1947,8 +1950,7 @@ class Calculator:
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             if self._native_automatic_initial_guess_kind is None:
-                # Explicit requests and older images have not passed combined
-                # model admission. Keep their existing frontend errors.
+                # Explicit choices have not passed automatic model admission.
                 backend_ok = self._device_name == "cpu" or (
                     minao
                     and self._device_name == "cuda"
