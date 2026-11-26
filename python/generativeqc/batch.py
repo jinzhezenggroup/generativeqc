@@ -233,6 +233,7 @@ class PreparedBatch:
         ks_export: bool = True,
         resource_plan: typing.Any = None,
         host_resources: HostResources | None = None,
+        host_hessian_workspace_bytes: int | None = None,
         _cold_rks_fock: _native.RksColdFockOptions | None = None,
         _hessian_request: typing.Any = None,
         _resource_properties: frozenset[str] | None = None,
@@ -242,12 +243,33 @@ class PreparedBatch:
         Charges and multiplicities default to zero and one per system. Explicit
         sequences must match the nonempty batch; an optional resource plan must
         match the requested systems, method, and calculator budget. A shared
-        host cap additionally requires a supported CPU DF-J resource plan.
+        host cap additionally requires a supported CPU DF resource plan or
+        explicit linked Direct CPU Hessian workspace.
         """
         if not systems:
             raise ValueError("a batch requires at least one system")
         if host_resources is not None and not isinstance(host_resources, HostResources):
             raise TypeError("host_resources must be a HostResources instance")
+        if host_hessian_workspace_bytes is not None:
+            from generativeqc_compiler.common.resources import checked_bytes
+
+            checked_bytes(host_hessian_workspace_bytes, "host Hessian workspace")
+            if not host_hessian_workspace_bytes or host_resources is None:
+                raise ValueError(
+                    "host Hessian workspace must be positive and needs HostResources"
+                )
+            if not (
+                ks_export
+                and calculator._native_cpu_second_order
+                and _hessian_request is None
+                and _cold_rks_fock is None
+                and not shell_class_profiling
+                and not inactive_eigensolver_profiling
+            ):
+                raise NotImplementedError(
+                    "host Hessian workspace requires an ordinary linked CPU derivative batch"
+                )
+        self._host_hessian_workspace_bytes = host_hessian_workspace_bytes
         if _cold_rks_fock is not None and (
             resource_plan is not None or len(systems) != 1
         ):
@@ -304,7 +326,11 @@ class PreparedBatch:
         )
         self._effective_ks_options = self._ks_profile_selection.options
         self.resource_plan = resource_plan
-        self._planned_properties = _resource_properties
+        self._planned_properties = (
+            frozenset({"energy"})
+            if host_hessian_workspace_bytes is not None
+            else _resource_properties
+        )
         self._packed_force_plan = False
         self._dense_force_plan = False
         self._cpu_df_plan = False
@@ -346,7 +372,11 @@ class PreparedBatch:
         dispersion_request = None
         resource_native_name = None
         native_graph = calculator._dispersion_method_ir
-        if resource_plan is not None or calculator._resource_budget is not None:
+        if (
+            resource_plan is not None
+            or calculator._resource_budget is not None
+            or host_hessian_workspace_bytes is not None
+        ):
             from ._named_ks import select_resource_program
             from .resources_ks import native_cpu_df_program, native_dense_force_request
 
@@ -392,10 +422,14 @@ class PreparedBatch:
                 else (request, dispersion_request)
             )
             if resource_plan is None:
+                from generativeqc_compiler.common.resources import ResourceBudget
+
                 from .resources_planning import plan_resources
 
                 self.resource_plan = plan_resources(
-                    requests, calculator._resource_budget, library=self._library
+                    requests,
+                    calculator._resource_budget or ResourceBudget(),
+                    library=self._library,
                 )
             else:
                 owned = {r.name: r for r in resource_plan.requests}
@@ -451,9 +485,38 @@ class PreparedBatch:
                 raise NotImplementedError(
                     "CUDA resource plans exclude optional profiling allocations"
                 )
-        if host_resources is not None and not self._cpu_df_plan:
+        host_hessian_budget = None
+        if host_hessian_workspace_bytes is not None:
+            from generativeqc_compiler.common.resources import MAX_BYTES
+
+            if resource_native_name is None and native_graph is None:
+                from ._named_ks import select_named_program
+
+                native_graph = calculator.method_ir
+                resource_native_name = select_named_program(
+                    self._library, native_graph, _native.BACKEND_CPU_REFERENCE
+                )
+            if (
+                resource_native_name is None
+                or self._cpu_df_plan
+                or any(
+                    component not in requests
+                    for component in self.resource_plan.requests
+                )
+            ):
+                raise NotImplementedError(
+                    "host Hessian workspace requires a named Direct CPU primal resource plan"
+                )
+            self._dense_force_plan = False
+            host_hessian_budget = (
+                self.resource_plan.budget.limits().get("host", MAX_BYTES),
+                host_hessian_workspace_bytes,
+            )
+        if host_resources is not None and not (
+            self._cpu_df_plan or host_hessian_budget
+        ):
             raise NotImplementedError(
-                "shared host resources require a native CPU DF KS plan"
+                "shared host resources require a native CPU DF KS plan or a Direct Hessian workspace"
             )
         self._model_signature = calculator._model_signature()
         fixed_cuda_d4 = (
@@ -608,6 +671,11 @@ class PreparedBatch:
                             cpu_packed_eri_maximum_bytes=calculator._cpu_packed_eri_maximum_bytes,
                             cold_rks_fock=_cold_rks_fock,
                             **(
+                                {"host_hessian_budget": host_hessian_budget}
+                                if host_hessian_budget is not None
+                                else {}
+                            ),
+                            **(
                                 {"host_resources": shared} if shared is not None else {}
                             ),
                             **(
@@ -682,7 +750,12 @@ class PreparedBatch:
                     phase="preparation",
                     native_managed=self._resource_prepare is not None,
                 )
-                check_resource_status(self._library, status, self.resource_diagnostics)
+                check_resource_status(
+                    self._library,
+                    status,
+                    self.resource_diagnostics,
+                    context=self._context if host_hessian_budget is not None else None,
+                )
                 from .resources_ks import configure_native_cuda_stationary_batch
 
                 configure_native_cuda_stationary_batch(
@@ -1498,6 +1571,8 @@ class PreparedBatch:
         self._ensure_open()
         from .initial_guess import read_initial_guess_diagnostic
 
+        if properties is None and self._host_hessian_workspace_bytes is not None:
+            properties = ("energy",)
         if (
             properties is None
             and self.resource_plan is not None
@@ -1530,6 +1605,10 @@ class PreparedBatch:
             raise ValueError(f"unsupported properties: {names}")
         unsupported = requested - self._calculator._capabilities.supported_properties
         compute_forces = "forces" in requested
+        if compute_forces and self._host_hessian_workspace_bytes is not None:
+            raise NotImplementedError(
+                "force replay is outside the admitted CPU Hessian host budget"
+            )
         if compute_forces and self._cpu_df_plan and not self._cpu_df_force_plan:
             raise NotImplementedError("CPU DF KS host resource plans cover energy only")
         if (

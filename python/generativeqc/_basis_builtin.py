@@ -45,48 +45,41 @@ class Capacity(ctypes.Structure):
     ]
 
 
-def eligible(library: Any, basis: Any) -> bool:
-    """Require the complete immutable built-in record, not a custom display name.
-
-    Offline BasisSet APIs stay native-free. Old libraries and explicit custom
-    records retain their existing validated-descriptor route. A discovered
-    protocol's error is never interpreted as eligibility for a Python retry.
-    """
+def is_catalog_record(basis: Any) -> bool:
+    """Recognize the immutable built-in record, independent of library support."""
     if type(basis) is not BasisSet:
         return False
     from ._model_resolution import _bundled_basis_name
 
-    if _bundled_basis_name(basis) is None:
-        return False
-    return all(
-        getattr(library, name, None) is not None
-        for name in (
-            "generativeqc_builtin_basis_query_v1",
-            "generativeqc_system_create_builtin_basis_v1",
+    return _bundled_basis_name(basis) is not None
+
+
+def _require_symbol(library: Any, name: str) -> Any:
+    """Do not reinterpret an installed ABI mismatch as a different basis route."""
+    entry = getattr(library, name, None)
+    if entry is None:
+        raise RuntimeError(
+            f"selected native library lacks the built-in basis protocol: {name}"
         )
-    )
+    return entry
 
 
 def resolve_record(library: Any, selector: str, representation: str) -> BasisSet:
     """Resolve a Calculator's name natively, then attach portable provenance.
 
-    An older library may lack name discovery. An installed resolver's refusal
-    or pack mismatch is authoritative, not permission to load another basis.
+    Missing symbols, native refusal, and pack mismatch are final. Offline
+    metadata readers use the separate, library-free snapshot API.
     """
     from ._model_resolution import _named_basis_record
 
-    resolve = getattr(library, "generativeqc_builtin_basis_resolve_name_v1", None)
-    if resolve is None:
-        return _named_basis_record(selector, representation)
+    resolve = _require_symbol(library, "generativeqc_builtin_basis_resolve_name_v1")
     resolve.argtypes = [ctypes.c_char_p, ctypes.c_uint64]
     resolve.restype = ctypes.c_char_p
     encoded = selector.encode("utf-8")
     canonical = resolve(encoded, len(encoded))
     if not canonical:
         raise NotImplementedError(f"bundled basis {selector!r} is unavailable")
-    checksum = getattr(library, "generativeqc_bundled_basis_catalog_sha256", None)
-    if checksum is None:
-        raise RuntimeError("native builtin basis resolver has no pack provenance")
+    checksum = _require_symbol(library, "generativeqc_bundled_basis_catalog_sha256")
     checksum.argtypes = []
     checksum.restype = ctypes.c_char_p
     try:
@@ -116,10 +109,12 @@ def create_system(
 ) -> ctypes.c_void_p:
     """Marshal atom metadata; native AOT expansion and existing normalization own data.
 
-    The caller must validate consumer capabilities and eligibility first. Pack,
+    The caller must validate consumer capabilities and catalog identity first. Pack,
     ABI, admission and physical validation errors propagate without retry. The
     byte limit excludes normalized system/provider and caller storage.
     """
+    query = _require_symbol(library, "generativeqc_builtin_basis_query_v1")
+    create = _require_symbol(library, "generativeqc_system_create_builtin_basis_v1")
     charge = checked_integer(charge, "ionic charge", low=-(2**31), high=2**31 - 1)
     multiplicity = checked_integer(multiplicity, "multiplicity", low=1, high=2**31 - 1)
     checked_integer(len(atoms), "atom count", low=1, high=2**32 - 1)
@@ -149,7 +144,6 @@ def create_system(
         expected_pack_checksum=checksum,
         expected_pack_checksum_count=len(checksum),
     )
-    query = library.generativeqc_builtin_basis_query_v1
     query.argtypes = [ctypes.POINTER(Descriptor), ctypes.POINTER(Capacity)]
     query.restype = ctypes.c_int
     capacity = Capacity(
@@ -165,7 +159,6 @@ def create_system(
         raise RuntimeError(
             "native builtin basis query returned inconsistent provenance"
         )
-    create = library.generativeqc_system_create_builtin_basis_v1
     create.argtypes = [
         ctypes.c_void_p,
         ctypes.POINTER(Descriptor),

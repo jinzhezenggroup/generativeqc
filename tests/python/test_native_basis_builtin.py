@@ -1,4 +1,4 @@
-"""Built-in materialization ownership, full-record identity and explicit compatibility."""
+"""Built-in materialization ownership, full-record identity and explicit custom data."""
 
 import ctypes
 import typing
@@ -59,12 +59,10 @@ def test_calculator_resolves_orbital_and_auxiliary_aliases(
         Calculator(basis="not-a-bundled-basis")
 
 
-def test_builtin_selector_distinguishes_legacy_library_from_pack_mismatch() -> None:
-    """Only a missing resolver permits portable name resolution."""
-    old_library = SimpleNamespace()
-    assert _basis_builtin.resolve_record(old_library, "STO_3G", "cartesian") is (
-        _named_basis_record("STO_3G", "cartesian")
-    )
+def test_builtin_selector_refuses_missing_resolver_and_pack_mismatch() -> None:
+    """Installed selection cannot retry through the portable metadata catalog."""
+    with pytest.raises(RuntimeError, match="lacks the built-in basis protocol"):
+        _basis_builtin.resolve_record(SimpleNamespace(), "STO_3G", "cartesian")
     mismatched_library = SimpleNamespace(
         generativeqc_builtin_basis_resolve_name_v1=lambda *_args: b"sto-3g",
         generativeqc_bundled_basis_catalog_sha256=lambda: b"0" * 64,
@@ -114,15 +112,15 @@ def test_native_system_avoids_python_primitive_materialization(
         Atom.from_value(value)
         for value in [("O", (0, 0, 0)), ("H", (0, -1.4, 1.1)), ("H", (0, 1.4, 1.1))]
     ]
+    shells = calculator._basis.shells_for(atoms)
     size = sum(
         2 * shell.angular_momentum + 1
         if representation == "spherical"
         else (shell.angular_momentum + 1) * (shell.angular_momentum + 2) // 2
-        for shell in calculator._basis.shells_for(atoms)
+        for shell in shells
     )
-    with monkeypatch.context() as compatibility:
-        compatibility.setattr(_basis_builtin, "eligible", lambda *args: False)
-        reference = calculator._create_native_system(context, atoms, 0, 1)
+    explicit = Calculator(basis=shells, basis_representation=representation)
+    reference = explicit._create_native_system(context, atoms, 0, 1)
     try:
         expected = overlap(library, context, reference, size)
     finally:
@@ -157,28 +155,51 @@ def changed_record() -> BasisSet:
     )
 
 
-def test_custom_same_name_never_selects_catalog(native_context: typing.Any) -> None:
-    library, _ = native_context
+def test_custom_same_name_never_selects_catalog() -> None:
     original = _named_basis_record("sto-3g", "cartesian")
     custom = changed_record()
     assert original.name == custom.name and original.identity != custom.identity
-    assert _basis_builtin.eligible(library, original)
-    assert not _basis_builtin.eligible(library, custom)
+    assert _basis_builtin.is_catalog_record(original)
+    assert not _basis_builtin.is_catalog_record(custom)
 
 
-def test_old_protocol_keeps_explicit_compatibility() -> None:
-    record = _named_basis_record("sto-3g", "cartesian")
-    assert not _basis_builtin.eligible(SimpleNamespace(), record)
-    assert not _basis_builtin.eligible(
-        SimpleNamespace(generativeqc_builtin_basis_query_v1=lambda *args: 0), record
-    )
+@pytest.mark.parametrize(
+    "missing",
+    (
+        "generativeqc_builtin_basis_query_v1",
+        "generativeqc_system_create_builtin_basis_v1",
+    ),
+)
+def test_missing_catalog_symbol_cannot_route_to_other_constructor(
+    native_context: typing.Any, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    library, context = native_context
+    calculator = Calculator(basis="sto-3g")
+
+    class IncompleteLibrary:
+        def __getattr__(self, name: str) -> typing.Any:
+            if name == missing:
+                raise AttributeError(name)
+            if name in {
+                "generativeqc_system_create",
+                "generativeqc_system_create_bundled",
+                "generativeqc_system_create_basis_template_v1",
+            }:
+                raise AssertionError(
+                    "catalog ABI mismatch selected another constructor"
+                )
+            return getattr(library, name)
+
+    monkeypatch.setattr(calculator, "_library", IncompleteLibrary())
+    with pytest.raises(RuntimeError, match=missing):
+        calculator._create_native_system(
+            context, [Atom.from_value(("H", (0, 0, 0)))], 0, 2
+        )
 
 
-@pytest.mark.parametrize("compatibility", ("custom-record", "old-library"))
-def test_compatibility_preserves_actual_basis_data(
+def test_custom_execution_preserves_actual_basis_data(
     native_context: typing.Any,
     monkeypatch: pytest.MonkeyPatch,
-    compatibility: str,
 ) -> None:
     library, context = native_context
     atoms = [Atom.from_value(("H", (0, 0, distance))) for distance in (-0.7, 0.7)]
@@ -196,21 +217,15 @@ def test_compatibility_preserves_actual_basis_data(
                 "generativeqc_builtin_basis_query_v1",
                 "generativeqc_system_create_builtin_basis_v1",
             }:
-                if compatibility == "old-library":
-                    return None
                 raise AssertionError("a custom record selected built-in table data")
             return getattr(library, name)
 
-    if compatibility == "custom-record":
-        calculator = Calculator(basis=changed_record())
+    calculator = Calculator(basis=changed_record())
     monkeypatch.setattr(calculator, "_library", CompatibilityLibrary())
     system = calculator._create_native_system(context, atoms, 0, 1)
     try:
         actual = overlap(library, context, system, 2)
-        if compatibility == "custom-record":
-            assert abs(actual[0, 1] - expected[0, 1]) > 1e-5
-        else:
-            np.testing.assert_allclose(actual, expected, atol=2e-14, rtol=0)
+        assert abs(actual[0, 1] - expected[0, 1]) > 1e-5
     finally:
         library.generativeqc_system_destroy(system)
 

@@ -21,6 +21,11 @@ bool cpu_stationary_direct_force_work_admitted(const core::System& system, bool 
                                                std::size_t grid_points,
                                                std::size_t tile_points) noexcept;
 
+/** Shape-only bound used by Direct force replay, including the ECP provider
+ * selected for this system. No offsets, matrices or integrals are built. */
+std::size_t cpu_stationary_direct_integral_gradient_capacity(const core::System& system,
+                                                             bool hybrid, bool unrestricted);
+
 /** Compact hcore, Pulay, Coulomb and exchange positive derivatives, in that order.
  * Capacity covers owned numeric publication/weight buffers, not recurrence
  * scratch, allocator overhead or the retained SCF owner. Semantic counts are

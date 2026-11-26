@@ -130,6 +130,25 @@ GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_version_v1(void);
  */
 GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_method_v1(const char* identity);
 
+enum {
+  GENERATIVEQC_KS_HESSIAN_CPU_MODEL_UNLINKED = 0,
+  GENERATIVEQC_KS_HESSIAN_CPU_MODEL_ELECTRONIC_ONLY = 1,
+  GENERATIVEQC_KS_HESSIAN_CPU_MODEL_MATCHED = 2,
+};
+
+/** @native-contract generativeqc_ks_hessian_cpu_model_match_v1
+ * @behavior Authenticate a linked bare electronic Hessian closure and a total
+ * method that uses that same closure, with any correction resolved natively.
+ * @inputs Two NUL-terminated MethodIR identities; use the same value for a
+ * bare method. The first identity must not carry a correction.
+ * @outputs UNLINKED if the library cannot bind the electronic identity;
+ * ELECTRONIC_ONLY if it binds but the total method is missing or uses another
+ * closure; MATCHED if both identities select the same linked electronic owner.
+ * @execution Host metadata only; no SCF, Hessian, capacity or system admission.
+ */
+GENERATIVEQC_API uint32_t generativeqc_ks_hessian_cpu_model_match_v1(
+    const char* electronic_identity, const char* total_identity);
+
 /** @native-contract generativeqc_ks_hessian_cpu_default_options_v1
  * @behavior Initialize bounded CPU derivative defaults, size and ABI version.
  * @inputs Pointer to writable options storage.

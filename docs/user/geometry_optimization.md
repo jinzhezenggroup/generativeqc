@@ -211,13 +211,38 @@ an over-budget packed request fall back to ordinary values.
 `--saddle-budget-bytes` (128 MiB) bounds the corrector and, separately, final
 harmonic analysis. `--root-budget-bytes` (128 MiB) bounds retained orbital
 panels and root-tracking matrices, including the current orbital export
-reservation and any retained native seed snapshots. These are owner-specific
-numeric bounds, not an aggregate RSS
-promise; primal/provider scratch, cross-overlap integral scratch, allocation
-metadata, JSON and process overhead are excluded. `--output-budget-bytes`
+reservation and any retained native seed snapshots. Once an accepted frame
+exists, it also includes the modeled cross-geometry overlap workspace. Mass-centroid
+registration shifts only the centres used by the overlap; it does not copy the
+normalized basis or alter the trial system used by SCF and derivatives. The root
+panels, overlap workspace and retained state must fit before SCF preparation.
+Capturing a new seed has a separate check against the remaining root budget. These
+are owner-specific numeric bounds, not an aggregate RSS promise; other primal/provider
+scratch, allocation metadata, JSON and process overhead are excluded. `--output-budget-bytes`
 also admits the task's dense result panels; `--max-coordinates` defaults to
 300 and cannot exceed 300. Bounded storage does not imply practical electronic
 work at the largest admitted dimension.
+
+For qualified CPU Direct FP64 saddle runs, `--host-bytes` also admits an
+aggregate **modeled** host peak. Optional
+`--host-reserve-bytes` and `--headroom-fraction` reduce the effective limit. One
+two-frame envelope covers caller panels, accepted/trial systems, coefficients
+and occupied-root tracking while the corrector and native energy/forces/Hessian
+batch coexist. With `--accepted-frame-warm-start`, that envelope includes both
+detached seed snapshots; the native batch lease also covers physical validation
+in the seed's source metric before restoring it. A qualified cold Fock damping
+prefix adds its proposal matrix to the first SCF's lease; the explicit proposal
+cap still applies. The separately qualified Cs46 and I28 protocols retain their
+operator and optimizer gates; their lease includes ECP setup, the bounded force
+source, and seed source-metric preparation. The batch requires at least the
+larger of the dense Hessian minimum and physical orbital export scratch. Spare
+bytes, up to the derivative
+cap, allow the faster Hessian schedules when they fit. Final harmonic analysis
+is checked separately from the electronic phase. The individual saddle, root and
+derivative budgets still apply. With `--json`, `host_admission` reports the
+effective limit and the minimum and selected modeled peaks for admitted phases;
+this is not a process RSS limit and excludes JSON, metadata parsing, allocator
+overhead and unmodeled provider storage.
 
 With `--json`, stdout contains one final `generativeqc.native-molecular-saddle-result/v1`
 record. `--progress-json` streams derivative-stage and last-accepted optimizer

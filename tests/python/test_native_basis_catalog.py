@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import subprocess
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, _model_resolution, _native
+from generativeqc import Calculator, _basis_builtin, _model_resolution, _native
 from generativeqc.profiles import canonical_hash
 
 if TYPE_CHECKING:
@@ -128,42 +129,31 @@ def test_only_exact_snapshots_are_recognized_without_loading_native(
             assert _model_resolution._bundled_basis_name(changed) is None
 
 
-class CatalogLibrary:
-    """Select the legacy catalog ABI to test its compatibility and rejection rules."""
+class ExplicitBasisLibrary:
+    """Keep supplied records on their own route, never the bundled catalog."""
 
-    def __init__(
-        self, library: Any, *, legacy: bool = False, mismatched: bool = False
-    ) -> None:
+    def __init__(self, library: Any, *, raw_descriptor: bool = False) -> None:
         self.library = library
-        self.legacy = legacy
-        self.mismatched = mismatched
+        self.raw_descriptor = raw_descriptor
 
     def __getattr__(self, name: str) -> Any:
         if name in {
             "generativeqc_builtin_basis_query_v1",
             "generativeqc_system_create_builtin_basis_v1",
-        }:
-            raise AttributeError(name)
-        if self.legacy and name in {
             "generativeqc_system_create_bundled",
-            "generativeqc_system_create_basis_template_v1",
         }:
+            raise AssertionError("caller-owned basis selected the bundled catalog")
+        if (
+            self.raw_descriptor
+            and name == "generativeqc_system_create_basis_template_v1"
+        ):
             raise AttributeError(name)
-        if name == "generativeqc_system_create_bundled" and self.mismatched:
-            return self.create_mismatched
         return getattr(self.library, name)
-
-    def create_mismatched(
-        self, context: Any, descriptor: Any, name: bytes, digest: bytes, output: Any
-    ) -> int:
-        return self.library.generativeqc_system_create_bundled(
-            context, descriptor, name, b"0" * 64, output
-        )
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 @pytest.mark.parametrize("basis_name", ["sto-3g", "def2-svp", "def2-tzvp"])
-def test_native_and_explicit_legacy_complete_ragged_lifecycles(
+def test_native_and_explicit_data_agree_across_complete_ragged_lifecycles(
     basis_name: str, representation: str
 ) -> None:
     systems = [
@@ -173,30 +163,64 @@ def test_native_and_explicit_legacy_complete_ragged_lifecycles(
     native = Calculator(
         basis=basis_name, basis_representation=representation, device="cpu"
     )
-    legacy = Calculator(
-        basis=basis_name, basis_representation=representation, device="cpu"
+    bundled = _model_resolution.snapshot_basis(basis_name, representation)
+    explicit = Calculator(
+        basis=replace(
+            bundled, provenance=replace(bundled.provenance, source="explicit test data")
+        ),
+        device="cpu",
     )
-    legacy._library = CatalogLibrary(legacy._library, legacy=True)
+    explicit._library = ExplicitBasisLibrary(explicit._library, raw_descriptor=True)
     with (
         native.prepare_batch(systems, warm_start=True) as planned_native,
-        legacy.prepare_batch(systems, warm_start=True) as planned_legacy,
+        explicit.prepare_batch(systems, warm_start=True) as planned_explicit,
     ):
         for coordinates in (None, None, [[(0, 0, -0.72), (0, 0, 0.72)], None]):
             actual = planned_native.execute(coordinates, strict=True)
-            expected = planned_legacy.execute(coordinates, strict=True)
+            expected = planned_explicit.execute(coordinates, strict=True)
             for result, oracle in zip(actual.items, expected.items, strict=True):
                 assert result.energy == oracle.energy
                 np.testing.assert_array_equal(result.forces, oracle.forces)
                 assert result.converged == oracle.converged
                 assert result.iterations == oracle.iterations
                 assert result.warm_start_used == oracle.warm_start_used
-                assert result.basis_metadata == oracle.basis_metadata
+                assert (
+                    result.basis_metadata["orbital"]["mathematical_identity"]
+                    == oracle.basis_metadata["orbital"]["mathematical_identity"]
+                )
 
 
 def test_native_catalog_rejection_never_retries_portable_expansion() -> None:
     calculator = Calculator(basis="sto-3g", device="cpu")
-    calculator._library = CatalogLibrary(calculator._library, mismatched=True)
-    with pytest.raises(RuntimeError, match="checksum"):
+    library = calculator._library
+
+    class CorruptDigest:
+        def __call__(self, descriptor: Any, output: Any) -> int:
+            request = ctypes.cast(
+                descriptor, ctypes.POINTER(_basis_builtin.Descriptor)
+            ).contents
+            request.expected_pack_checksum = b"0" * 64
+            return library.generativeqc_builtin_basis_query_v1(descriptor, output)
+
+    class CheckedLibrary:
+        generativeqc_builtin_basis_query_v1 = CorruptDigest()
+
+        def __getattr__(self, name: str) -> Any:
+            if name in {
+                "generativeqc_system_create",
+                "generativeqc_system_create_bundled",
+                "generativeqc_system_create_basis_template_v1",
+            }:
+                raise AssertionError("checksum rejection selected another constructor")
+            return getattr(library, name)
+
+    library.generativeqc_builtin_basis_query_v1.argtypes = [
+        ctypes.POINTER(_basis_builtin.Descriptor),
+        ctypes.POINTER(_basis_builtin.Capacity),
+    ]
+    library.generativeqc_builtin_basis_query_v1.restype = ctypes.c_int
+    calculator._library = CheckedLibrary()
+    with pytest.raises(RuntimeError, match="GENERATIVEQC error 1: invalid argument"):
         calculator.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))])
 
 
@@ -231,7 +255,7 @@ def test_same_name_custom_data_are_executed_instead_of_the_catalog() -> None:
     )
     atoms = [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
     calculator = Calculator(basis=changed, device="cpu")
-    calculator._library = CatalogLibrary(calculator._library, mismatched=True)
+    calculator._library = ExplicitBasisLibrary(calculator._library)
     actual = calculator.singlepoint(atoms)
     original = Calculator(basis="sto-3g", device="cpu").singlepoint(atoms)
     assert abs(actual.energy - original.energy) > 1e-5
