@@ -37,6 +37,7 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 | C5 | 3,830.93 median (2) | Psi4 | 2,495.80 median (2) | 3.0241e-11 | 1.7405e-06 | 5.8795e-07 |
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
 | C6 | 11,946.41 (one) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
+| C6 | 11,946.41 (one) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
 | C7 | — | — | — | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every

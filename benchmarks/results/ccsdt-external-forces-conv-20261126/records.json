@@ -3981,6 +3981,469 @@
       "worker-memory": {
         "process_rss_high_water_kib": 68863692
       }
+    },
+    {
+      "source": "gqc-3167-conv-pyscf-c6-1126-a",
+      "arm": "pyscf-conv",
+      "label": "C6.0",
+      "record_sha256": "745e1f1a813fa17d38c5aabd234cdadc46d88a9ac60448373b73474745f59ab6",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -236.3901182027278,
+        "force_hartree_per_bohr": [
+          [
+            -0.002277470959485939,
+            -0.004846885846376825,
+            0.0006965567185772681
+          ],
+          [
+            -0.002072688586547855,
+            0.010559922914768372,
+            0.0002813264152036199
+          ],
+          [
+            0.002030916884559586,
+            -0.016333760058396152,
+            -5.242444431957649e-05
+          ],
+          [
+            -0.0023263246608513644,
+            0.01618135532926157,
+            7.774410891792094e-05
+          ],
+          [
+            0.0025418306340641017,
+            -0.010692974970191393,
+            -0.00028504272579477075
+          ],
+          [
+            0.002255846061189004,
+            0.004890572247756353,
+            -0.0007084056274042627
+          ],
+          [
+            -0.007370844895001172,
+            -0.0035364272770617156,
+            0.0017840315994711586
+          ],
+          [
+            -0.0026197997583587984,
+            0.004901959275720014,
+            -0.005573301992674029
+          ],
+          [
+            0.0001387941308422791,
+            0.005028669356284876,
+            0.0059559464721377076
+          ],
+          [
+            0.0008523754544221829,
+            -0.0053776491614705435,
+            -0.00619835356541687
+          ],
+          [
+            0.003648535706475914,
+            -0.005129347411145346,
+            0.005285931327936311
+          ],
+          [
+            0.0005997751380744376,
+            0.00528996571826168,
+            0.006196301388761594
+          ],
+          [
+            -0.0022152557655858995,
+            0.005023698992694836,
+            -0.006059787158013474
+          ],
+          [
+            -0.0005953309249455419,
+            -0.005318551115301773,
+            -0.006149427339704472
+          ],
+          [
+            0.002279108687390119,
+            -0.004939728254980125,
+            0.006046441427502991
+          ],
+          [
+            -0.0009850034946914388,
+            0.005527083302601321,
+            0.0062111815194025866
+          ],
+          [
+            -0.00364470684891835,
+            0.0051307283768748935,
+            -0.00549087931824821
+          ],
+          [
+            0.0025629209131166064,
+            -0.004718393154035994,
+            0.005619195697652124
+          ],
+          [
+            0.007279296863347273,
+            0.0034819935510861377,
+            -0.0018170155881759853
+          ],
+          [
+            -8.197457910363859e-05,
+            -0.005122231816380163,
+            -0.005820018915820624
+          ]
+        ],
+        "endpoint_seconds": 17533.39035995677,
+        "versions": {
+          "pyscf": "2.11.0"
+        },
+        "work": {
+          "nao": 154,
+          "electrons": 50,
+          "rhf_energy": -235.3836032262852,
+          "ccsd_energy": -236.36187165788402,
+          "triples_energy": -0.028246544843776887,
+          "hf_cycles": 39,
+          "ccsd_cycles": 47,
+          "ccsdt_lambda_converged": true
+        },
+        "case": "C6",
+        "trial": "0",
+        "arm": "pyscf-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+        "affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127
+        ],
+        "host_topology": {
+          "lscpu": [
+            {
+              "field": "Architecture:",
+              "data": "x86_64"
+            },
+            {
+              "field": "CPU op-mode(s):",
+              "data": "32-bit, 64-bit"
+            },
+            {
+              "field": "Address sizes:",
+              "data": "52 bits physical, 57 bits virtual"
+            },
+            {
+              "field": "Byte Order:",
+              "data": "Little Endian"
+            },
+            {
+              "field": "CPU(s):",
+              "data": "128"
+            },
+            {
+              "field": "On-line CPU(s) list:",
+              "data": "0-127"
+            },
+            {
+              "field": "Vendor ID:",
+              "data": "GenuineIntel"
+            },
+            {
+              "field": "Model name:",
+              "data": "INTEL(R) XEON(R) GOLD 6530"
+            },
+            {
+              "field": "CPU family:",
+              "data": "6"
+            },
+            {
+              "field": "Model:",
+              "data": "207"
+            },
+            {
+              "field": "Thread(s) per core:",
+              "data": "2"
+            },
+            {
+              "field": "Core(s) per socket:",
+              "data": "32"
+            },
+            {
+              "field": "Socket(s):",
+              "data": "2"
+            },
+            {
+              "field": "Stepping:",
+              "data": "2"
+            },
+            {
+              "field": "CPU max MHz:",
+              "data": "4000.0000"
+            },
+            {
+              "field": "CPU min MHz:",
+              "data": "800.0000"
+            },
+            {
+              "field": "BogoMIPS:",
+              "data": "4200.00"
+            },
+            {
+              "field": "Flags:",
+              "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities"
+            },
+            {
+              "field": "Virtualization:",
+              "data": "VT-x"
+            },
+            {
+              "field": "L1d cache:",
+              "data": "3 MiB (64 instances)"
+            },
+            {
+              "field": "L1i cache:",
+              "data": "2 MiB (64 instances)"
+            },
+            {
+              "field": "L2 cache:",
+              "data": "128 MiB (64 instances)"
+            },
+            {
+              "field": "L3 cache:",
+              "data": "320 MiB (2 instances)"
+            },
+            {
+              "field": "NUMA node(s):",
+              "data": "2"
+            },
+            {
+              "field": "NUMA node0 CPU(s):",
+              "data": "0-31,64-95"
+            },
+            {
+              "field": "NUMA node1 CPU(s):",
+              "data": "32-63,96-127"
+            },
+            {
+              "field": "Vulnerability Gather data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Itlb multihit:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability L1tf:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Meltdown:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mmio stale data:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Reg file data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Retbleed:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec rstack overflow:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec store bypass:",
+              "data": "Mitigation; Speculative Store Bypass disabled via prctl and seccomp"
+            },
+            {
+              "field": "Vulnerability Spectre v1:",
+              "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+            },
+            {
+              "field": "Vulnerability Spectre v2:",
+              "data": "Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline"
+            },
+            {
+              "field": "Vulnerability Srbds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Tsx async abort:",
+              "data": "Not affected"
+            }
+          ]
+        },
+        "cgroup_memory": {
+          "memory.max": "214748364800",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        },
+        "threads": 32,
+        "process_id": 121,
+        "qz_job_name": "gqc-3167-conv-pyscf-c6-1126-a",
+        "qz_project": "CQ-NexChem",
+        "slurm_job_id": "1",
+        "slurm_cpus_per_task": "32",
+        "scratch_free_bytes": 4473082994688,
+        "python": "3.11.18",
+        "driver_sha256": "d3b2353074ab2cca9ea19aa5c0da3c6f2c2e00a19e4e3a354075156e0f27c3c0",
+        "protocol_sha256": {
+          "run.py": "0b9b8d6d1fb9d3ea13b875e6ffa29eec5209301523dd5cf881aeca14333d23fd",
+          "fixtures.json": "559cb9a7c952654fadd79559d7f52973d6d5ab6faca6fcc40ba408b304f45695"
+        },
+        "arm": "pyscf-conv",
+        "trial": "C6.0",
+        "wall_limit_seconds": 126000,
+        "application_memory_mib": 172032
+      },
+      "resource": {
+        "duration_seconds": 17540.341629981995,
+        "sample_interval_seconds": 30,
+        "samples": 585,
+        "sampled_peak": {
+          "rss_high_water_kib": 122081120
+        },
+        "cgroup_memory_after": {
+          "memory.max": "214748364800",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        }
+      },
+      "worker-memory": {
+        "process_rss_high_water_kib": 122081120
+      }
     }
   ]
 }

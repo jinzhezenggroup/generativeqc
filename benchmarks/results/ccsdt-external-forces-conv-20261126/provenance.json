@@ -324,24 +324,24 @@
       },
       "diagnostics": [
         {
-          "time": "2026-11-25 19:54:32",
+          "time": "2026-11-25 22:23:48",
           "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=738.00, Memory=3316.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+          "message": "0/1350 nodes are unavailable: 1288 Insufficient cpu, 16 Insufficient memory, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         },
         {
-          "time": "2026-11-25 19:54:39",
+          "time": "2026-11-25 22:24:03",
           "reason": "FailedScheduling",
-          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=778.00, Memory=3516.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+          "message": "0/1350 nodes are unavailable: 12 Insufficient memory, 1292 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         },
         {
-          "time": "2026-11-25 20:41:23",
+          "time": "2026-11-25 22:24:11",
           "reason": "FailedScheduling",
-          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-362, once minAvailable is satisfied"
+          "message": "0/1350 nodes are unavailable: 11 Insufficient memory, 1293 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         },
         {
-          "time": "2026-11-25 20:49:24",
+          "time": "2026-11-25 22:24:25",
           "reason": "FailedScheduling",
-          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-106, once minAvailable is satisfied"
+          "message": "0/1350 nodes are unavailable: 10 Insufficient memory, 1294 Insufficient cpu, 38 node(s) didn't match Pod's node affinity/selector, 8 node(s) were unschedulable."
         }
       ],
       "planned": [
@@ -426,8 +426,8 @@
     "gqc-3167-conv-pyscf-c6-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-pyscf-c6-1126-a",
-        "status": "RUNNING",
-        "steps": "0/1",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
         "project": "cq-nex-chem",
         "compute_group": "CPU\u8d44\u6e90-2",
         "resource": {
@@ -437,19 +437,25 @@
           "nodes": 1,
           "gpu_type": "CPU"
         },
-        "nodes": [
-          "cpu-nat-320"
-        ],
         "priority": 35,
         "priority_level": "HIGH",
-        "created_at": "2026-11-26 09:30:33"
+        "created_at": "2026-11-26 09:30:33",
+        "finished_at": "2026-11-26 14:23:41"
       },
       "diagnostics": [],
       "scheduled_utc": "2026-11-26T01:30:39+00:00",
+      "released_utc": "2026-11-26T06:23:41+00:00",
+      "allocated_core_hours": 195.35555555555555,
+      "estimated_points": 0.0,
       "planned": [
         "C6.0"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c6-1126-a"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c6-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-pyscf-c6-1126-a.tar.gz",
+        "bytes": 12611,
+        "sha256": "72b2547d36c05a50ca7b92a1c84f5f8e621b4fa60a138365280d12c97b62eac5"
+      }
     },
     "gqc-3167-conv-pyscf-c7-1126-a": {
       "platform": {
