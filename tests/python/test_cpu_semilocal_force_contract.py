@@ -1,7 +1,7 @@
-"""Native-free admission, API routing and budgets for optional CPU KS forces.
+"""Admission, API routing and budgets for optional CPU KS forces.
 
-Native calls return fixed dummy results. These are compatibility/control-flow
-regressions, not numerical qualification or performance measurements.
+Resource composition uses the native query; execution returns fixed dummy
+results. These are control-flow regressions, not numerical qualification.
 """
 
 from __future__ import annotations
@@ -55,7 +55,8 @@ FORCES = frozenset({"energy", "forces"})
 
 @pytest.fixture
 def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
-    """Use the real Python facade with no native library, compilation or SCF."""
+    """Use native planning without running a native calculation or SCF."""
+    native = _native.load_library(device="cpu")
     state = SimpleNamespace(fail=False, force_fail=False, force_calls=0, observed=[])
 
     def available(method: int, output: object) -> int:
@@ -84,6 +85,7 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         return 0
 
     library = SimpleNamespace(
+        generativeqc_resource_compose_v1=native.generativeqc_resource_compose_v1,
         generativeqc_method_available=available,
         generativeqc_ks_options_version=Mock(return_value=1),
         generativeqc_ks_resource_inventory_version_v1=Mock(return_value=1),

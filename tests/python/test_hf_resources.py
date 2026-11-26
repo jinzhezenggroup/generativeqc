@@ -227,7 +227,10 @@ def test_unavailable_cuda_hf_query_is_diagnosed_without_cpu_fallback() -> None:
 
 
 def test_cuda_hf_inventory_marshals_exact_shell_topology_to_v2() -> None:
+    """Stub the CUDA layout leaf, but exercise native resource composition."""
     from types import SimpleNamespace
+
+    from generativeqc import _native
 
     seen: dict[str, typing.Any] = {}
 
@@ -264,7 +267,11 @@ def test_cuda_hf_inventory_marshals_exact_shell_topology_to_v2() -> None:
         output[1] = 256
         return 0
 
-    library = SimpleNamespace(generativeqc_resource_small_hf_cuda_v2=query)
+    native = _native.load_library(device="cpu")
+    library = SimpleNamespace(
+        generativeqc_resource_compose_v1=native.generativeqc_resource_compose_v1,
+        generativeqc_resource_small_hf_cuda_v2=query,
+    )
     plan = estimate_hf_resources([H2], backend="cuda", library=library)
     assert plan.status == "feasible"
     assert seen == {
