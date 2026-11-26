@@ -38,7 +38,7 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
 | C6 | 11,642.08 median (2) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
 | C6 | 11,642.08 median (2) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
-| C7 | — | — | — | — | — | — |
+| C7 | — | Psi4 | 18,777.03 (one) | — | — | — |
 
 A single sample is shown with its own wall time. The replay uses every
 available H100-to-reference pair and reports incomplete cases explicitly.
@@ -65,7 +65,9 @@ The 1,200 GiB HPC request uses 32 solver threads and a 1,024 GiB Psi4
 allowance. The original job queued behind the personal 800-CPU ceiling and then behind
 large-node placement constraints. It started at 08:09 UTC, after about
 6 h 40 min in queue. The worker reported Xeon Gold 6530, 32 solver threads
-and a 1,200 GiB cgroup limit. No Psi4 worker was launched on the shared notebook.
+and a 1,200 GiB cgroup limit. It finished the complete 69-component
+gradient and peaked at 634.56 GiB worker RSS. No Psi4 worker was
+launched on the shared notebook.
 [DPD allocator](https://github.com/psi4/psi4/blob/v1.10.2/psi4/src/psi4/libdpd/block_matrix.cc#L71-L106).
 
 PySCF 2.11.0 sizes triples Lambda and gradient-density blocks from its
@@ -128,7 +130,8 @@ RSS peaked at 16.04 and 16.04 GiB. Sampled device
 memory peaked at 74.25 and 74.25 GiB, respectively.
 The runs used two fresh processes in the same job. Both raw outputs
 were retained and the qz GPU job was deleted. The C7 CPU reference remains
-in progress in this local snapshot.
+available from Psi4. The C7 PySCF cross-check remains in progress in
+this local snapshot.
 
 ## Reproduction
 

@@ -317,8 +317,8 @@
     "gqc-3167-conv-psi4-c7-1126-a": {
       "platform": {
         "name": "gqc-3167-conv-psi4-c7-1126-a",
-        "status": "RUNNING",
-        "steps": "-/1",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
         "project": "cq-nex-chem",
         "compute_group": "CPU\u8d44\u6e90-2",
         "resource": {
@@ -328,12 +328,10 @@
           "nodes": 1,
           "gpu_type": "CPU"
         },
-        "nodes": [
-          "cpu-nat-464"
-        ],
         "priority": 35,
         "priority_level": "HIGH",
-        "created_at": "2026-11-26 09:29:10"
+        "created_at": "2026-11-26 09:29:10",
+        "finished_at": "2026-11-26 21:23:01"
       },
       "diagnostics": [
         {
@@ -358,10 +356,18 @@
         }
       ],
       "scheduled_utc": "2026-11-26T08:08:28+00:00",
+      "released_utc": "2026-11-26T13:23:01+00:00",
+      "allocated_core_hours": 524.25,
+      "estimated_points": 0.0,
       "planned": [
         "C7.0"
       ],
-      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c7-1126-a"
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c7-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-psi4-c7-1126-a.tar.gz",
+        "bytes": 12779,
+        "sha256": "50d4788359a446e205dab5776d11b36b98067570b3ce0a91537362a4c272b4dc"
+      }
     },
     "gqc-3167-conv-pyscf-c5-1126-a": {
       "platform": {
