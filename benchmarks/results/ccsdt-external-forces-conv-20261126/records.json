@@ -1,0 +1,529 @@
+{
+  "attempts": [
+    {
+      "arm": "native-conv",
+      "label": "C5.0",
+      "source": "PR #3174 at 86016450ecc5af32f8e4528112badad7dec2d279",
+      "record_sha256": "b933d5f5217322de110af33095dd5197b7b17e1824317ca44e9e58019656c726",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -197.1894328072819,
+        "force_hartree_per_bohr": [
+          [
+            7.05114225518834e-05,
+            -0.0055581850997370565,
+            0.0001899517420031099
+          ],
+          [
+            -0.0072466906395253885,
+            0.008673059031641592,
+            -0.0007240978706143453
+          ],
+          [
+            0.0095737553898101,
+            -0.013161005251085336,
+            0.00040397200529361695
+          ],
+          [
+            -0.0048879914141385546,
+            0.008415624037356951,
+            9.9973470319585e-05
+          ],
+          [
+            0.0045080683689979984,
+            -0.0021096927536345894,
+            6.497917602098777e-05
+          ],
+          [
+            -0.004991660504679542,
+            -0.006398238769488715,
+            0.00016942349575268061
+          ],
+          [
+            -0.00328179533739613,
+            0.0036134242726525013,
+            -0.0059827549156657315
+          ],
+          [
+            -0.003403465073501903,
+            0.003966595234258555,
+            0.005729872833457876
+          ],
+          [
+            0.00459600816824969,
+            -0.0038109175201440416,
+            -0.005843211212969202
+          ],
+          [
+            0.004635183453023224,
+            -0.0036915907106403246,
+            0.006485320136801079
+          ],
+          [
+            -0.0030962102079062884,
+            0.004434851856031566,
+            0.006228266679181545
+          ],
+          [
+            -0.003128923218010381,
+            0.004063449689262763,
+            -0.006504429330347034
+          ],
+          [
+            0.0017654371438449428,
+            -0.005323147953087246,
+            -0.005512426383777051
+          ],
+          [
+            0.0016643564765575426,
+            -0.004905792812409621,
+            0.005483936115431224
+          ],
+          [
+            -0.002525085654041635,
+            0.004443530901540351,
+            -0.006139542472424347
+          ],
+          [
+            0.008248514130361704,
+            0.002624048451885594,
+            -7.190437866537483e-05
+          ],
+          [
+            -0.002500012504125006,
+            0.004723987395858859,
+            0.005922670910201861
+          ]
+        ],
+        "endpoint_seconds": 3633.4600099865347,
+        "versions": {
+          "generativeqc": "0.1.0"
+        },
+        "work": {
+          "correlation": {
+            "reference_energy": -196.34648947665588,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.6220041277689223,
+            "reference_residual": 2.8031466037248265e-12,
+            "numeric_capacity_bytes": 65988191372,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 32533547008,
+            "correlation_provider_retained_bytes": 1482210104,
+            "mo_transfer_bytes": 1484102904,
+            "host_to_device_ms": 0.9094719886779785,
+            "device_to_host_ms": 358.3606414794922,
+            "transform_library_ms": 14.689088344573975,
+            "tensor_kernel_ms": 8.871327996253967,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 15,
+            "response_restarts": 0,
+            "response_absolute_residual": 2.772287529325483e-13,
+            "response_relative_residual": 6.598614446657561e-11,
+            "response_workspace_bytes": 1326872,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 65988191372,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+            "measured_response_workspace_peak_bytes": 1308560,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 21,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.8196984721124584,
+            "ccsd_energy_change": 1.0247358517290195e-13,
+            "ccsd_singles_residual_max": 2.268535649158546e-12,
+            "ccsd_doubles_residual_max": 6.266176813540802e-13,
+            "ccsd_replay_singles_residual_max": 2.2685355949484373e-12,
+            "ccsd_replay_doubles_residual_max": 6.266237528862462e-13,
+            "ccsd_setup_h2d_bytes": 1524280824,
+            "ccsd_scalar_d2h_bytes": 928,
+            "ccsd_amplitude_d2h_bytes": 41934480,
+            "ccsd_synchronizations": 64,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.023244858513559365,
+            "ccsd_t_virtual_triples": 221815,
+            "ccsd_t_workspace_bytes": 310036736,
+            "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 442594640
+          },
+          "correlation_budget_gib": 72,
+          "cc_performance": {
+            "reference_seconds": 2.109845817,
+            "problem_seconds": 56.824260012,
+            "provider_seconds": 56.708324045,
+            "source_seconds": 0.008366690999999999,
+            "solver_seconds": 49.351303615,
+            "iteration_seconds": 43.83175383515625,
+            "replay_seconds": 4.90159416,
+            "update_seconds": 0.0024011550000000003,
+            "diis_seconds": 0.09235643184374931,
+            "triples_seconds": 166.788679625,
+            "source_scans": 2,
+            "source_reads": 2,
+            "source_values": 571220000,
+            "transform_fmas": 121199381290,
+            "transform_stages": 17,
+            "mo_blocks": 7,
+            "cuda_transform_calls": 7,
+            "cuda_batch_calls": 2,
+            "iteration_graph_calls": 40,
+            "replay_graph_calls": 1,
+            "update_calls": 20,
+            "generated_error_checks": 21,
+            "diis_gram_calls": 20,
+            "diis_coefficient_calls": 19,
+            "diis_combine_calls": 38,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": null,
+            "source_response_seconds": null,
+            "orbital_seconds": null,
+            "lambda_fp32_requested": null,
+            "lambda_fp32_executed": null,
+            "lambda_fp32_refused": null,
+            "lambda_fp32_iterations": null,
+            "lambda_fp64_iterations": null,
+            "lambda_fp32_actions": null,
+            "lambda_fp64_actions": null,
+            "lambda_fp32_gemm_calls": null,
+            "lambda_fp32_cast_elements": null,
+            "lambda_auxiliary_batch_size": null,
+            "lambda_numeric_capacity_bytes": null,
+            "lambda_owned_device_bytes": null
+          },
+          "rhf_energy": -196.34648947665588,
+          "hf_cycles": 21,
+          "hf_density_rms": 2.268535649158546e-12,
+          "executed_backend": "cuda"
+        },
+        "case": "C5",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "Intel(R) Xeon(R) Platinum 8468",
+        "threads": 1,
+        "cgroup_memory": {
+          "/sys/fs/cgroup/memory.max": "214748364800"
+        },
+        "allocation": {
+          "SLURM_JOB_ID": null,
+          "SLURM_STEP_ID": null,
+          "SLURM_CPUS_PER_TASK": null,
+          "GQC_QZ_JOB_NAME": "gqc-3167-ccsdt-conv-c5-m72-h100-1125",
+          "GQC_QZ_PROJECT": "CQ-NexChem",
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUBLAS_WORKSPACE_CONFIG": ":16:8"
+        },
+        "application_memory_mib": 76800,
+        "driver_sha256": "7e2e2d6d59c6d68cf3dd1cb090c9160b0d927af6308c499c5072c3849603e167",
+        "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+        "source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+        "library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
+        "gpu": "NVIDIA H100 80GB HBM3, 81559 MiB, 595.58.03, GPU-577c4e3f-a889-6122-7bec-faa777a24999"
+      }
+    },
+    {
+      "arm": "psi4-conv",
+      "label": "C5.0",
+      "source": "PR #3174 at 86016450ecc5af32f8e4528112badad7dec2d279",
+      "record_sha256": "1d7eab8e524388750a51d9ed3e3a7ac5eeccdbcda07833b29b6b1d1c3fb76e49",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -197.18943280731202,
+        "force_hartree_per_bohr": [
+          [
+            6.969562619563163e-05,
+            -0.005558401932666879,
+            0.00018969629340952025
+          ],
+          [
+            -0.007246863807170323,
+            0.008674799535447697,
+            -0.0007243228726808715
+          ],
+          [
+            0.009573550534254682,
+            -0.01316075585818366,
+            0.00040430721790923885
+          ],
+          [
+            -0.0048892954245003395,
+            0.008416771335838291,
+            9.919571372941915e-05
+          ],
+          [
+            0.004506964972082805,
+            -0.0021105159641612303,
+            6.537446896015542e-05
+          ],
+          [
+            -0.004991442047161954,
+            -0.006398704156946211,
+            0.00016982217145841694
+          ],
+          [
+            -0.0032817901355524093,
+            0.003613983859234504,
+            -0.005983794673490417
+          ],
+          [
+            -0.0034032443879374874,
+            0.003966564784733673,
+            0.0057305005159613565
+          ],
+          [
+            0.004596167611325974,
+            -0.0038114885864311,
+            -0.005843817594302969
+          ],
+          [
+            0.004635629539390673,
+            -0.003692064686883212,
+            0.006486329473389674
+          ],
+          [
+            -0.003096096237331092,
+            0.0044344528981425935,
+            0.006227422945400463
+          ],
+          [
+            -0.0031285242526293278,
+            0.004063225626037337,
+            -0.006503505502745144
+          ],
+          [
+            0.0017660583752714398,
+            -0.005323570628846586,
+            -0.005512618299427174
+          ],
+          [
+            0.0016649687670151625,
+            -0.00490601004581781,
+            0.0054843224974197025
+          ],
+          [
+            -0.0025247372427299464,
+            0.004443491856370274,
+            -0.00613943466345912
+          ],
+          [
+            0.008248748939103656,
+            0.0026241513481472523,
+            -7.213578679151483e-05
+          ],
+          [
+            -0.002499790829521953,
+            0.004724070616753284,
+            0.005922658094970501
+          ]
+        ],
+        "endpoint_seconds": 2427.485752945766,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 130,
+          "auxiliary_counts": {},
+          "electrons": 42,
+          "rhf_energy": -196.3464894766559
+        },
+        "case": "C5",
+        "trial": "0",
+        "arm": "psi4-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "Intel(R) Xeon(R) CPU Max 9462",
+        "threads": 8,
+        "cgroup_memory": {
+          "/sys/fs/cgroup/memory.max": "107374182400"
+        },
+        "allocation": {
+          "SLURM_JOB_ID": "1",
+          "SLURM_STEP_ID": "0",
+          "SLURM_CPUS_PER_TASK": "8",
+          "GQC_QZ_JOB_NAME": null,
+          "GQC_QZ_PROJECT": null,
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUBLAS_WORKSPACE_CONFIG": null
+        },
+        "application_memory_mib": 94208,
+        "driver_sha256": "6691ab0fdb3803442f52271979dad5d2e0eae22c7ecfd7810f4f772545f23f20"
+      }
+    },
+    {
+      "arm": "psi4-conv",
+      "label": "C5.1",
+      "source": "PR #3174 at 86016450ecc5af32f8e4528112badad7dec2d279",
+      "record_sha256": "9f43376df5040a484869765493ff6938ee9d8ee3fcdaefff8c9512e4b07ea17c",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -197.18943280731213,
+        "force_hartree_per_bohr": [
+          [
+            6.969562620895431e-05,
+            -0.0055584019326655465,
+            0.0001896962934188071
+          ],
+          [
+            -0.007246863807206516,
+            0.008674799535421052,
+            -0.0007243228726803164
+          ],
+          [
+            0.009573550534129893,
+            -0.01316075585817078,
+            0.00040430721791530344
+          ],
+          [
+            -0.004889295424511886,
+            0.008416771335824969,
+            9.919571368860458e-05
+          ],
+          [
+            0.0045069649721036775,
+            -0.00211051596419054,
+            6.537446899473887e-05
+          ],
+          [
+            -0.004991442047175054,
+            -0.006398704156962198,
+            0.00016982217145818101
+          ],
+          [
+            -0.0032817901355570722,
+            0.003613983859234504,
+            -0.005983794673470433
+          ],
+          [
+            -0.003403244387929494,
+            0.003966564784743665,
+            0.0057305005159862255
+          ],
+          [
+            0.004596167611329083,
+            -0.003811488586451528,
+            -0.0058438175943194
+          ],
+          [
+            0.00463562953939578,
+            -0.0036920646868841,
+            0.006486329473421204
+          ],
+          [
+            -0.0030960962372891254,
+            0.00443445289810751,
+            0.0062274229453698204
+          ],
+          [
+            -0.003128524252625775,
+            0.004063225626047551,
+            -0.0065035055027335975
+          ],
+          [
+            0.001766058375257229,
+            -0.005323570628842145,
+            -0.005512618299394312
+          ],
+          [
+            0.0016649687670264868,
+            -0.004906010045830023,
+            0.005484322497405492
+          ],
+          [
+            -0.0025247372427348314,
+            0.004443491856359172,
+            -0.006139434663463117
+          ],
+          [
+            0.008248748939092554,
+            0.0026241513481446987,
+            -7.21357867911783e-05
+          ],
+          [
+            -0.0024997908295260607,
+            0.004724070616715537,
+            0.005922658094956734
+          ]
+        ],
+        "endpoint_seconds": 2564.1044597923756,
+        "versions": {
+          "psi4": "1.10.2"
+        },
+        "work": {
+          "settings": {
+            "basis": "issue3167orb",
+            "puream": true,
+            "reference": "rhf",
+            "freeze_core": false,
+            "scf_type": "pk",
+            "cc_type": "conv",
+            "qc_module": "ccenergy",
+            "e_convergence": 1e-12,
+            "d_convergence": 1e-10,
+            "maxiter": 200,
+            "ints_tolerance": 1e-14,
+            "ccenergy__e_convergence": 1e-12,
+            "ccenergy__r_convergence": 1e-10,
+            "cclambda__r_convergence": 1e-10,
+            "dfocc__e_convergence": 1e-12,
+            "dfocc__r_convergence": 1e-10
+          },
+          "nao": 130,
+          "auxiliary_counts": {},
+          "electrons": 42,
+          "rhf_energy": -196.34648947665568
+        },
+        "case": "C5",
+        "trial": "1",
+        "arm": "psi4-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "Intel(R) Xeon(R) CPU Max 9462",
+        "threads": 8,
+        "cgroup_memory": {
+          "/sys/fs/cgroup/memory.max": "107374182400"
+        },
+        "allocation": {
+          "SLURM_JOB_ID": "1",
+          "SLURM_STEP_ID": "0",
+          "SLURM_CPUS_PER_TASK": "8",
+          "GQC_QZ_JOB_NAME": null,
+          "GQC_QZ_PROJECT": null,
+          "CUDA_VISIBLE_DEVICES": null,
+          "CUBLAS_WORKSPACE_CONFIG": null
+        },
+        "application_memory_mib": 94208,
+        "driver_sha256": "6691ab0fdb3803442f52271979dad5d2e0eae22c7ecfd7810f4f772545f23f20"
+      }
+    }
+  ]
+}
