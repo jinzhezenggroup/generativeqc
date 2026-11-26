@@ -1,0 +1,402 @@
+{
+  "measured_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "native_library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
+  "baseline_commit": "86016450ecc5af32f8e4528112badad7dec2d279",
+  "project": "CQ-NexChem",
+  "remote_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126",
+  "local_raw_directory": "raw/",
+  "reference_environments": {
+    "psi4": "Psi4 1.10.2 with the #3174 cpu-env-v3 lock",
+    "pyscf": "PySCF 2.11.0 with the #3174 cpu-env-v4 lock"
+  },
+  "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
+  "accounting": "GPU scheduled-to-terminal with 1 point per card-hour. CPU compute-worker scheduled-to-release at 0 points per core-hour. Estimates exclude Slurm control-plane overhead.",
+  "jobs": {
+    "gqc-3167-conv-h100-c5-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-h100-c5-1126-a",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795656621000",
+        "finished_at": "1795660750000"
+      },
+      "diagnostics": [
+        {
+          "time": "2026-11-25 18:39:10",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T01:30:24+00:00",
+      "released_utc": "2026-11-26T02:39:10+00:00",
+      "allocated_card_hours": 1.146111111111111,
+      "estimated_points": 1.146111111111111,
+      "cleanup": {
+        "name": "gqc-3167-conv-h100-c5-1126-a",
+        "status": "deleted"
+      },
+      "planned": [
+        "C5.1"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c5-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-h100-c5-1126-a.tar.gz",
+        "bytes": 5404,
+        "sha256": "c092e511fece005b4556e6b71719da89421b123acd6fca5b2180cbb7d687f7e5"
+      }
+    },
+    "gqc-3167-conv-h100-c6-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-h100-c6-1126-a",
+        "status": "RUNNING",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "nodes": [
+          "qb-prod-gpu103"
+        ],
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795656603000"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:30:07+00:00",
+      "planned": [
+        "C6.0",
+        "C6.1"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c6-1126-a"
+    },
+    "gqc-3167-conv-h100-c7-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-h100-c7-1126-a",
+        "status": "FAILED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 400,
+          "gpu": 2,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795656584000",
+        "finished_at": "1795656718000"
+      },
+      "diagnostics": [
+        {
+          "time": "2026-11-25 17:31:58",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T01:29:48+00:00",
+      "released_utc": "2026-11-26T01:31:58+00:00",
+      "allocated_card_hours": 0.07222222222222222,
+      "estimated_points": 0.07222222222222222,
+      "cleanup": {
+        "name": "gqc-3167-conv-h100-c7-1126-a",
+        "status": "deleted"
+      },
+      "planned": [
+        "C7.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-h100-c7-1126-a.tar.gz",
+        "bytes": 3627,
+        "sha256": "24a2097612ab1fa9b5ec0d5f3834fe1fde80ef5c65eb86fce1ab6d8563ef4059"
+      }
+    },
+    "gqc-3167-conv-h100-c7-retry-1126-r2": {
+      "platform": {
+        "name": "gqc-3167-conv-h100-c7-retry-1126-r2",
+        "status": "RUNNING",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "nodes": [
+          "qb-prod-gpu488"
+        ],
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795656864000"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:34:29+00:00",
+      "planned": [
+        "C7.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-retry-1126-r2"
+    },
+    "gqc-3167-conv-h100-c7-repeat-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-h100-c7-repeat-1126-a",
+        "status": "RUNNING",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H100-cuda13.2\u7248\u672c-183\u6838",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H100 (80GB)"
+        },
+        "nodes": [
+          "qb-prod-gpu404"
+        ],
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795657867000"
+      },
+      "diagnostics": [
+        {
+          "time": "2026-11-25 17:51:14",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-worker-0 can possibly be assigned to qb-prod-gpu404, once resource is released and minAvailable is satisfied"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T01:51:25+00:00",
+      "planned": [
+        "C7.1"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-h100-c7-repeat-1126-a"
+    },
+    "gqc-3167-conv-psi4-c6-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-psi4-c6-1126-a",
+        "status": "RUNNING",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 55,
+          "memory_gib": 500,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "nodes": [
+          "cpu-nat-451"
+        ],
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:29:13"
+      },
+      "diagnostics": [
+        {
+          "time": "2026-11-25 17:29:18",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-362, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-25 17:29:19",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to cpu-nat-451, once resource is released and minAvailable is satisfied"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T01:29:21+00:00",
+      "planned": [
+        "C6.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c6-1126-a"
+    },
+    "gqc-3167-conv-psi4-c7-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-psi4-c7-1126-a",
+        "status": "QUEUEING",
+        "steps": "-/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 100,
+          "memory_gib": 1200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:29:10"
+      },
+      "diagnostics": [
+        {
+          "time": "2026-11-25 18:30:07",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=713.00, Memory=3416.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 18:30:13",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=753.00, Memory=3616.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 18:30:45",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1350 user quota exceeded for user <redacted> in workspace <redacted>: used (CPU=793.00, Memory=3816.00GB, GPU=0.00) + requested (CPU=100.00, Memory=1200.00GB, GPU=0.00) > total (CPU=800.00, Memory=-1.00GB, GPU=-1.00)."
+        },
+        {
+          "time": "2026-11-25 18:33:23",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-292, once minAvailable is satisfied"
+        }
+      ],
+      "planned": [
+        "C7.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-psi4-c7-1126-a"
+    },
+    "gqc-3167-conv-pyscf-c5-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-pyscf-c5-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:31:08",
+        "finished_at": "2026-11-26 09:32:21"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:31:10+00:00",
+      "released_utc": "2026-11-26T01:32:21+00:00",
+      "allocated_core_hours": 0.7888888888888889,
+      "estimated_points": 0.0,
+      "planned": [
+        "C5.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c5-1126-a",
+      "local_archive": {
+        "path": "raw/gqc-3167-conv-pyscf-c5-1126-a.tar.gz",
+        "bytes": 45,
+        "sha256": "85cea451eec057fa7e734548ca3ba6d779ed5836a3f9de14b8394575ef0d7d8e"
+      }
+    },
+    "gqc-3167-conv-pyscf-c5-1126-r2": {
+      "platform": {
+        "name": "gqc-3167-conv-pyscf-c5-1126-r2",
+        "status": "RUNNING",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "nodes": [
+          "cpu-nat-097"
+        ],
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:33:14"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:33:19+00:00",
+      "planned": [
+        "C5.1"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c5-1126-r2"
+    },
+    "gqc-3167-conv-pyscf-c6-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-pyscf-c6-1126-a",
+        "status": "RUNNING",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "nodes": [
+          "cpu-nat-320"
+        ],
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:30:33"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:30:39+00:00",
+      "planned": [
+        "C6.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c6-1126-a"
+    },
+    "gqc-3167-conv-pyscf-c7-1126-a": {
+      "platform": {
+        "name": "gqc-3167-conv-pyscf-c7-1126-a",
+        "status": "RUNNING",
+        "steps": "0/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 40,
+          "memory_gib": 200,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "nodes": [
+          "cpu-nat-548"
+        ],
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-26 09:29:16"
+      },
+      "diagnostics": [],
+      "scheduled_utc": "2026-11-26T01:29:21+00:00",
+      "planned": [
+        "C7.0"
+      ],
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-conv-20261126/output/gqc-3167-conv-pyscf-c7-1126-a"
+    }
+  }
+}

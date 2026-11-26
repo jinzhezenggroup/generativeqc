@@ -524,6 +524,1060 @@
         "application_memory_mib": 94208,
         "driver_sha256": "6691ab0fdb3803442f52271979dad5d2e0eae22c7ecfd7810f4f772545f23f20"
       }
+    },
+    {
+      "source": "gqc-3167-conv-h100-c5-1126-a",
+      "arm": "native-conv",
+      "label": "C5.1",
+      "record_sha256": "caf5162af26ddbe822c67e82a1af12df40e3b1736ad8dc7bab00df43ac5719e0",
+      "record": {
+        "status": "completed",
+        "energy_hartree": -197.1894328072819,
+        "force_hartree_per_bohr": [
+          [
+            7.051142256261026e-05,
+            -0.005558185099740691,
+            0.00018995174200163282
+          ],
+          [
+            -0.007246690639502964,
+            0.008673059031623716,
+            -0.000724097870613419
+          ],
+          [
+            0.009573755389813738,
+            -0.013161005251042966,
+            0.0004039720052912842
+          ],
+          [
+            -0.004887991414123876,
+            0.008415624037351717,
+            9.997347031870548e-05
+          ],
+          [
+            0.004508068369004507,
+            -0.002109692753626713,
+            6.497917602079359e-05
+          ],
+          [
+            -0.004991660504680974,
+            -0.006398238769506826,
+            0.0001694234957530497
+          ],
+          [
+            -0.0032817953373946007,
+            0.0036134242726511383,
+            -0.00598275491566706
+          ],
+          [
+            -0.003403465073498029,
+            0.003966595234260917,
+            0.005729872833462027
+          ],
+          [
+            0.004596008168249221,
+            -0.0038109175201375424,
+            -0.00584321121296788
+          ],
+          [
+            0.004635183453021894,
+            -0.003691590710640205,
+            0.006485320136804202
+          ],
+          [
+            -0.0030962102079115064,
+            0.004434851856034274,
+            0.006228266679195724
+          ],
+          [
+            -0.0031289232180047007,
+            0.0040634496892601405,
+            -0.006504429330344642
+          ],
+          [
+            0.0017654371438384664,
+            -0.005323147953087637,
+            -0.0055124263837837955
+          ],
+          [
+            0.0016643564765594838,
+            -0.004905792812410733,
+            0.005483936115444071
+          ],
+          [
+            -0.0025250856540417863,
+            0.004443530901539469,
+            -0.006139542472424776
+          ],
+          [
+            0.00824851413036052,
+            0.0026240484518841338,
+            -7.190437866555374e-05
+          ],
+          [
+            -0.0025000125041244217,
+            0.004723987395853974,
+            0.005922670910198889
+          ]
+        ],
+        "endpoint_seconds": 4028.3921753084287,
+        "versions": {
+          "generativeqc": "0.1.0"
+        },
+        "work": {
+          "correlation": {
+            "reference_energy": -196.34648947665588,
+            "opposite_spin_energy": 0.0,
+            "same_spin_energy": 0.0,
+            "minimum_absolute_denominator": 0.6220041277689223,
+            "reference_residual": 2.8031466037248265e-12,
+            "numeric_capacity_bytes": 65988191372,
+            "energy_tile_count": 0,
+            "mo_host_staging": true,
+            "correlation_owned_device_bytes": 32533547008,
+            "correlation_provider_retained_bytes": 1482210104,
+            "mo_transfer_bytes": 1484102904,
+            "host_to_device_ms": 0.8626559972763062,
+            "device_to_host_ms": 471.72704315185547,
+            "transform_library_ms": 14.585632562637329,
+            "tensor_kernel_ms": 1.9044479727745056,
+            "equation_hash": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+            "response_iterations": 15,
+            "response_restarts": 0,
+            "response_absolute_residual": 2.772287529325483e-13,
+            "response_relative_residual": 6.598614446657561e-11,
+            "response_workspace_bytes": 1326872,
+            "derivative_workspace_bytes": 0,
+            "planned_endpoint_peak_bytes": 65988191372,
+            "measured_endpoint_peak_bytes": 0,
+            "force_provenance_flags": 15,
+            "response_operator_hash": "8656a987504db7e0012f14927f34e62ca17262a9f406bb552b855bc0bd276034",
+            "measured_response_workspace_peak_bytes": 1308560,
+            "response_workspace_allocation_count": 17,
+            "ccsd_iterations": 21,
+            "ccsd_diis_restarts": 0,
+            "ccsd_correlation_energy": -0.8196984721124584,
+            "ccsd_energy_change": 1.0247358517290195e-13,
+            "ccsd_singles_residual_max": 2.268535649158546e-12,
+            "ccsd_doubles_residual_max": 6.266176813540802e-13,
+            "ccsd_replay_singles_residual_max": 2.2685355949484373e-12,
+            "ccsd_replay_doubles_residual_max": 6.266237528862462e-13,
+            "ccsd_setup_h2d_bytes": 1524280824,
+            "ccsd_scalar_d2h_bytes": 928,
+            "ccsd_amplitude_d2h_bytes": 41934480,
+            "ccsd_synchronizations": 64,
+            "ccsd_replay_equation_hash": "895007fd09d45283af4598084fa8d15b9c1786da4fa9c9bf741fc9e6f145c6e1",
+            "ccsd_t_triples_energy": -0.023244858513559365,
+            "ccsd_t_virtual_triples": 221815,
+            "ccsd_t_workspace_bytes": 310036736,
+            "ccsd_t_equation_hash": "5edcf457ed1c080e566743ede345db2f42bb69e8d35c5d734c84fdc92545e8df",
+            "reference_execution_plan_reused": false,
+            "reference_execution_plan_owned_device_bytes": 442594640
+          },
+          "correlation_budget_gib": 72,
+          "cc_performance": {
+            "reference_seconds": 2.18276976,
+            "problem_seconds": 56.932010937,
+            "provider_seconds": 56.817100765,
+            "source_seconds": 0.018389091,
+            "solver_seconds": 49.259166123,
+            "iteration_seconds": 43.77951744841406,
+            "replay_seconds": 4.90085107,
+            "update_seconds": 0.002466284,
+            "diis_seconds": 0.0923205785859369,
+            "triples_seconds": 168.943373957,
+            "source_scans": 2,
+            "source_reads": 2,
+            "source_values": 571220000,
+            "transform_fmas": 121199381290,
+            "transform_stages": 17,
+            "mo_blocks": 7,
+            "cuda_transform_calls": 7,
+            "cuda_batch_calls": 2,
+            "iteration_graph_calls": 40,
+            "replay_graph_calls": 1,
+            "update_calls": 20,
+            "generated_error_checks": 21,
+            "diis_gram_calls": 20,
+            "diis_coefficient_calls": 19,
+            "diis_combine_calls": 38,
+            "ccsd_fp32_requested": false,
+            "ccsd_fp32_executed": false,
+            "ccsd_fp32_refused": false,
+            "ccsd_fp32_evaluations": 0,
+            "ccsd_fp32_gemm_calls": 0,
+            "ccsd_fp32_cast_elements": 0,
+            "lambda_seconds": null,
+            "source_response_seconds": null,
+            "orbital_seconds": null,
+            "lambda_fp32_requested": null,
+            "lambda_fp32_executed": null,
+            "lambda_fp32_refused": null,
+            "lambda_fp32_iterations": null,
+            "lambda_fp64_iterations": null,
+            "lambda_fp32_actions": null,
+            "lambda_fp64_actions": null,
+            "lambda_fp32_gemm_calls": null,
+            "lambda_fp32_cast_elements": null,
+            "lambda_auxiliary_batch_size": null,
+            "lambda_numeric_capacity_bytes": null,
+            "lambda_owned_device_bytes": null
+          },
+          "rhf_energy": -196.34648947665588,
+          "hf_cycles": 21,
+          "hf_density_rms": 2.268535649158546e-12,
+          "executed_backend": "cuda"
+        },
+        "case": "C5",
+        "trial": "1",
+        "arm": "native-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "Intel(R) Xeon(R) Platinum 8468",
+        "affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159,
+          160,
+          161,
+          162,
+          163,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191
+        ],
+        "host_topology": {
+          "lscpu": [
+            {
+              "field": "Architecture:",
+              "data": "x86_64"
+            },
+            {
+              "field": "CPU op-mode(s):",
+              "data": "32-bit, 64-bit"
+            },
+            {
+              "field": "Address sizes:",
+              "data": "46 bits physical, 57 bits virtual"
+            },
+            {
+              "field": "Byte Order:",
+              "data": "Little Endian"
+            },
+            {
+              "field": "CPU(s):",
+              "data": "192"
+            },
+            {
+              "field": "On-line CPU(s) list:",
+              "data": "0-191"
+            },
+            {
+              "field": "Vendor ID:",
+              "data": "GenuineIntel"
+            },
+            {
+              "field": "Model name:",
+              "data": "Intel(R) Xeon(R) Platinum 8468"
+            },
+            {
+              "field": "CPU family:",
+              "data": "6"
+            },
+            {
+              "field": "Model:",
+              "data": "143"
+            },
+            {
+              "field": "Thread(s) per core:",
+              "data": "2"
+            },
+            {
+              "field": "Core(s) per socket:",
+              "data": "48"
+            },
+            {
+              "field": "Socket(s):",
+              "data": "2"
+            },
+            {
+              "field": "Stepping:",
+              "data": "8"
+            },
+            {
+              "field": "CPU max MHz:",
+              "data": "3800.0000"
+            },
+            {
+              "field": "CPU min MHz:",
+              "data": "800.0000"
+            },
+            {
+              "field": "BogoMIPS:",
+              "data": "4200.00"
+            },
+            {
+              "field": "Flags:",
+              "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities"
+            },
+            {
+              "field": "Virtualization:",
+              "data": "VT-x"
+            },
+            {
+              "field": "L1d cache:",
+              "data": "4.5 MiB (96 instances)"
+            },
+            {
+              "field": "L1i cache:",
+              "data": "3 MiB (96 instances)"
+            },
+            {
+              "field": "L2 cache:",
+              "data": "192 MiB (96 instances)"
+            },
+            {
+              "field": "L3 cache:",
+              "data": "210 MiB (2 instances)"
+            },
+            {
+              "field": "NUMA node(s):",
+              "data": "2"
+            },
+            {
+              "field": "NUMA node0 CPU(s):",
+              "data": "0-47,96-143"
+            },
+            {
+              "field": "NUMA node1 CPU(s):",
+              "data": "48-95,144-191"
+            },
+            {
+              "field": "Vulnerability Gather data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Itlb multihit:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability L1tf:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Meltdown:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mmio stale data:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Reg file data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Retbleed:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec rstack overflow:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec store bypass:",
+              "data": "Mitigation; Speculative Store Bypass disabled via prctl and seccomp"
+            },
+            {
+              "field": "Vulnerability Spectre v1:",
+              "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+            },
+            {
+              "field": "Vulnerability Spectre v2:",
+              "data": "Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline"
+            },
+            {
+              "field": "Vulnerability Srbds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Tsx async abort:",
+              "data": "Not affected"
+            }
+          ]
+        },
+        "cgroup_memory": {
+          "memory.max": "214748364800",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        },
+        "threads": 1,
+        "process_id": 32,
+        "qz_job_name": "gqc-3167-conv-h100-c5-1126-a",
+        "qz_project": "CQ-NexChem",
+        "slurm_job_id": null,
+        "slurm_cpus_per_task": null,
+        "scratch_free_bytes": 929973219328,
+        "python": "3.11.16",
+        "driver_sha256": "d3b2353074ab2cca9ea19aa5c0da3c6f2c2e00a19e4e3a354075156e0f27c3c0",
+        "protocol_sha256": {
+          "run.py": "0b9b8d6d1fb9d3ea13b875e6ffa29eec5209301523dd5cf881aeca14333d23fd",
+          "fixtures.json": "559cb9a7c952654fadd79559d7f52973d6d5ab6faca6fcc40ba408b304f45695"
+        },
+        "arm": "native-conv",
+        "trial": "C5.1",
+        "wall_limit_seconds": 17100,
+        "application_memory_mib": 0,
+        "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+        "source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+        "library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
+        "native_input_count": 2284,
+        "gpu": {
+          "model": "NVIDIA H100 80GB HBM3",
+          "total_mib": 81559,
+          "driver": "595.58.03",
+          "uuid": "GPU-fd2e5932-3341-b29c-c994-324edcc856fd"
+        },
+        "correlation_budget_gib": 72,
+        "cublas_workspace_config": ":16:8"
+      },
+      "resource": {
+        "duration_seconds": 4029.9794083638117,
+        "sample_interval_seconds": 30,
+        "samples": 134,
+        "sampled_peak": {
+          "rss_high_water_kib": 9189948,
+          "gpu_device_used_mib": 45809
+        },
+        "cgroup_memory_after": {
+          "memory.max": "214748364800",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        }
+      },
+      "worker-memory": {
+        "process_rss_high_water_kib": 9189948
+      }
+    },
+    {
+      "source": "gqc-3167-conv-h100-c7-1126-a",
+      "arm": "native-conv",
+      "label": "C7.0",
+      "record_sha256": "f84bc30628a24bc1b10887a0f19ff7b74cf48a460f97a3660fc27f52931e79d4",
+      "record": {
+        "status": "failed",
+        "exception": "RuntimeError('GENERATIVEQC error 7: RCCSD MO provider/problem allocation failed')",
+        "case": "C7",
+        "trial": "0",
+        "arm": "native-conv",
+        "displacement": null
+      },
+      "hardware": {
+        "cpu_model": "Intel(R) Xeon(R) Platinum 8468",
+        "affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119,
+          120,
+          121,
+          122,
+          123,
+          124,
+          125,
+          126,
+          127,
+          128,
+          129,
+          130,
+          131,
+          132,
+          133,
+          134,
+          135,
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143,
+          144,
+          145,
+          146,
+          147,
+          148,
+          149,
+          150,
+          151,
+          152,
+          153,
+          154,
+          155,
+          156,
+          157,
+          158,
+          159,
+          160,
+          161,
+          162,
+          163,
+          164,
+          165,
+          166,
+          167,
+          168,
+          169,
+          170,
+          171,
+          172,
+          173,
+          174,
+          175,
+          176,
+          177,
+          178,
+          179,
+          180,
+          181,
+          182,
+          183,
+          184,
+          185,
+          186,
+          187,
+          188,
+          189,
+          190,
+          191
+        ],
+        "host_topology": {
+          "lscpu": [
+            {
+              "field": "Architecture:",
+              "data": "x86_64"
+            },
+            {
+              "field": "CPU op-mode(s):",
+              "data": "32-bit, 64-bit"
+            },
+            {
+              "field": "Address sizes:",
+              "data": "46 bits physical, 57 bits virtual"
+            },
+            {
+              "field": "Byte Order:",
+              "data": "Little Endian"
+            },
+            {
+              "field": "CPU(s):",
+              "data": "192"
+            },
+            {
+              "field": "On-line CPU(s) list:",
+              "data": "0-191"
+            },
+            {
+              "field": "Vendor ID:",
+              "data": "GenuineIntel"
+            },
+            {
+              "field": "Model name:",
+              "data": "Intel(R) Xeon(R) Platinum 8468"
+            },
+            {
+              "field": "CPU family:",
+              "data": "6"
+            },
+            {
+              "field": "Model:",
+              "data": "143"
+            },
+            {
+              "field": "Thread(s) per core:",
+              "data": "2"
+            },
+            {
+              "field": "Core(s) per socket:",
+              "data": "48"
+            },
+            {
+              "field": "Socket(s):",
+              "data": "2"
+            },
+            {
+              "field": "Stepping:",
+              "data": "8"
+            },
+            {
+              "field": "CPU max MHz:",
+              "data": "3800.0000"
+            },
+            {
+              "field": "CPU min MHz:",
+              "data": "800.0000"
+            },
+            {
+              "field": "BogoMIPS:",
+              "data": "4200.00"
+            },
+            {
+              "field": "Flags:",
+              "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single intel_ppin cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts hwp hwp_act_window hwp_epp hwp_pkg_req avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities"
+            },
+            {
+              "field": "Virtualization:",
+              "data": "VT-x"
+            },
+            {
+              "field": "L1d cache:",
+              "data": "4.5 MiB (96 instances)"
+            },
+            {
+              "field": "L1i cache:",
+              "data": "3 MiB (96 instances)"
+            },
+            {
+              "field": "L2 cache:",
+              "data": "192 MiB (96 instances)"
+            },
+            {
+              "field": "L3 cache:",
+              "data": "210 MiB (2 instances)"
+            },
+            {
+              "field": "NUMA node(s):",
+              "data": "2"
+            },
+            {
+              "field": "NUMA node0 CPU(s):",
+              "data": "0-47,96-143"
+            },
+            {
+              "field": "NUMA node1 CPU(s):",
+              "data": "48-95,144-191"
+            },
+            {
+              "field": "Vulnerability Gather data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Itlb multihit:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability L1tf:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Meltdown:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Mmio stale data:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Reg file data sampling:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Retbleed:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec rstack overflow:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Spec store bypass:",
+              "data": "Mitigation; Speculative Store Bypass disabled via prctl and seccomp"
+            },
+            {
+              "field": "Vulnerability Spectre v1:",
+              "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+            },
+            {
+              "field": "Vulnerability Spectre v2:",
+              "data": "Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline"
+            },
+            {
+              "field": "Vulnerability Srbds:",
+              "data": "Not affected"
+            },
+            {
+              "field": "Vulnerability Tsx async abort:",
+              "data": "Not affected"
+            }
+          ]
+        },
+        "cgroup_memory": {
+          "memory.max": "429496729600",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        },
+        "threads": 1,
+        "process_id": 32,
+        "qz_job_name": "gqc-3167-conv-h100-c7-1126-a",
+        "qz_project": "CQ-NexChem",
+        "slurm_job_id": null,
+        "slurm_cpus_per_task": null,
+        "scratch_free_bytes": 3790646788096,
+        "python": "3.11.16",
+        "driver_sha256": "d3b2353074ab2cca9ea19aa5c0da3c6f2c2e00a19e4e3a354075156e0f27c3c0",
+        "protocol_sha256": {
+          "run.py": "0b9b8d6d1fb9d3ea13b875e6ffa29eec5209301523dd5cf881aeca14333d23fd",
+          "fixtures.json": "559cb9a7c952654fadd79559d7f52973d6d5ab6faca6fcc40ba408b304f45695"
+        },
+        "arm": "native-conv",
+        "trial": "C7.0",
+        "wall_limit_seconds": 63900,
+        "application_memory_mib": 0,
+        "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+        "source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+        "library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
+        "native_input_count": 2284,
+        "gpu": {
+          "model": "NVIDIA H100 80GB HBM3",
+          "total_mib": 81559,
+          "driver": "595.58.03",
+          "uuid": "GPU-eaa9a748-3021-271f-01d0-54518276b940"
+        },
+        "correlation_budget_gib": 320,
+        "cublas_workspace_config": ":16:8"
+      },
+      "resource": {
+        "duration_seconds": 14.658598909154534,
+        "sample_interval_seconds": 30,
+        "samples": 1,
+        "sampled_peak": {
+          "rss_high_water_kib": 8,
+          "gpu_device_used_mib": 0
+        },
+        "cgroup_memory_after": {
+          "memory.max": "429496729600",
+          "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0"
+        }
+      },
+      "worker-memory": {
+        "process_rss_high_water_kib": 6248368
+      }
+    },
+    {
+      "source": "gqc-3167-conv-pyscf-c5-1126-a",
+      "arm": "pyscf-conv",
+      "label": "C5.0",
+      "record_sha256": "7029b92d98bb92c6e3b987717bf730b5dbefce1a017bfd2099608df320334fd0",
+      "record": {
+        "status": "no_endpoint_record",
+        "platform_status": "SUCCEEDED",
+        "exception": "Slurm step invoked C5.0, which the stage's driver rejected. Retried as C5.1."
+      }
     }
   ]
 }

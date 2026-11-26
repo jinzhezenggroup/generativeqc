@@ -27,16 +27,14 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 
 ## Acquisition status
 
-| Molecule | H100 complete endpoint (s) | Psi4 complete endpoints (s) | Maximum energy error (Eh) | Maximum force error (Eh/Bohr) | Worst force RMS (Eh/Bohr) |
-|---|---:|---:|---:|---:|---:|
-| C5 | 3,633.460 (one baseline sample) | 2,427.486 and 2,564.104 | 3.0241e-11 | 1.7405e-6 | 5.8795e-7 |
-| C6 | Pending | Pending | — | — | — |
-| C7 | Pending | Pending | — | — | — |
+| Molecule | H100 endpoint (s) | CPU reference | CPU endpoint (s) | Worst energy error (Eh) | Largest force error (Eh/Bohr) | Worst force RMS (Eh/Bohr) |
+|---|---:|---|---:|---:|---:|---:|
+| C5 | 3,830.93 median (2) | Psi4 | 2,495.80 median (2) | 3.0241e-11 | 1.7405e-06 | 5.8795e-07 |
+| C6 | — | — | — | — | — | — |
+| C7 | — | — | — | — | — | — |
 
-The retained C5 errors compare the single H100 baseline against both Psi4
-samples. The second H100 acquisition and the larger-molecule acquisitions are
-pending qz session renewal. They have no fresh timing, error or memory-peak
-measurements yet.
+A single sample is shown with its own wall time. The replay uses every
+available H100-to-reference pair and reports incomplete cases explicitly.
 
 ## Resource sizing
 
@@ -51,6 +49,22 @@ The C5 native complete-force plan reported a 61.46 GiB bound with a
 the orbital-basis dimension suggests planning allowances above roughly
 121 GiB at C6 and 216 GiB at C7. The projection guides allocation choice
 and the driver separately records the observed process and device peaks.
+
+## Local raw captures
+
+The complete endpoint rows and their SHA-256 values are retained in
+`records.json`. `provenance.json` records the remote output path for each
+job and the hashes of any completed archives under `raw/`. The local archives
+contain the original worker, engine and device telemetry files. They stay
+untracked because they include verbose logs and time series.
+
+The second C5 H100 run reached 8.76 GiB worker RSS and 44.74 GiB sampled
+device memory at the matching 72 GiB application allowance. The first C7
+H100 attempt failed during MO provider allocation at a 320 GiB allowance.
+Its only GPU sample preceded that allocation. The subsequent 155 GiB C7
+attempts record one-second device samples. The first C5 PySCF launcher
+rejected its trial label before computation and was retried with C5.1.
+C6 and C7 acquisitions remain in progress in this local snapshot.
 
 ## Reproduction
 
