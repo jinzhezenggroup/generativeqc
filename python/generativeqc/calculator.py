@@ -4591,22 +4591,25 @@ class Calculator:
         )
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
         resource_plan = None
-        # CPU DF uses the batch owner's pre-allocation admission once,
-        # rather than constructing an internal plan only to revalidate it as
-        # an external one. Bind the exact property set to that preparation.
-        batch_admits_cpu_df = (
+        # A CPU KS singlepoint already uses PreparedBatch. Pass the requested
+        # outputs to that owner instead of revalidating its own plan as external.
+        batch_admits_cpu_ks = (
             self._resource_budget is not None
             and self._device_name == "cpu"
             and self._capabilities.family == "density_functional"
-            and self._density_fitting_mode
-            in (
-                _native.DENSITY_FITTING_CPU_REFERENCE,
-                _native.DENSITY_FITTING_AUTO,
+            and (
+                self._dispersion_method_ir is None
+                or compute_forces
+                or self._density_fitting_mode
+                in (
+                    _native.DENSITY_FITTING_CPU_REFERENCE,
+                    _native.DENSITY_FITTING_AUTO,
+                )
             )
             and requested_properties <= {"energy", "forces"}
         )
         if (
-            not batch_admits_cpu_df
+            not batch_admits_cpu_ks
             and self._resource_budget is not None
             and (
                 self._dispersion_method_ir is None
@@ -4622,9 +4625,8 @@ class Calculator:
         if self._dispersion_method_ir is not None or (
             self._capabilities.family == "density_functional"
         ):
-            # Ordinary named corrections build their plan once during batch
-            # preparation. Requested CPU forces use the property-bound
-            # electronic plus correction plan above, not an energy-only plan.
+            # For ordinary CPU KS and CPU force requests, the owner plans the
+            # electronic and any correction work together for the requested outputs.
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
             # scientific implementation in the single-system path. Energy-only
@@ -4643,7 +4645,7 @@ class Calculator:
                 ),
                 resource_plan=resource_plan,
                 _resource_properties=requested_properties
-                if batch_admits_cpu_df
+                if batch_admits_cpu_ks
                 else None,
             ) as batch:
                 execution_properties = requested_properties - PROPERTY_NAMES

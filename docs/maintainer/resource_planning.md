@@ -27,7 +27,9 @@ controls, including automatic Hückel/MINAO preparation when admitted. The stand
 `estimate_hf_resources` estimator describes the Hcore target inventory; use
 `initial_guess=None` when executing that exact inventory, or use the calculator
 estimator to include its active preparation policy. `singlepoint` also accepts
-the calculator's budget and attaches diagnostics to its result. Unsupported or
+the calculator's budget and attaches diagnostics to its result. Budgeted CPU KS
+singlepoints delegate energy/force admission directly to their prepared batch;
+no separate calculator estimate is needed. Unsupported or
 infeasible plans fail before native
 context creation in these execution endpoints. Constructing a CUDA calculator
 itself can select a profile and initialize the CUDA runtime; use the standalone
