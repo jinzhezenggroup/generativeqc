@@ -808,10 +808,13 @@ struct CudaKsWb97mvHessian::Impl {
                                          stream)) != cudaSuccess)
       return error;
     result.failure_check = "moving-grid response Hessian contraction";
-    if ((error = grid.enqueue_private_nuclear_covector(
-             right_motion.ao, right_motion.weights, right_motion.point_directions,
-             at(delta_density), at<int>(status_offset), stream)) != cudaSuccess)
-      return error;
+    error = cartesian_column.weights
+                ? grid.enqueue_private_induced_density_covector(at(delta_density),
+                                                                at<int>(status_offset), stream)
+                : grid.enqueue_private_nuclear_covector(
+                      right_motion.ao, right_motion.weights, right_motion.point_directions,
+                      at(delta_density), at<int>(status_offset), stream);
+    if (error != cudaSuccess) return error;
     if (separate && (error = vv10_grid.enqueue_private_nuclear_covector(
                          vv10_motion.ao + vv10_panel, vv10_motion.weights + vv10_shape.points,
                          vv10_motion.point_directions + 3 * vv10_shape.points, at(delta_density),
@@ -1468,8 +1471,10 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps &&
         owner->remaining > owner->induced.work().device_bytes - induced_bytes) {
       const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
-      check(owner->induced.retain_fixed_grid_points(std::min<std::size_t>(16ULL << 20, spare)),
-            "stationary Hessian optional fixed XC residency");
+      const auto point_lease = options.max_resident_cpks_bytes >= (64ULL << 20) ? 32ULL : 16ULL;
+      check(
+          owner->induced.retain_fixed_grid_points(std::min<std::size_t>(point_lease << 20, spare)),
+          "stationary Hessian optional fixed XC residency");
     }
     if (owner->operator_matrix &&
         owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64) {

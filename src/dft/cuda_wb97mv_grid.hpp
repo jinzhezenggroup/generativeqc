@@ -180,6 +180,11 @@ class CudaWb97mvGridResponse {
                                                const double* points, const double* density,
                                                int* transaction_status,
                                                cudaStream_t stream) noexcept;
+  /** Add the CPKS density to the retained frozen-motion features from the
+   * same private transaction. No second AO/weight/point sweep is needed. */
+  cudaError_t enqueue_private_induced_density_covector(const double* density,
+                                                       int* transaction_status,
+                                                       cudaStream_t stream) noexcept;
   /** Stationary left nuclear partial with zero left/mixed density motion.
    * The retained right density response participates in the mixed AO features.
    * Mixed point motion is zero for affine owner-atom coordinates. The scalar

@@ -469,6 +469,22 @@ __global__ void record_private_nuclear_status(const int* status, int* transactio
   if (*status) atomicOr(transaction_status, cuda_grid_nuclear_xc_invalid);
 }
 
+__global__ void verify_frozen_density(const double* density, std::size_t count, int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
+    if (density[index] != 0) atomicExch(status, 1);
+}
+
+__global__ void add_density_features(const double* induced, double* direction, std::size_t count,
+                                     int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto total = direction[index] + induced[index];
+    if (!isfinite(total)) atomicExch(status, 1);
+    direction[index] = total;
+  }
+}
+
 __global__ void discover(const double* fields, const double* weights, const double* points,
                          std::size_t count, unsigned spins, std::size_t* active,
                          std::size_t* selected, int* status) {
@@ -2167,6 +2183,59 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_covector(
   }
   return prepare_nuclear_direction_impl(ao, weights, points, density, nullptr, transaction_status,
                                         stream);
+}
+
+cudaError_t CudaWb97mvGridResponse::enqueue_private_induced_density_covector(
+    const double* density, int* transaction_status, cudaStream_t stream) noexcept {
+  const bool retained = nuclear_ready_ && !nuclear_adjoint_ready_ && transaction_status &&
+                        private_nuclear_status_ == transaction_status;
+  nuclear_ready_ = false;
+  private_nuclear_status_ = nullptr;
+  if (!retained) return cudaErrorInvalidResourceHandle;
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  Layout plan;
+  if (!options_.nuclear_response || !layout(shape_, options_, plan) ||
+      work_.nuclear_directions == UINT64_MAX ||
+      plan.direction_feature_work > UINT64_MAX - work_.nuclear_affine_terms)
+    return cudaErrorInvalidValue;
+  error =
+      nuclear_buffers(shape_, plan, reference_, workspace_, {{density, plan.matrices}}, nullptr, 0);
+  if (error != cudaSuccess) return error;
+  auto* arena = static_cast<double*>(workspace_);
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess)
+    return drain(error, stream);
+  // A density tangent may be added exactly once, and only to a frozen
+  // geometry tangent. Verify the actual resident density, not its pointer.
+  verify_frozen_density<<<maps::blocks(plan.matrices), 128, 0, stream>>>(arena + plan.right_density,
+                                                                         plan.matrices, status);
+  if ((error = cudaGetLastError()) != cudaSuccess ||
+      (error = cudaMemcpyAsync(arena + plan.right_density, density, plan.matrices * sizeof(double),
+                               cudaMemcpyDeviceToDevice, stream)) != cudaSuccess)
+    return drain(error, stream);
+  check_matrix<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
+      arena + plan.right_density, shape_.nao, shape_.spins, options_.symmetry_absolute_tolerance,
+      options_.symmetry_relative_tolerance, status);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  // Features are affine in either density or AO motion with the other held
+  // fixed. The left-field scratch is unused until the mixed contraction.
+  error =
+      features(shape_, plan, arena, arena + plan.right_density, arena + plan.left_fields, stream);
+  if (error != cudaSuccess) return drain(error, stream);
+  add_density_features<<<maps::blocks(plan.fields), 128, 0, stream>>>(
+      arena + plan.left_fields, arena + plan.direction, plan.fields, status);
+  if ((error = cudaGetLastError()) != cudaSuccess ||
+      (error = evaluate_nuclear(true, true, false)) != cudaSuccess ||
+      (error = authenticate(stream)) != cudaSuccess)
+    return drain(error, stream);
+  record_private_nuclear_status<<<1, 1, 0, stream>>>(status, transaction_status);
+  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  nuclear_ready_ = true;
+  private_nuclear_status_ = transaction_status;
+  ++work_.nuclear_directions;
+  work_.nuclear_affine_terms += plan.direction_feature_work;  // Conservative moving-feature bound.
+  return cudaSuccess;
 }
 
 cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
