@@ -1009,13 +1009,13 @@ cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::Cuda
   if (owner.transition_workspace || shape.spins != 1 || owner.source.spins != 1 ||
       shape.nao != owner.source.nao || shape.nao < 32 || shape.nao > 96 || !occupied ||
       occupied >= shape.nao || points < 4096 || (axes != 4 && axes != 5) ||
-      (owner.fitted && axes != 5) ||
-      owner.source.correction || owner.expected.identity.model.nonlocal_grid)
+      (owner.fitted && axes != 5) || owner.source.correction ||
+      owner.expected.identity.model.nonlocal_grid)
     return cudaSuccess;
   const auto rotations = occupied * (shape.nao - occupied);
   const auto products_per_point = axes * rotations * rotations;
-  const auto limit = axes == 5 && shape.nao > 64 ? wide_r2scan_transition_product_limit
-                                                : transition_product_limit;
+  const auto limit =
+      axes == 5 && shape.nao > 64 ? wide_r2scan_transition_product_limit : transition_product_limit;
   if (points > limit / products_per_point) return cudaSuccess;
   const auto bytes =
       (2 * axes * rotations + 4 * shape.nao) * transition_tile_points * sizeof(double) +

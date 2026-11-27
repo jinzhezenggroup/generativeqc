@@ -1483,8 +1483,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
         owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64) {
       const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
       const auto tile_lease = options.max_resident_cpks_bytes >= (64ULL << 20) ? 24ULL : 12ULL;
-      check(owner->induced.retain_transition_builder(owner->cpks_reference.shape(),
-                                                     std::min<std::size_t>(tile_lease << 20, spare)),
+      check(owner->induced.retain_transition_builder(
+                owner->cpks_reference.shape(), std::min<std::size_t>(tile_lease << 20, spare)),
             "stationary Hessian optional CPKS XC projection");
       owner->cpks_operator.set_build_decomposition(CudaKsWb97mvResponse::seed_local_xc,
                                                    CudaKsWb97mvResponse::induced_nonlocal_fock);
@@ -1506,8 +1506,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
           provider <= owner->remaining - fold_bytes) {
         auto fold = runtime::resource_cuda_malloc(&owner->folded_weights, fold_bytes);
         if (fold == cudaSuccess)
-          fold = owner->geometry.prepare_cartesian_weight_fold(
-              energy, owner->folded_weights, fold_bytes, owner->stream);
+          fold = owner->geometry.prepare_cartesian_weight_fold(energy, owner->folded_weights,
+                                                               fold_bytes, owner->stream);
         if (fold == cudaSuccess) {
           owner->charge(fold_bytes);
         } else if (fold == cudaErrorNotSupported || fold == cudaErrorMemoryAllocation) {

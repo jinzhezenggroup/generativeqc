@@ -703,8 +703,8 @@ template <bool response, std::uint32_t domain>
 __global__ void stationary_points(const double* fields, const double* direction,
                                   const double* weights, const double* delta_weights,
                                   std::size_t points, unsigned spins, double* partials,
-                                  double* energy, int* status, const double* replay_mask,
-                                  int seed, double* becke_activity) {
+                                  double* energy, int* status, const double* replay_mask, int seed,
+                                  double* becke_activity) {
   for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
        lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
     if (replay_mask && !replay_mask[lane]) continue;
@@ -806,15 +806,13 @@ void launch_stationary_points(const double* fields, const double* direction, con
   const auto blocks = maps::blocks(shape.points);
   const auto launch = [&]<std::uint32_t domain>() {
     if (response)
-      stationary_points<true, domain>
-          <<<blocks, 128, 0, stream>>>(fields, direction, weights, delta_weights, shape.points,
-                                       shape.spins, partials, energy, status, replay_mask, seed,
-                                       nullptr);
+      stationary_points<true, domain><<<blocks, 128, 0, stream>>>(
+          fields, direction, weights, delta_weights, shape.points, shape.spins, partials, energy,
+          status, replay_mask, seed, nullptr);
     else
       stationary_points<false, domain>
           <<<blocks, 128, 0, stream>>>(fields, nullptr, weights, nullptr, shape.points, shape.spins,
-                                        partials, energy, status, replay_mask, seed,
-                                        becke_activity);
+                                       partials, energy, status, replay_mask, seed, becke_activity);
   };
 #if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
   if (code == generated::kM062XFunctionalCode)
@@ -2571,9 +2569,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
             launch(std::false_type{}, batch);
           if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
           if ((error = authenticate(stream)) != cudaSuccess) return error;
-          finish_cartesian_column<<<batch.rows, 128, 0, stream>>>(partials, output + start, status,
-                                                                  transaction_status,
-                                                                  batch.folded_weight_column);
+          finish_cartesian_column<<<batch.rows, 128, 0, stream>>>(
+              partials, output + start, status, transaction_status, batch.folded_weight_column);
           if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
           work_.nuclear_contractions += batch.rows;
           work_.nuclear_adjoint_contractions += batch.rows;
