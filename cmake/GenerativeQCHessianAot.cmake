@@ -212,7 +212,7 @@ function(generativeqc_add_hessian_aot target inventory)
     generativeqc_ensure_cuda_wheel_import_interface()
     target_link_libraries(${target} PUBLIC generativeqc_cuda_wheel_imports)
   else()
-    target_link_libraries(${target} PUBLIC CUDA::cudart)
+    target_link_libraries(${target} PUBLIC CUDA::cudart CUDA::cublas)
   endif()
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
   # Both moving-grid consumers include the generated force-owner pair layout.

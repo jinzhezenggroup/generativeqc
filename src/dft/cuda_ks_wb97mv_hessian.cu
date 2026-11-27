@@ -275,6 +275,7 @@ struct CudaKsWb97mvHessian::Impl {
   cudaStream_t stream{};
   void* arena{};
   void* operator_matrix{};
+  void* folded_weights{};
   double* frozen_exact{};
   double* frozen_core{};
   bool frozen_exact_ready{};
@@ -304,6 +305,7 @@ struct CudaKsWb97mvHessian::Impl {
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
     if (operator_matrix) (void)runtime::resource_cuda_free(operator_matrix);
+    if (folded_weights) (void)runtime::resource_cuda_free(folded_weights);
     if (frozen_exact) (void)runtime::resource_cuda_free(frozen_exact);
     if (frozen_core) (void)runtime::resource_cuda_free(frozen_core);
     if (arena) (void)runtime::resource_cuda_free(arena);
@@ -663,7 +665,8 @@ struct CudaKsWb97mvHessian::Impl {
     CudaGridGeometryDirectionView right_motion;
     if (cartesian_mixed && grid.admits_cartesian_mixed(coordinates)) {
       error = geometry.enqueue_private_cartesian_column(
-          at(direction), column, cartesian_column, at<int>(status_offset), stream, &right_motion);
+          at(direction), column, cartesian_column, at<int>(status_offset), stream, &right_motion,
+          grid.private_becke_activity());
       if (error != cudaSuccess && error != cudaErrorNotSupported) return error;
     }
     CudaGridGeometryMixedView motion, vv10_motion;
@@ -1479,8 +1482,9 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     if (owner->operator_matrix &&
         owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64) {
       const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
+      const auto tile_lease = options.max_resident_cpks_bytes >= (64ULL << 20) ? 24ULL : 12ULL;
       check(owner->induced.retain_transition_builder(owner->cpks_reference.shape(),
-                                                     std::min<std::size_t>(12ULL << 20, spare)),
+                                                     std::min<std::size_t>(tile_lease << 20, spare)),
             "stationary Hessian optional CPKS XC projection");
       owner->cpks_operator.set_build_decomposition(CudaKsWb97mvResponse::seed_local_xc,
                                                    CudaKsWb97mvResponse::induced_nonlocal_fock);
@@ -1493,6 +1497,29 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     check(owner->sum_weights(lease.density, owner->at(owner->weights), owner->totals));
     check(owner->gate());
     check(owner->authenticate());
+    if (mode == CudaKsWb97mvHessianMode::dense_and_action && !separate &&
+        owner->grid.admits_cartesian_mixed(coordinates)) {
+      const auto* energy = owner->grid.private_becke_energy();
+      const auto fold_bytes = owner->geometry.cartesian_weight_fold_workspace();
+      const auto provider = owner->geometry.cartesian_weight_fold_provider_allowance();
+      if (energy && fold_bytes && fold_bytes <= owner->remaining &&
+          provider <= owner->remaining - fold_bytes) {
+        auto fold = runtime::resource_cuda_malloc(&owner->folded_weights, fold_bytes);
+        if (fold == cudaSuccess)
+          fold = owner->geometry.prepare_cartesian_weight_fold(
+              energy, owner->folded_weights, fold_bytes, owner->stream);
+        if (fold == cudaSuccess) {
+          owner->charge(fold_bytes);
+        } else if (fold == cudaErrorNotSupported || fold == cudaErrorMemoryAllocation) {
+          if (owner->folded_weights) {
+            check(runtime::resource_cuda_free(owner->folded_weights));
+            owner->folded_weights = nullptr;
+          }
+        } else {
+          check(fold, "stationary Hessian frozen Becke weights");
+        }
+      }
+    }
     owner->receipt.nuclear_pairs = owner->pairs;
     impl_ = std::move(owner);
     detail.clear();

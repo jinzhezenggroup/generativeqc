@@ -53,7 +53,7 @@ struct Layout {
   maps::Extents extents{};
   std::size_t full_fields{}, base_partial{}, right_partial{}, left_fields{}, mixed_fields{};
   std::size_t right_ao{}, right_density{}, right_weights{}, right_points{}, zero_density{};
-  std::size_t energy{}, energy_scalar{}, scalar{};
+  std::size_t energy{}, energy_scalar{}, scalar{}, becke_activity{};
   std::size_t staged_left_ao{}, staged_mixed_ao{}, staged_left_weights{}, staged_mixed_weights{},
       staged_left_points{};
   std::size_t adjoint_first{}, adjoint_second{}, adjoint_output_tile{}, adjoint_scratch{},
@@ -349,6 +349,17 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
       plan.point_linearization_axes = axes;
     else
       elements = before;
+  }
+  if (options.nuclear_response && plan.adjoint_bytes && shape.spins == 1 && !nonlocal &&
+      shape.atoms > cuda_grid_cartesian_atoms && shape.atoms <= cuda_grid_tiled_cartesian_atoms &&
+      code == semilocal_family_code(SemilocalFamily::R2scan)) {
+    // Never evict a required jet or adjoint to admit this optional lattice mask.
+    const auto before = elements;
+    if (!reserve(shape.points, plan.becke_activity) ||
+        elements > options.max_workspace_bytes / sizeof(double)) {
+      elements = before;
+      plan.becke_activity = 0;
+    }
   }
   plan.bytes = elements * sizeof(double);
   return plan.bytes <= options.max_workspace_bytes;
@@ -693,7 +704,7 @@ __global__ void stationary_points(const double* fields, const double* direction,
                                   const double* weights, const double* delta_weights,
                                   std::size_t points, unsigned spins, double* partials,
                                   double* energy, int* status, const double* replay_mask,
-                                  int seed) {
+                                  int seed, double* becke_activity) {
   for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
        lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
     if (replay_mask && !replay_mask[lane]) continue;
@@ -744,6 +755,15 @@ __global__ void stationary_points(const double* fields, const double* direction,
           return generated::r2scan_stationary_value(point);
       }
     }();
+    if constexpr (!response) {
+      if (becke_activity) {
+        // A weight derivative multiplies only the unweighted local energy
+        // or potential. The AO response at the original weight still runs.
+        bool active = value.energy != 0;
+        for (double potential : value.potential) active = active || potential != 0;
+        becke_activity[lane] = static_cast<double>(active);
+      }
+    }
     for (unsigned spin = 0; spin < spins; ++spin) {
       const unsigned indices[] = {spin, 2 + 3 * spin, 3 + 3 * spin, 4 + 3 * spin, 8 + spin};
       const unsigned other[] = {1, 5, 6, 7, 9};
@@ -782,17 +802,19 @@ void launch_stationary_points(const double* fields, const double* direction, con
                               const double* delta_weights, CudaWb97mvGridShape shape,
                               std::uint32_t code, bool response, double* partials, double* energy,
                               int* status, cudaStream_t stream, const double* replay_mask = nullptr,
-                              int seed = -1) {
+                              int seed = -1, double* becke_activity = nullptr) {
   const auto blocks = maps::blocks(shape.points);
   const auto launch = [&]<std::uint32_t domain>() {
     if (response)
       stationary_points<true, domain>
           <<<blocks, 128, 0, stream>>>(fields, direction, weights, delta_weights, shape.points,
-                                       shape.spins, partials, energy, status, replay_mask, seed);
+                                       shape.spins, partials, energy, status, replay_mask, seed,
+                                       nullptr);
     else
       stationary_points<false, domain>
           <<<blocks, 128, 0, stream>>>(fields, nullptr, weights, nullptr, shape.points, shape.spins,
-                                       partials, energy, status, replay_mask, seed);
+                                        partials, energy, status, replay_mask, seed,
+                                        becke_activity);
   };
 #if GENERATIVEQC_ENABLE_M062X_STATIONARY_POINT
   if (code == generated::kM062XFunctionalCode)
@@ -818,12 +840,18 @@ __global__ void finish_point_linearization(const double* fields, std::size_t poi
                                            double* coefficients) {
   for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < points;
        lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
-    bool regular = fields[lane] >= 0x1p-60;
+    bool regular = true;
+    bool exact_zero = true;
     for (unsigned field = 0; field < axes; ++field)
       regular = regular && fabs(fields[field * points + lane]) <= 0x1p32;
-    for (unsigned entry = 0; entry < (axes + 1) * 5; ++entry)
+    for (unsigned entry = 0; entry < (axes + 1) * 5; ++entry) {
       regular = regular && fabs(coefficients[entry * points + lane]) <= 0x1p250;
-    if (!regular) coefficients[lane] = nan("");
+      exact_zero = exact_zero && coefficients[entry * points + lane] == 0;
+    }
+    // The compiled meta-GGA branches can return exactly zero for both the
+    // potential and every basis action in vacuum. This is not a new cutoff.
+    if (!regular || !(fields[lane] >= 0x1p-60 || (axes == 5 && exact_zero)))
+      coefficients[lane] = nan("");
   }
 }
 
@@ -1167,7 +1195,7 @@ __global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
                                               const unsigned* owners, const int* status,
                                               const int* transaction) {
   if (*status || (transaction && *transaction)) return;
-  const auto weight_planes = motion.rows > 1 ? 2 : 3;
+  const auto weight_planes = motion.folded_weight_column ? 1 : motion.rows > 1 ? 2 : 3;
   motion.left += blockIdx.y;
   motion.weights += blockIdx.y * (weight_planes * shape.points);
   partials += blockIdx.y * adjoint_blocks;
@@ -1234,9 +1262,10 @@ __global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
     }
   }
   for (std::size_t point = start; point < shape.points; point += stride) {
-    value += right_partial[5 * shape.points + point] * motion.weights[point] +
-             base_partial[5 * shape.points + point] *
-                 motion.weights[(weight_planes - 1) * shape.points + point];
+    value += right_partial[5 * shape.points + point] * motion.weights[point];
+    if (!motion.folded_weight_column)
+      value += base_partial[5 * shape.points + point] *
+               motion.weights[(weight_planes - 1) * shape.points + point];
     if (point >= left_begin && point < left_end)
       value += right_partial[(6 + left_axis) * shape.points + point];
   }
@@ -1245,7 +1274,7 @@ __global__ void contract_cartesian_ao_adjoint(CudaWb97mvGridShape shape,
 }
 
 __global__ void finish_cartesian_column(const double* partials, double* output, const int* status,
-                                        int* transaction) {
+                                        int* transaction, const double* folded_weights) {
   // Each row is private until the enclosing Hessian transaction commits.
   if (*status) {
     if (!threadIdx.x && !blockIdx.x) atomicOr(transaction, 1);
@@ -1263,10 +1292,11 @@ __global__ void finish_cartesian_column(const double* partials, double* output, 
     value += partials[index];
   const auto sum = adjoint_sum(value);
   if (!threadIdx.x) {
-    if (!isfinite(sum))
+    const auto result = folded_weights ? sum + folded_weights[blockIdx.x] : sum;
+    if (!isfinite(result))
       atomicOr(transaction, 1);
     else
-      output[blockIdx.x] = sum;
+      output[blockIdx.x] = result;
   }
 }
 
@@ -1664,6 +1694,7 @@ cudaError_t nuclear_buffers(const CudaWb97mvGridShape& shape, const Layout& plan
     if (output_count && !disjoint(output, output_count, pointer, count))
       return cudaErrorInvalidValue;
   for (const auto& [pointer, count] : inputs) {
+    if (!count) continue;
     if ((output_count && !disjoint(output, output_count, pointer, count)) ||
         !disjoint(pointer, count, workspace, plan.bytes / sizeof(double)))
       return cudaErrorInvalidValue;
@@ -2045,7 +2076,8 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_s
   } else if (uses_stationary_point(options_.functional_code))
     launch_stationary_points(arena + plan.base, arena + plan.direction, reference_.weights,
                              arena + plan.right_weights, shape_, options_.functional_code, response,
-                             partials, arena + plan.energy, status, stream, replay_mask);
+                             partials, arena + plan.energy, status, stream, replay_mask, -1,
+                             plan.becke_activity ? arena + plan.becke_activity : nullptr);
   else if (options_.functional_code != semilocal_family_code(SemilocalFamily::Wb97mv))
     launch_semilocal_points(arena + plan.base, arena + plan.direction, reference_.weights,
                             arena + plan.right_weights, shape_.points, shape_.spins,
@@ -2402,6 +2434,21 @@ bool CudaWb97mvGridResponse::admits_cartesian_mixed(std::size_t rows) const noex
   return rows == 1 || cartesian_first_batch(plan, options_, rows) != 0;
 }
 
+const double* CudaWb97mvGridResponse::private_becke_activity() const noexcept {
+  Layout plan;
+  if (!ready_ || !layout(shape_, options_, plan) || !plan.becke_activity) return nullptr;
+  return static_cast<const double*>(workspace_) + plan.becke_activity;
+}
+
+const double* CudaWb97mvGridResponse::private_becke_energy() const noexcept {
+  Layout plan;
+  if (!ready_ || !options_.nuclear_response || shape_.spins != 1 || options_.includes_nonlocal() ||
+      options_.functional_code != semilocal_family_code(SemilocalFamily::R2scan) ||
+      !layout(shape_, options_, plan))
+    return nullptr;
+  return static_cast<const double*>(workspace_) + plan.base_partial + 5 * shape_.points;
+}
+
 cudaError_t CudaWb97mvGridResponse::enqueue_private_cartesian_mixed(
     const CudaGridGeometryCartesianView& motion, double* output, int* transaction_status,
     cudaStream_t stream) noexcept {
@@ -2447,11 +2494,13 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
         cartesian->left / 3 >= shape_.atoms || cartesian->right / 3 >= shape_.atoms ||
         rows > 3 * shape_.atoms - cartesian->left || (rows > 1 && !first_batch))
       return cudaErrorInvalidValue;
-    const auto weight_planes = rows > 1 ? 2 : 3;
+    if (cartesian->folded_weight_column && rows == 1) return cudaErrorInvalidValue;
+    const auto weight_planes = cartesian->folded_weight_column ? 1 : rows > 1 ? 2 : 3;
     error = nuclear_buffers(
         shape_, plan, reference_, workspace_,
         {{cartesian->spatial, (cartesian->radial_points ? 1 : 5) * plan.ao_elements},
-         {cartesian->weights, rows * weight_planes * shape_.points}},
+         {cartesian->weights, rows * weight_planes * shape_.points},
+         {cartesian->folded_weight_column, cartesian->folded_weight_column ? rows : 0}},
         output, rows);
   } else {
     error = nuclear_buffers(shape_, plan, reference_, workspace_,
@@ -2514,7 +2563,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
           auto batch = *cartesian;
           batch.left += start;
           batch.rows = start ? rows - start : first_batch;
-          batch.weights += 2 * start * shape_.points;
+          batch.weights += (batch.folded_weight_column ? 1 : 2) * start * shape_.points;
+          if (batch.folded_weight_column) batch.folded_weight_column += start;
           if (batch.radial_points)
             launch(std::true_type{}, batch);
           else
@@ -2522,7 +2572,8 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
           if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
           if ((error = authenticate(stream)) != cudaSuccess) return error;
           finish_cartesian_column<<<batch.rows, 128, 0, stream>>>(partials, output + start, status,
-                                                                  transaction_status);
+                                                                  transaction_status,
+                                                                  batch.folded_weight_column);
           if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
           work_.nuclear_contractions += batch.rows;
           work_.nuclear_adjoint_contractions += batch.rows;

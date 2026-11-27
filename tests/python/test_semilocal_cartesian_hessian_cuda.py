@@ -203,7 +203,8 @@ def test_dense_r2scan_cartesian_column_matches_signed_hvp() -> None:
     assert not dense.diagnostics["numerical_host_fallbacks"]
 
 
-def test_wide_fitted_hessian_cached_cpks_matches_physical_solve() -> None:
+@pytest.mark.parametrize("method", ("pbe-rks", "r2scan-rks"))
+def test_wide_fitted_hessian_cached_cpks_matches_physical_solve(method: str) -> None:
     """Check wide fitted cache admission, strict residuals, and raw matrix parity."""
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     atoms = [
@@ -215,7 +216,7 @@ def test_wide_fitted_hessian_cached_cpks_matches_physical_solve() -> None:
         for side in (-1, 1)
     ]
     calculator = Calculator(
-        method="pbe-rks",
+        method=method,
         device="cuda",
         precision="fp64",
         basis="sto-3g",

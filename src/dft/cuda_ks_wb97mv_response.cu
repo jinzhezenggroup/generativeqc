@@ -246,6 +246,9 @@ struct ActionCounts {
 constexpr unsigned status_count = 3;
 constexpr std::size_t transition_tile_points = 128;
 constexpr std::uint64_t transition_product_limit = 64ULL << 30;
+// A wide FP64 semilocal operator can reuse this projection across every
+// Cartesian solve; keep its one-time dense work independently bounded.
+constexpr std::uint64_t wide_r2scan_transition_product_limit = 3ULL << 40;
 constexpr std::uint64_t transition_correction_limit = 2ULL << 20;
 
 __device__ bool failed_action(const int* status) { return status[0] || status[1] || status[2]; }
@@ -1005,12 +1008,15 @@ cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::Cuda
   const auto occupied = shape.occupied[0];
   if (owner.transition_workspace || shape.spins != 1 || owner.source.spins != 1 ||
       shape.nao != owner.source.nao || shape.nao < 32 || shape.nao > 96 || !occupied ||
-      occupied >= shape.nao || points < 4096 || (axes != 4 && axes != 5) || owner.fitted ||
+      occupied >= shape.nao || points < 4096 || (axes != 4 && axes != 5) ||
+      (owner.fitted && axes != 5) ||
       owner.source.correction || owner.expected.identity.model.nonlocal_grid)
     return cudaSuccess;
   const auto rotations = occupied * (shape.nao - occupied);
   const auto products_per_point = axes * rotations * rotations;
-  if (points > transition_product_limit / products_per_point) return cudaSuccess;
+  const auto limit = axes == 5 && shape.nao > 64 ? wide_r2scan_transition_product_limit
+                                                : transition_product_limit;
+  if (points > limit / products_per_point) return cudaSuccess;
   const auto bytes =
       (2 * axes * rotations + 4 * shape.nao) * transition_tile_points * sizeof(double) +
       sizeof(double);

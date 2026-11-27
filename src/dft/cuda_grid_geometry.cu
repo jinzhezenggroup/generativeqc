@@ -7,6 +7,8 @@
 #include "dft/cuda_grid_geometry.hpp"
 #include "dft/hessian_aot.hpp"
 #include "response/grid_geometry_response.cuh"
+#include "tensor/cuda_contraction.cuh"
+#include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::dft {
 namespace {
@@ -303,6 +305,33 @@ __device__ bool matches_partition(ad::Jet partition, double weight, double atomi
           fabs(partition.value - expected) <= options.reference_absolute_tolerance +
                                                   options.reference_relative_tolerance *
                                                       fmax(fabs(partition.value), fabs(expected)));
+}
+#include "dft/cuda_becke_weight_fold.cuh"
+
+struct WeightFoldLayout {
+  Layout storage;
+  std::size_t radii{}, edges{}, products{}, left{}, right{}, gradient{}, hessian{}, status{};
+};
+
+bool weight_fold_layout(const CudaGridGeometryShape& shape, WeightFoldLayout& plan) {
+  const auto atoms = shape.atoms;
+  if (!shape.points_per_atom || atoms <= shared_wide_cartesian_atoms ||
+      atoms > cuda_grid_tiled_cartesian_atoms || shape.points > INT_MAX)
+    return false;
+  const auto coordinates = 3 * atoms;
+  const auto points = std::min(shape.points_per_atom, std::size_t{becke_fold::tile});
+  const auto ranks = points * (2 * atoms + 2);
+  return append(plan.storage, points * atoms * sizeof(becke_fold::Radius) / sizeof(double),
+                plan.radii) &&
+         append(plan.storage, points * atoms * (atoms - 1) / 2 * sizeof(becke_fold::Edge) /
+                                  sizeof(double), plan.edges) &&
+         append(plan.storage, points * atoms * sizeof(becke_fold::Product) / sizeof(double),
+                plan.products) &&
+         append(plan.storage, coordinates * ranks, plan.left) &&
+         append(plan.storage, coordinates * ranks, plan.right) &&
+         append(plan.storage, coordinates * shape.points, plan.gradient) &&
+         append(plan.storage, coordinates * coordinates, plan.hessian) &&
+         append(plan.storage, 1, plan.status);
 }
 __global__ void finite_directions(const double* left, const double* right, std::size_t count,
                                   int* status) {
@@ -612,9 +641,20 @@ __global__ void cartesian_partition_rows(
     const std::uint64_t* offsets, bool adjusted, const CartesianPair* pairs, std::size_t column,
     double* rows, double* accepted, double* right_weights, std::size_t begin = 0,
     RightDual* scratch = nullptr, unsigned* failure_count = nullptr, unsigned repair_capacity = 0,
-    int* status = nullptr) {
+    int* status = nullptr, const double* becke_activity = nullptr) {
   const auto point = begin + static_cast<std::size_t>(blockIdx.x);
   const auto atom = static_cast<std::size_t>(threadIdx.x);
+  if constexpr (wide) {
+    if (becke_activity && !becke_activity[point]) {
+      if (!atom) right_weights[point] = 0;
+      if (atom < shape.atoms)
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          auto* row = rows + 2 * (3 * atom + axis) * shape.points;
+          row[point] = row[shape.points + point] = 0;
+        }
+      return;
+    }
+  }
   const auto owner = grid_owner(shape, offsets, point);
   const auto atoms = shape.atoms;
   constexpr auto shared_atoms = block_local    ? shared_wide_cartesian_atoms
@@ -1501,6 +1541,7 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
                                               void* workspace,
                                               std::size_t workspace_bytes) noexcept {
   ready_ = false;
+  folded_gradient_ = folded_hessian_ = nullptr;
   motion_ready_ = false;
   cartesian_right_ = SIZE_MAX;
   work_ = {};
@@ -1819,9 +1860,102 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_view(
   return cudaSuccess;
 }
 
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_workspace() const noexcept {
+  Layout geometry;
+  WeightFoldLayout fold;
+  return ready_ && layout(shape_, options_, geometry) && geometry.wide_tile &&
+                 weight_fold_layout(shape_, fold) &&
+                 cartesian_weight_fold_provider_allowance() <=
+                     options_.max_workspace_bytes - geometry.bytes &&
+                 fold.storage.bytes <= options_.max_workspace_bytes - geometry.bytes -
+                                           cartesian_weight_fold_provider_allowance()
+             ? fold.storage.bytes
+             : 0;
+}
+
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_provider_allowance() noexcept {
+  return tensor::CudaContractionContext::kProviderAllowance;
+}
+
+cudaError_t CudaGridGeometryResponse::prepare_cartesian_weight_fold(
+    const double* energy, void* workspace, std::size_t bytes, cudaStream_t stream) noexcept {
+  auto error = authenticate(stream);
+  if (error != cudaSuccess) return error;
+  const auto required = cartesian_weight_fold_workspace();
+  if (!required || !energy || !workspace || bytes < required || folded_gradient_)
+    return cudaErrorInvalidValue;
+  WeightFoldLayout plan;
+  if (!weight_fold_layout(shape_, plan)) return cudaErrorInvalidValue;
+  auto* base = static_cast<char*>(workspace);
+  auto* status = reinterpret_cast<int*>(base + plan.status);
+  const int atoms = static_cast<int>(shape_.atoms), coordinates = 3 * atoms;
+  const int threads = (atoms + 31) / 32 * 32;
+  auto* hessian = reinterpret_cast<double*>(base + plan.hessian);
+  auto* gradient = reinterpret_cast<double*>(base + plan.gradient);
+  auto* radii = reinterpret_cast<becke_fold::Radius*>(base + plan.radii);
+  auto* edges = reinterpret_cast<becke_fold::Edge*>(base + plan.edges);
+  auto* products = reinterpret_cast<becke_fold::Product*>(base + plan.products);
+  auto* left = reinterpret_cast<double*>(base + plan.left);
+  auto* right = reinterpret_cast<double*>(base + plan.right);
+  const auto* centers = reinterpret_cast<const becke_fold::Vector*>(reference_.basis);
+  const auto* points = reinterpret_cast<const becke_fold::Vector*>(reference_.points);
+  tensor::CudaContractionContext blas;
+  try {
+    if (!blas.prepare(stream)) return cudaErrorMemoryAllocation;
+  } catch (const std::bad_alloc&) {
+    return cudaErrorMemoryAllocation;
+  } catch (const std::exception&) {
+    return cudaErrorNotSupported;
+  }
+  const auto release = [&](cudaError_t pending) { return drain(pending, stream); };
+  if ((error = cudaMemsetAsync(status, 0, sizeof(int), stream)) != cudaSuccess ||
+      (error = cudaMemsetAsync(hessian, 0, coordinates * coordinates * sizeof(double), stream)) !=
+          cudaSuccess)
+    return release(error);
+  const int per_atom = static_cast<int>(shape_.points_per_atom);
+  for (int owner = 0; owner < atoms; ++owner) {
+    for (int begin = 0; begin < per_atom; begin += becke_fold::tile) {
+      const int count = std::min(becke_fold::tile, per_atom - begin);
+      const int index = owner * per_atom + begin;
+      becke_fold::tile_radii<<<count, threads, 0, stream>>>(atoms, centers, points + index, radii,
+                                                           status);
+      becke_fold::tile_edges<<<count, threads, 0, stream>>>(atoms, centers, radii, edges, options_,
+                                                           reference_.atomic_radii, status);
+      becke_fold::tile_rank<<<count, threads, 0, stream>>>(
+          atoms, owner, centers, radii, edges, reference_.atomic_weights + index,
+          reference_.weights + index, energy + index, products, left, right, gradient + index,
+          shape_.points, options_, status);
+      becke_fold::tile_pair_curvature<<<dim3(atoms, atoms), 32, 0, stream>>>(
+          atoms, count, owner, centers, radii, edges, products, hessian);
+      if ((error = cudaGetLastError()) != cudaSuccess) return release(error);
+      const auto code = tensor::cuda::square_panel_product(
+          blas.handle(), coordinates, count * (2 * atoms + 2), left, false, right, true,
+          hessian, 1, 1);
+      if (code != CUBLAS_STATUS_SUCCESS)
+        return release(code == CUBLAS_STATUS_ALLOC_FAILED ? cudaErrorMemoryAllocation
+                                                         : cudaErrorNotSupported);
+    }
+  }
+  finite_values<<<blocks(coordinates * coordinates), 128, 0, stream>>>(
+      hessian, coordinates * coordinates, status);
+  if ((error = cudaGetLastError()) != cudaSuccess) return release(error);
+  int refused{};
+  error = cudaMemcpyAsync(&refused, status, sizeof(int), cudaMemcpyDeviceToHost, stream);
+  if ((error = release(error)) != cudaSuccess) return error;
+  work_.folded_partition_pairs += shape_.points * (atoms * (atoms - 1) / 2);
+  work_.folded_rank_columns += shape_.points * (2 * atoms + 2);
+  work_.folded_numerical_refusal = refused;
+  if (refused) return cudaErrorNotSupported;
+  if ((error = authenticate(stream)) != cudaSuccess) return error;
+  folded_gradient_ = gradient;
+  folded_hessian_ = hessian;
+  return cudaSuccess;
+}
+
 cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
     const double* right, std::size_t right_column, CudaGridGeometryCartesianView& view,
-    int* transaction_status, cudaStream_t stream, CudaGridGeometryDirectionView* rhs) noexcept {
+    int* transaction_status, cudaStream_t stream, CudaGridGeometryDirectionView* rhs,
+    const double* becke_activity) noexcept {
   view = {};
   if (rhs) *rhs = {};
   motion_ready_ = false;
@@ -1848,7 +1982,9 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
     return cudaErrorNotSupported;
   const auto repair_bound =
       plan.wide_repair_points * coordinates * shape_.atoms * (shape_.atoms - 1) / 2;
-  const auto pair_visits = wide ? plan.point_pairs + repair_bound : coordinates * plan.point_pairs;
+  const bool folded = folded_gradient_ != nullptr;
+  const auto pair_visits = folded ? 0 : wide ? plan.point_pairs + repair_bound
+                                              : coordinates * plan.point_pairs;
   if (!disjoint(right, coordinates, workspace_, plan.bytes / sizeof(double)) ||
       coordinates > UINT64_MAX - work_.attempted_actions ||
       pair_visits > UINT64_MAX - work_.action_partition_pairs ||
@@ -1876,12 +2012,15 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
       nullptr, right, coordinates, SIZE_MAX, right_column, status);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   const auto pair_blocks = blocks(shape_.atoms * shape_.atoms);
-  cartesian_pair_geometry<<<pair_blocks, 128, 0, stream>>>(
-      reference_.basis, reference_.atomic_radii, shape_.atoms, right_column,
-      options_.coincident_tolerance, fast_pairs);
-  if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-  auto* failures = wide ? reinterpret_cast<unsigned*>(base + plan.wide_failures) : nullptr;
-  if (wide) {
+  if (!folded) {
+    cartesian_pair_geometry<<<pair_blocks, 128, 0, stream>>>(
+        reference_.basis, reference_.atomic_radii, shape_.atoms, right_column,
+        options_.coincident_tolerance, fast_pairs);
+    if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+  }
+  auto* failures = wide && !folded ? reinterpret_cast<unsigned*>(base + plan.wide_failures)
+                                   : nullptr;
+  if (wide && !folded) {
     auto* scratch = reinterpret_cast<RightDual*>(base + plan.wide_scratch);
     if ((error = cudaMemsetAsync(failures, 0, sizeof(*failures), stream)) != cudaSuccess)
       return drain(error, stream);
@@ -1895,7 +2034,7 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
                 reference_.atomic_weights, reference_.atom_offsets,
                 reference_.atomic_radii != nullptr, fast_pairs, right_column, rows, nullptr,
                 right_weights, begin, scratch, failures,
-                static_cast<unsigned>(plan.wide_repair_points), status);
+                static_cast<unsigned>(plan.wide_repair_points), status, becke_activity);
       };
       if (plan.wide_shared)
         launch(std::true_type{});
@@ -1917,7 +2056,7 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
               right, nullptr, 0, plan.wide_repair_points, nullptr, nullptr, nullptr, rows, nullptr,
               status, right_weights, right_column, failures, fast_pairs);
     }
-  } else {
+  } else if (!folded) {
     if ((error = launch_cartesian_rows<false, true>(shape_, options_, reference_, fast_pairs,
                                                     right_column, rows, accepted, stream,
                                                     right_weights)) != cudaSuccess)
@@ -1954,23 +2093,25 @@ cudaError_t CudaGridGeometryResponse::enqueue_private_cartesian_column(
   if ((error = authenticate(stream)) != cudaSuccess) return error;
   view = {reference_.basis,
           spatial,
-          rows,
+          folded ? folded_gradient_ : rows,
           reference_.atom_offsets,
           shape_.atoms,
           shape_.points_per_atom,
           0,
           right_column,
           coordinates,
-          shape_.radial_s ? reference_.points : nullptr};
+          shape_.radial_s ? reference_.points : nullptr,
+          folded ? folded_hessian_ + right_column * coordinates : nullptr};
   if (rhs) {
-    *rhs = {accepted, right_weights, point_directions};
+    *rhs = {accepted, folded ? folded_gradient_ + right_column * shape_.points : right_weights,
+            point_directions};
     work_.action_ao_jet_values += 4 * plan.panel;
     work_.action_point_values += 3 * shape_.points;
   }
-  ++work_.cartesian_partition_sweeps;
+  work_.cartesian_partition_sweeps += !folded;
   work_.completed_actions += coordinates;
   work_.action_partition_pairs += pair_visits;
-  if (wide) {
+  if (wide && !folded) {
     ++work_.tiled_cartesian_sweeps;
     work_.tiled_cartesian_repair_pair_bound += repair_bound;
   }

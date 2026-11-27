@@ -203,6 +203,11 @@ class CudaWb97mvGridResponse {
                                             int* transaction_status, cudaStream_t stream) noexcept;
   /** Admit the number of rows that fit the existing adjoint scratch. */
   bool admits_cartesian_mixed(std::size_t rows = 1) const noexcept;
+  /** Borrow the frozen semilocal weight-derivative activity for this grid lease.
+   * Null means every point is required. A zero is not a quadrature deletion. */
+  const double* private_becke_activity() const noexcept;
+  /** Borrow unweighted local XC energy density, fixed for this density lease. */
+  const double* private_becke_energy() const noexcept;
   /** Contract consecutive rows of a live geometry lease into a private panel. */
   cudaError_t enqueue_private_cartesian_mixed(const CudaGridGeometryCartesianView& motion,
                                               double* output, int* transaction_status,

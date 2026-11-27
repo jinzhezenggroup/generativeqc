@@ -11,15 +11,14 @@ namespace generativeqc::tensor::cuda {
  * the leading reduction coordinates without repacking the resident inputs.
  * Borrow the current handle/stream/modes/workspace. The caller validates all
  * storage and dimensions and handles an empty rank without submitting GEMM.
- * Alpha is a host scalar; beta remains zero for overwrite semantics. */
+ * Alpha and beta are host scalars; the default is an overwrite. */
 inline cublasStatus_t square_panel_product(cublasHandle_t handle, int dimension, int rank,
                                            const double* left, bool transpose_left,
                                            const double* right, bool transpose_right,
-                                           double* output, double alpha = 1.0) {
-  const double zero = 0.0;
+                                           double* output, double alpha = 1.0, double beta = 0.0) {
   return cublasDgemm(handle, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
                      transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, dimension, dimension, rank,
-                     &alpha, left, dimension, right, dimension, &zero, output, dimension);
+                     &alpha, left, dimension, right, dimension, &beta, output, dimension);
 }
 
 /** Already-admitted square FP64 column-major primitives. Borrow the current

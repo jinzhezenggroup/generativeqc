@@ -670,6 +670,7 @@ def test_native_borrowed_center_pairs_preserve_mixed_geometry(tmp_path: Path) ->
         "36_atoms",
         "36_atoms_adjusted",
         "37_atoms",
+        "37_atoms_fold",
         "65_atoms",
         "96_atoms",
     ),
@@ -704,6 +705,14 @@ def test_native_batched_cartesian_partition(tmp_path: Path, case: str) -> None:
     topology = "cartesian"
     if wide:
         topology = "tiled-cartesian"
+        if case == "37_atoms_fold":
+            topology += "-fold"
+            fixture["atomic"][::3] *= -1
+            # A slight separation makes the quotient regular without removing
+            # rounded-zero switches or resorting to the scaled fallback.
+            separation = np.arange(atoms, dtype=float) * 0.7
+            fixture["centers"][:, 0] += separation
+            fixture["points"][:, 0] += separation[fixture["owner"]]
         if case == "33_atoms_radial":
             # Give the fused XC adjoint a realistic point count and a sparse
             # axis of well-separated centers, keeping repairs exceptional.

@@ -91,6 +91,8 @@ struct CudaGridGeometryWork {
   std::uint64_t cartesian_diagonal_sweeps{};
   std::uint64_t tiled_cartesian_sweeps{};
   std::uint64_t tiled_cartesian_repair_pair_bound{};
+  std::uint64_t folded_partition_pairs{}, folded_rank_columns{};
+  int folded_numerical_refusal{};
 };
 
 struct CudaGridGeometryMixedView {
@@ -113,6 +115,8 @@ struct CudaGridGeometryCartesianView {
   /** Non-null for [4,point,AO] radial moments; reconstruct spatial derivatives
    * using these same authenticated [point,xyz] coordinates. */
   const double* radial_points{};
+  /** When folded, weights contain only the frozen first derivative per row. */
+  const double* folded_weight_column{};
 };
 
 /** Pure host overflow/resource/work admission. The optional minimum reserves
@@ -181,10 +185,17 @@ class CudaGridGeometryResponse {
    * When requested, borrow its right first jets and weights for the CPKS RHS.
    * Both views remain live until the next geometry call that uses scratch.
    * If the batched fallback does not fit, return NotSupported before enqueue. */
-  cudaError_t enqueue_private_cartesian_column(
-      const double* right, std::size_t right_column, CudaGridGeometryCartesianView& view,
-      int* transaction_status, cudaStream_t stream,
-      CudaGridGeometryDirectionView* rhs = nullptr) noexcept;
+  cudaError_t enqueue_private_cartesian_column(const double* right, std::size_t right_column,
+                                               CudaGridGeometryCartesianView& view,
+                                               int* transaction_status, cudaStream_t stream,
+                                               CudaGridGeometryDirectionView* rhs = nullptr,
+                                               const double* becke_activity = nullptr) noexcept;
+  /** Bounded optional lease for first weight derivatives and the dense
+   * contraction of second weight derivatives against frozen local XC energy. */
+  std::size_t cartesian_weight_fold_workspace() const noexcept;
+  static std::size_t cartesian_weight_fold_provider_allowance() noexcept;
+  cudaError_t prepare_cartesian_weight_fold(const double* energy, void* workspace,
+                                            std::size_t bytes, cudaStream_t stream) noexcept;
   /** Admit all mixed actions of an endpoint before any partial work. */
   cudaError_t admit_actions(std::size_t actions) noexcept;
   /** Borrow [20,point,AO] spatial jets when resident and expanded. */
@@ -213,6 +224,7 @@ class CudaGridGeometryResponse {
   CudaGridGeometryWork work_{};
   void* workspace_{};
   std::size_t cartesian_right_{SIZE_MAX};
+  const double *folded_gradient_{}, *folded_hessian_{};
   bool ready_{};
   bool motion_ready_{};
 };

@@ -525,6 +525,59 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
                                                       cartesian_status, storage.stream));
       require(audit() != 0, "Cartesian column accepted a mismatched right direction");
     }
+    if (topology == "tiled-cartesian-fold") {
+      std::vector<double> energy(shape.points);
+      for (std::size_t point = 0; point < energy.size(); ++point)
+        energy[point] = std::cos(0.33 * point);
+      const auto right_seed = static_cast<std::size_t>(right_column);
+      const auto enqueue = [&] {
+        write_unit(cartesian_right, right_seed);
+        check(cudaMemsetAsync(cartesian_status, 0, sizeof(int), storage.stream));
+        check(response.enqueue_private_cartesian_column(cartesian_right, right_seed, cartesian,
+                                                        cartesian_status, storage.stream));
+        require(!audit(), "folded fixture's private transaction failed");
+      };
+      enqueue();
+      const auto original = download(cartesian.weights, 2 * shape.points * left.size());
+      const auto fold_bytes = response.cartesian_weight_fold_workspace();
+      require(fold_bytes > 0, "eligible weight fold did not fit");
+      auto* scratch = storage.allocate(fold_bytes / sizeof(double));
+      const auto energy_device = [&](const std::vector<double>& values) {
+        auto* device = storage.allocate(values.size());
+        check(cudaMemcpyAsync(device, values.data(), values.size() * sizeof(double),
+                              cudaMemcpyHostToDevice, storage.stream));
+        return device;
+      };
+      auto invalid = energy;
+      invalid.front() = std::numeric_limits<double>::quiet_NaN();
+      require(response.prepare_cartesian_weight_fold(energy_device(invalid), scratch, fold_bytes,
+                                                     storage.stream) == cudaErrorNotSupported,
+              "invalid cotangent did not retain the original Becke path");
+      enqueue();
+      require(!cartesian.folded_weight_column, "failed preparation published a folded view");
+      const auto folding = response.prepare_cartesian_weight_fold(energy_device(energy), scratch,
+                                                                  fold_bytes, storage.stream);
+      if (folding != cudaSuccess) {
+        std::cerr << "Becke fold refusal " << response.work().folded_numerical_refusal << '\n';
+        check(folding);
+      }
+      enqueue();
+      require(cartesian.folded_weight_column, "accepted fold did not publish a folded view");
+      const auto first = download(cartesian.weights, shape.points * left.size());
+      const auto mixed = download(cartesian.folded_weight_column, left.size());
+      for (std::size_t row = 0; row < left.size(); ++row) {
+        double weighted{};
+        for (std::size_t point = 0; point < shape.points; ++point) {
+          weighted += original[(2 * row + 1) * shape.points + point] * energy[point];
+          const auto reference_first = original[2 * row * shape.points + point];
+          require(std::abs(first[row * shape.points + point] - reference_first) <=
+                      2e-12 * (1 + std::abs(reference_first)),
+                  "folded first weight derivative differs from the per-column path");
+        }
+        require(std::abs(mixed[row] - weighted) <= 2e-12 * (1 + std::abs(weighted)),
+                "folded mixed weight contraction differs from the per-column path");
+      }
+    }
   }
   std::ofstream capture(output, std::ios::binary);
   for (const auto& values :
