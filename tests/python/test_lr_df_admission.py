@@ -75,13 +75,13 @@ int main() {
 @pytest.mark.parametrize("device", ("cpu", "cuda"))
 @pytest.mark.parametrize("initially_safe", (False, True))
 @pytest.mark.parametrize("selector", (None, "auto"), ids=("default", "auto"))
-def test_automatic_lr_choice_is_frozen_across_cutoff_failure_and_replay(
+def test_automatic_lr_retreats_before_energy_at_a_moved_cutoff_boundary(
     device: str,
     initially_safe: bool,
     selector: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Resolve the unsafe initial branch once, never switch on a later force error."""
+    """Use the same exact LR owner for energy and forces at the unsafe geometry."""
     if device == "cuda" and os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1":
         pytest.skip("requires an explicitly scheduled CUDA device")
     if device == "cuda":
@@ -120,29 +120,30 @@ def test_automatic_lr_choice_is_frozen_across_cutoff_failure_and_replay(
             _mixed_pyscf_energy(calculator, initial, 0, fitted_range=initially_safe),
             abs=2e-8,
         )
-        if initially_safe:
-            assert (
-                batch.execute(
-                    coordinates=([position for _, position in unsafe],),
-                    strict=True,
-                    properties=("energy",),
-                )
-                .items[0]
-                .converged
-            )
-            with closing(NativeKsSnapshot(batch, 0)) as snapshot:
-                assert snapshot.range_density_fitted
-                with pytest.raises(RuntimeError, match="rank crossing"):
-                    snapshot.mixed_density_fitted_integral_derivatives(2, 256 << 20)
-            # Both retries fail under the same fitted Hamiltonian. A fallback
-            # here would make energy/forces depend on the requested properties.
-            for _attempt in range(2):
-                with pytest.raises((RuntimeError, ValueError)):
-                    batch.execute(
-                        coordinates=([position for _, position in unsafe],),
-                        strict=True,
-                        properties=("energy", "forces"),
-                    )
+        positions = [position for _, position in unsafe]
+        energy = batch.execute(
+            coordinates=(positions,), strict=True, properties=("energy",)
+        ).items[0]
+        assert energy.converged and energy.warm_start_used
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert not snapshot.range_density_fitted
+        oracle = _mixed_pyscf_energy(calculator, unsafe, 0)
+        assert energy.energy == pytest.approx(oracle, abs=2e-8)
+
+        forces = batch.execute(
+            coordinates=(positions,), strict=True, properties=("energy", "forces")
+        ).items[0]
+        with closing(NativeKsSnapshot(batch, 0)) as snapshot:
+            assert not snapshot.range_density_fitted
+        assert forces.energy == pytest.approx(oracle, abs=2e-8)
+        h = 2e-4
+        z = positions[1][2]
+        plus = _mixed_pyscf_energy(calculator, [unsafe[0], ("H", (0, 0, z + h))], 0)
+        minus = _mixed_pyscf_energy(calculator, [unsafe[0], ("H", (0, 0, z - h))], 0)
+        expected = (plus - minus) / (2 * h)
+        np.testing.assert_allclose(
+            forces.forces, [[0, 0, expected], [0, 0, -expected]], atol=3e-6, rtol=0
+        )
         for geometry in (safe, safe, initial):
             result = batch.execute(
                 coordinates=([position for _, position in geometry],),
@@ -151,11 +152,9 @@ def test_automatic_lr_choice_is_frozen_across_cutoff_failure_and_replay(
             ).items[0]
             assert result.converged
             with closing(NativeKsSnapshot(batch, 0)) as snapshot:
-                assert snapshot.range_density_fitted == initially_safe
+                assert not snapshot.range_density_fitted
             assert result.energy == pytest.approx(
-                _mixed_pyscf_energy(
-                    calculator, geometry, 0, fitted_range=initially_safe
-                ),
+                _mixed_pyscf_energy(calculator, geometry, 0),
                 abs=2e-8,
             )
 

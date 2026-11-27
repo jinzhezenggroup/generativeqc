@@ -75,7 +75,7 @@
 namespace generativeqc::methods::detail {
 namespace {
 
-/** Initial automatic LR admission only; never escapes a prepared batch item. */
+/** Automatic LR preparation refused before any energy was evaluated. */
 struct AutomaticLrFitRefused final : std::exception {};
 
 /** Resolve the public capacity once. Replay keeps the same reduction and
@@ -620,7 +620,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   generativeqc_backend backend, int device,
                   const std::optional<core::System>& auxiliary,
                   const runtime::DeviceCapacityReservation* capacity,
-                  std::optional<scf::CpuPackedEriPreparation> packed_eri)
+                  std::optional<scf::CpuPackedEriPreparation> packed_eri, bool initial_geometry)
       : capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
@@ -657,7 +657,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA && options_.certify_ks_export;
     options_.certify_ks_export = options_.retain_ks_state;
-    if (execution_plan_.range_exchange) prepare_range_exchange(device);
+    if (execution_plan_.range_exchange) prepare_range_exchange(device, initial_geometry);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
         (!range_strategy_ ||
@@ -781,7 +781,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return options_.preliminary_guess;
   }
 
-  /** The admitted approximation survives replacement of this geometry owner. */
+  /** The actual approximation chosen before SCF on this geometry. */
   [[nodiscard]] bool density_fitted_range_exchange() const noexcept {
     return execution_plan_.density_fitted_range_exchange;
   }
@@ -3042,7 +3042,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
  private:
-  void prepare_range_exchange(int device) {
+  void prepare_range_exchange(int device, bool initial_geometry) {
     const auto spin = ks_is_unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted
                                                           : scf::FockSpin::Restricted;
     const auto fock_backend =
@@ -3079,16 +3079,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return;
     }
 
-    // The batch owns the optional transaction, including the primary's split
-    // budget. Refuse before SCF/property selection and retire this whole state
-    // before its one exact retry. Never catch invalid controls or solver errors.
+    // Recheck a displaced automatic fit before SCF, even for energy-only
+    // requests. Capability refusal can fall back only at initial preparation.
     try {
       prepare();
     } catch (const generativeqc::Error& error) {
-      if (error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
+      if (!initial_geometry || error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
       throw AutomaticLrFitRefused{};
     }
-    if (!range_correction_ || !range_correction_->density_fitting_response_valid())
+    if (range_correction_ ? !range_correction_->density_fitting_response_valid() : initial_geometry)
       throw AutomaticLrFitRefused{};
     execution_plan_.automatic_density_fitted_range_exchange = false;
   }
@@ -3393,6 +3392,7 @@ class KsPreparedBatch final : public PreparedBatch,
           item.resident_warm = false;
           item.plan = make_plan(target, item.stationary_device_allowance,
                                 item.density_fitted_range_exchange);
+          item.density_fitted_range_exchange = item.plan->density_fitted_range_exchange();
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
@@ -3991,8 +3991,8 @@ class KsPreparedBatch final : public PreparedBatch,
   }
 
   struct Item {
-    // Scientific admission belongs to the item, not its replaceable plan. In
-    // particular an exact fallback cannot become fitted after a failed rebuild.
+    // Once automatic admission selects exact LR, later plans keep it.
+    // A fitted automatic owner rechecks its metric when geometry changes.
     bool density_fitted_range_exchange{};
     // Admission belongs to the immutable prepared model/basis/backend, not a
     // replaceable geometry owner. A failed rebuild must not revoke it and
@@ -4016,22 +4016,25 @@ class KsPreparedBatch final : public PreparedBatch,
       std::optional<bool> density_fitted_range_exchange = {}) const {
     runtime::DeviceCapacityScope capacity_scope(capacity_.get());
     auto execution_plan = execution_plan_;
-    if (density_fitted_range_exchange) {
+    const bool initial_geometry = !density_fitted_range_exchange.has_value();
+    if (density_fitted_range_exchange)
       execution_plan.density_fitted_range_exchange = *density_fitted_range_exchange;
-      execution_plan.automatic_density_fitted_range_exchange = false;
-    }
+    execution_plan.automatic_density_fitted_range_exchange =
+        execution_plan.automatic_density_fitted_range_exchange &&
+        execution_plan.density_fitted_range_exchange;
     const auto prepare = [&] {
-      return std::make_unique<KsPreparedState>(
-          capabilities_, system, execution_plan, options_, grid_spec_, backend_, device_,
-          ks_auxiliary_for_system(system, auxiliary_), capacity_.get(), packed_eri_);
+      return std::make_unique<KsPreparedState>(capabilities_, system, execution_plan, options_,
+                                               grid_spec_, backend_, device_,
+                                               ks_auxiliary_for_system(system, auxiliary_),
+                                               capacity_.get(), packed_eri_, initial_geometry);
     };
     std::unique_ptr<KsPreparedState> plan;
     try {
       plan = prepare();
     } catch (const AutomaticLrFitRefused&) {
-      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+      // The partially built fitted owner has unwound before the exact retry.
     } catch (const std::bad_alloc&) {
-      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+      if (!initial_geometry || !execution_plan.automatic_density_fitted_range_exchange) throw;
 #if GENERATIVEQC_HAS_CUDA
       if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
         const auto pending = cudaGetLastError();
@@ -4041,9 +4044,8 @@ class KsPreparedBatch final : public PreparedBatch,
 #endif
     }
     if (!plan) {
-      // This covers primary split-budget refusal too. All candidate providers
-      // have retired, so the original explicit total cap can be used by exact
-      // preparation without overlapping owners or borrowing an extra budget.
+      // All fitted candidate providers have retired. Exact preparation can
+      // use the original explicit total DF cap without overlapping owners.
       execution_plan.density_fitted_range_exchange = false;
       execution_plan.automatic_density_fitted_range_exchange = false;
       plan = prepare();

@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _translation_unit(source: str) -> str:
     host = source[: source.index("unsigned blocks(")]
+    # The extracted helper is compiled with a host-only C++ compiler.
+    host = host.replace("__host__ __device__ ", "")
     # Only the generated jet's storage contributes to host layout. Keep the
     # production pair records and their size assertions, without CUDA codegen.
     host = host.replace(
