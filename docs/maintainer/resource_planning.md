@@ -27,7 +27,9 @@ controls, including automatic Hückel/MINAO preparation when admitted. The stand
 `estimate_hf_resources` estimator describes the Hcore target inventory; use
 `initial_guess=None` when executing that exact inventory, or use the calculator
 estimator to include its active preparation policy. `singlepoint` also accepts
-the calculator's budget and attaches diagnostics to its result. Unsupported or
+the calculator's budget and attaches diagnostics to its result. Budgeted CPU KS
+singlepoints delegate energy/force admission directly to their prepared batch;
+no separate calculator estimate is needed. Unsupported or
 infeasible plans fail before native
 context creation in these execution endpoints. Constructing a CUDA calculator
 itself can select a profile and initialize the CUDA runtime; use the standalone
@@ -128,11 +130,12 @@ silently replace a user-selected alternative with a cheaper one. Native
 authority also rechecks changed optional CPU force workspace before a
 force replay, preserving all live owners and selections. The revised plan is
 published only after successful execution; rejection leaves the energy plan
-and warm state usable. Discovered native errors propagate without retrying
-portable selection. Missing symbols
-or libraries retain provider-free portable planning; this adapter never loads a
-library itself. The compiler's separate portable planner remains available for
-offline generation without importing the runtime.
+and warm state usable. A selected library must provide native composition;
+an absent query or a native rejection never retries portable selection or
+validates a supplied plan using Python peaks. Library-free planning remains
+provider-free and offline. This adapter never loads a library itself, and the
+compiler's separate portable planner remains available without importing the
+runtime.
 
 `ResourcePlan` retains its portable data-only schema, independent derived-byte
 validation and serialization. A plan is not a native allocation receipt or
@@ -366,7 +369,7 @@ library-free planning retain explicit portable shape arithmetic.
 Python still owns basis expansion and mathematical provenance in this planner;
 these counts are not complete allocation, provider, lease or RSS authority.
 
-CPU RHF/UHF calculator plans with a discovered
+CPU RHF/UHF calculator plans require the selected library's
 `generativeqc_resource_hf_cpu_fleet_v1` query obtain their per-item phase bounds,
 summed fleet retained capacity and maximum serialized workspace from the same
 allocation-free C++ owners as the native CLI. Direct and density-fitted
@@ -376,10 +379,11 @@ query validates every item before publishing any capacities; invalid later
 items, overlapping buffers and aggregate signed-int64 overflow leave output
 unchanged. Native rejection propagates without a Python retry.
 
-Schedule identity records phase and fleet sizing owners separately. Libraries
-with only `generativeqc_resource_hf_cpu_host_v1` retain native phase sizing and
-portable fleet composition; library-free dry runs and older libraries retain
-portable metadata sizing without implicitly loading a provider. Declared-capacity
+Schedule identity records phase and fleet sizing owners separately. The standalone
+phase query is not a fleet contract. A selected runtime without fleet sizing,
+or without native ECP workspace sizing for an ECP fleet, cannot admit the plan.
+Explicit library-free dry runs retain portable metadata sizing without loading
+a provider. Declared-capacity
 selection and admission use the separately discovered native composition owner
 described above; prepared leases remain frontend-owned. Native fleet sizing is
 not complete endpoint/RSS allocation accounting.
@@ -398,9 +402,9 @@ or inconsistent publication never restarts Python arithmetic. This does not
 change density-fitted HF, scientific admission, prepared lease ownership or the
 exclusion of provider/allocator retention and complete simultaneously-live RSS.
 
-CPU KS calculator plans with a discovered
-`generativeqc_resource_ks_cpu_fleet_v1` query use the same allocation-free native
-owners as the installed CLI for per-item diagnostics, twelve retained-owner
+Ordinary CPU KS calculator plans require the selected library's
+`generativeqc_resource_ks_cpu_fleet_v1` query. It uses the same allocation-free
+native owners as the installed CLI for per-item diagnostics, twelve retained-owner
 totals and serialized preparation/SCF workspace. The query validates the entire
 fleet and the complete signed-int64 retained-plus-workspace peak before
 publication. For qualified dense Direct CPU named KS force plans,
@@ -424,12 +428,11 @@ LDA/GGA program with full-range J/K and a real-spherical s/p/d/f basis;
 force replay, missing native inventory, and undersized packed caps do not
 fall back to dense storage.
 
-Native rejection never retries Python sizing. Schedule identity records item
-and fleet authority separately. Libraries exposing only
-`generativeqc_resource_ks_cpu_host_v1` keep native per-item sizing and portable
-fleet composition; old/no-library dry runs retain portable metadata sizing
-without implicitly loading a provider. Neither sizing query executes
-quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
+Native rejection never retries Python sizing. A per-item query alone cannot
+admit a live fleet, and CPU ECP fleets require native ECP workspace sizing.
+Explicit library-free dry runs retain portable metadata sizing without loading
+a provider. Schedule identity records the selected inventory. No sizing query
+executes quadrature, integrals or SCF. Native admission/leases and full simultaneously-live
 allocator/RSS receipts remain outside this bridge.
 
 CUDA KS host inventories use the same `scf::KsHostFleetResources` owner through

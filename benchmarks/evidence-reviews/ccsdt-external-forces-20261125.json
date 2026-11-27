@@ -1,0 +1,25 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "ccsdt-external-forces-20261125",
+  "owner": "External closed-shell CCSD(T) benchmark for issue #3167",
+  "reason": "Retain exact full Cartesian forces, all observed endpoint and displaced-energy trials, and hash-bound hardware and timing provenance so the external accuracy gates and missing data can be independently replayed. This review classifies storage.",
+  "review_document": "benchmarks/results/ccsdt-external-forces-20261125/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/ccsdt-external-forces-20261125/execution.json",
+      "family": "ccsdt-external-forces-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Immutable hardware and driver identities, acquisition plans and per-record hashes required to audit provenance and missing trials.",
+      "bytes": 231198,
+      "sha256": "673cfe36ea4ac01abbb74bd53d62a06bc843461501f07b8284bf1e91ba36f1ec"
+    },
+    {
+      "path": "benchmarks/results/ccsdt-external-forces-20261125/records.json",
+      "family": "ccsdt-external-forces-20261125",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact endpoint energies, full analytic force vectors, timings, work metadata and finite-difference energies used for independent replay.",
+      "bytes": 430152,
+      "sha256": "2b2b7652d7a1471b8a9aebe52e21bee341dcc90462befe8a5480e4b00945d7fe"
+    }
+  ]
+}

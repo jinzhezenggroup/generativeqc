@@ -16,6 +16,15 @@
 
 namespace generativeqc::geometry::saddle {
 
+/** Modeled corrector panels and attempt history, excluding callback and caller storage.
+ * Callers must first validate the v1 bounds of 300 coordinates and 100 attempts.
+ */
+inline constexpr std::size_t corrector_numeric_bytes(std::size_t coordinates,
+                                                     std::size_t attempts) noexcept {
+  return sizeof(double) *
+         (16 * coordinates * coordinates + (attempts + 64) * coordinates + 16 * attempts);
+}
+
 /** Internal local saddle corrector, not molecular task admission.
  * Callbacks supply gradients (not forces) and raw row-major Hessians at the
  * exact atom-major Bohr coordinates. Energies are Hartree. This local algorithm

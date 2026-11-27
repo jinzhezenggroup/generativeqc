@@ -46,7 +46,8 @@ from test_wb97mv_native_grid import (
 
 
 def _data(spins: int, *, points: int = 8, orbital_replicas: int = 1) -> dict:
-    fixture = _fixture(spins, points + 1, orbital_replicas=orbital_replicas)
+    # Each replica contains the full s/p/d/f set, not a single orbital.
+    fixture = _fixture(spins, points + 1, orbitals=4 * orbital_replicas)
     fixture["points"] = fixture["points"][:-1].copy()
     fixture["weights"] = fixture["weights"][:-1].copy()
     fixture["jets"] = fixture["jets"][:, :-1].copy()

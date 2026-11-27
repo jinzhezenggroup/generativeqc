@@ -1,0 +1,136 @@
+{
+  "basis": "First Scheduled event to terminal finish. HPC: slurmd worker. Times converted to UTC.",
+  "rates": {
+    "H100": "1 point per card-hour",
+    "CPU HPC": "0 points per CPU instance-hour"
+  },
+  "tasks": [
+    {
+      "job": "gqc-3182-ae1086-build",
+      "project": "CQ-NexChem",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 16,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "compute_group": "开发区-H100-cuda13.2版本-183核",
+      "workspace": "分布式训练空间",
+      "image": "generativeqc-science-py311-cuda129:20261015",
+      "requested_priority": 4,
+      "effective_priority": 20,
+      "priority_level": "NORMAL",
+      "terminal_status": "SUCCEEDED",
+      "slurm_steps": null,
+      "scheduled_utc": "2026-11-26T01:29:59+00:00",
+      "finished_utc": "2026-11-26T02:24:15+00:00",
+      "hourly_points_for_allocation": 1,
+      "h100_card_hours_estimate": 0.9044444444444445,
+      "cpu_core_hours_estimate": null,
+      "points_estimate": 0.9044444444444445,
+      "cleanup_receipt": {
+        "name": "gqc-3182-ae1086-build",
+        "status": "deleted"
+      },
+      "status_sha256": "c6e4234b251919276e4c427a0183baabec4cf7351da881f7e8a48e71e61f6682",
+      "retained_remote_directory": "build-receipts/"
+    },
+    {
+      "job": "gqc-3182-crbh20-1",
+      "project": "CQ-NexChem",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 16,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "compute_group": "开发区-H100-cuda13.2版本-183核",
+      "workspace": "分布式训练空间",
+      "image": "generativeqc-science-py311-cuda129:20261015",
+      "requested_priority": 4,
+      "effective_priority": 20,
+      "priority_level": "NORMAL",
+      "terminal_status": "SUCCEEDED",
+      "slurm_steps": null,
+      "scheduled_utc": "2026-11-26T02:28:58+00:00",
+      "finished_utc": "2026-11-26T02:55:57+00:00",
+      "hourly_points_for_allocation": 1,
+      "h100_card_hours_estimate": 0.44972222222222225,
+      "cpu_core_hours_estimate": null,
+      "points_estimate": 0.44972222222222225,
+      "cleanup_receipt": {
+        "name": "gqc-3182-crbh20-1",
+        "status": "deleted"
+      },
+      "status_sha256": "98f9c73b15545d77f8e581a17fad5fae475f17d02571a93751422dd84826530e",
+      "retained_remote_directory": "out-gqc-3182-crbh20-1/"
+    },
+    {
+      "job": "gqc-3182-crbh20-2",
+      "project": "CQ-NexChem",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 200,
+        "gpu": 1,
+        "nodes": 1,
+        "shared_memory_gib": 16,
+        "gpu_type": "NVIDIA H100 (80GB)"
+      },
+      "compute_group": "开发区-H100-cuda13.2版本-183核",
+      "workspace": "分布式训练空间",
+      "image": "generativeqc-science-py311-cuda129:20261015",
+      "requested_priority": 4,
+      "effective_priority": 20,
+      "priority_level": "NORMAL",
+      "terminal_status": "SUCCEEDED",
+      "slurm_steps": null,
+      "scheduled_utc": "2026-11-26T02:29:30+00:00",
+      "finished_utc": "2026-11-26T03:01:45+00:00",
+      "hourly_points_for_allocation": 1,
+      "h100_card_hours_estimate": 0.5375,
+      "cpu_core_hours_estimate": null,
+      "points_estimate": 0.5375,
+      "cleanup_receipt": {
+        "name": "gqc-3182-crbh20-2",
+        "status": "deleted"
+      },
+      "status_sha256": "2077874fab4c44c440b6260c52d55d8d39445fb35c6e0b14f66b77c3a8c8d590",
+      "retained_remote_directory": "out-gqc-3182-crbh20-2/"
+    },
+    {
+      "job": "gqc-3182-ref-crbh20",
+      "project": "cq-nex-chem",
+      "resource": {
+        "cpu": 20,
+        "memory_gib": 100,
+        "gpu": 0,
+        "nodes": 1,
+        "gpu_type": "CPU"
+      },
+      "compute_group": "HPC-可上网区资源-2",
+      "workspace": "CPU资源空间",
+      "image": "docker.sii.shaipower.online/infly-dev/slurm-k8s-cluster:20250101841",
+      "requested_priority": 10,
+      "effective_priority": 35,
+      "priority_level": "HIGH",
+      "terminal_status": "SUCCEEDED",
+      "slurm_steps": "1/1",
+      "scheduled_utc": "2026-11-26T01:31:30+00:00",
+      "finished_utc": "2026-11-26T06:04:47+00:00",
+      "hourly_points_for_allocation": 0,
+      "h100_card_hours_estimate": 0,
+      "cpu_core_hours_estimate": 91.09444444444443,
+      "points_estimate": 0.0,
+      "cleanup_receipt": {
+        "name": "gqc-3182-ref-crbh20",
+        "status": "deleted"
+      },
+      "status_sha256": "625e1b450d2eb592d66aa77caa71f439805c68e904c75dda7a3fab0b46c00afb",
+      "retained_remote_directory": "out-gqc-3182-ref-crbh20/"
+    }
+  ]
+}

@@ -176,12 +176,19 @@ def test_equal_share_correction_cap_and_global_capacity(library: Any) -> None:
                 calculator.prepare_batch(_systems())
 
 
-def test_missing_inventory_retains_the_existing_standalone_route(library: Any) -> None:
-    """Compatibility is selected before planning, never after native rejection."""
+@pytest.mark.parametrize("standalone_query_available", [True, False])
+def test_missing_complete_inventory_uses_only_native_standalone_capacity(
+    library: Any, standalone_query_available: bool
+) -> None:
+    """Keep stand-alone execution, but not portable admission on a CPU DSO."""
 
     class Legacy:
         def __getattr__(self, name: str) -> Any:
             if name == "generativeqc_ks_d3_resource_query_v1":
+                raise AttributeError(name)
+            if not standalone_query_available and (
+                name == "generativeqc_resource_d3_layout_v1"
+            ):
                 raise AttributeError(name)
             return getattr(library, name)
 
@@ -189,6 +196,15 @@ def test_missing_inventory_retains_the_existing_standalone_route(library: Any) -
     calculator._library = Legacy()
     plan = calculator.estimate_resources(_systems())
     correction = next(r for r in plan.requests if r.name == "d3")
+    if not standalone_query_available:
+        assert plan.status == "unsupported"
+        assert not correction.candidates
+        with pytest.raises(
+            NotImplementedError, match="generativeqc_resource_d3_layout_v1"
+        ):
+            calculator.prepare_batch(_systems(), resource_plan=plan)
+        return
+    assert plan.status == "feasible"
     assert (
         json.loads(correction.identity.schedule)["inventory_owner"]
         == "native-d3-layout-v1"

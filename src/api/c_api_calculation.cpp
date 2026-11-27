@@ -4,6 +4,8 @@
 #include "api/device_resources.hpp"
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/hf_cpu_host_budget.hpp"
+#include "api/host_resources.hpp"
 #include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_cpu_df_host_budget.hpp"
 #include "api/ks_diagnostic.hpp"
@@ -30,7 +32,8 @@ generativeqc_status prepare_candidate(
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation,
     const std::optional<scf::ProviderInitializationIntent>& pending,
     const std::shared_ptr<runtime::DeviceResourceLedger>& resource_owner,
-    const generativeqc_named_ks_descriptor* named = nullptr) {
+    const generativeqc_named_ks_descriptor* named = nullptr,
+    const generativeqc_host_resources* hf_host_resources = nullptr) {
   generativeqc::runtime::host_trace::Region trace("calculation_prepare");
   if (context == nullptr || system == nullptr || descriptor == nullptr || calculation == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -66,12 +69,24 @@ generativeqc_status prepare_candidate(
     std::unique_lock<std::mutex> host_workspace;
     std::shared_ptr<runtime::HostResourceLease> host_lease;
     if (named_inputs && named_inputs->selection.cpu_df_host_properties) {
-      generativeqc::api::CpuDfKsHostAdmission admission(*named_inputs,
-                                                        context->state.executed_backend);
+      generativeqc::api::CpuKsHostAdmission admission(*named_inputs,
+                                                      context->state.executed_backend);
       admission.append(system->data, generativeqc::api::native_auxiliary_basis(*descriptor));
       admitted_properties = admission.properties();
       host_workspace = admission.use_workspace();
       host_lease = admission.reserve();
+    } else if (hf_host_resources) {
+      const auto inventory =
+          cpu_direct_hf_host_inventory(context->state.executed_backend, system->data, *descriptor);
+      const auto& ledger = hf_host_resources->ledger;
+      host_workspace = ledger->use_workspace();
+      try {
+        host_lease =
+            std::make_shared<runtime::HostResourceLease>(ledger, inventory[0], inventory[1]);
+      } catch (const std::bad_alloc&) {
+        throw methods::MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                                   "Direct CPU HF shared host capacity exceeds the limit");
+      }
     }
     auto candidate = std::make_unique<generativeqc_calculation>();
     candidate->context = context;
@@ -279,6 +294,16 @@ generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation) {
   return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {}, {});
+}
+
+generativeqc_status generativeqc_calculation_prepare_with_host_resources_v1(
+    generativeqc_context* context, const generativeqc_system* system,
+    const generativeqc_method_descriptor* descriptor, const generativeqc_host_resources* resources,
+    generativeqc_calculation** calculation) {
+  if (calculation) *calculation = nullptr;
+  if (!resources) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  return generativeqc::api::prepare_candidate(context, system, descriptor, calculation, {}, {},
+                                              nullptr, resources);
 }
 
 generativeqc_status generativeqc_calculation_prepare_named_ks_v1(

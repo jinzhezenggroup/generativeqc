@@ -29,12 +29,13 @@
     {
       "id": "native-fock-and-jk",
       "status": "performance-exception",
-      "capability": "Retained scientific Direct J/K and materialized/packed Fock consumers for public-AO/reference domains. Order-two and generic quartet production adapters are runtime-only over compiler-owned recurrence, shell canonicalization and Fock scatter.",
-      "current_selector": "Generated shell classes are used where promoted. Remaining scientific files are the independent J/K path, budgeted density-Hermite Coulomb and partial-residual consumers, plus cached-tensor and packed-Fock consumers; order-two/quartet task adapters no longer own scientific formulas or screening criteria.",
-      "generated_alternative": "Compiler-generated recurrence/source contraction and Fock accumulation cover the order-two/quartet adapters. Remaining cached/public-AO Fock/J-K consumers require explicit compiler/TensorIR replacement or measured exception evidence.",
-      "schedule_requirements": "Share primitive/Boys work across Fock outputs, preserve symmetry/scatter semantics, and choose materialization/rematerialization from measured register and occupancy evidence rather than Direct-only shape tests.",
-      "resource_profile": "Register/shared-memory pressure and repeated primitive work are the primary retirement constraints; endpoint selection must consume generic target/resource evidence.",
+      "capability": "Retained scientific Direct J/K and materialized/packed Fock consumers for public-AO/reference domains, including exact retained pair-row J/K for dense restricted Direct Hessian response. Order-two and generic quartet production adapters are runtime-only over compiler-owned recurrence, shell canonicalization and Fock scatter.",
+      "current_selector": "Generated shell classes are used where promoted. Remaining scientific files are the independent J/K path, budgeted density-Hermite Coulomb and partial-residual consumers, plus cached-tensor, packed-Fock and admitted response pair-row consumers; order-two/quartet task adapters no longer own scientific formulas or screening criteria.",
+      "generated_alternative": "Compiler-generated recurrence/source contraction and Fock accumulation cover the order-two/quartet adapters. Remaining cached/public-AO Fock/J-K and response pair-row consumers require explicit compiler/TensorIR replacement or measured exception evidence.",
+      "schedule_requirements": "Share primitive/Boys work across Fock outputs, preserve symmetry/scatter semantics including both exchange orientations for nonsymmetric response densities, and choose materialization/rematerialization from measured register and occupancy evidence rather than Direct-only shape tests.",
+      "resource_profile": "Register/shared-memory pressure and repeated primitive work are the primary Fock retirement constraints. Response pair rows have separate byte and worst-case product caps, with canonical replay on refusal. Endpoint selection must consume generic target/resource evidence.",
       "evidence": [
+        "docs/developer/dft_hessian.md",
         "docs/developer/shell_codegen.md",
         "docs/maintainer/cuda_ownership.md",
         "python/generativeqc_compiler/integral/production_shell_classes.json"
@@ -44,14 +45,15 @@
         "#832 live-range/rematerialization/fusion profitability",
         "#833 reusable schedule vocabulary"
       ],
-      "retirement_condition": "For each retained Fock family, demonstrate generated mathematical parity plus matched complete-endpoint non-regression; then delete the duplicate native scientific body unless an independently measured exception remains.",
+      "retirement_condition": "For each retained Fock or response family, demonstrate generated mathematical parity plus matched complete-endpoint non-regression; then delete the duplicate native scientific body unless an independently measured exception remains.",
       "files": [
         "src/scf/cuda/direct_cached_tensor_kernels.cu",
         "src/scf/cuda/direct_jk_kernels.cu",
         "src/scf/cuda/direct_md_j.cu",
         "src/scf/cuda/direct_md_j.hpp",
         "src/scf/cuda/direct_md_jk.cu",
-        "src/scf/cuda/direct_packed_fock_kernels.cu"
+        "src/scf/cuda/direct_packed_fock_kernels.cu",
+        "src/scf/cuda/direct_response_pair_kernels.cu"
       ]
     },
     {

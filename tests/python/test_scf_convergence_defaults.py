@@ -17,6 +17,7 @@ from generativeqc import Calculator, GridSpec, KsOptions, PrecisionCalculator, _
 from generativeqc._scf_defaults_native import default_controls
 
 from tools.generativeqc_validation.native_registry_stub import (
+    install_initial_guess_default_stub,
     install_registry_stub,
     install_scf_defaults_stub,
 )
@@ -176,6 +177,7 @@ def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNames
         return _native.STATUS_SUCCESS
 
     native = SimpleNamespace(
+        generativeqc_resource_compose_v1=policy_library.generativeqc_resource_compose_v1,
         generativeqc_precision_controls_query_v1=policy_library.generativeqc_precision_controls_query_v1,
         generativeqc_ks_options_version=lambda: 1,
         generativeqc_method_available=available,
@@ -193,6 +195,7 @@ def library(monkeypatch: pytest.MonkeyPatch, policy_library: Any) -> SimpleNames
         ),
     )
     install_registry_stub(native, frozenset({"energy"}))
+    install_initial_guess_default_stub(native)
     install_scf_defaults_stub(native, (1e-9, 1e-5, 1e-12), qualified=True)
     monkeypatch.setattr(_native, "load_library", lambda **kwargs: native)
     return native

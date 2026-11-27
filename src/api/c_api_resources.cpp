@@ -8,6 +8,7 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/ks_cpu_df_host_budget.hpp"
 #include "dft/cuda_stationary_capacity.hpp"
 #include "dft/dispersion/d3_runtime.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
@@ -45,6 +46,25 @@
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #endif
+
+namespace generativeqc::api {
+
+void CpuKsHostAdmission::append_direct_d3(const core::System& system) {
+  using namespace dft::dispersion;
+  if (system.atoms.size() > kD3MaximumAtomsPerSystem ||
+      std::ranges::any_of(system.atoms, [](const auto& atom) {
+        return atom.atomic_number < 1 || atom.atomic_number > 86;
+      }))
+    throw methods::MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                               "CPU Direct Hessian host admission excludes this D3 domain");
+  const auto atoms = static_cast<std::uint32_t>(system.atoms.size());
+  const auto layout =
+      ks_d3_resource_usage(GENERATIVEQC_BACKEND_CPU_REFERENCE, std::span(&atoms, 1));
+  // The retained correction can coexist with both primal and derivative scratch.
+  fleet_.add_retained(runtime::size_add(layout.plan_host_bytes, layout.execution_host_bytes));
+}
+
+}  // namespace generativeqc::api
 
 extern "C" {
 

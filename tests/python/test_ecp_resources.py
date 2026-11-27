@@ -11,12 +11,14 @@ from generativeqc import (
     BasisProvenance,
     BasisSet,
     BasisShell,
+    Calculator,
     ElementBasis,
     ResourceBudget,
     _native,
     estimate_hf_resources,
     estimate_ks_resources,
     resources_hf,
+    resources_ks,
 )
 
 
@@ -228,6 +230,7 @@ def cuda_layout_library(library: typing.Any) -> typing.Any:
         return 1
 
     return SimpleNamespace(
+        generativeqc_resource_compose_v1=library.generativeqc_resource_compose_v1,
         generativeqc_resource_ecp_workspace_v1=library.generativeqc_resource_ecp_workspace_v1,
         generativeqc_resource_small_hf_cuda_v2=layout,
         generativeqc_resource_ks_cuda_v2=layout,
@@ -298,6 +301,54 @@ def basis() -> BasisSet:
         ),
         BasisProvenance("Synthetic test data", "1", "test-only", "0" * 64),
     )
+
+
+@pytest.mark.parametrize("missing_ecp", (False, True))
+def test_incomplete_cpu_ks_runtime_is_refused_before_preparation(
+    library: typing.Any,
+    basis: BasisSet,
+    monkeypatch: pytest.MonkeyPatch,
+    missing_ecp: bool,
+) -> None:
+    """Neither the leaf ABI nor offline dimensions authorize live preparation."""
+    missing = (
+        "generativeqc_resource_ecp_workspace_v1"
+        if missing_ecp
+        else "generativeqc_resource_ks_cpu_fleet_v1"
+    )
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        pytest.fail("incomplete KS runtime was used for sizing or preparation")
+
+    class IncompleteRuntime:
+        def __getattr__(self, name: str) -> typing.Any:
+            if name == missing:
+                raise AttributeError(name)
+            if name.startswith(
+                (
+                    "generativeqc_system_create",
+                    "generativeqc_batch_prepare",
+                    "generativeqc_calculation_prepare",
+                    "generativeqc_context_create",
+                )
+            ):
+                return forbidden
+            return getattr(library, name)
+
+    atoms = (
+        [("Na", (0, 0, 0)), ("H", (0, 0, 3))]
+        if missing_ecp
+        else [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]
+    )
+    calculator = Calculator(
+        basis=basis if missing_ecp else "sto-3g",
+        method="pbe-rks",
+        resource_budget=ResourceBudget(host_bytes=2**30),
+    )
+    monkeypatch.setattr(calculator, "_library", IncompleteRuntime())
+    monkeypatch.setattr(resources_ks, "_item_host_inventory", forbidden)
+    with pytest.raises(NotImplementedError, match=f"CPU KS .*inventory {missing}"):
+        calculator.prepare_batch([atoms])
 
 
 @pytest.mark.parametrize("method", ("pbe-rks", "b3lyp-rks"))
@@ -413,8 +464,11 @@ def test_public_plans_route_ecp_independently_of_enclosing_inventory(
     method: str,
     host_owner: str,
 ) -> None:
-    """Mixed-age libraries keep exact bounds and explicit ECP owner identity."""
+    """HF refuses incomplete owners; KS keeps its separately scoped behavior."""
     hidden = set()
+    if method in ("pbe-rks", "pbe-uks"):
+        # Exercise the ordinary fleet, not the separately qualified dense force owner.
+        hidden.add("generativeqc_resource_ks_cpu_force_fleet_v1")
     if host_owner != "current":
         hidden.add("generativeqc_resource_hf_cpu_fleet_v1")
         hidden.add("generativeqc_resource_ks_cpu_fleet_v1")
@@ -448,10 +502,58 @@ def test_public_plans_route_ecp_independently_of_enclosing_inventory(
         [("Na", (0, 0, 0)), ("H", (0, 0, 3))],
         [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))],
     ]
+    if method in ("pbe-rks", "pbe-uks"):
+        selected = LibraryView()
+        if host_owner != "current":
+            incomplete = estimate_ks_resources(systems, library=selected, **options)
+            with pytest.raises(NotImplementedError, match="CPU KS fleet inventory"):
+                incomplete.require_feasible()
+            return
+
+        incomplete = estimate_ks_resources(
+            systems, library=LibraryView(legacy_ecp=True), **options
+        )
+        assert not incomplete.requests[0].candidates
+        with pytest.raises(NotImplementedError, match="CPU KS ECP workspace inventory"):
+            incomplete.require_feasible()
+        offline = estimate_ks_resources(systems, **options).require_feasible()
+        native = estimate_ks_resources(
+            systems, library=selected, **options
+        ).require_feasible()
+        assert (native.peak_bytes, native.resident_bytes) == (
+            offline.peak_bytes,
+            offline.resident_bytes,
+        )
+        assert native.identity != offline.identity
+        assert (
+            json.loads(native.requests[0].identity.schedule)["ecp_host_inventory"]
+            == "native-ecp-v1"
+        )
+        cap = native.peak_bytes["host"]
+        for budget, expected in ((cap, "feasible"), (cap - 1, "infeasible")):
+            plan = estimate_ks_resources(
+                systems,
+                library=selected,
+                budget=ResourceBudget(host_bytes=budget),
+                **options,
+            )
+            assert plan.status == expected
+        return
+
     estimate = (
         estimate_hf_resources if method in ("rhf", "uhf") else estimate_ks_resources
     )
-    legacy = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
+    if method in ("rhf", "uhf"):
+        incomplete = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
+        with pytest.raises(
+            NotImplementedError, match="CPU HF (ECP workspace|fleet) inventory"
+        ):
+            incomplete.require_feasible()
+        if host_owner != "current":
+            return
+        legacy = estimate(systems, **options)
+    else:
+        legacy = estimate(systems, library=LibraryView(legacy_ecp=True), **options)
     legacy.require_feasible()
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
