@@ -472,6 +472,126 @@
         "name": "gqc-3167-c7-fd-h4p-tight-1126-a",
         "status": "deleted"
       }
+    },
+    "gqc-3167-c7-h200-0-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-h200-0-1126-a",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H200-3\u53f7\u673a\u623f",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H200 (141GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795709122000",
+        "finished_at": "1795733581000"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-h200-0-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-h200-0-1126-a.tar.gz",
+        "bytes": 82771,
+        "sha256": "9415306ae76c316622694a35114f9601db8cef70d71b689bd6305c2ca2cc192f"
+      },
+      "terminal_status_receipt": {
+        "bytes": 388,
+        "sha256": "537fe841e6c5bd9868c4d3088ca98342e130be62057b96c18fbbad5ca66986ec"
+      },
+      "events_receipt": {
+        "bytes": 5526,
+        "sha256": "2cf13d9bc06bf77e06e1855eb4050aefdfa37d8252c87f1a73cf178484f60ff8"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:06:34",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 Insufficient rdma/hca_shared_devices, 6 node(s) were unschedulable, 665 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 08:06:49",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 25 Insufficient rdma/hca_shared_devices, 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 node(s) were unschedulable, 646 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 14:53:01",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:06:53+00:00",
+      "released_utc": "2026-11-26T22:53:01+00:00",
+      "allocated_card_hours": 6.768888888888889,
+      "estimated_points": 6.768888888888889,
+      "cleanup": {
+        "name": "gqc-3167-c7-h200-0-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-h200-1-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-h200-1-1126-a",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H200-3\u53f7\u673a\u623f",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H200 (141GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795709141000",
+        "finished_at": "1795733646000"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-h200-1-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-h200-1-1126-a.tar.gz",
+        "bytes": 81648,
+        "sha256": "894b3b1527b981be5764278e66b6f6dc869fc72f004c0845b9da826227709a29"
+      },
+      "terminal_status_receipt": {
+        "bytes": 388,
+        "sha256": "7feda481aa5739060149bc0d350a3dcc5187167928a820c733ba9a331f989e69"
+      },
+      "events_receipt": {
+        "bytes": 4540,
+        "sha256": "39bbebf1929ab36bcee93049b7ba7159e6e60e1af271fbc7a1440050cdac3459"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:06:49",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 26 Insufficient rdma/hca_shared_devices, 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 node(s) were unschedulable, 645 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 14:54:06",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        },
+        {
+          "time": "2026-11-26 14:54:11",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:06:53+00:00",
+      "released_utc": "2026-11-26T22:54:06+00:00",
+      "allocated_card_hours": 6.786944444444444,
+      "estimated_points": 6.786944444444444,
+      "cleanup": {
+        "name": "gqc-3167-c7-h200-1-1126-a",
+        "status": "deleted"
+      }
     }
   }
 }
