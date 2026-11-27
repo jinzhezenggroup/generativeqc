@@ -31,6 +31,8 @@ struct CudaDfNuclearOptions {
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
   /** Must match the live basis source and a complete linked AOT radial closure. */
   double range_omega{};
+  /** Optionally retain one all-s directional source tape within the workspace budget. */
+  bool retain_directional_source{};
 };
 
 /** The actual immutable DF basis and its enclosing original-stream capability.
@@ -83,8 +85,12 @@ cudaError_t cuda_df_nuclear_workspace(const CudaDfNuclearShape& shape,
 
 /** Bounded two-pass raw DF nuclear AD, not a stationary Hessian endpoint.
  * values supplies A_R,V_R for the physical inverse/Fock response. After CPKS
- * and moving-weight AD, contract streams the source again to form w I' and
- * w I''R + w_R I'. Both passes are explicitly counted. A mandatory shell cache
+ * and moving-weight AD, contract forms w I' and w I''R + w_R I'. If admitted,
+ * it consumes the previous values pass's all-s source tape once, only for an
+ * identical device direction under the same live basis lease. Otherwise it
+ * streams the source again. Verified Cartesian directions can also reuse
+ * invariant primal/first jets for groups not incident to the moving atom.
+ * Both passes are explicitly counted. A mandatory shell cache
  * evaluates each primitive component once per pass; public expansion gathers
  * never repeat primitive work or introduce a left-coordinate source traversal.
  *

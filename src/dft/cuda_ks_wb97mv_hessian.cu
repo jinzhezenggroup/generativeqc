@@ -1190,6 +1190,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const bool range = source == &owner->range_df;
       auto raw_options = options.raw_df;
       raw_options.range_omega = range ? owner->fock.correction->spec.exchange.omega : 0;
+      raw_options.retain_directional_source = mode == CudaKsWb97mvHessianMode::dense_and_action;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
       status = source->nuclear.prepare(batch, item, expected, raw_options, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {

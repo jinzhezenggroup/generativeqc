@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -134,7 +135,7 @@ void host_admission() {
               empty.contract(nullptr, {}, {}, nullptr) == cudaErrorInvalidResourceHandle,
           "unprepared source admitted");
 }
-void run(const char* source, const char* result) {
+void run(const char* source, const char* result, bool retain_tape) {
   std::ifstream file(source, std::ios::binary);
   const auto header = read<std::uint64_t>(file, 8);
   require(header[0] >= 2 && header[0] <= 8 && header[1] > 0 && header[1] <= 8 && header[2] > 0 &&
@@ -200,6 +201,7 @@ void run(const char* source, const char* result) {
   CudaDfNuclearOptions options;
   options.radial_tile = header[5];
   options.range_omega = header[6] == 5 ? 0.3 : policy.range_omega;
+  options.retain_directional_source = retain_tape;
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital_shells, auxiliary_shells, options, bytes));
   auto* arena = storage.allocate((bytes + sizeof(double) - 1) / sizeof(double));
@@ -237,6 +239,46 @@ void run(const char* source, const char* result) {
             "replay or rejected pass changed published outputs");
   };
   preserved();
+  if (retain_tape) {
+    const auto original_motion = download(direction, 3 * shape.atoms);
+    auto different_motion = original_motion;
+    different_motion.front() += 0.125;
+    check(response.values(direction, values, storage.stream));
+    check(cudaMemcpy(direction, different_motion.data(), different_motion.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(response.contract(direction, weights, vectors, storage.stream));
+    const auto without_matching_tape = download(vector_storage, expected_vectors.size());
+    check(response.contract(direction, weights, vectors, storage.stream));
+    require(download(vector_storage, expected_vectors.size()) == without_matching_tape,
+            "contract reused a tape after overwriting the device direction");
+    // Move different atoms in successive values passes. The latter pass must
+    // not confuse a prior moving group's second jet with its fixed first jet.
+    for (std::size_t coordinate : {std::size_t{0}, original_motion.size() - 1}) {
+      std::vector<double> unit_motion(original_motion.size());
+      unit_motion[coordinate] = 1;
+      check(cudaMemcpy(direction, unit_motion.data(), unit_motion.size() * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      const auto before = response.work();
+      check(response.values(direction, values, storage.stream));
+      check(response.contract(direction, weights, vectors, storage.stream));
+      const auto after = response.work();
+      require(after.component_evaluations - before.component_evaluations <
+                  before.component_evaluations_per_pass,
+              "resident all-s replay exceeded a full primitive pass");
+      const auto replayed = download(vector_storage, expected_vectors.size());
+      check(response.contract(direction, weights, vectors, storage.stream));
+      const auto streamed = download(vector_storage, expected_vectors.size());
+      for (std::size_t index = 0; index < streamed.size(); ++index)
+        require(std::abs(replayed[index] - streamed[index]) <= 2e-11,
+                "cross-column source reuse changed the contraction");
+    }
+    check(cudaMemcpy(direction, original_motion.data(), original_motion.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(response.values(direction, values, storage.stream));
+    check(response.contract(direction, weights, vectors, storage.stream));
+    preserved();
+  }
+  const auto successful = response.work();
   auto alias = values;
   alias.metric = alias.three_center;
   require(response.values(direction, alias, storage.stream) != cudaSuccess,
@@ -307,7 +349,9 @@ void run(const char* source, const char* result) {
           "stale owner admitted");
   preserved();
   const auto work = response.work();
-  require(work.value_passes == 2 && work.contraction_passes == 2, "failed pass reported completed");
+  require(work.value_passes == successful.value_passes &&
+              work.contraction_passes == successful.contraction_passes,
+          "failed pass reported completed");
   std::ofstream output(result, std::ios::binary);
   output.write(reinterpret_cast<const char*>(expected_values.data()),
                expected_values.size() * sizeof(double));
@@ -327,8 +371,9 @@ int main(int argc, char** argv) {
   try {
     host_admission();
     if (argc == 2 && std::string(argv[1]) == "--host-only") return 0;
-    require(argc == 3, "usage: probe fixture.bin result.bin | --host-only");
-    run(argv[1], argv[2]);
+    require(argc == 3 || (argc == 4 && std::string(argv[3]) == "--retain-tape"),
+            "usage: probe fixture.bin result.bin [--retain-tape] | --host-only");
+    run(argv[1], argv[2], argc == 4);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

@@ -125,11 +125,22 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     owner->shape = {owner->basis.atoms, owner->basis.primitives,    owner->basis.nao,
                     owner->basis.naux,  owner->basis.cartesian_nao, owner->basis.cartesian_naux};
     std::size_t bytes{};
-    check(integrals::cuda_df_nuclear_workspace(owner->shape, orbital, auxiliary, options, bytes));
-    check(runtime::resource_cuda_malloc(&owner->arena, bytes));
+    auto admitted = options;
+    const auto allocate = [&]() {
+      check(
+          integrals::cuda_df_nuclear_workspace(owner->shape, orbital, auxiliary, admitted, bytes));
+      return runtime::resource_cuda_malloc(&owner->arena, bytes);
+    };
+    auto allocation = allocate();
+    if (allocation == cudaErrorMemoryAllocation && admitted.retain_directional_source) {
+      // The optional tape must not turn a streamable request into OOM.
+      admitted.retain_directional_source = false;
+      allocation = allocate();
+    }
+    check(allocation);
     const integrals::CudaDfNuclearReference reference{owner->basis, owner->stream,
                                                       Impl::authenticate, owner.get()};
-    check(owner->response.prepare(owner->shape, orbital, auxiliary, options, reference,
+    check(owner->response.prepare(owner->shape, orbital, auxiliary, admitted, reference,
                                   owner->arena, bytes));
     impl_ = std::move(owner);
     return GENERATIVEQC_STATUS_SUCCESS;

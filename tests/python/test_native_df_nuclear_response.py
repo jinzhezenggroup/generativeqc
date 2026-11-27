@@ -105,7 +105,14 @@ def _write_fixture(
             fixture["metric_weight"][index].astype(np.float64).tofile(output)
 
 
-def _native(fixture: dict, path: Path, *, tile: int = 64, reject: int = 0) -> tuple:
+def _native(
+    fixture: dict,
+    path: Path,
+    *,
+    tile: int = 64,
+    reject: int = 0,
+    retain_tape: bool = False,
+) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_DF_NUCLEAR_PROBE")
     if not executable:
         pytest.skip("requires native raw DF probe and an allocated Slurm GPU")
@@ -114,7 +121,12 @@ def _native(fixture: dict, path: Path, *, tile: int = 64, reject: int = 0) -> tu
     result.unlink(missing_ok=True)
     _write_fixture(fixture, source, tile=tile, reject=reject)
     completed = subprocess.run(
-        [executable, str(source), str(result)],
+        [
+            executable,
+            str(source),
+            str(result),
+            *(["--retain-tape"] if retain_tape else []),
+        ],
         check=True,
         capture_output=True,
         text=True,
@@ -279,6 +291,11 @@ def test_raw_df_single_component_tiles(tile: int, tmp_path: Path) -> None:
     _qualify_raw_df_source("ss", False, False, tile, tmp_path)
 
 
+def test_raw_df_resident_directional_source(tmp_path: Path) -> None:
+    """Reusing the all-s tape preserves values and the oracle-qualified contraction."""
+    _qualify_raw_df_source("ss", False, False, 64, tmp_path, retain_tape=True)
+
+
 @pytest.mark.parametrize(
     "orbital_spherical,auxiliary_spherical",
     ((False, False), (False, True), (True, False), (True, True)),
@@ -312,12 +329,13 @@ def _qualify_raw_df_source(
     tmp_path: Path,
     *,
     omega: float = 0,
+    retain_tape: bool = False,
 ) -> None:
     """Share the independent source, fitted-response and exact semantic-work gates."""
     fixture = _fixture(domain, orbital_spherical, auxiliary_spherical)
     if omega:
         fixture["range_omega"] = omega
-    actual, receipt = _native(fixture, tmp_path, tile=tile)
+    actual, receipt = _native(fixture, tmp_path, tile=tile, retain_tape=retain_tape)
     oracle = DfOracle(fixture)
     reference = oracle.evaluate(fixture["centers"])
     for field in ("three_center", "metric"):

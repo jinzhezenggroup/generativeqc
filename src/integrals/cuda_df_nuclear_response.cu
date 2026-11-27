@@ -44,6 +44,10 @@ struct DeviceGroup {
   std::size_t centers{}, components{}, public_components{};
   bool metric{};
 };
+__host__ __device__ bool includes_atom(const DeviceGroup& group, long long atom) {
+  return atom < 0 || group.atoms[0] == atom || group.atoms[1] == atom ||
+         (!group.metric && group.atoms[2] == atom);
+}
 struct DeviceTile {
   std::uint32_t components[16]{}, count{};
 };
@@ -59,7 +63,8 @@ struct Layout {
       candidates{}, status{}, raw_elements{}, metric_elements{}, candidate_count{},
       max_components{}, max_fields{}, max_public{};
   std::size_t batch_width{}, batch_radials{}, batch_records{}, batch_raw{}, batch_projected{},
-      batch_inputs{}, atom_offsets{}, atom_incidence{};
+      batch_inputs{}, atom_offsets{}, atom_incidence{}, retained_raw{}, retained_direction{},
+      direction_mismatch{};
   CudaDfNuclearWork work{};
   bool reserve(std::size_t count, std::size_t size, std::size_t& offset) {
     offset = bytes;
@@ -244,7 +249,7 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
       !plan.reserve(1, sizeof(int), plan.status) || plan.bytes > options.max_workspace_bytes)
     return cudaErrorInvalidValue;
   const bool single_component =
-      plan.max_components == 1 && plan.max_public == 1 && groups <= UINT32_MAX / 4;
+      plan.max_components == 1 && plan.max_public == 1 && groups <= UINT32_MAX / 8;
   std::size_t batch_radials{};
   if (single_component) {
     for (const auto& group : result.groups) batch_radials = std::max(batch_radials, group.radials);
@@ -254,7 +259,7 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
         return tile.device.count == 1 && tile.program->integral_batch;
       })) {
     // A fully contracted s-shell group needs only one consumer of its local
-    // output. Windows share scratch and keep the original group/fold order.
+    // output. Windows share scratch and keep the original group order.
     for (auto width = std::min<std::size_t>(4096, groups); width >= 2; width /= 2) {
       Layout trial = plan;
       if (!trial.reserve(width * batch_radials * 13, sizeof(double), trial.batch_records) ||
@@ -270,6 +275,14 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
       plan = trial;
       break;
     }
+  }
+  if (plan.batch_width && options.retain_directional_source) {
+    Layout trial = plan;
+    if (trial.reserve(groups, 19 * sizeof(double), trial.retained_raw) &&
+        trial.reserve(shape.atoms, 3 * sizeof(double), trial.retained_direction) &&
+        trial.reserve(2, sizeof(int), trial.direction_mismatch) &&
+        trial.bytes <= options.max_workspace_bytes)
+      plan = trial;
   }
   plan.work.workspace_bytes = plan.bytes;
   plan.work.groups = groups;
@@ -322,6 +335,22 @@ __global__ void finite(const double* values, std::size_t count, int* status) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     if (!isfinite(values[index])) atomicExch(status, 1);
+}
+__global__ void compare_direction(const double* direction, const double* retained,
+                                  std::size_t count, int* mismatch) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
+    if (__double_as_longlong(direction[index]) != __double_as_longlong(retained[index]))
+      atomicExch(mismatch, 1);
+}
+__global__ void identify_unit_direction(const double* direction, std::size_t count, int* audit) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+    const auto value = direction[index];
+    if (value == 0) continue;
+    if (value != 1 || atomicCAS(audit, 0, static_cast<int>(index) + 1) != 0)
+      atomicExch(audit + 1, 1);
+  }
 }
 __global__ void symmetric(const double* values, std::size_t extent, std::size_t channels,
                           double absolute, double relative, int* status) {
@@ -407,21 +436,24 @@ __global__ void build_records(const DeviceGroup* group, Basis basis, std::size_t
   fill_records(group, basis, begin, count, records, status);
 }
 __global__ void build_batch(const DeviceGroup* groups, Basis basis, std::size_t stride,
-                            double* records, double* raw, aot::FactorizedIntegralBatch* batches,
-                            int* status) {
+                            double* records, double* raw, double* discarded,
+                            aot::FactorizedIntegralBatch* batches, long long atom, int* status) {
   const auto slot = blockIdx.x;
   const auto* group = groups + slot;
   std::size_t count = 1;
   for (unsigned center = 0; center < group->centers; ++center)
     count *= group->shells[center].primitive_count;
   records += slot * stride;
+  const bool active = includes_atom(*group, atom);
   if (threadIdx.x == 0)
     batches[slot] = {records,
-                     count,
+                     active ? count : 0,
                      {group->atoms[0], group->atoms[1], group->atoms[2], 0},
-                     raw + slot * 19,
+                     (active ? raw : discarded) + slot * 19,
                      nullptr};
-  fill_records(group, basis, 0, count, records, status);
+  // An empty radial chunk emits zeros into window scratch, not into the
+  // stationary tape. The batched DF leaf needs no four-center selector.
+  if (active) fill_records(group, basis, 0, count, records, status);
 }
 __global__ void accumulate(const DeviceGroup* group, const DeviceTile* tile, const double* raw,
                            double* cache, int* status) {
@@ -433,12 +465,13 @@ __global__ void accumulate(const DeviceGroup* group, const DeviceTile* tile, con
 template <bool Contract>
 __global__ void project(CudaDfNuclearShape shape, const DeviceGroup* group, Basis basis,
                         const double* direction, CudaDfNuclearWeights weights, const double* cache,
-                        double* candidate, double* projected, int* status) {
+                        double* candidate, double* projected, int* status, long long atom = -1) {
   if (atomicAdd(status, 0)) return;
   group += blockIdx.y;
   cache += 19 * blockIdx.y;
   projected += 18 * blockIdx.y;
   const auto centers = group->centers, coordinates = 3 * centers;
+  const bool moving = includes_atom(*group, atom);
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < group->public_components;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
     Expansion expansions[3]{};
@@ -479,11 +512,12 @@ __global__ void project(CudaDfNuclearShape shape, const DeviceGroup* group, Basi
           }
           for (unsigned coordinate = 0; coordinate < coordinates; ++coordinate) {
             double result[4];
-            if (!ad::contract(cache[component],
-                              cache[(1 + coordinate) * group->components + component],
-                              cache[(1 + coordinates + coordinate) * group->components + component],
-                              weight, delta_weight, projection,
-                              direction[3 * group->atoms[coordinate / 3] + coordinate % 3], result))
+            if (!ad::contract(
+                    cache[component], cache[(1 + coordinate) * group->components + component],
+                    moving ? cache[(1 + coordinates + coordinate) * group->components + component]
+                           : 0.0,
+                    weight, delta_weight, projection,
+                    direction[3 * group->atoms[coordinate / 3] + coordinate % 3], result))
               atomicExch(status, 1);
             if (!coordinate) value += result[0];
             motion += result[1];
@@ -525,32 +559,55 @@ __global__ void scatter(const DeviceGroup* group, std::size_t atoms, const doubl
     candidate[3 * (atoms + group->atoms[center]) + axis] += hvp;
   }
 }
-__global__ void scatter_batch(const DeviceGroup* groups, std::size_t atoms, std::uint32_t begin,
-                              std::uint32_t end, const std::uint32_t* offsets,
-                              const std::uint32_t* incidence, const double* projected,
-                              double* candidate, int* status) {
-  if (atomicAdd(status, 0)) return;
-  for (std::size_t coordinate = blockIdx.x * blockDim.x + threadIdx.x; coordinate < 3 * atoms;
-       coordinate += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+__global__ void scatter_batch(std::size_t atoms, std::uint32_t begin, std::uint32_t end,
+                              const std::uint32_t* offsets, const std::uint32_t* incidence,
+                              const double* projected, double* candidate, const int* status) {
+  if (*status) return;
+  const auto lane = threadIdx.x % 32;
+  for (std::size_t coordinate = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
+       coordinate < 3 * atoms;
+       coordinate += static_cast<std::size_t>(blockDim.x) * gridDim.x / 32) {
     const auto atom = coordinate / 3, axis = coordinate % 3;
-    auto left = offsets[atom], right = offsets[atom + 1];
-    while (left < right) {
-      const auto middle = left + (right - left) / 2;
-      if (incidence[middle] / 4 < begin)
-        left = middle + 1;
-      else
-        right = middle;
+    std::uint32_t first{}, last{};
+    const auto lower = [&](std::uint32_t left, std::uint32_t right, std::uint32_t group) {
+      while (left < right) {
+        const auto middle = left + (right - left) / 2;
+        if (incidence[middle] / 8 < group)
+          left = middle + 1;
+        else
+          right = middle;
+      }
+      return left;
+    };
+    if (!lane) {
+      first = lower(offsets[atom], offsets[atom + 1], begin);
+      last = lower(first, offsets[atom + 1], end);
     }
-    auto gradient = candidate[coordinate], hvp = candidate[3 * atoms + coordinate];
-    for (auto entry = left; entry < offsets[atom + 1]; ++entry) {
-      const auto packed = incidence[entry], index = packed / 4, center = packed % 4;
-      if (index >= end) break;
+    first = __shfl_sync(0xffffffffU, first, 0);
+    last = __shfl_sync(0xffffffffU, last, 0);
+    if (first == last) continue;
+    double gradient{}, hvp{};
+    // Some groups contribute thousands of incidences to the same atom. A
+    // warp folds each coordinate in a fixed FP64 tree instead of making one
+    // lane carry the longest bin. The metric bit avoids a group-table gather.
+    for (auto entry = first + lane; entry < last; entry += 32) {
+      const auto packed = incidence[entry], index = packed / 8, center = packed % 4;
       const auto* terms = projected + (index - begin) * 18 + 3 * center + axis;
       gradient += terms[0];
-      hvp += terms[3 * groups[index].centers];
+      hvp += terms[packed & 4U ? 6 : 9];
     }
-    candidate[coordinate] = gradient;
-    candidate[3 * atoms + coordinate] = hvp;
+    for (unsigned stride = 16; stride; stride /= 2) {
+      const auto other_gradient = __shfl_down_sync(0xffffffffU, gradient, stride);
+      const auto other_hvp = __shfl_down_sync(0xffffffffU, hvp, stride);
+      if (lane < stride && lane + stride < last - first) {
+        gradient += other_gradient;
+        hvp += other_hvp;
+      }
+    }
+    if (!lane) {
+      candidate[coordinate] += gradient;
+      candidate[3 * atoms + coordinate] += hvp;
+    }
   }
 }
 }  // namespace
@@ -563,6 +620,9 @@ struct CudaDfNuclearResponse::Impl {
   CudaDfNuclearWork receipt{};
   void* arena{};
   bool ready{};
+  bool retained_ready{};
+  bool stationary_ready{};
+  long long retained_atom{-1};
   template <class Value>
   Value* at(std::size_t offset) const {
     return reinterpret_cast<Value*>(static_cast<char*>(arena) + offset);
@@ -618,11 +678,18 @@ struct CudaDfNuclearResponse::Impl {
   template <bool Contract>
   cudaError_t execute(const double* direction, CudaDfNuclearWeights weights,
                       std::span<const Range> outputs, cudaStream_t stream) {
+    // A tape is a single-use capability. Even a failed or mismatched action
+    // retires it; the original stream orders the reader behind the writer.
+    const bool check_retained = Contract && retained_ready;
+    retained_ready = false;
+    const auto& plan = schedule.layout;
+    const bool retain = !Contract && plan.batch_width && plan.retained_raw;
+    const bool check_unit = retain && stationary_ready && shape.atoms <= INT_MAX / 3;
+    if constexpr (!Contract) stationary_ready = false;
     if (receipt.attempted_passes == UINT64_MAX) return cudaErrorInvalidValue;
     ++receipt.attempted_passes;
     auto error = authenticate(stream);
     if (error != cudaSuccess) return error;
-    const auto& plan = schedule.layout;
     auto basis = basis_ranges(reference.basis);
     std::array<Range, 15> inputs{};
     std::copy(basis.begin(), basis.end(), inputs.begin());
@@ -641,6 +708,7 @@ struct CudaDfNuclearResponse::Impl {
         receipt.reduction_terms_bound > UINT64_MAX - plan.work.reduction_terms_bound_per_pass)
       return cudaErrorInvalidValue;
     auto* status = at<int>(plan.status);
+    int direction_audit[2]{1, 0};
     error = cudaMemsetAsync(status, 0, sizeof(int), stream);
     if (error == cudaSuccess) {
       finite<<<blocks(3 * shape.atoms), 128, 0, stream>>>(direction, 3 * shape.atoms, status);
@@ -653,8 +721,36 @@ struct CudaDfNuclearResponse::Impl {
         error = symmetric_panel(static_cast<const double*>(inputs[index].pointer), index % 2 == 0);
       }
     }
+    if (check_retained && error == cudaSuccess) {
+      auto* flag = at<int>(plan.direction_mismatch);
+      error = cudaMemsetAsync(flag, 0, sizeof(int), stream);
+      if (error == cudaSuccess) {
+        compare_direction<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
+            direction, at<double>(plan.retained_direction), 3 * shape.atoms, flag);
+        error = cudaGetLastError();
+      }
+      if (error == cudaSuccess)
+        error = cudaMemcpyAsync(direction_audit, flag, sizeof(int), cudaMemcpyDeviceToHost, stream);
+    }
+    if (check_unit && error == cudaSuccess) {
+      auto* audit = at<int>(plan.direction_mismatch);
+      error = cudaMemsetAsync(audit, 0, sizeof(direction_audit), stream);
+      if (error == cudaSuccess) {
+        identify_unit_direction<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
+            direction, 3 * shape.atoms, audit);
+        error = cudaGetLastError();
+      }
+      if (error == cudaSuccess)
+        error = cudaMemcpyAsync(direction_audit, audit, sizeof(direction_audit),
+                                cudaMemcpyDeviceToHost, stream);
+    }
     if (error == cudaSuccess) error = gate(status, stream);
     if (error != cudaSuccess) return drain(error, stream);
+    const bool reuse = check_retained && direction_audit[0] == 0;
+    const auto atom = reuse ? retained_atom
+                      : check_unit && direction_audit[0] && !direction_audit[1]
+                          ? static_cast<long long>((direction_audit[0] - 1) / 3)
+                          : -1;
     auto* candidate = at<double>(plan.candidates);
     auto* records = at<double>(plan.records);
     auto* raw = at<double>(plan.raw);
@@ -666,14 +762,17 @@ struct CudaDfNuclearResponse::Impl {
     if (plan.batch_width) {
       auto* batches = at<aot::FactorizedIntegralBatch>(plan.batch_inputs);
       auto* projected_batch = at<double>(plan.batch_projected);
-      auto* raw_batch = at<double>(plan.batch_raw);
       for (std::size_t first = 0; first < schedule.groups.size() && error == cudaSuccess;) {
         const auto closure = schedule.groups[first].closure;
         auto stop = first + 1;
-        auto radials = schedule.groups[first].radials;
+        const auto records_for = [&](std::size_t index) {
+          return includes_atom(schedule.descriptors[index], atom) ? schedule.groups[index].radials
+                                                                  : std::size_t{};
+        };
+        auto radials = records_for(first);
         while (stop < schedule.groups.size() && stop - first < plan.batch_width &&
                schedule.groups[stop].closure == closure) {
-          radials += schedule.groups[stop++].radials;
+          radials += records_for(stop++);
         }
         const auto count = stop - first;
         const auto& program = *schedule.tiles[schedule.closure[closure].front()].program;
@@ -681,23 +780,28 @@ struct CudaDfNuclearResponse::Impl {
         // submitted windows; an enqueue failure never counts the unseen tail.
         const auto coordinates = 3 * schedule.descriptors[first].centers;
         const auto fields = 1 + 2 * coordinates;
-        build_batch<<<count, 32, 0, stream>>>(
-            groups + first, reference.basis, plan.batch_radials * 13,
-            at<double>(plan.batch_records), raw_batch, batches, status);
-        error = cudaGetLastError();
-        if (error == cudaSuccess) {
-          receipt.radial_records += radials;
-          error = static_cast<cudaError_t>(program.integral_batch(
-              options.range_omega, batches, count, direction, -1, status, stream));
+        auto* raw_batch = retain || reuse ? at<double>(plan.retained_raw) + first * 19
+                                          : at<double>(plan.batch_raw);
+        if (!reuse && radials) {
+          build_batch<<<count, 32, 0, stream>>>(groups + first, reference.basis,
+                                                plan.batch_radials * 13,
+                                                at<double>(plan.batch_records), raw_batch,
+                                                at<double>(plan.batch_raw), batches, atom, status);
+          error = cudaGetLastError();
           if (error == cudaSuccess) {
-            receipt.component_evaluations += radials;
-            receipt.reduction_terms_bound += (radials + count) * fields;
+            receipt.radial_records += radials;
+            error = static_cast<cudaError_t>(program.integral_batch(
+                options.range_omega, batches, count, direction, -1, status, stream));
+            if (error == cudaSuccess) {
+              receipt.component_evaluations += radials;
+              receipt.reduction_terms_bound += (radials + count) * fields;
+            }
           }
         }
         if (error == cudaSuccess) {
           project<Contract><<<dim3(1, count), 32, 0, stream>>>(
               shape, groups + first, reference.basis, direction, weights, raw_batch, candidate,
-              projected_batch, status);
+              projected_batch, status, atom);
           error = cudaGetLastError();
           if (error == cudaSuccess) {
             receipt.projection_terms_bound += count * coordinates;
@@ -706,8 +810,8 @@ struct CudaDfNuclearResponse::Impl {
         }
         if constexpr (Contract) {
           if (error == cudaSuccess) {
-            scatter_batch<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
-                groups, shape.atoms, first, stop, at<std::uint32_t>(plan.atom_offsets),
+            scatter_batch<<<blocks(32 * 3 * shape.atoms), 128, 0, stream>>>(
+                shape.atoms, first, stop, at<std::uint32_t>(plan.atom_offsets),
                 at<std::uint32_t>(plan.atom_incidence), projected_batch, candidate, status);
             error = cudaGetLastError();
             if (error == cudaSuccess) receipt.reduction_terms_bound += 4 * count * coordinates;
@@ -780,6 +884,11 @@ struct CudaDfNuclearResponse::Impl {
     if (error == cudaSuccess) error = gate(status, stream);
     if (error != cudaSuccess) return drain(error, stream);
     if ((error = authenticate(stream)) != cudaSuccess) return error;
+    if (retain) {
+      error = cudaMemcpyAsync(at<double>(plan.retained_direction), direction, inputs[10].bytes,
+                              cudaMemcpyDeviceToDevice, stream);
+      if (error != cudaSuccess) return drain(error, stream);
+    }
     std::size_t offset{};
     for (const auto& output : outputs) {
       error = cudaMemcpyAsync(const_cast<void*>(output.pointer), candidate + offset, output.bytes,
@@ -791,8 +900,12 @@ struct CudaDfNuclearResponse::Impl {
     if (error == cudaSuccess) {
       if constexpr (Contract)
         ++receipt.contraction_passes;
-      else
+      else {
         ++receipt.value_passes;
+        retained_ready = retain;
+        stationary_ready = retain;
+        retained_atom = atom;
+      }
     }
     return error;
   }
@@ -862,7 +975,7 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
         for (std::uint32_t index = 0; index < state->schedule.descriptors.size(); ++index) {
           const auto& group = state->schedule.descriptors[index];
           for (unsigned center = 0; center < group.centers; ++center)
-            incidence[cursor[group.atoms[center]]++] = index * 4 + center;
+            incidence[cursor[group.atoms[center]]++] = index * 8 + (group.metric ? 4 : 0) + center;
         }
       } catch (const std::bad_alloc&) {
         plan.batch_width = 0;

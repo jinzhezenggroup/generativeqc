@@ -140,7 +140,12 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
   if (!plan.replay_points && tiled_cartesian(shape, options)) {
     // Keep prefix and switch duals in block-local storage when they fit;
     // larger shapes use a bounded point tile, never the full grid.
-    constexpr std::size_t tile_byte_limit = 32ULL << 20;
+    // Wide global-scratch blocks own one grid point each. The fixed 32 MiB
+    // limit leaves fewer than 128 blocks at the largest admitted extent.
+    // An explicitly large geometry lease can spend more on concurrent
+    // points, but keeps the same bounded tile and low-memory fallback.
+    const auto tile_byte_limit =
+        std::clamp(options.max_workspace_bytes / 8, std::size_t{32} << 20, std::size_t{256} << 20);
     const auto words_per_point = wide_point_words(matrix);
     const auto repair_cost = 3 * shape.atoms * (matrix - shape.atoms) / 2;
     auto candidate = plan;
@@ -162,8 +167,8 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
       const auto available = options.max_workspace_bytes - candidate.bytes;
       const auto bytes_per_point = words_per_point * sizeof(double);
       candidate.wide_tile =
-          std::min({std::size_t{256}, options.point_tile, shape.points,
-                    tile_byte_limit / bytes_per_point, available / bytes_per_point});
+          std::min({options.point_tile, shape.points, tile_byte_limit / bytes_per_point,
+                    available / bytes_per_point});
       if (candidate.wide_tile &&
           append(candidate, candidate.wide_tile * words_per_point, candidate.wide_scratch) &&
           candidate.bytes <= options.max_workspace_bytes)
