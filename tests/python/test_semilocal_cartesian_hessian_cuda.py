@@ -1,4 +1,4 @@
-"""Qualify the public Direct Cartesian RKS Hessian and its directional route."""
+"""Qualify the public Direct and fitted Cartesian CUDA RKS Hessians."""
 
 from __future__ import annotations
 
@@ -201,3 +201,47 @@ def test_dense_r2scan_cartesian_column_matches_signed_hvp() -> None:
         == "cuda"
     )
     assert not dense.diagnostics["numerical_host_fallbacks"]
+
+
+def test_wide_fitted_hessian_cached_cpks_matches_physical_solve() -> None:
+    """Check wide fitted cache admission, strict residuals, and raw matrix parity."""
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    atoms = [
+        (
+            "H",
+            (5.8 * (pair % 4), 5.4 * (pair // 4), 0.08 * pair + side * 0.71),
+        )
+        for pair in range(18)
+        for side in (-1, 1)
+    ]
+    calculator = Calculator(
+        method="pbe-rks",
+        device="cuda",
+        precision="fp64",
+        basis="sto-3g",
+        basis_representation="cartesian",
+        density_fitting="cuda",
+        auxiliary_basis="sto-3g",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=6, angular_polar=4, angular_azimuth=8)
+        ),
+        energy_tolerance=1e-13,
+        density_tolerance=1e-9,
+        resource_budget=ResourceBudget(
+            device_bytes=10 << 30, device_reserve_bytes=1 << 30
+        ),
+    )
+    common = {
+        "block_size": 1,
+        "solver_options": SOLVER,
+        "integral_budget_bytes": 3 << 30,
+    }
+    streamed = calculator.hessian(atoms, grid_budget_bytes=512 << 20, **common)
+    cached = calculator.hessian(atoms, grid_budget_bytes=4 << 30, **common)
+    assert streamed.diagnostics["cpks_operator_bytes"] == 0
+    assert cached.diagnostics["cpks_operator_bytes"] > 0
+    assert cached.diagnostics["cpks_physical_checks"] == 3 * len(atoms)
+    assert cached.diagnostics["completed_directions"] == 3 * len(atoms)
+    assert cached.diagnostics["df_workspace_bytes"] > 0
+    assert not cached.diagnostics["numerical_host_fallbacks"]
+    np.testing.assert_allclose(cached.matrix, streamed.matrix, atol=2e-8, rtol=0)

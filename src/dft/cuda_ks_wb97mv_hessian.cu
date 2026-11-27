@@ -1391,9 +1391,13 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       constexpr std::size_t small_operator_bytes = 128ULL << 10;
       const auto cpks_shape = owner->cpks_reference.shape();
       constexpr std::size_t ordinary_operator_bytes = 512ULL << 10;
+      // The explicit wide lease can amortize a fitted semilocal operator
+      // across all columns without evicting the mandatory fitted sources.
+      const bool wide_fitted = options.max_resident_cpks_bytes >= (64ULL << 20) &&
+                               !owner->fock.primary->strategy().spec.exchange.present;
       const bool extended =
-          operator_bytes > ordinary_operator_bytes && cpks_shape.spins == 1 && !owner->has_df &&
-          !owner->has_ecp && !owner->fock.correction &&
+          operator_bytes > ordinary_operator_bytes && cpks_shape.spins == 1 &&
+          (!owner->has_df || wide_fitted) && !owner->has_ecp && !owner->fock.correction &&
           !owner->expected.identity.model.nonlocal_grid &&
           owner->options.cpks.resident_precision == response::CudaCpksResidentPrecision::fp64;
       const auto operator_limit =
