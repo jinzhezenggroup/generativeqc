@@ -11,6 +11,8 @@
 
 namespace generativeqc::dft {
 
+inline constexpr int cuda_grid_nuclear_xc_invalid = 8;
+
 struct CudaGridGeometryCartesianView;
 
 using CudaWb97mvGridAuthenticate = cudaError_t (*)(void*) noexcept;

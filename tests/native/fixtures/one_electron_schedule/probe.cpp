@@ -184,6 +184,36 @@ int main() {
     generativeqc::dft::hessian_aot::batch_closure = false;
     assert(compact > ordinary && compact <= bounded.max_workspace_bytes);
   }
+  // At the former cliff, admit the full ordered census only if both byte
+  // and work limits fit. Test the scalar sizing path without building jobs.
+  {
+    constexpr std::size_t atoms = 96, primitives_per_shell = 3;
+    constexpr auto ordered_jobs = atoms * atoms * (atoms + 2);
+    const CudaOneElectronShape larger{atoms, atoms * primitives_per_shell, atoms};
+    CudaOneElectronShell atom_shells[atoms];
+    for (std::size_t atom = 0; atom < atoms; ++atom)
+      atom_shells[atom] = {atom, 0, atom * primitives_per_shell, primitives_per_shell, atom, 1};
+    CudaOneElectronOptions bounded;
+    bounded.parallel_streams = 0;
+    CudaOneElectronAdmissionLimit limit;
+    std::size_t required{};
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, required, &limit) ==
+           cudaErrorInvalidValue);
+    assert(required == 0 && limit.required == ordered_jobs && limit.maximum == bounded.max_jobs);
+    bounded.max_jobs = SIZE_MAX;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, required, &limit) ==
+           cudaSuccess);
+    assert(!limit.resource && required > (64ULL << 20));
+    bounded.max_workspace_bytes = required - 1;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, required, &limit) ==
+           cudaErrorInvalidValue);
+    assert(required == 0 && limit.required == bounded.max_workspace_bytes + 1);
+    bounded.max_workspace_bytes = limit.required;
+    bounded.max_primitive_component_evaluations = ordered_jobs * 9 - 1;
+    assert(cuda_one_electron_workspace(larger, atom_shells, bounded, required, &limit) ==
+           cudaErrorInvalidValue);
+    assert(required == 0 && limit.required == ordered_jobs * 9);
+  }
   // Mandatory metadata OOM and scientific closure/work refusals are not hidden.
   options.max_parallel_tasks = 2048;
   failure::allocation_size = sizeof(Job);

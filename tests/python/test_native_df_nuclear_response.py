@@ -30,7 +30,10 @@ def _fixture(
 ) -> dict:
     random = np.random.default_rng(2167)
     radial = [[0.8, 0.7], [0.23, -0.15], [0.09, 0.3]]
-    if domain == "sp":
+    if domain == "ss":
+        orbital = [(0, 0, radial), (1, 0, [[0.9, 0.6], [0.31, 0.25]])]
+        auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]]), (1, 0, [[0.75, 1.0]])]
+    elif domain == "sp":
         orbital = [(0, 0, radial), (1, 1, [[0.9, 0.6], [0.31, 0.25]])]
         auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]]), (1, 1, [[0.75, 1.0]])]
     elif domain == "df":
@@ -268,6 +271,12 @@ def test_raw_df_two_pass_source_against_independent_oracle(
     _qualify_raw_df_source(
         domain, orbital_spherical, auxiliary_spherical, tile, tmp_path
     )
+
+
+@pytest.mark.parametrize("tile", (1, 64))
+def test_raw_df_single_component_tiles(tile: int, tmp_path: Path) -> None:
+    """Validate both ordered batched and primitive-streamed all-s schedules."""
+    _qualify_raw_df_source("ss", False, False, tile, tmp_path)
 
 
 @pytest.mark.parametrize(

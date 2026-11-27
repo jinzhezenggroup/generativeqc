@@ -134,7 +134,9 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
                   (bound_options.part == CudaWb97mvJkPart::coulomb ||
                    bound_options.part == CudaWb97mvJkPart::full_hybrid),
               "screened frozen derivatives require restricted full-range Direct J/K");
-      constexpr std::size_t envelope_candidate_limit = 200'000;
+      const auto envelope_candidate_limit = bound_options.max_frozen_replay_candidates
+                                                ? bound_options.max_frozen_replay_candidates
+                                                : 200'000;
       omissions = integrals::coulomb_derivative_omissions(
           system, integrals::CoulombDerivativeOmissions::max_bound, envelope_candidate_limit);
       require(!omissions.sources.empty(), "no certified frozen sources within the census budget");

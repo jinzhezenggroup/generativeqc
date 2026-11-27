@@ -72,14 +72,20 @@ struct CudaOneElectronWork {
   std::uint64_t parallel_actions{};
 };
 
+/** Optional explanation of a rejected host-only resource bound. */
+struct CudaOneElectronAdmissionLimit {
+  const char* resource{};
+  std::size_t required{}, maximum{};
+};
+
 /** Checked host-only closure/work/arena admission; does not initialize CUDA.
  * Every needed ordered shell class/component must already be in the linked AOT
  * inventory. Missing or overlapping closure is rejected before kernel work.
  * All mathematical centers, including coincident physical atoms, are retained. */
 cudaError_t cuda_one_electron_workspace(const CudaOneElectronShape& shape,
                                         std::span<const CudaOneElectronShell> shells,
-                                        const CudaOneElectronOptions& options,
-                                        std::size_t& bytes) noexcept;
+                                        const CudaOneElectronOptions& options, std::size_t& bytes,
+                                        CudaOneElectronAdmissionLimit* limit = nullptr) noexcept;
 
 /** Compiler-AD S and T+effective-charge V nuclear source, not a Hessian endpoint.
  * Preparation owns bounded integer scheduling metadata only. All primitive

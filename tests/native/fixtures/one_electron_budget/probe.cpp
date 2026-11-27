@@ -36,6 +36,8 @@ int main() {
     options.max_jobs = 1;
     std::string detail;
     assert(owner.prepare(batch, 0, token, options, detail) != GENERATIVEQC_STATUS_SUCCESS);
+    assert(detail.find("ordered jobs") != std::string::npos);
+    assert(detail.find("required 2, maximum 1") != std::string::npos);
   }
   assert(stub::live_allocations == 0);
   std::cout << "PASS mandatory charge reservation and bounded optional fallback\n";

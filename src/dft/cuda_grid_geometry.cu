@@ -32,6 +32,10 @@ static_assert(sizeof(PartitionPair) == 9 * sizeof(double));
 constexpr std::size_t unpacked_cartesian_atoms = 30;
 // Both product planes and all radial jets fit in 48 KiB for this extent.
 constexpr std::size_t shared_wide_cartesian_atoms = 36;
+__host__ __device__ constexpr std::size_t wide_point_words(std::size_t matrix) {
+  // Two right-dual panels and an int exponent for each scaled prefix.
+  return 4 * matrix + (matrix + 1) / 2;
+}
 struct CartesianPair {
   ad::Jet inverse[3];
   double adjustment;
@@ -137,7 +141,7 @@ bool layout(const CudaGridGeometryShape& shape, const CudaGridGeometryOptions& o
     // Keep prefix and switch duals in block-local storage when they fit;
     // larger shapes use a bounded point tile, never the full grid.
     constexpr std::size_t tile_byte_limit = 32ULL << 20;
-    const auto words_per_point = 4 * matrix;
+    const auto words_per_point = wide_point_words(matrix);
     const auto repair_cost = 3 * shape.atoms * (matrix - shape.atoms) / 2;
     auto candidate = plan;
     candidate.wide_pairs = plan.distances;
@@ -580,6 +584,15 @@ __device__ RightDual dual_add(RightDual first, RightDual second) {
 __device__ RightDual dual_subtract(RightDual first, RightDual second) {
   return primal_dual(ad::subtract(dual_jet(first), dual_jet(second)));
 }
+__device__ RightDual dual_scale(RightDual value, int exponent) {
+  return primal_dual(scale(dual_jet(value), exponent));
+}
+__device__ bool dual_scaled_product(RightDual& running, long long& exponent, RightDual factor) {
+  auto jet = dual_jet(running);
+  const auto valid = multiply(jet, exponent, dual_jet(factor));
+  running = primal_dual(jet);
+  return valid;
+}
 
 /** One warp owns a point. An atom lane differentiates its entire product
  * using exclusive prefix/suffix products, then the warp folds atomic rows.
@@ -616,11 +629,16 @@ __global__ void cartesian_partition_rows(
   __shared__ RightDual shared_prefix[shared_slots], shared_switches[shared_slots];
   __shared__ RightDual slopes[slope_slots];
   __shared__ RightDual atom_products[product_slots];
+  __shared__ int exponents[wide && !block_local ? shared_atoms : 1];
   auto* prefix = shared_prefix;
   auto* switches = shared_switches;
+  int* prefix_exponents = nullptr;
   if constexpr (wide && !block_local) {
-    prefix = scratch + 2 * blockIdx.x * slots * slots;
+    auto* point_scratch =
+        reinterpret_cast<double*>(scratch) + blockIdx.x * wide_point_words(slots * slots);
+    prefix = reinterpret_cast<RightDual*>(point_scratch);
     switches = prefix + slots * slots;
+    prefix_exponents = reinterpret_cast<int*>(switches + slots * slots);
   }
   const auto join = [] {
     if constexpr (wide)
@@ -712,6 +730,12 @@ __global__ void cartesian_partition_rows(
   // The paired stores cross lanes; finish them before preserving the
   // original ordered prefix/suffix products in each atom lane.
   join();
+  if constexpr (wide && !block_local) {
+    if (!all(valid)) {
+      finish(false);
+      return;
+    }
+  }
   RightDual product{};
   bool inactive = false;
   if (atom < atoms) {
@@ -742,15 +766,61 @@ __global__ void cartesian_partition_rows(
     if constexpr (wide) inactive = zero_duals >= 2;
     valid = valid && (inactive || (regular_factors && nonzero_product >= 0x1p-952));
   }
-  if (!all(valid)) {
-    finish(false);
-    return;
+  const bool scaled = !all(valid);
+  int common = 0;
+  if (scaled) {
+    if constexpr (wide && !block_local) {
+      // Switch jets passed the finite/range audit before the ordinary
+      // product test. Replay their products, not the pair geometry or any
+      // Cartesian row. One exponent applies to a primal and its right jet.
+      valid = true;
+      long long product_exponent = 0;
+      if (atom < atoms) {
+        product = inactive ? RightDual{} : RightDual{1, 0};
+        if (!inactive)
+          for (std::size_t other = 0; other < atoms; ++other) {
+            if (other == atom) continue;
+            const auto slot = other * slots + atom;
+            prefix[slot] = product;
+            prefix_exponents[slot] = static_cast<int>(product_exponent);
+            valid =
+                dual_scaled_product(product, product_exponent, primal_dual(load_switch(other))) &&
+                valid;
+          }
+        exponents[atom] =
+            product.value || product.right ? static_cast<int>(product_exponent) : INT_MIN;
+      }
+      if (!all(valid)) {
+        finish(false);
+        return;
+      }
+      if (!atom) {
+        common = INT_MIN;
+        for (std::size_t center = 0; center < atoms; ++center)
+          common = max(common, exponents[center]);
+      }
+      join();
+      if (!atom) exponents[0] = common;
+      join();
+      common = exponents[0];
+      if (common == INT_MIN) {
+        finish(false);
+        return;
+      }
+      if (atom < atoms && (product.value || product.right))
+        product = dual_scale(product, static_cast<int>(product_exponent - common));
+    } else {
+      finish(false);
+      return;
+    }
   }
   if (atom < atoms && !inactive) {
     RightDual suffix{1, 0};
+    long long suffix_exponent = 0;
     for (std::size_t other = atoms; other-- > 0;) {
       if (other == atom) continue;
-      const auto exclusive = dual_product(prefix[other * slots + atom], suffix);
+      const auto slot = other * slots + atom;
+      const auto exclusive = dual_product(prefix[slot], suffix);
       RightDual switched, slope;
       if constexpr (packed_pairs) {
         const auto jet = load_switch(other);
@@ -760,13 +830,27 @@ __global__ void cartesian_partition_rows(
         switched = switches[other * slots + atom];
         slope = slopes[other * slots + atom];
       }
-      suffix = dual_product(switched, suffix);
       // This prefix entry is dead; keep the full exclusive slope here.
-      prefix[other * slots + atom] = dual_product(exclusive, slope);
+      prefix[slot] = dual_product(exclusive, slope);
+      if constexpr (wide && !block_local) {
+        if (scaled) {
+          prefix[slot] = dual_scale(
+              prefix[slot], static_cast<int>(prefix_exponents[slot] + suffix_exponent - common));
+          valid = dual_scaled_product(suffix, suffix_exponent, switched) && valid;
+          continue;
+        }
+      }
+      suffix = dual_product(switched, suffix);
     }
   } else if constexpr (wide) {
     if (atom < atoms)
       for (std::size_t other = 0; other < atoms; ++other) prefix[other * slots + atom] = {};
+  }
+  if constexpr (wide && !block_local) {
+    if (scaled && !all(valid)) {
+      finish(false);
+      return;
+    }
   }
   RightDual sum{}, numerator{};
   if constexpr (wide) {
@@ -794,8 +878,18 @@ __global__ void cartesian_partition_rows(
     numerator = {__shfl_sync(0xffffffffU, product.value, owner),
                  __shfl_sync(0xffffffffU, product.right, owner)};
   }
-  // A regular denominator and measure bound amplification of small products.
-  // The scaled path below owns the extended exponent domain.
+  // A wide grid can have many representable but tiny atomic products. Bring
+  // the entire quotient jet into the same binary unit before inversion. The
+  // exponent is held fixed for this derivative, so it cancels from every row.
+  // Prefix/suffix underflow and nonfinite rescaled jets still require repair.
+  int quotient_shift = 0;
+  if constexpr (wide) {
+    if (sum.value >= 0x1p-952 && sum.value < 0x1p-48) quotient_shift = -ilogb(sum.value);
+    if (quotient_shift) {
+      sum = primal_dual(scale(dual_jet(sum), quotient_shift));
+      numerator = primal_dual(scale(dual_jet(numerator), quotient_shift));
+    }
+  }
   if (!(sum.value >= 0x1p-48 && isfinite(sum.right))) {
     finish(false);
     return;
@@ -839,6 +933,12 @@ __global__ void cartesian_partition_rows(
       }
 #pragma unroll
       for (unsigned axis = 0; axis < 3; ++axis) {
+        if (quotient_shift) {
+          numerator_tangent[axis] =
+              primal_dual(scale(dual_jet(numerator_tangent[axis]), quotient_shift));
+          denominator_tangent[axis] =
+              primal_dual(scale(dual_jet(denominator_tangent[axis]), quotient_shift));
+        }
         const auto derivative =
             dual_product(dual_subtract(numerator_tangent[axis],
                                        dual_product(partition, denominator_tangent[axis])),
@@ -1564,7 +1664,7 @@ __global__ void record_geometry_status(const int* status, int* transaction_statu
                                        const unsigned* failures = nullptr,
                                        std::size_t repair_capacity = 0) {
   const auto flags =
-      (*status ? 1 : 0) |
+      (*status ? cuda_grid_geometry_invalid : 0) |
       (failures && *failures > repair_capacity ? cuda_grid_cartesian_repair_exhausted : 0);
   if (flags) atomicOr(transaction_status, flags);
 }

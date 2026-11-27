@@ -743,9 +743,13 @@ def test_native_batched_cartesian_partition(tmp_path: Path, case: str) -> None:
         assert abs(weights[2, repair[0]] / scale[repair[0]]) > 1e-5
 
 
-def test_native_wide_hydrogen_cartesian_quadrature(tmp_path: Path) -> None:
+@pytest.mark.parametrize("sliced", (False, True))
+def test_native_wide_hydrogen_cartesian_quadrature(
+    tmp_path: Path, sliced: bool
+) -> None:
     """Check both directions of the terminal dimer against scalar geometry and XC."""
-    atoms = 34
+    atoms = 66 if sliced else 34
+    radial_count, polar_count, azimuth_count = (3, 4, 6) if sliced else (12, 6, 12)
     centers = np.array(
         [
             (5.8 * (dimer % 4), 5.4 * (dimer // 4), 0.08 * dimer)
@@ -761,11 +765,11 @@ def test_native_wide_hydrogen_cartesian_quadrature(tmp_path: Path) -> None:
     centers = (
         centers[:, None, :] + bonds[:, None, :] * np.array([-1, 1])[None, :, None]
     ).reshape(-1, 3)
-    radial, radial_weight = np.polynomial.legendre.leggauss(12)
+    radial, radial_weight = np.polynomial.legendre.leggauss(radial_count)
     radial = (1 + radial) / 2
     radius = radial / (1 - radial)
-    polar, polar_weight = np.polynomial.legendre.leggauss(6)
-    azimuth = np.arange(12) * (2 * np.pi / 12)
+    polar, polar_weight = np.polynomial.legendre.leggauss(polar_count)
+    azimuth = np.arange(azimuth_count) * (2 * np.pi / azimuth_count)
     zz, pp = np.meshgrid(polar, azimuth, indexing="ij")
     ring = np.sqrt(1 - zz**2)
     spheres = np.stack((ring * np.cos(pp), ring * np.sin(pp), zz), axis=-1).reshape(
@@ -777,8 +781,8 @@ def test_native_wide_hydrogen_cartesian_quadrature(tmp_path: Path) -> None:
         / 2
         * radial[:, None] ** 2
         / (1 - radial[:, None]) ** 4
-        * np.repeat(polar_weight, 12)
-        * (2 * np.pi / 12)
+        * np.repeat(polar_weight, azimuth_count)
+        * (2 * np.pi / azimuth_count)
     ).ravel()
     points_per_atom = len(local_grid)
     records = np.zeros((atoms, 16))
@@ -794,11 +798,14 @@ def test_native_wide_hydrogen_cartesian_quadrature(tmp_path: Path) -> None:
         "iterations": 3,
         "points": (centers[:, None, :] + local_grid).reshape(-1, 3),
         "atomic": np.tile(local_measure, atoms),
-        "left": np.eye(3 * atoms)[98].reshape(atoms, 3),
-        "right": np.eye(3 * atoms)[101].reshape(atoms, 3),
+        "left": np.eye(3 * atoms)[3 * atoms - 4].reshape(atoms, 3),
+        "right": np.eye(3 * atoms)[3 * atoms - 1].reshape(atoms, 3),
     }
     fixture["weights"] = _partition(fixture)
-    _, receipt = _native(fixture, tmp_path, topology="tiled-cartesian-quadrature")
+    topology = (
+        "tiled-cartesian-quadrature-sliced" if sliced else "tiled-cartesian-quadrature"
+    )
+    _, receipt = _native(fixture, tmp_path, topology=topology)
     assert receipt["tiled_cartesian_sweeps"] > 0
 
 

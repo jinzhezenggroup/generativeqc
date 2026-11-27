@@ -46,7 +46,17 @@ struct Plan {
     require(shape.atoms <= options.max_workspace_bytes / sizeof(double),
             "one-electron effective charges exceed the device budget");
     options.max_workspace_bytes -= shape.atoms * sizeof(double);
-    check(integrals::cuda_one_electron_workspace(shape, shells, options, bytes));
+    integrals::CudaOneElectronAdmissionLimit limit;
+    const auto status =
+        integrals::cuda_one_electron_workspace(shape, shells, options, bytes, &limit);
+    if (status == cudaErrorInvalidValue && limit.resource)
+      throw std::invalid_argument(std::string("one-electron ") + limit.resource +
+                                  " exceed the bound (required " + std::to_string(limit.required) +
+                                  ", maximum " + std::to_string(limit.maximum) + ")");
+    if (status != cudaSuccess && status != cudaErrorMemoryAllocation)
+      throw std::runtime_error(std::string("one-electron workspace admission: ") +
+                               cudaGetErrorString(status));
+    check(status);
     require(bytes <= options.max_workspace_bytes,
             "one-electron arena plus effective charges exceed the device budget");
     device_bytes = bytes + shape.atoms * sizeof(double);

@@ -5,6 +5,7 @@
 #include <new>
 #include <vector>
 
+#include "dft/factorized_hessian_integral.hpp"
 #include "dft/hessian_aot.hpp"
 #include "integrals/cuda_df_nuclear_response.hpp"
 #include "response/nuclear_integral_response.cuh"
@@ -26,7 +27,14 @@ bool multiply(std::size_t first, std::size_t second, std::size_t& result) {
   result = first * second;
   return true;
 }
-std::size_t cartesian(std::size_t angular) { return (angular + 1) * (angular + 2) / 2; }
+__host__ __device__ std::size_t cartesian(std::size_t angular) {
+  return (angular + 1) * (angular + 2) / 2;
+}
+__host__ __device__ unsigned expansion_bound(std::size_t angular, bool auxiliary) {
+  const unsigned support = cartesian(angular);
+  const unsigned capacity = auxiliary ? 6 : 3;
+  return support < capacity ? support : capacity;
+}
 unsigned blocks(std::size_t count) {
   return static_cast<unsigned>(std::min((count + 127) / 128, std::size_t{65535}));
 }
@@ -44,13 +52,14 @@ struct Tile {
   DeviceTile device{};
 };
 struct Group {
-  DeviceGroup device{};
-  std::size_t radials{}, closure{};
+  std::size_t radials{}, closure{}, projection_bound{};
 };
 struct Layout {
   std::size_t bytes{}, shells{}, groups{}, tiles{}, records{}, raw{}, cache{}, projected{},
       candidates{}, status{}, raw_elements{}, metric_elements{}, candidate_count{},
       max_components{}, max_fields{}, max_public{};
+  std::size_t batch_width{}, batch_radials{}, batch_records{}, batch_raw{}, batch_projected{},
+      batch_inputs{}, atom_offsets{}, atom_incidence{};
   CudaDfNuclearWork work{};
   bool reserve(std::size_t count, std::size_t size, std::size_t& offset) {
     offset = bytes;
@@ -64,6 +73,9 @@ struct Layout {
 struct Schedule {
   Layout layout;
   std::vector<Group> groups;
+  // Keep upload records contiguous; the host-only launch selectors never
+  // cross the device boundary and the group order is shared by the arrays.
+  std::vector<DeviceGroup> descriptors;
   std::vector<Tile> tiles;
   std::array<std::vector<std::size_t>, 150> closure;
 };
@@ -111,23 +123,30 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
       !multiply(count, shape.naux, plan.raw_elements) ||
       !multiply(shape.naux, shape.naux, plan.metric_elements))
     return cudaErrorInvalidValue;
+  // Reject impossible descriptor storage before growing host metadata or
+  // traversing the ordered product. Remaining workspace is checked below.
+  if (groups > options.max_workspace_bytes / sizeof(DeviceGroup)) return cudaErrorInvalidValue;
   result.groups.reserve(groups);
+  result.descriptors.reserve(groups);
   const auto append_group = [&](const Shell& first, const Shell& second, const Shell* third) {
     Group group;
-    group.device.centers = third ? 3 : 2;
-    group.device.metric = !third;
-    group.device.shells[0] = first;
-    group.device.shells[1] = second;
-    if (third) group.device.shells[2] = *third;
-    group.device.components = group.device.public_components = group.radials = 1;
+    DeviceGroup device;
+    device.centers = third ? 3 : 2;
+    device.metric = !third;
+    device.shells[0] = first;
+    device.shells[1] = second;
+    if (third) device.shells[2] = *third;
+    device.components = device.public_components = group.radials = group.projection_bound = 1;
     std::size_t key{};
-    for (unsigned slot = 0; slot < group.device.centers; ++slot) {
-      const auto& shell = group.device.shells[slot];
-      group.device.atoms[slot] = shell.atom;
+    for (unsigned slot = 0; slot < device.centers; ++slot) {
+      const auto& shell = device.shells[slot];
+      device.atoms[slot] = shell.atom;
       key = key * 5 + shell.angular;
       if (!multiply(group.radials, shell.primitive_count, group.radials) ||
-          !multiply(group.device.components, cartesian(shell.angular), group.device.components) ||
-          !multiply(group.device.public_components, shell.ao_count, group.device.public_components))
+          !multiply(device.components, cartesian(shell.angular), device.components) ||
+          !multiply(device.public_components, shell.ao_count, device.public_components) ||
+          !multiply(group.projection_bound, expansion_bound(shell.angular, !third || slot == 2),
+                    group.projection_bound))
         return cudaErrorInvalidValue;
     }
     if (!third) key += 125;
@@ -139,62 +158,65 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
         const auto& signature = program.signature;
         if (program.kind != aot::Kind::integral ||
             signature.family != (third ? "three_center_eri" : "coulomb_metric") ||
-            signature.angular.size() != group.device.centers || signature.radial != radial ||
+            signature.angular.size() != device.centers || signature.radial != radial ||
             !program.accepts_omega(options.range_omega))
           continue;
         bool matches = true;
-        for (unsigned slot = 0; slot < group.device.centers; ++slot)
-          matches &= signature.angular[slot] == group.device.shells[slot].angular;
+        for (unsigned slot = 0; slot < device.centers; ++slot)
+          matches &= signature.angular[slot] == device.shells[slot].angular;
         if (!matches) continue;
-        if (!program.integral || program.centers != group.device.centers ||
-            program.record_stride != 4 * group.device.centers + 1 ||
-            program.outputs != 1 + 6 * group.device.centers || program.components.empty() ||
+        if (!program.integral || program.centers != device.centers ||
+            program.record_stride != 4 * device.centers + 1 ||
+            program.outputs != 1 + 6 * device.centers || program.components.empty() ||
             program.components.size() > 16)
           return cudaErrorNotSupported;
         Tile tile{&program, {}};
         tile.device.count = program.components.size();
         for (unsigned index = 0; index < tile.device.count; ++index) {
           const auto component = program.components[index];
-          if (component >= group.device.components || covered[component])
-            return cudaErrorNotSupported;
+          if (component >= device.components || covered[component]) return cudaErrorNotSupported;
           covered[component] = true;
           tile.device.components[index] = component;
         }
         closure.push_back(result.tiles.size());
         result.tiles.push_back(tile);
       }
-      if (!std::all_of(covered.begin(), covered.begin() + group.device.components,
+      if (!std::all_of(covered.begin(), covered.begin() + device.components,
                        [](bool value) { return value; }))
         return cudaErrorNotSupported;
     }
     std::size_t components{}, projections{}, reductions{}, records{}, cache_terms{},
         projection_reductions{}, scatter_terms{};
-    const auto coordinates = 3 * group.device.centers;
+    const auto coordinates = 3 * device.centers;
     const auto fields = 1 + 2 * coordinates;
     const auto batches =
         group.radials / options.radial_tile + (group.radials % options.radial_tile != 0);
     // Count submitted records for every component tile, primitive-field sums,
     // cache additions, sparse projection sums and deterministic scatter. The
     // reduction bound covers either pass, including coincident center writes.
-    if (!multiply(group.radials, group.device.components, components) ||
+    if (!multiply(group.radials, device.components, components) ||
         !multiply(group.radials, closure.size(), records) ||
-        !multiply(group.device.public_components, third ? 54 : 36, projections) ||
+        !multiply(device.public_components, group.projection_bound, projections) ||
         !multiply(projections, 1 + 3 * coordinates, projection_reductions) ||
         !multiply(projections, coordinates, projections) ||
         !multiply(components, fields, reductions) ||
-        !multiply(group.device.components, fields, cache_terms) ||
+        !multiply(device.components, fields, cache_terms) ||
         !multiply(cache_terms, batches, cache_terms) ||
-        !multiply(group.device.public_components + 1, 2 * coordinates, scatter_terms) ||
+        !multiply(device.public_components + 1, 2 * coordinates, scatter_terms) ||
         !add(reductions, cache_terms) || !add(reductions, projection_reductions) ||
         !add(reductions, scatter_terms) || !add(plan.work.radial_records_per_pass, records) ||
         !add(plan.work.component_evaluations_per_pass, components) ||
         !add(plan.work.projection_terms_bound_per_pass, projections) ||
-        !add(plan.work.reduction_terms_bound_per_pass, reductions))
+        !add(plan.work.reduction_terms_bound_per_pass, reductions) ||
+        plan.work.component_evaluations_per_pass > options.max_component_evaluations ||
+        plan.work.projection_terms_bound_per_pass > options.max_projection_terms ||
+        plan.work.reduction_terms_bound_per_pass > options.max_reduction_terms_bound)
       return cudaErrorInvalidValue;
-    plan.max_components = std::max(plan.max_components, group.device.components);
-    plan.max_public = std::max(plan.max_public, group.device.public_components);
-    plan.max_fields = std::max(plan.max_fields, 1 + 6 * group.device.centers);
+    plan.max_components = std::max(plan.max_components, device.components);
+    plan.max_public = std::max(plan.max_public, device.public_components);
+    plan.max_fields = std::max(plan.max_fields, 1 + 6 * device.centers);
     result.groups.push_back(group);
+    result.descriptors.push_back(device);
     return cudaSuccess;
   };
   for (const auto& first : orbital)
@@ -206,10 +228,6 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
     for (const auto& second : auxiliary)
       if (const auto error = append_group(first, second, nullptr); error != cudaSuccess)
         return error;
-  if (plan.work.component_evaluations_per_pass > options.max_component_evaluations ||
-      plan.work.projection_terms_bound_per_pass > options.max_projection_terms ||
-      plan.work.reduction_terms_bound_per_pass > options.max_reduction_terms_bound)
-    return cudaErrorInvalidValue;
   plan.candidate_count = plan.raw_elements;
   if (!add(plan.candidate_count, plan.metric_elements) ||
       !multiply(plan.candidate_count, 2, plan.candidate_count) || !multiply(shape.atoms, 6, extra))
@@ -225,6 +243,34 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
       !plan.reserve(plan.candidate_count, sizeof(double), plan.candidates) ||
       !plan.reserve(1, sizeof(int), plan.status) || plan.bytes > options.max_workspace_bytes)
     return cudaErrorInvalidValue;
+  const bool single_component =
+      plan.max_components == 1 && plan.max_public == 1 && groups <= UINT32_MAX / 4;
+  std::size_t batch_radials{};
+  if (single_component) {
+    for (const auto& group : result.groups) batch_radials = std::max(batch_radials, group.radials);
+  }
+  if (batch_radials && batch_radials <= options.radial_tile &&
+      std::all_of(result.tiles.begin(), result.tiles.end(), [](const Tile& tile) {
+        return tile.device.count == 1 && tile.program->integral_batch;
+      })) {
+    // A fully contracted s-shell group needs only one consumer of its local
+    // output. Windows share scratch and keep the original group/fold order.
+    for (auto width = std::min<std::size_t>(4096, groups); width >= 2; width /= 2) {
+      Layout trial = plan;
+      if (!trial.reserve(width * batch_radials * 13, sizeof(double), trial.batch_records) ||
+          !trial.reserve(width * 19, sizeof(double), trial.batch_raw) ||
+          !trial.reserve(width * 18, sizeof(double), trial.batch_projected) ||
+          !trial.reserve(width, sizeof(aot::FactorizedIntegralBatch), trial.batch_inputs) ||
+          !trial.reserve(shape.atoms + 1, sizeof(std::uint32_t), trial.atom_offsets) ||
+          !trial.reserve(3 * groups, sizeof(std::uint32_t), trial.atom_incidence) ||
+          trial.bytes > options.max_workspace_bytes)
+        continue;
+      trial.batch_width = width;
+      trial.batch_radials = batch_radials;
+      plan = trial;
+      break;
+    }
+  }
   plan.work.workspace_bytes = plan.bytes;
   plan.work.groups = groups;
   return cudaSuccess;
@@ -317,7 +363,7 @@ __global__ void validate_basis(Basis basis, const Shell* shells, int* status) {
     const auto* expansions = auxiliary ? basis.auxiliary_expansions : basis.orbital_expansions;
     for (std::size_t orbital = 0; orbital < shell.ao_count; ++orbital) {
       const auto expansion = expansions[shell.ao_begin + orbital];
-      if (!expansion.count || expansion.count > (auxiliary ? 6U : 3U)) {
+      if (!expansion.count || expansion.count > expansion_bound(shell.angular, auxiliary)) {
         atomicExch(status, 1);
         continue;
       }
@@ -331,8 +377,8 @@ __global__ void validate_basis(Basis basis, const Shell* shells, int* status) {
     }
   }
 }
-__global__ void build_records(const DeviceGroup* group, Basis basis, std::size_t begin,
-                              std::size_t count, double* records, int* status) {
+__device__ void fill_records(const DeviceGroup* group, Basis basis, std::size_t begin,
+                             std::size_t count, double* records, int* status) {
   // Always initialize every submitted record, even after a prior component
   // failed: the linked leaf reports errors but does not consume an abort flag.
   const auto centers = group->centers, stride = 4 * centers + 1;
@@ -356,6 +402,27 @@ __global__ void build_records(const DeviceGroup* group, Basis basis, std::size_t
     record[stride - 1] = scale;
   }
 }
+__global__ void build_records(const DeviceGroup* group, Basis basis, std::size_t begin,
+                              std::size_t count, double* records, int* status) {
+  fill_records(group, basis, begin, count, records, status);
+}
+__global__ void build_batch(const DeviceGroup* groups, Basis basis, std::size_t stride,
+                            double* records, double* raw, aot::FactorizedIntegralBatch* batches,
+                            int* status) {
+  const auto slot = blockIdx.x;
+  const auto* group = groups + slot;
+  std::size_t count = 1;
+  for (unsigned center = 0; center < group->centers; ++center)
+    count *= group->shells[center].primitive_count;
+  records += slot * stride;
+  if (threadIdx.x == 0)
+    batches[slot] = {records,
+                     count,
+                     {group->atoms[0], group->atoms[1], group->atoms[2], 0},
+                     raw + slot * 19,
+                     nullptr};
+  fill_records(group, basis, 0, count, records, status);
+}
 __global__ void accumulate(const DeviceGroup* group, const DeviceTile* tile, const double* raw,
                            double* cache, int* status) {
   if (atomicAdd(status, 0)) return;
@@ -368,6 +435,9 @@ __global__ void project(CudaDfNuclearShape shape, const DeviceGroup* group, Basi
                         const double* direction, CudaDfNuclearWeights weights, const double* cache,
                         double* candidate, double* projected, int* status) {
   if (atomicAdd(status, 0)) return;
+  group += blockIdx.y;
+  cache += 19 * blockIdx.y;
+  projected += 18 * blockIdx.y;
   const auto centers = group->centers, coordinates = 3 * centers;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < group->public_components;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
@@ -453,6 +523,34 @@ __global__ void scatter(const DeviceGroup* group, std::size_t atoms, const doubl
     }
     candidate[3 * group->atoms[center] + axis] += gradient;
     candidate[3 * (atoms + group->atoms[center]) + axis] += hvp;
+  }
+}
+__global__ void scatter_batch(const DeviceGroup* groups, std::size_t atoms, std::uint32_t begin,
+                              std::uint32_t end, const std::uint32_t* offsets,
+                              const std::uint32_t* incidence, const double* projected,
+                              double* candidate, int* status) {
+  if (atomicAdd(status, 0)) return;
+  for (std::size_t coordinate = blockIdx.x * blockDim.x + threadIdx.x; coordinate < 3 * atoms;
+       coordinate += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+    const auto atom = coordinate / 3, axis = coordinate % 3;
+    auto left = offsets[atom], right = offsets[atom + 1];
+    while (left < right) {
+      const auto middle = left + (right - left) / 2;
+      if (incidence[middle] / 4 < begin)
+        left = middle + 1;
+      else
+        right = middle;
+    }
+    auto gradient = candidate[coordinate], hvp = candidate[3 * atoms + coordinate];
+    for (auto entry = left; entry < offsets[atom + 1]; ++entry) {
+      const auto packed = incidence[entry], index = packed / 4, center = packed % 4;
+      if (index >= end) break;
+      const auto* terms = projected + (index - begin) * 18 + 3 * center + axis;
+      gradient += terms[0];
+      hvp += terms[3 * groups[index].centers];
+    }
+    candidate[coordinate] = gradient;
+    candidate[3 * atoms + coordinate] = hvp;
   }
 }
 }  // namespace
@@ -565,57 +663,107 @@ struct CudaDfNuclearResponse::Impl {
     const auto* groups = at<DeviceGroup>(plan.groups);
     const auto* tiles = at<DeviceTile>(plan.tiles);
     error = cudaMemsetAsync(candidate, 0, plan.candidate_count * sizeof(double), stream);
-    for (std::size_t index = 0; index < schedule.groups.size() && error == cudaSuccess; ++index) {
-      const auto& group = schedule.groups[index];
-      error = cudaMemsetAsync(
-          cache, 0, group.device.components * (1 + 6 * group.device.centers) * sizeof(double),
-          stream);
-      for (const auto tile_index : schedule.closure[group.closure]) {
-        const auto& tile = schedule.tiles[tile_index];
-        for (std::size_t begin = 0; begin < group.radials && error == cudaSuccess;) {
-          const auto count = std::min(options.radial_tile, group.radials - begin);
-          build_records<<<1, 128, 0, stream>>>(groups + index, reference.basis, begin, count,
-                                               records, status);
-          error = cudaGetLastError();
-          if (error == cudaSuccess) {
-            receipt.radial_records += count;
-            error =
-                aot::launch_integral_at_omega(*tile.program, options.range_omega, records, count,
-                                              groups[index].atoms, direction, raw, status, stream);
-          }
-          if (error == cudaSuccess) {
-            receipt.component_evaluations += count * tile.device.count;
-            receipt.reduction_terms_bound +=
-                count * tile.device.count * (1 + 6 * group.device.centers);
-            accumulate<<<1, 128, 0, stream>>>(groups + index, tiles + tile_index, raw, cache,
-                                              status);
-            error = cudaGetLastError();
-            if (error == cudaSuccess)
-              receipt.reduction_terms_bound += tile.device.count * (1 + 6 * group.device.centers);
-          }
-          begin += count;
+    if (plan.batch_width) {
+      auto* batches = at<aot::FactorizedIntegralBatch>(plan.batch_inputs);
+      auto* projected_batch = at<double>(plan.batch_projected);
+      auto* raw_batch = at<double>(plan.batch_raw);
+      for (std::size_t first = 0; first < schedule.groups.size() && error == cudaSuccess;) {
+        const auto closure = schedule.groups[first].closure;
+        auto stop = first + 1;
+        auto radials = schedule.groups[first].radials;
+        while (stop < schedule.groups.size() && stop - first < plan.batch_width &&
+               schedule.groups[stop].closure == closure) {
+          radials += schedule.groups[stop++].radials;
         }
-      }
-      if (error == cudaSuccess) {
-        project<Contract><<<blocks(group.device.public_components), 128, 0, stream>>>(
-            shape, groups + index, reference.basis, direction, weights, cache, candidate, projected,
-            status);
+        const auto count = stop - first;
+        const auto& program = *schedule.tiles[schedule.closure[closure].front()].program;
+        // Batched groups share a single all-s output component. Charge only
+        // submitted windows; an enqueue failure never counts the unseen tail.
+        const auto coordinates = 3 * schedule.descriptors[first].centers;
+        const auto fields = 1 + 2 * coordinates;
+        build_batch<<<count, 32, 0, stream>>>(
+            groups + first, reference.basis, plan.batch_radials * 13,
+            at<double>(plan.batch_records), raw_batch, batches, status);
         error = cudaGetLastError();
-        receipt.projection_terms_bound += group.device.public_components *
-                                          (group.device.metric ? 36 : 54) * 3 *
-                                          group.device.centers;
-        receipt.reduction_terms_bound += group.device.public_components *
-                                         (group.device.metric ? 36 : 54) *
-                                         (1 + 9 * group.device.centers);
-      }
-      if constexpr (Contract)
         if (error == cudaSuccess) {
-          scatter<<<1, 32, 0, stream>>>(groups + index, shape.atoms, projected, candidate, status);
-          error = cudaGetLastError();
-          receipt.reduction_terms_bound +=
-              6 * group.device.centers * (group.device.public_components + 1);
+          receipt.radial_records += radials;
+          error = static_cast<cudaError_t>(program.integral_batch(
+              options.range_omega, batches, count, direction, -1, status, stream));
+          if (error == cudaSuccess) {
+            receipt.component_evaluations += radials;
+            receipt.reduction_terms_bound += (radials + count) * fields;
+          }
         }
-    }
+        if (error == cudaSuccess) {
+          project<Contract><<<dim3(1, count), 32, 0, stream>>>(
+              shape, groups + first, reference.basis, direction, weights, raw_batch, candidate,
+              projected_batch, status);
+          error = cudaGetLastError();
+          if (error == cudaSuccess) {
+            receipt.projection_terms_bound += count * coordinates;
+            receipt.reduction_terms_bound += count * (1 + 3 * coordinates);
+          }
+        }
+        if constexpr (Contract) {
+          if (error == cudaSuccess) {
+            scatter_batch<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
+                groups, shape.atoms, first, stop, at<std::uint32_t>(plan.atom_offsets),
+                at<std::uint32_t>(plan.atom_incidence), projected_batch, candidate, status);
+            error = cudaGetLastError();
+            if (error == cudaSuccess) receipt.reduction_terms_bound += 4 * count * coordinates;
+          }
+        }
+        first = stop;
+      }
+    } else
+      for (std::size_t index = 0; index < schedule.groups.size() && error == cudaSuccess; ++index) {
+        const auto& group = schedule.groups[index];
+        const auto& device = schedule.descriptors[index];
+        error = cudaMemsetAsync(
+            cache, 0, device.components * (1 + 6 * device.centers) * sizeof(double), stream);
+        for (const auto tile_index : schedule.closure[group.closure]) {
+          const auto& tile = schedule.tiles[tile_index];
+          for (std::size_t begin = 0; begin < group.radials && error == cudaSuccess;) {
+            const auto count = std::min(options.radial_tile, group.radials - begin);
+            build_records<<<1, 128, 0, stream>>>(groups + index, reference.basis, begin, count,
+                                                 records, status);
+            error = cudaGetLastError();
+            if (error == cudaSuccess) {
+              receipt.radial_records += count;
+              error = aot::launch_integral_at_omega(*tile.program, options.range_omega, records,
+                                                    count, groups[index].atoms, direction, raw,
+                                                    status, stream);
+            }
+            if (error == cudaSuccess) {
+              receipt.component_evaluations += count * tile.device.count;
+              receipt.reduction_terms_bound += count * tile.device.count * (1 + 6 * device.centers);
+              accumulate<<<1, 128, 0, stream>>>(groups + index, tiles + tile_index, raw, cache,
+                                                status);
+              error = cudaGetLastError();
+              if (error == cudaSuccess)
+                receipt.reduction_terms_bound += tile.device.count * (1 + 6 * device.centers);
+            }
+            begin += count;
+          }
+        }
+        if (error == cudaSuccess) {
+          project<Contract><<<blocks(device.public_components), 128, 0, stream>>>(
+              shape, groups + index, reference.basis, direction, weights, cache, candidate,
+              projected, status);
+          error = cudaGetLastError();
+          receipt.projection_terms_bound +=
+              device.public_components * group.projection_bound * 3 * device.centers;
+          receipt.reduction_terms_bound +=
+              device.public_components * group.projection_bound * (1 + 9 * device.centers);
+        }
+        if constexpr (Contract)
+          if (error == cudaSuccess) {
+            scatter<<<1, 32, 0, stream>>>(groups + index, shape.atoms, projected, candidate,
+                                          status);
+            error = cudaGetLastError();
+            receipt.reduction_terms_bound += 6 * device.centers * (device.public_components + 1);
+          }
+      }
     if (error == cudaSuccess) {
       if constexpr (Contract) {
         finite<<<blocks(6 * shape.atoms), 128, 0, stream>>>(candidate, 6 * shape.atoms, status);
@@ -678,10 +826,12 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
   impl_.reset();
   try {
     auto state = std::make_unique<Impl>();
-    auto error = schedule(shape, orbital, auxiliary, options, state->schedule);
+    auto admitted = options;
+    admitted.max_workspace_bytes = std::min(options.max_workspace_bytes, workspace_bytes);
+    auto error = schedule(shape, orbital, auxiliary, admitted, state->schedule);
     if (error != cudaSuccess) return error;
     const auto& basis = reference.basis;
-    const auto& plan = state->schedule.layout;
+    auto& plan = state->schedule.layout;
     if (!basis || !reference.stream || !reference.authenticate || !reference.owner || !workspace ||
         reinterpret_cast<std::uintptr_t>(workspace) % alignof(double) ||
         workspace_bytes < plan.bytes || basis.range_omega != options.range_omega ||
@@ -699,6 +849,25 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
     if ((error = state->authenticate(reference.stream)) != cudaSuccess) return error;
     if ((error = device_buffer(workspace, basis.device_id)) != cudaSuccess) return error;
     if ((error = state->buffers(basis_ranges(basis), {})) != cudaSuccess) return error;
+    std::vector<std::uint32_t> offsets, incidence;
+    if (plan.batch_width) {
+      try {
+        offsets.resize(shape.atoms + 1);
+        for (const auto& group : state->schedule.descriptors)
+          for (unsigned center = 0; center < group.centers; ++center)
+            ++offsets[group.atoms[center] + 1];
+        for (std::size_t atom = 0; atom < shape.atoms; ++atom) offsets[atom + 1] += offsets[atom];
+        incidence.resize(offsets.back());
+        auto cursor = offsets;
+        for (std::uint32_t index = 0; index < state->schedule.descriptors.size(); ++index) {
+          const auto& group = state->schedule.descriptors[index];
+          for (unsigned center = 0; center < group.centers; ++center)
+            incidence[cursor[group.atoms[center]]++] = index * 4 + center;
+        }
+      } catch (const std::bad_alloc&) {
+        plan.batch_width = 0;
+      }
+    }
     auto* status = state->at<int>(plan.status);
     auto* shells = state->at<Shell>(plan.shells);
     error = cudaMemsetAsync(status, 0, sizeof(int), reference.stream);
@@ -708,11 +877,19 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
     if (error == cudaSuccess)
       error = cudaMemcpyAsync(shells + orbital.size(), auxiliary.data(), auxiliary.size_bytes(),
                               cudaMemcpyHostToDevice, reference.stream);
-    for (std::size_t index = 0; index < state->schedule.groups.size() && error == cudaSuccess;
-         ++index)
-      error = cudaMemcpyAsync(state->at<DeviceGroup>(plan.groups) + index,
-                              &state->schedule.groups[index].device, sizeof(DeviceGroup),
-                              cudaMemcpyHostToDevice, reference.stream);
+    if (error == cudaSuccess)
+      error =
+          cudaMemcpyAsync(state->at<DeviceGroup>(plan.groups), state->schedule.descriptors.data(),
+                          state->schedule.descriptors.size() * sizeof(DeviceGroup),
+                          cudaMemcpyHostToDevice, reference.stream);
+    if (plan.batch_width && error == cudaSuccess)
+      error = cudaMemcpyAsync(state->at<std::uint32_t>(plan.atom_offsets), offsets.data(),
+                              offsets.size() * sizeof(std::uint32_t), cudaMemcpyHostToDevice,
+                              reference.stream);
+    if (plan.batch_width && error == cudaSuccess)
+      error = cudaMemcpyAsync(state->at<std::uint32_t>(plan.atom_incidence), incidence.data(),
+                              incidence.size() * sizeof(std::uint32_t), cudaMemcpyHostToDevice,
+                              reference.stream);
     for (std::size_t index = 0; index < state->schedule.tiles.size() && error == cudaSuccess;
          ++index)
       error = cudaMemcpyAsync(state->at<DeviceTile>(plan.tiles) + index,

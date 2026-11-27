@@ -95,10 +95,19 @@ void host_admission() {
       auxiliary{{{1, 0, 2, 2, 0, 1, 0}}};
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital, auxiliary, {}, bytes));
-  const auto admitted = bytes;
+  // Optional batch windows may fall back while a mandatory scalar arena fits.
+  std::size_t minimum = 1, maximum = bytes;
+  while (minimum < maximum) {
+    CudaDfNuclearOptions options;
+    options.max_workspace_bytes = minimum + (maximum - minimum) / 2;
+    if (cuda_df_nuclear_workspace(shape, orbital, auxiliary, options, bytes) == cudaSuccess)
+      maximum = options.max_workspace_bytes;
+    else
+      minimum = options.max_workspace_bytes + 1;
+  }
   for (unsigned gate = 0; gate < 6; ++gate) {
     CudaDfNuclearOptions options;
-    if (gate == 0) options.max_workspace_bytes = admitted - 1;
+    if (gate == 0) options.max_workspace_bytes = minimum - 1;
     if (gate == 1) options.max_groups = 1;
     if (gate == 2) options.max_component_evaluations = 1;
     if (gate == 3) options.max_projection_terms = 1;

@@ -672,6 +672,7 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   policy.cpks.gmres.max_iterations = invocation.response_iterations;
   if (invocation.response_fp32_proposal)
     policy.cpks.resident_precision = response::CudaCpksResidentPrecision::fp32_proposal;
+  if (!hvp) dft::configure_wide_dense_cuda_hessian(policy);
   dft::CudaKsWb97mvHessian endpoint;
   using Mode = dft::CudaKsWb97mvHessianMode;
   const auto prepared = endpoint.prepare(

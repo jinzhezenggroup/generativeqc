@@ -18,6 +18,7 @@ inline constexpr std::size_t cuda_grid_cartesian_atoms = 32;
 inline constexpr std::size_t cuda_grid_tiled_cartesian_atoms = 96;
 /** Private transaction status bit, independent of the generic invalid-data bit. */
 inline constexpr int cuda_grid_cartesian_repair_exhausted = 2;
+inline constexpr int cuda_grid_geometry_invalid = 4;
 
 struct CudaGridGeometryShape {
   std::size_t atoms{}, primitives{}, nao{}, points{}, points_per_atom{};

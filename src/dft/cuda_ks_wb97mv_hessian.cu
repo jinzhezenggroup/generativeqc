@@ -318,7 +318,10 @@ struct CudaKsWb97mvHessian::Impl {
   }
   void charge(std::size_t size) {
     if (size > remaining)
-      throw HessianCapacityExceeded("stationary Hessian aggregate device budget exceeded");
+      throw HessianCapacityExceeded(
+          "stationary Hessian aggregate device budget exceeded (requested " + std::to_string(size) +
+          " bytes, remaining " + std::to_string(remaining) + " of " +
+          std::to_string(options.max_device_bytes) + " bytes)");
     remaining -= size;
     receipt.device_bytes += size;
   }
@@ -692,6 +695,11 @@ struct CudaKsWb97mvHessian::Impl {
                                                                  at(vv10_direction), panels);
       if ((error = cudaGetLastError()) != cudaSuccess) return error;
     }
+    // The generated RHS finite check can replace the public failure flag with
+    // 1. Keep the upstream reason in the adjacent private diagnostic slot.
+    if ((error = cudaMemcpyAsync(at<int>(status_offset) + 1, at<int>(status_offset), sizeof(int),
+                                 cudaMemcpyDeviceToDevice, stream)) != cudaSuccess)
+      return error;
     error = maps::launch_rhs(extents(), rhs_core, at(ecp_values) + 2 * matrix,
                              at(ecp_values) + 3 * matrix, at(exact_direction),
                              at(full_df.direction), at(xc_direction), at(rhs), at(map_offset),
@@ -715,6 +723,29 @@ struct CudaKsWb97mvHessian::Impl {
       receipt.cpks_strict_iterations += result.response.gmres.iterations;
     if (!result.response.converged() &&
         !(cpks_replay && result.response.status == response::CudaCpksStatus::running)) {
+      // A synchronous solve can stop before store_column copies the sticky
+      // geometry status into the dense audit. Report that upstream failure
+      // instead of treating an invalid right-hand side as nonconvergence.
+      if (result.response.status == response::CudaCpksStatus::numerical_failure) {
+        int transaction_flags[2]{};
+        error = cudaMemcpyAsync(transaction_flags, at<int>(status_offset),
+                                sizeof(transaction_flags), cudaMemcpyDeviceToHost, stream);
+        const auto synchronized = cudaStreamSynchronize(stream);
+        if (error != cudaSuccess || synchronized != cudaSuccess)
+          return error != cudaSuccess ? error : synchronized;
+        const auto transaction_status = transaction_flags[0] | transaction_flags[1];
+        if (transaction_status) {
+          if (transaction_status & cuda_grid_cartesian_repair_exhausted)
+            result.failure_check = "Cartesian moving-grid repair work exhausted";
+          else if (transaction_status & cuda_grid_geometry_invalid)
+            result.failure_check = "Cartesian moving-grid geometry failed its device audit";
+          else if (transaction_status & cuda_grid_nuclear_xc_invalid)
+            result.failure_check = "moving-grid XC right-hand side failed its device audit";
+          else
+            result.failure_check = "Hessian right-hand side failed its device transaction audit";
+          return cudaErrorInvalidValue;
+        }
+      }
       result.status = CudaKsWb97mvHessianStatus::response_not_converged;
       return cudaSuccess;
     }
@@ -1064,7 +1095,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
           "stationary Hessian CPKS workspace admission");
     Layout layout;
     owner->map_offset = layout.reserve(owner->map_bytes, 1);
-    owner->status_offset = layout.reserve(1, sizeof(int));
+    owner->status_offset = layout.reserve(2, sizeof(int));
     const auto matrix = owner->matrix, panels = owner->panels, coordinates = owner->coordinates;
     for (auto* offset :
          {&owner->zero, &owner->weights, &owner->delta_density, &owner->delta_weights,

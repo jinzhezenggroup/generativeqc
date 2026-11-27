@@ -143,14 +143,15 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
           "missing probe fixture header");
   CudaGridGeometryShape shape{header[0], header[1], header[2], header[3], header[5]};
   const bool tiled_cartesian = topology.find("tiled-cartesian") != std::string::npos;
-  const bool quadrature_column = topology == "tiled-cartesian-quadrature";
+  const bool quadrature_column = topology.starts_with("tiled-cartesian-quadrature");
+  const bool sliced_column = topology == "tiled-cartesian-quadrature-sliced";
   CudaGridGeometryOptions options;
   options.point_tile = point_tile;
   options.partition_iterations = static_cast<unsigned>(header[4]);
   options.coincident_tolerance = read(input, 1)[0];
   if (topology == "tiled-cartesian-extended") {
-    // The random dense 96-center fixture can need more repairs than the
-    // production budget. Reserve all its points for a derivative comparison.
+    // This random dense fixture qualifies the derivatives rather than the
+    // repair queue budget. Reserve all points for its scalar comparison.
     options.max_cartesian_repair_pairs =
         3 * shape.atoms * (shape.atoms * (shape.atoms - 1) / 2) * shape.points;
   }
@@ -344,6 +345,7 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       grid_options.functional_code = semilocal_family_code(SemilocalFamily::Pbe);
       grid_options.nuclear_response = true;
       grid_options.max_nuclear_adjoint_bytes = 64ULL << 20;
+      if (sliced_column) grid_options.max_nuclear_affine_terms = 1ULL << 29;
       CudaWb97mvGridReference grid_reference{
           reference.basis,     reference.points, reference.weights,   storage.upload(density),
           reference.device_id, storage.stream,   Owner::authenticate, &owner};
@@ -351,6 +353,14 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
       check(cuda_wb97mv_grid_workspace(grid_shape, grid_options, grid_bytes));
       check(grid.prepare(grid_shape, grid_options, grid_reference,
                          storage.allocate(grid_bytes / sizeof(double)), grid_bytes));
+      if (sliced_column) {
+        auto no_adjoint = grid_options;
+        no_adjoint.max_nuclear_adjoint_bytes = 0;
+        std::size_t unusable{};
+        require(
+            cuda_wb97mv_grid_workspace(grid_shape, no_adjoint, unusable) == cudaErrorInvalidValue,
+            "fixture must require a factored adjoint");
+      }
       density_motion = storage.upload(std::vector<double>(density.size(), 0.0));
       cartesian_xc = storage.allocate(left.size());
       require(grid.admits_cartesian_mixed(left.size()), "radial XC column not admitted");
@@ -404,7 +414,8 @@ void run(const char* fixture, const char* output, bool reject, std::size_t point
         // selected mixed row, diagonal, and first/last center's three axes.
         const auto left_atom = left_seed / 3;
         if (quadrature_column && left_seed != static_cast<std::size_t>(left_column) &&
-            left_seed != static_cast<std::size_t>(right_column))
+            left_seed != static_cast<std::size_t>(right_column) &&
+            !(sliced_column && (left_seed == 0 || left_seed == left.size() / 2)))
           continue;
         if (tiled_cartesian && (shape.radial_s || shape.atoms == cuda_grid_tiled_cartesian_atoms) &&
             left_atom != 0 && left_atom + 1 != shape.atoms && left_atom % 32 > 1 &&
@@ -635,7 +646,7 @@ int main(int argc, char** argv) {
                                       topology == "understated" || topology == "radial-reject");
     // The fixtures exercise full tiles followed by a short tail.
     auto tile = CudaGridGeometryOptions{}.point_tile;
-    if (mode.rfind("tiled-cartesian", 0) == 0 && mode != "tiled-cartesian-quadrature")
+    if (mode.starts_with("tiled-cartesian") && !mode.starts_with("tiled-cartesian-quadrature"))
       tile = 7;
     else if (replay)
       tile = 64;

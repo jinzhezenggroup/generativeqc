@@ -361,6 +361,26 @@ bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& optio
   return layout_impl(shape, options, plan, true);
 }
 
+std::size_t cartesian_first_batch(const Layout& plan, const CudaWb97mvGridOptions& options,
+                                  std::size_t rows) {
+  const auto workspace_rows = plan.adjoint_bytes / (adjoint_blocks * sizeof(double));
+  const auto first =
+      plan.factored_only
+          ? std::min(workspace_rows, (options.max_nuclear_affine_terms - plan.adjoint_build_work) /
+                                         plan.adjoint_dot_work)
+          : workspace_rows;
+  if (rows <= first) return rows;
+  // The second batch reuses the live adjoint, so only its contractions are
+  // charged against the work limit. Require paired weight planes in both
+  // batches; a singleton uses the standalone three-plane layout instead.
+  const auto second =
+      plan.factored_only
+          ? std::min(workspace_rows, options.max_nuclear_affine_terms / plan.adjoint_dot_work)
+          : workspace_rows;
+  const auto split = std::min(first, rows - 2);
+  return split >= 2 && rows - split <= second ? split : 0;
+}
+
 bool interval(const void* pointer, std::size_t elements, std::uintptr_t& end) noexcept {
   const auto begin = reinterpret_cast<std::uintptr_t>(pointer);
   std::size_t bytes{};
@@ -446,7 +466,7 @@ __global__ void finish_private_mixed(const double* candidate, double* output, co
 }
 
 __global__ void record_private_nuclear_status(const int* status, int* transaction_status) {
-  if (*status) atomicOr(transaction_status, 1);
+  if (*status) atomicOr(transaction_status, cuda_grid_nuclear_xc_invalid);
 }
 
 __global__ void discover(const double* fields, const double* weights, const double* points,
@@ -2307,12 +2327,10 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_mixed(
 
 bool CudaWb97mvGridResponse::admits_cartesian_mixed(std::size_t rows) const noexcept {
   Layout plan;
-  return ready_ && rows && rows <= 3 * shape_.atoms && layout(shape_, options_, plan) &&
-         plan.adjoint_bytes &&
-         (!plan.factored_only ||
-          plan.adjoint_dot_work <=
-              (options_.max_nuclear_affine_terms - plan.adjoint_build_work) / rows) &&
-         (rows == 1 || rows <= plan.adjoint_bytes / (adjoint_blocks * sizeof(double)));
+  if (!ready_ || !rows || rows > 3 * shape_.atoms || !layout(shape_, options_, plan) ||
+      !plan.adjoint_bytes)
+    return false;
+  return rows == 1 || cartesian_first_batch(plan, options_, rows) != 0;
 }
 
 cudaError_t CudaWb97mvGridResponse::enqueue_private_cartesian_mixed(
@@ -2343,10 +2361,13 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
       (use_adjoint && rows > UINT64_MAX - work_.nuclear_adjoint_contractions))
     return cudaErrorInvalidValue;
   const auto build_work = use_adjoint && !nuclear_adjoint_ready_ ? plan.adjoint_build_work : 0;
+  const auto first_batch =
+      cartesian && rows > 1 && use_adjoint ? cartesian_first_batch(plan, options_, rows) : 0;
   std::size_t contract_work{};
   if (!product(rows, use_adjoint ? plan.adjoint_dot_work : plan.mixed_work, contract_work) ||
-      (plan.factored_only && (build_work > options_.max_nuclear_affine_terms ||
-                              contract_work > options_.max_nuclear_affine_terms - build_work)) ||
+      (plan.factored_only && !first_batch &&
+       (build_work > options_.max_nuclear_affine_terms ||
+        contract_work > options_.max_nuclear_affine_terms - build_work)) ||
       build_work > UINT64_MAX - work_.nuclear_affine_terms ||
       contract_work > UINT64_MAX - work_.nuclear_affine_terms - build_work)
     return cudaErrorInvalidValue;
@@ -2355,8 +2376,7 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
         cartesian->basis != reference_.basis || cartesian->atoms != shape_.atoms ||
         (cartesian->radial_points && cartesian->radial_points != reference_.points) ||
         cartesian->left / 3 >= shape_.atoms || cartesian->right / 3 >= shape_.atoms ||
-        rows > 3 * shape_.atoms - cartesian->left ||
-        (rows > 1 && rows > plan.adjoint_bytes / (adjoint_blocks * sizeof(double))))
+        rows > 3 * shape_.atoms - cartesian->left || (rows > 1 && !first_batch))
       return cudaErrorInvalidValue;
     const auto weight_planes = rows > 1 ? 2 : 3;
     error = nuclear_buffers(
@@ -2404,36 +2424,47 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
     if (cartesian) {
       // The adjoint generator has finished with its scratch on this stream.
       auto* partials = arena + (rows > 1 ? plan.adjoint_scratch : plan.adjoint_partials);
-      const auto launch = [&](auto radial) {
+      const auto launch = [&](auto radial, const CudaGridGeometryCartesianView& batch) {
         constexpr bool compact = decltype(radial)::value;
-        if (rows > 1 && plan.cartesian_ao_owners)
+        if (batch.rows > 1 && plan.cartesian_ao_owners)
           contract_cartesian_ao_adjoint<true, compact>
-              <<<dim3(adjoint_blocks, rows), 128, 0, stream>>>(
-                  shape_, *cartesian, arena + plan.adjoint_first, arena + plan.adjoint_second,
+              <<<dim3(adjoint_blocks, batch.rows), 128, 0, stream>>>(
+                  shape_, batch, arena + plan.adjoint_first, arena + plan.adjoint_second,
                   extra_left, arena + plan.base_partial, arena + plan.right_partial, partials,
                   reinterpret_cast<const unsigned*>(arena + plan.cartesian_ao_owners), status,
                   transaction_status);
         else
           contract_cartesian_ao_adjoint<false, compact>
-              <<<dim3(adjoint_blocks, rows), 128, 0, stream>>>(
-                  shape_, *cartesian, arena + plan.adjoint_first, arena + plan.adjoint_second,
+              <<<dim3(adjoint_blocks, batch.rows), 128, 0, stream>>>(
+                  shape_, batch, arena + plan.adjoint_first, arena + plan.adjoint_second,
                   extra_left, arena + plan.base_partial, arena + plan.right_partial, partials,
-                  nullptr, status, rows > 1 ? transaction_status : nullptr);
+                  nullptr, status, batch.rows > 1 ? transaction_status : nullptr);
       };
-      if (cartesian->radial_points)
-        launch(std::true_type{});
-      else
-        launch(std::false_type{});
       if (rows > 1) {
-        if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-        if ((error = authenticate(stream)) != cudaSuccess) return error;
-        finish_cartesian_column<<<rows, 128, 0, stream>>>(partials, output, status,
-                                                          transaction_status);
-        if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
-        work_.nuclear_contractions += rows;
-        work_.nuclear_adjoint_contractions += rows;
+        for (std::size_t start = 0; start < rows;) {
+          auto batch = *cartesian;
+          batch.left += start;
+          batch.rows = start ? rows - start : first_batch;
+          batch.weights += 2 * start * shape_.points;
+          if (batch.radial_points)
+            launch(std::true_type{}, batch);
+          else
+            launch(std::false_type{}, batch);
+          if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+          if ((error = authenticate(stream)) != cudaSuccess) return error;
+          finish_cartesian_column<<<batch.rows, 128, 0, stream>>>(partials, output + start, status,
+                                                                  transaction_status);
+          if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
+          work_.nuclear_contractions += batch.rows;
+          work_.nuclear_adjoint_contractions += batch.rows;
+          start += batch.rows;
+        }
         return cudaSuccess;
       }
+      if (cartesian->radial_points)
+        launch(std::true_type{}, *cartesian);
+      else
+        launch(std::false_type{}, *cartesian);
     } else
       contract_ao_adjoint<<<adjoint_blocks, 128, 0, stream>>>(
           plan.ao_elements, shape_.points, arena + plan.adjoint_first, arena + plan.adjoint_second,
