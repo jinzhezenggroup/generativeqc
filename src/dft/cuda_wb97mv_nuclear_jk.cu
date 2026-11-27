@@ -1597,13 +1597,34 @@ __device__ std::size_t lower_group(const ReductionEntry* entries, std::size_t be
   return begin;
 }
 
+/** The compact frozen sweep is the only reader of these entries after
+ * upload. Encode its atom tests and projected offsets in the original slots
+ * once per window rather than gathering group descriptors once per atom. */
+__global__ void encode_frozen_owners(const DeviceGroup* groups, ReductionEntry* entries,
+                                     std::size_t count, const int* status) {
+  if (*status) return;
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto entry = entries[index];
+    const auto& group = groups[entry.group];
+    std::uint32_t atom_bytes{};
+#pragma unroll
+    for (unsigned slot = 0; slot < 4; ++slot)
+      atom_bytes |= static_cast<std::uint32_t>(group.atoms[slot]) << (8 * slot);
+    const auto offset = group.projected_offset + entry.packed_offset;
+    entries[index] = {
+        atom_bytes, static_cast<std::uint8_t>(offset), static_cast<std::uint8_t>(offset >> 8),
+        static_cast<std::uint8_t>(offset >> 16), static_cast<std::uint8_t>(offset >> 24)};
+  }
+}
+
 /** Keep the significant entries in owner and projection order. Each owner
  * uses its original range as a capacity, so warps need no global scan and
  * no atomic allocation. The energy owner is not part of a frozen column. */
 __global__ void compact_frozen_owners(const DeviceGroup* groups, const std::size_t* offsets,
                                       const ReductionEntry* entries, std::size_t owners,
                                       long long atom, std::uint32_t* counts, std::uint32_t* values,
-                                      const int* status) {
+                                      bool encoded, const int* status) {
   if (*status) return;
   const unsigned lane = threadIdx.x % 32;
   for (std::size_t owner = (blockIdx.x * blockDim.x + threadIdx.x) / 32; owner < owners;
@@ -1616,12 +1637,22 @@ __global__ void compact_frozen_owners(const DeviceGroup* groups, const std::size
       bool active = false;
       if (index < end) {
         entry = entries[index];
-        active = aot::active_eri_centers(groups[entry.group].atoms, atom);
+        if (encoded) {
+          const auto matches = __vcmpeq4(entry.group, 0x01010101U * unsigned(atom));
+          active = matches != 0 && matches != UINT32_MAX;
+        } else {
+          active = aot::active_eri_centers(groups[entry.group].atoms, atom);
+        }
       }
       const auto mask = __ballot_sync(0xffffffffU, active);
       if (active) {
         const auto rank = __popc(mask & ((1U << lane) - 1));
-        values[first + count + rank] = groups[entry.group].projected_offset + entry.packed_offset;
+        const auto offset =
+            encoded
+                ? (std::uint32_t(entry.incidence) | (std::uint32_t(entry.first) << 8) |
+                   (std::uint32_t(entry.second) << 16) | (std::uint32_t(entry.packed_offset) << 24))
+                : groups[entry.group].projected_offset + entry.packed_offset;
+        values[first + count + rank] = static_cast<std::uint32_t>(offset);
       }
       count += __popc(mask);
     }
@@ -1908,7 +1939,8 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
                         bool first_atom_axis = true,
                         const aot::FactorizedPairGeometry* prepared = nullptr,
                         const ActiveComponentAtom* active_atom = nullptr,
-                        const aot::FactorizedActiveComponent* active_tasks = nullptr) {
+                        const aot::FactorizedActiveComponent* active_tasks = nullptr,
+                        bool encoded_owners = false) {
   auto error = cudaSuccess;
   const auto& plan = selected.plan;
   const auto* groups = reinterpret_cast<const DeviceGroup*>(base + plan.groups);
@@ -1924,8 +1956,8 @@ cudaError_t run_batched(const Schedule& selected, CudaWb97mvJkShape shape, char*
   const auto owners = plan.panels + 3 * shape.atoms;
   const auto packed_blocks = std::min<std::size_t>((owners + 3) / 4, 65535);
   if (compact && first_atom_axis) {
-    compact_frozen_owners<<<packed_blocks, 128, 0, stream>>>(groups, offsets, entries, owners, atom,
-                                                             counts, values, status);
+    compact_frozen_owners<<<packed_blocks, 128, 0, stream>>>(
+        groups, offsets, entries, owners, atom, counts, values, encoded_owners, status);
     if ((error = cudaGetLastError()) != cudaSuccess) return error;
   }
   if (active_atom && !reuse) {
@@ -2348,6 +2380,14 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
                               window.active_tasks.size() * sizeof(*tasks), cudaMemcpyHostToDevice,
                               stream);
     if (error == cudaSuccess && upload_complete) error = cudaEventRecord(upload_complete, stream);
+    const bool encoded_owners = window.plan.frozen_value_offsets && shape.atoms <= 256;
+    if (error == cudaSuccess && encoded_owners) {
+      const auto count = window.plan.reduction_entry_count;
+      encode_frozen_owners<<<blocks(count), 128, 0, stream>>>(
+          reinterpret_cast<const DeviceGroup*>(base + window.plan.groups),
+          reinterpret_cast<ReductionEntry*>(base + window.plan.reduction_entries), count, status);
+      error = cudaGetLastError();
+    }
     aot::FactorizedPairGeometry* prepared = nullptr;
     if (error == cudaSuccess && window.plan.paired_radial_cache &&
         window.frozen_atoms.size() >= 2 && window.plan.window_radials <= plan.prepared_count) {
@@ -2377,7 +2417,7 @@ cudaError_t CudaWb97mvNuclearJk::enqueue_private_frozen_dense(
                             hvp + column * coordinates,
                             has_anchor ? table + anchor * plan.panels : nullptr,
                             has_anchor ? hvp + anchor * coordinates : nullptr, axis == 0, prepared,
-                            active, indexed ? tasks : nullptr);
+                            active, indexed ? tasks : nullptr, encoded_owners);
       }
     }
     return error;

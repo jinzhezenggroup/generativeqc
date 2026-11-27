@@ -219,6 +219,10 @@ function(generativeqc_add_hessian_aot target inventory)
   set_property(SOURCE "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu" APPEND
     PROPERTY COMPILE_OPTIONS --expt-relaxed-constexpr)
+  # Keep FP64 multiply-add contraction local to Hessian grid geometry;
+  # ordinary grids, functional evaluation, and integral AD keep their policies.
+  set_property(SOURCE "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu" APPEND
+    PROPERTY COMPILE_OPTIONS --fmad=true)
   set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
     CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON CUDA_SEPARABLE_COMPILATION OFF)
   if(GENERATIVEQC_BUILD_TESTS)
