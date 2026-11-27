@@ -1,0 +1,1830 @@
+{
+  "gates": {
+    "energy_per_atom": 1e-05,
+    "force_max": 0.0001,
+    "force_rms": 3e-05
+  },
+  "grid_stability_fraction": 0.25,
+  "trajectory": {
+    "paper-water96": {
+      "steps": [
+        {
+          "repeat": 1,
+          "step": 0,
+          "master": {
+            "seconds": 20.386407176032662,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 20.354113936424255,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 1,
+          "master": {
+            "seconds": 19.830080699175596,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.423685773715988e-07,
+                "force_max": 1.0329038349965458e-05,
+                "force_rms": 4.499555706765937e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.348035306771635e-06,
+                "force_max": 2.6476987010859432e-05,
+                "force_rms": 1.0945944002760518e-05
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 19.831738410517573,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.423685773715988e-07,
+                "force_max": 1.0329038349965458e-05,
+                "force_rms": 4.499555706765937e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.348035297297732e-06,
+                "force_max": 2.6476886645809827e-05,
+                "force_rms": 1.0945942862781387e-05
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 2,
+          "master": {
+            "seconds": 22.637462498620152,
+            "iterations": 13,
+            "fock_builds": 13,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 13,
+            "terminal_attempt_fock_builds": 13,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 22.66834995150566,
+            "iterations": 13,
+            "fock_builds": 13,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 13,
+            "terminal_attempt_fock_builds": 13,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 3,
+          "master": {
+            "seconds": 16.183597760275006,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 16.17727627977729,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 4,
+          "master": {
+            "seconds": 18.336153557524085,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 18.387729972600937,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 5,
+          "master": {
+            "seconds": 18.645599704235792,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.066477276860193e-08,
+                "force_max": 1.2438738623998802e-05,
+                "force_rms": 4.654747459293646e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.1390823664878553e-06,
+                "force_max": 1.7499604189730178e-05,
+                "force_rms": 7.46924723675724e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 18.577888809144497,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.066477276860193e-08,
+                "force_max": 1.2438738623998802e-05,
+                "force_rms": 4.654747459293646e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.1390823570139523e-06,
+                "force_max": 1.749962025154872e-05,
+                "force_rms": 7.469243393154571e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 6,
+          "master": {
+            "seconds": 18.290802305564284,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 18.280493510887027,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 7,
+          "master": {
+            "seconds": 17.721148874610662,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 17.731575924903154,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 8,
+          "master": {
+            "seconds": 33.44672278314829,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 23,
+            "terminal_attempt_fock_builds": 23,
+            "seed_step": 7,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 3.041445969150421e-08,
+                "force_max": 9.236332088491395e-06,
+                "force_rms": 4.065071871935149e-06
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 31.48090291209519,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 7,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 3.041445969150421e-08,
+                "force_max": 9.236332088491395e-06,
+                "force_rms": 4.065071871935149e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.8878280460276073e-06,
+                "force_max": 1.5152003151719384e-05,
+                "force_rms": 6.118689088210031e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 9,
+          "master": {
+            "seconds": 20.1511614844203,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 30.545605523511767,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 10,
+          "master": {
+            "seconds": 18.31680359505117,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.139961890809597e-07,
+                "force_max": 7.585222146389015e-06,
+                "force_rms": 3.2890606874684387e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.830276301324375e-06,
+                "force_max": 2.5498546757818374e-05,
+                "force_rms": 7.73249809287382e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 30.410120686516166,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.139961890809597e-07,
+                "force_max": 7.585222146389015e-06,
+                "force_rms": 3.2890606874684387e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.8322938353160985e-06,
+                "force_max": 2.5501139942152307e-05,
+                "force_rms": 7.73306697020512e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 0,
+          "master": {
+            "seconds": 20.431585742160678,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 20.354268627241254,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 1,
+          "master": {
+            "seconds": 19.78775918856263,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.423685773715988e-07,
+                "force_max": 1.0329038349965458e-05,
+                "force_rms": 4.499555706765937e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.348035306771635e-06,
+                "force_max": 2.6476921016538313e-05,
+                "force_rms": 1.094594110073357e-05
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 19.83218376711011,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.423685773715988e-07,
+                "force_max": 1.0329038349965458e-05,
+                "force_rms": 4.499555706765937e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.348035306771635e-06,
+                "force_max": 2.647697148816519e-05,
+                "force_rms": 1.0945947039418252e-05
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 2,
+          "master": {
+            "seconds": 22.637478668242693,
+            "iterations": 13,
+            "fock_builds": 13,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 13,
+            "terminal_attempt_fock_builds": 13,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 22.649420818313956,
+            "iterations": 13,
+            "fock_builds": 13,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 13,
+            "terminal_attempt_fock_builds": 13,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 3,
+          "master": {
+            "seconds": 16.156449899077415,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 16.159055219963193,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 4,
+          "master": {
+            "seconds": 18.357203049585223,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 18.35699481703341,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 5,
+          "master": {
+            "seconds": 18.562913693487644,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.066477276860193e-08,
+                "force_max": 1.2438738623998802e-05,
+                "force_rms": 4.654747459293646e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.1390823570139523e-06,
+                "force_max": 1.749957765007082e-05,
+                "force_rms": 7.469245245590352e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 18.610567906871438,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.066477276860193e-08,
+                "force_max": 1.2438738623998802e-05,
+                "force_rms": 4.654747459293646e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 3.1390823570139523e-06,
+                "force_max": 1.749964149055927e-05,
+                "force_rms": 7.4692455909407105e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 6,
+          "master": {
+            "seconds": 18.303804088383913,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 18.33145445585251,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 7,
+          "master": {
+            "seconds": 17.62732925079763,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 17.764288479462266,
+            "iterations": 9,
+            "fock_builds": 9,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 9,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 8,
+          "master": {
+            "seconds": 33.269089767709374,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 23,
+            "terminal_attempt_fock_builds": 23,
+            "seed_step": 7,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 3.041445969150421e-08,
+                "force_max": 9.236332088491395e-06,
+                "force_rms": 4.065071871935149e-06
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 31.394202403724194,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 7,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 3.041445969150421e-08,
+                "force_max": 9.236332088491395e-06,
+                "force_rms": 4.065071871935149e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.887828027079801e-06,
+                "force_max": 1.5152003217444587e-05,
+                "force_rms": 6.1186890745879674e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 9,
+          "master": {
+            "seconds": 20.13252170011401,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 30.492956072092056,
+            "iterations": 11,
+            "fock_builds": 11,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 11,
+            "terminal_attempt_fock_builds": 11,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 10,
+          "master": {
+            "seconds": 18.274688156321645,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.139961890809597e-07,
+                "force_max": 7.585222146389015e-06,
+                "force_rms": 3.2890606874684387e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.8302763155352295e-06,
+                "force_max": 2.549858413214423e-05,
+                "force_rms": 7.732501421690927e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 30.418811302632093,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 1.139961890809597e-07,
+                "force_max": 7.585222146389015e-06,
+                "force_rms": 3.2890606874684387e-06
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 2.832293825842195e-06,
+                "force_max": 2.5501140241024345e-05,
+                "force_rms": 7.733066976021719e-06
+              },
+              "passed": true
+            }
+          }
+        }
+      ],
+      "expected_baseline_failure_step": 8,
+      "master_failures": [
+        8,
+        8
+      ],
+      "candidate_complete": true,
+      "candidate_observable_gates": true,
+      "candidate_moved_seconds": [
+        224.09168198145926,
+        224.00993524305522
+      ]
+    },
+    "n-c32h66": {
+      "steps": [
+        {
+          "repeat": 1,
+          "step": 0,
+          "master": {
+            "seconds": 21.176396230235696,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 21.111766373738647,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 1,
+          "master": {
+            "seconds": 18.97549882531166,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.939941376113874e-08,
+                "force_max": 3.150313472310984e-06,
+                "force_rms": 8.619253073177651e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.044256581305657e-06,
+                "force_max": 3.158607667863578e-05,
+                "force_rms": 9.532070784416224e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 18.98364201001823,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.939941376113874e-08,
+                "force_max": 3.150313472310984e-06,
+                "force_rms": 8.619253073177651e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.044256599866773e-06,
+                "force_max": 3.1586087027690724e-05,
+                "force_rms": 9.532071041882573e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 2,
+          "master": {
+            "seconds": 16.08310879766941,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 16.022788694128394,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 3,
+          "master": {
+            "seconds": 37.61760698072612,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 2,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.839433395037694e-08,
+                "force_max": 2.707859567685489e-06,
+                "force_rms": 8.33516917601129e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 56.68097341619432,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 2,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.839433395037694e-08,
+                "force_max": 2.707859567685489e-06,
+                "force_rms": 8.33516917601129e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.071733348942314e-06,
+                "force_max": 2.4047404409088813e-05,
+                "force_rms": 9.044812867389034e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 4,
+          "master": {
+            "seconds": 19.009367499500513,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 68.4678519833833,
+            "iterations": 9,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 5,
+          "master": {
+            "seconds": 34.748982509598136,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 4,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.768894656468658e-08,
+                "force_max": 2.5165939900873013e-06,
+                "force_rms": 8.607109242168941e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 48.46884607896209,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.768894656468658e-08,
+                "force_max": 2.5165939900873013e-06,
+                "force_rms": 8.607109242168941e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.107130581117177e-06,
+                "force_max": 2.299067244826425e-05,
+                "force_rms": 8.982989622966944e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 6,
+          "master": {
+            "seconds": 16.50222976692021,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 4,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 49.95693475753069,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 7,
+          "master": {
+            "seconds": 16.44701829366386,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 50.18006297573447,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 8,
+          "master": {
+            "seconds": 16.084488183259964,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 48.97387603484094,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 9,
+          "master": {
+            "seconds": 16.419893531128764,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 51.46589580737054,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 1,
+          "step": 10,
+          "master": {
+            "seconds": 34.66207609139383,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 9,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.777855035392758e-08,
+                "force_max": 2.5249758976997327e-06,
+                "force_rms": 8.445450276527181e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 49.82194302044809,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.777855035392758e-08,
+                "force_max": 2.5249758976997327e-06,
+                "force_rms": 8.445450276527181e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.099435485653848e-06,
+                "force_max": 2.2410514596504783e-05,
+                "force_rms": 8.856125564132479e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 0,
+          "master": {
+            "seconds": 21.27630827575922,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 21.19402665272355,
+            "iterations": 15,
+            "fock_builds": 15,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 15,
+            "terminal_attempt_fock_builds": 15,
+            "seed_step": null,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 1,
+          "master": {
+            "seconds": 19.001716431230307,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.939941376113874e-08,
+                "force_max": 3.150313472310984e-06,
+                "force_rms": 8.619253073177651e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.044256590586214e-06,
+                "force_max": 3.158609988851424e-05,
+                "force_rms": 9.532069252822768e-06
+              },
+              "passed": true
+            }
+          },
+          "candidate": {
+            "seconds": 18.978712106123567,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 0,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.939941376113874e-08,
+                "force_max": 3.150313472310984e-06,
+                "force_rms": 8.619253073177651e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.044256604507052e-06,
+                "force_max": 3.1586088398150025e-05,
+                "force_rms": 9.53207073862641e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 2,
+          "master": {
+            "seconds": 16.17537265457213,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 16.011651972308755,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 1,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 3,
+          "master": {
+            "seconds": 37.554007878527045,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 2,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.839433395037694e-08,
+                "force_max": 2.707859567685489e-06,
+                "force_rms": 8.33516917601129e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 57.000719111412764,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 2,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.839433395037694e-08,
+                "force_max": 2.707859567685489e-06,
+                "force_rms": 8.33516917601129e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.071733337341616e-06,
+                "force_max": 2.4047404111549042e-05,
+                "force_rms": 9.044812952509416e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 4,
+          "master": {
+            "seconds": 19.191144136711955,
+            "iterations": 10,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 10,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 2,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 69.28000799939036,
+            "iterations": 9,
+            "fock_builds": 10,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 9,
+            "terminal_attempt_fock_builds": 10,
+            "seed_step": 3,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 5,
+          "master": {
+            "seconds": 34.60680149681866,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 4,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.768894656468658e-08,
+                "force_max": 2.5165939900873013e-06,
+                "force_rms": 8.607109242168941e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 48.72204436734319,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 4,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.768894656468658e-08,
+                "force_max": 2.5165939900873013e-06,
+                "force_rms": 8.607109242168941e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.107130576476896e-06,
+                "force_max": 2.2990672495781794e-05,
+                "force_rms": 8.98298952519802e-06
+              },
+              "passed": true
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 6,
+          "master": {
+            "seconds": 16.545292876660824,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 4,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 51.21289042197168,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 5,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 7,
+          "master": {
+            "seconds": 16.621353093534708,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 51.87637684121728,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 6,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 8,
+          "master": {
+            "seconds": 16.02469529211521,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 49.100053291767836,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 7,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 9,
+          "master": {
+            "seconds": 16.469606509432197,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          },
+          "candidate": {
+            "seconds": 51.38395066000521,
+            "iterations": 8,
+            "fock_builds": 8,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 8,
+            "terminal_attempt_fock_builds": 8,
+            "seed_step": 8,
+            "warm_start_fallback": false
+          }
+        },
+        {
+          "repeat": 2,
+          "step": 10,
+          "master": {
+            "seconds": 34.75121730566025,
+            "iterations": null,
+            "fock_builds": null,
+            "complete": false,
+            "status": 5,
+            "native_detail": "batch item 0: DF metric rank crossing: retained/discarded subspaces are unresolved",
+            "terminal_attempt_history_rows": 24,
+            "terminal_attempt_fock_builds": 24,
+            "seed_step": 9,
+            "warm_start_fallback": true,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.777855035392758e-08,
+                "force_max": 2.5249758976997327e-06,
+                "force_rms": 8.445450276527181e-07
+              },
+              "grid_stable": true,
+              "errors": null,
+              "passed": false
+            }
+          },
+          "candidate": {
+            "seconds": 50.60414872318506,
+            "iterations": 7,
+            "fock_builds": 7,
+            "complete": true,
+            "status": 0,
+            "native_detail": null,
+            "terminal_attempt_history_rows": 7,
+            "terminal_attempt_fock_builds": 7,
+            "seed_step": 9,
+            "warm_start_fallback": false,
+            "observables": {
+              "grid_stability": {
+                "energy_per_atom": 9.777855035392758e-08,
+                "force_max": 2.5249758976997327e-06,
+                "force_rms": 8.445450276527181e-07
+              },
+              "grid_stable": true,
+              "errors": {
+                "energy_per_atom": 8.099435485653848e-06,
+                "force_max": 2.241051459783705e-05,
+                "force_rms": 8.856125502704796e-06
+              },
+              "passed": true
+            }
+          }
+        }
+      ],
+      "expected_baseline_failure_step": 3,
+      "master_failures": [
+        3,
+        5,
+        10,
+        3,
+        5,
+        10
+      ],
+      "candidate_complete": true,
+      "candidate_observable_gates": true,
+      "candidate_moved_seconds": [
+        459.02281477861106,
+        464.1705554947257
+      ]
+    }
+  },
+  "cold3": {
+    "master": {
+      "cold_seconds": [
+        20.380183055996895,
+        20.365636998787522,
+        20.3184220418334
+      ],
+      "warm_seconds_by_process": [
+        [
+          4.4146523382514715,
+          4.416326280683279,
+          4.41475442238152
+        ],
+        [
+          4.384807778522372,
+          4.39378084987402,
+          4.387641692534089
+        ],
+        [
+          4.404880376532674,
+          4.394704943522811,
+          4.412494013085961
+        ]
+      ],
+      "iterations": [
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ]
+      ],
+      "fock_builds": [
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ]
+      ],
+      "cold_median": 20.365636998787522,
+      "warm_process_median": 4.404880376532674
+    },
+    "candidate": {
+      "cold_seconds": [
+        20.256030881777406,
+        20.30452431924641,
+        20.358907530084252
+      ],
+      "warm_seconds_by_process": [
+        [
+          4.409353891387582,
+          4.414743639528751,
+          4.415292505174875
+        ],
+        [
+          4.402201354503632,
+          4.402987375855446,
+          4.405748687684536
+        ],
+        [
+          4.404614444822073,
+          4.413607940077782,
+          4.422100385650992
+        ]
+      ],
+      "iterations": [
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ]
+      ],
+      "fock_builds": [
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ],
+        [
+          15,
+          1,
+          1,
+          1
+        ]
+      ],
+      "cold_median": 20.30452431924641,
+      "warm_process_median": 4.413607940077782
+    },
+    "candidate_over_master": {
+      "cold_median": 0.9969992257278891,
+      "warm_process_median": 1.0019813395141455
+    }
+  }
+}

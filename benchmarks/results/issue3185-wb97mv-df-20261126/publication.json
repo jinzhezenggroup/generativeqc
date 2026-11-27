@@ -1,0 +1,75 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "e8049fa996846c9a64d9b02416fa96527a874dbc",
+    "dirty": false
+  },
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/issue3185-wb97mv-df-20261126/report.py"
+    ]
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "The endpoint and observable gates cover both frozen H100 replays and independent grid-stable Direct references"
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "samples.json.xz",
+      "role": "samples",
+      "bytes": 337080,
+      "sha256": "8ee220d091dce54b524e7b730eec0975eb3170d4da9bdce03b364deb7e46e536"
+    },
+    {
+      "path": "provenance.json.xz",
+      "role": "reproduction",
+      "bytes": 20504,
+      "sha256": "5816190b56301e3ea6eff7df58ecda36941e051389a610ea99e6fc2e32114a95"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 56833,
+      "sha256": "ed180eb1fecbc571e680d592a21ea80d3b4e2a59cc818a096216d7a62f9ed07a"
+    },
+    {
+      "path": "steps.csv",
+      "role": "samples",
+      "bytes": 4856,
+      "sha256": "c051fad78443b34caf877396d408037cb85aecfa9eccdc80af513ee9e012fa70"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 32211,
+      "sha256": "4158aefb105c6d9cb257209270b1f543d223fb92581c300a46309dc25a731706"
+    },
+    {
+      "path": "acquire_qz.sh",
+      "role": "reproduction",
+      "bytes": 5889,
+      "sha256": "06069bc8f2599da78b7b676076df411a2e4993f0e005f024eefda7f4db4c17a0"
+    },
+    {
+      "path": "replay.py",
+      "role": "reproduction",
+      "bytes": 11405,
+      "sha256": "f75a0ccf185395619cee31c6a72817d48eef2e3d7dacc69a0020641381a68fe4"
+    },
+    {
+      "path": "metric_spectrum.py",
+      "role": "reproduction",
+      "bytes": 2908,
+      "sha256": "474395d751955e55aaf1aad07054b2a841fa121bb7727c995b714115dd12a2e0"
+    },
+    {
+      "path": "report.py",
+      "role": "reproduction",
+      "bytes": 7164,
+      "sha256": "b47e589612137f51cfd09267b81e94b8ebf07d14756a11b0cf9ca9214855449f"
+    }
+  ]
+}
