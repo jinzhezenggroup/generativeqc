@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generativeqc/generativeqc.hpp"
 #include "scf/hf_host_resources.hpp"
 
 extern "C" int generativeqc_resource_hf_cpu_host_v1(const std::uint64_t*, std::size_t,
@@ -14,6 +15,117 @@ extern "C" int generativeqc_resource_hf_cpu_fleet_v1(const std::uint64_t*, std::
 namespace {
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
+}
+
+void check_prepared_host_lease() {
+  generativeqc_context_descriptor cpu{};
+  cpu.struct_size = sizeof(cpu);
+  cpu.abi_version = GENERATIVEQC_ABI_VERSION;
+  cpu.backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  generativeqc::Context first_context(cpu), second_context(cpu);
+  const std::array<generativeqc_atom, 2> hydrogen{{{1, 0, 0, 0}, {1, .05, -.1, 1.4}}};
+  const std::array<generativeqc_atom, 2> hydroxyl{{{8, 0, 0, 0}, {1, .12, .15, 1.8}}};
+  generativeqc::System first(first_context, hydrogen, "sto-3g");
+  generativeqc::System second(second_context, hydroxyl, "sto-3g", 0, 2,
+                              GENERATIVEQC_BASIS_SPHERICAL);
+  generativeqc_method_descriptor rhf{};
+  rhf.struct_size = sizeof(rhf);
+  rhf.abi_version = GENERATIVEQC_ABI_VERSION;
+  rhf.method = GENERATIVEQC_METHOD_RHF;
+  auto uhf = rhf;
+  uhf.method = GENERATIVEQC_METHOD_UHF;
+  uhf.diis_history = 5;
+
+  const auto quote = [](const std::array<std::uint64_t, 14>& shape) {
+    std::array<std::uint64_t, 7> capacity{};
+    require(generativeqc_resource_hf_cpu_fleet_v1(shape.data(), shape.size(), capacity.data(),
+                                                  capacity.size()) == 0,
+            "native HF fleet rejected the SDK test topology");
+    return capacity;
+  };
+  const auto small = quote({2, 2, 2, 1, 0, 8, 0, 0, 0, 0, 2, 6, 0, 0});
+  const auto large = quote({2, 6, 6, 2, 1, 5, 0, 0, 0, 0, 4, 12, 0, 0});
+  const auto combined = small[0] + large[0] + std::max(small[1], large[1]);
+  const auto expect = [](const generativeqc::HostResources& cap, std::uint64_t count,
+                         std::uint64_t retained, std::uint64_t workspace) {
+    const auto snapshot = cap.snapshot();
+    require(snapshot.owner_count == count && snapshot.retained_bytes == retained &&
+                snapshot.workspace_bytes == workspace,
+            "shared Direct HF lease does not match the expected owner lifetimes");
+  };
+  const auto refuse = [](generativeqc::Context& context, const generativeqc::System& system,
+                         const generativeqc_method_descriptor& method,
+                         const generativeqc::HostResources& cap, generativeqc_status status) {
+    auto* published = reinterpret_cast<generativeqc_calculation*>(1);
+    require(generativeqc_calculation_prepare_with_host_resources_v1(
+                context.get(), system.get(), &method, cap.get(), &published) == status &&
+                published == nullptr,
+            "refused Direct HF preparation published a handle or the wrong status");
+  };
+  {
+    generativeqc::HostResources short_cap(large[2] - 1);
+    refuse(second_context, second, uhf, short_cap, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+    expect(short_cap, 0, 0, 0);
+  }
+  {
+    generativeqc::HostResources exact(large[2]);
+    const auto properties = GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES;
+    generativeqc::Calculation ordinary(second_context, second, uhf);
+    const auto reference = ordinary.execute(properties);
+    generativeqc::Calculation bounded(second_context, second, uhf, exact);
+    expect(exact, 1, large[0], large[1]);
+    const auto energy = bounded.execute();
+    const auto ordinary_energy = ordinary.execute();
+    require(energy.energy == ordinary_energy.energy &&
+                energy.iterations == ordinary_energy.iterations && !energy.forces,
+            "leased UHF energy replay changed the scientific endpoint");
+    const auto forces = bounded.execute(properties);
+    require(forces.energy == reference.energy && forces.iterations == reference.iterations &&
+                forces.forces == reference.forces,
+            "leased UHF force replay changed the scientific endpoint");
+  }
+  {
+    generativeqc::HostResources cap(combined - 1);
+    {
+      generativeqc::Calculation owner(first_context, first, rhf, cap);
+      refuse(second_context, second, uhf, cap, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
+      expect(cap, 1, small[0], small[1]);
+    }
+    expect(cap, 0, 0, 0);
+    generativeqc::Calculation retry(second_context, second, uhf, cap);
+    expect(cap, 1, large[0], large[1]);
+  }
+  {
+    auto cap = std::make_unique<generativeqc::HostResources>(combined);
+    generativeqc::Calculation owner(first_context, first, rhf, *cap);
+    refuse(second_context, second, rhf, *cap, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    auto fitted = uhf;
+    fitted.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+    refuse(second_context, second, fitted, *cap, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    auto automatic = uhf;
+    automatic.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+    refuse(second_context, second, automatic, *cap, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    auto seeded = rhf;
+    generativeqc_initial_guess_options guess{};
+    guess.struct_size = sizeof(guess);
+    guess.abi_version = GENERATIVEQC_ABI_VERSION;
+    guess.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+    seeded.initial_guess = &guess;
+    refuse(first_context, first, seeded, *cap, GENERATIVEQC_STATUS_NOT_IMPLEMENTED);
+    expect(*cap, 1, small[0], small[1]);
+    auto other = std::make_unique<generativeqc::Calculation>(second_context, second, uhf, *cap);
+    expect(*cap, 2, small[0] + large[0], std::max(small[1], large[1]));
+    other.reset();
+    expect(*cap, 1, small[0], small[1]);
+    cap.reset();
+    generativeqc::Calculation ordinary(first_context, first, rhf);
+    const auto properties = GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES;
+    const auto result = owner.execute(properties);
+    const auto reference = ordinary.execute(properties);
+    require(result.energy == reference.energy && result.iterations == reference.iterations &&
+                result.forces == reference.forces,
+            "closing the host metadata detached a live RHF plan");
+  }
 }
 
 void check_fleet_capacity() {
@@ -108,6 +220,7 @@ void check_fleet_capacity() {
 
 int main() {
   check_fleet_capacity();
+  check_prepared_host_lease();
   const std::array<std::uint64_t, 10> shape{2, 2, 2, 1, 0, 8, 0, 0, 0, 0};
   std::array<std::uint64_t, 4> inventory{};
   const auto query = [&](const auto& request) {

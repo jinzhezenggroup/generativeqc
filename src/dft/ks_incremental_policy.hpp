@@ -30,14 +30,14 @@ constexpr bool admit_ks_incremental_cold_auto(KsIncrementalColdAutoDomain domain
          domain.through_d_shells && domain.all_electron && domain.no_resource_ledger;
 }
 
-/** Select each solve from a prepared capability without confusing a native
- * cold guess with an imported density. Only the initial-guess owner may attest
- * native provenance. Retained warm proof stays ordinary, and explicit opt-in
- * preserves its broader external-seed contract. */
+/** Select each solve from its prepared capability and seed provenance.
+ * Retained same-geometry warm proof stays ordinary. Explicit opt-in preserves
+ * its broader external-seed contract. */
 constexpr bool ks_incremental_solve_active(bool prepared_active, bool automatic, bool ordinary_warm,
-                                           bool supplied_density, bool native_cold_guess) noexcept {
+                                           bool supplied_density,
+                                           bool admitted_owned_seed) noexcept {
   return prepared_active && !ordinary_warm &&
-         (!automatic || !supplied_density || native_cold_guess);
+         (!automatic || !supplied_density || admitted_owned_seed);
 }
 
 /** Bound an incremental proposal epoch whose consumer requires a fresh physical

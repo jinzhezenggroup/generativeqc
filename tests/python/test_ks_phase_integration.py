@@ -12,9 +12,15 @@ from generativeqc import GridSpec, KsOptions, _native, resources_ks
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
 
 
+@pytest.fixture(scope="module")
+def cpu_fleet_query() -> typing.Callable[..., int]:
+    """Resolve the CPU query before the function-scoped loader guard runs."""
+    return _native.load_library(device="cpu").generativeqc_resource_ks_cpu_fleet_v1
+
+
 @pytest.fixture(autouse=True)
 def no_native_library_loading(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Resource discovery in this suite uses only explicit library doubles."""
+    """Require all resource discovery to use the explicitly supplied library."""
 
     def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
         pytest.fail("shape-only inventory attempted to load a native library")
@@ -156,18 +162,24 @@ def test_unavailable_quadrature_inventory_fails_closed(missing: bool) -> None:
         )
 
 
-def _abi_library(version: int | None = 1) -> SimpleNamespace:
+def _abi_library(
+    version: int | None = 1, *, cpu_fleet_query: typing.Callable[..., int] | None = None
+) -> SimpleNamespace:
     library = SimpleNamespace(generativeqc_ks_resource_inventory_version_v1=lambda: 1)
     if version is not None:
         library.generativeqc_ks_options_version = lambda: version
+    if cpu_fleet_query is not None:
+        library.generativeqc_resource_ks_cpu_fleet_v1 = cpu_fleet_query
     return library
 
 
 @pytest.mark.parametrize("version", [None, 0, 1, 3, 5])
 def test_native_semantic_abi_version_is_checked_even_for_default_model(
-    version: int | None,
+    version: int | None, cpu_fleet_query: typing.Callable[..., int]
 ) -> None:
-    request = resources_ks.ks_resource_request([ATOMS], library=_abi_library(version))
+    request = resources_ks.ks_resource_request(
+        [ATOMS], library=_abi_library(version, cpu_fleet_query=cpu_fleet_query)
+    )
     if version == 1:
         assert request.unsupported_reason is None
         assert request.candidates
@@ -177,12 +189,14 @@ def test_native_semantic_abi_version_is_checked_even_for_default_model(
 
 
 @pytest.mark.parametrize("method", ["pbe-rks", "pbe0-rks", "b3lyp-rks"])
-def test_current_models_plan_without_retired_version_properties(method: str) -> None:
+def test_current_models_plan_without_retired_version_properties(
+    method: str, cpu_fleet_query: typing.Callable[..., int]
+) -> None:
     """Resolve actual models and complete planning through the supported ABI."""
     request = resources_ks.ks_resource_request(
         [ATOMS],
         method=method,
-        library=_abi_library(),
+        library=_abi_library(cpu_fleet_query=cpu_fleet_query),
         ks_options=KsOptions(grid=GridSpec(24, 8, 16)),
     )
     assert request.unsupported_reason is None
@@ -231,8 +245,10 @@ def test_cpu_ao_cache_boundary_keeps_exact_transient_charge(
 
 
 @pytest.mark.parametrize("symbol", [None, 1])
-def test_unusable_semantic_abi_symbol_is_explicitly_unsupported(symbol: object) -> None:
-    library = _abi_library()
+def test_unusable_semantic_abi_symbol_is_explicitly_unsupported(
+    symbol: object, cpu_fleet_query: typing.Callable[..., int]
+) -> None:
+    library = _abi_library(cpu_fleet_query=cpu_fleet_query)
     library.generativeqc_ks_options_version = symbol
     request = resources_ks.ks_resource_request([ATOMS], library=library)
     assert not request.candidates

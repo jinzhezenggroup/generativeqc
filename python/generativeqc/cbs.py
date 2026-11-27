@@ -1,7 +1,7 @@
 """MP2-assisted canonical CCSD(T)/CBS energy and analytic forces.
 
-Only component orchestration and application of native-owned coefficients live here.
-Every electronic energy and force comes from the public native calculator;
+Only component orchestration and result presentation live here.
+Electronic energies, forces and focal-point composition come from native owners;
 reference packages and numerical differentiation are not production consumers.
 """
 
@@ -18,7 +18,7 @@ import numpy as np
 
 from . import _native
 from ._api_types import Atom, Result
-from ._cbs_plan import native_cbs_plan
+from ._cbs_plan import NativeCbsComposer, native_cbs_plan
 from ._model_resolution import snapshot_basis
 from .basis import BasisSet
 from .calculator import Calculator
@@ -324,36 +324,30 @@ class CCSDTCBSCalculator:
             self.hf_exponent,
             hf_extrapolation,
         )
+        self._compose = NativeCbsComposer(policy_library, self._plan)
         self.mp2_weights = self._plan.mp2_weights
         self.hf_weights = self._plan.hf_weights
 
-        from ._correlation_convergence import convergence_policy
-        from .force_aware_numerics import TargetErrorBudget
+        from ._correlation_convergence import cbs_convergence_policy
 
-        coefficients: dict[tuple[str, str], float] = {}
-        for _, method, basis, coefficient in self._terms():
-            key = (method, basis.identity)
-            coefficients[key] = coefficients.get(key, 0.0) + coefficient
-        amplification = math.fsum(abs(value) for value in coefficients.values())
-        # CBS owns its routine convergence contract. Do not change the shared
-        # HF/DFT Standard preset when promoting the previously explicit allowance.
-        # Explicit targets override presets; only an omitted Standard allowance
-        # receives this workflow's relaxed default. Tight/FP64 stay strict by default.
-        budget = policy.budget
-        if budget is None and policy.profile == "standard":
-            budget = TargetErrorBudget(1e-5, 1e-4, 3e-5)
-        component_budget = (
-            TargetErrorBudget(
-                budget.energy_abs / amplification,
-                budget.force_max_abs / amplification,
-                budget.force_rms / amplification
-                if budget.force_rms is not None
-                else None,
-            )
-            if budget is not None
-            else None
+        # Basis identity is a frontend fact; budget allocation is native policy.
+        correction_role = (
+            low.basis.identity,
+            high.basis.identity,
+            small.identity,
+        ).index(small.identity)
+        convergence = cbs_convergence_policy(
+            policy_library,
+            self._plan,
+            correction_role,
+            policy.budget,
+            default_standard=policy.profile == "standard",
         )
-        scale, limits = convergence_policy(component_budget, library=policy_library)
+        budget, component_budget = (
+            convergence.total_budget,
+            convergence.component_budget,
+        )
+        scale, limits = convergence.scale, convergence.limits
         if scale:
             for name in (
                 "energy_tolerance",
@@ -393,7 +387,7 @@ class CCSDTCBSCalculator:
             "component_budget": asdict(component_budget)
             if component_budget is not None
             else None,
-            "coefficient_l1": amplification,
+            "coefficient_l1": convergence.coefficient_l1,
             "scale": scale,
             "limits": {
                 **limits,
@@ -538,7 +532,6 @@ class CCSDTCBSCalculator:
                 method for role, method, _, _ in terms if role == "correction_ccsdt"
             )
             completed: dict[tuple[str, str], tuple[Result, float]] = {}
-            by_role: dict[str, Result] = {}
             groups = {basis.identity: basis for _, _, basis, _ in terms}
             execution_groups = []
             warmup_requested = False
@@ -645,8 +638,6 @@ class CCSDTCBSCalculator:
                 )
                 for method, result in results.items():
                     completed[(method, identity)] = result, elapsed
-            for role, method, basis, _ in terms:
-                by_role[role] = completed[(method, basis.identity)][0]
 
             components = tuple(
                 CBSComponent(
@@ -667,45 +658,19 @@ class CCSDTCBSCalculator:
                 )
                 for key, (result, elapsed) in completed.items()
             )
-            hf_energy = math.fsum(
-                weight * by_role[f"hf_{label}"].energy
-                for label, weight in zip(("low", "high"), self.hf_weights, strict=True)
+            ordered = tuple(
+                completed[(method, basis.identity)][0] for _, method, basis, _ in terms
             )
-            mp2_energy = math.fsum(
-                weight
-                * (by_role[f"mp2_{label}"].energy - by_role[f"hf_{label}"].energy)
-                for label, weight in zip(("low", "high"), self.mp2_weights, strict=True)
+            energies, force_blocks = self._compose(
+                tuple(result.energy for result in ordered),
+                tuple(result.forces for result in ordered)
+                if forces_requested
+                else None,
             )
-            delta_energy = (
-                by_role["correction_ccsdt"].energy - by_role["correction_mp2"].energy
-            )
-            energy = math.fsum((hf_energy, mp2_energy, delta_energy))
+            energy, hf_energy, mp2_energy, delta_energy = energies
             hf_forces = mp2_forces = delta_forces = forces = None
-            if forces_requested:
-                hf_forces = sum(
-                    weight * by_role[f"hf_{label}"].forces
-                    for label, weight in zip(
-                        ("low", "high"), self.hf_weights, strict=True
-                    )
-                )
-                mp2_forces = sum(
-                    weight
-                    * (by_role[f"mp2_{label}"].forces - by_role[f"hf_{label}"].forces)
-                    for label, weight in zip(
-                        ("low", "high"), self.mp2_weights, strict=True
-                    )
-                )
-                delta_forces = (
-                    by_role["correction_ccsdt"].forces
-                    - by_role["correction_mp2"].forces
-                )
-                forces = hf_forces + mp2_forces + delta_forces
-            if not math.isfinite(energy) or (
-                forces is not None and not np.all(np.isfinite(forces))
-            ):
-                raise RuntimeError(
-                    "CBS composition produced nonfinite energy or forces"
-                )
+            if force_blocks is not None:
+                forces, hf_forces, mp2_forces, delta_forces = force_blocks
             # Report actual arithmetic from the copied native counters. A
             # resource-refused FP32 request must not be relabelled as mixed.
             arithmetic = "fp64"

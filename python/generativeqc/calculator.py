@@ -250,9 +250,12 @@ class Calculator:
 
         ``initial_guess="auto"`` selects native Modified Huckel for FP64
         all-electron H-Ar restricted CPU/CUDA HF/KS cold starts, including DF.
-        Older libraries retain their previously supported default. Other domains retain
-        Hcore, as does a batch containing an unsupported element. Explicit
-        ``None`` disables preparation; existing densities always take precedence.
+        CPU batches select per system, falling back to Hcore for ineligible
+        systems. In CUDA batches, any ineligible system keeps the batch on Hcore.
+        Automatic selection requires ``generativeqc_initial_guess_default_kind_v1``;
+        if the native library lacks that query, it raises ``NotImplementedError``.
+        Explicit ``None`` selects Hcore without querying the policy; existing
+        densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
@@ -1947,8 +1950,7 @@ class Calculator:
 
             minao = self._initial_guess.kind in ("minao", "huckel")
             if self._native_automatic_initial_guess_kind is None:
-                # Explicit requests and older images have not passed combined
-                # model admission. Keep their existing frontend errors.
+                # Explicit choices have not passed automatic model admission.
                 backend_ok = self._device_name == "cpu" or (
                     minao
                     and self._device_name == "cuda"
@@ -2178,10 +2180,20 @@ class Calculator:
         )
 
     def _supports_fitted_ecp_basis(self) -> bool:
-        """Recognize electronic models with a qualified fitted ECP provider."""
-        return self._composite_rks_second_order or (
-            self._cuda_rks_second_order
-            and self._precision_mode == _native.PRECISION_FP64
+        """Allow creating an ECP system for a native fitted KS admission check."""
+        # A CPU ECP system describes only the orbital Hamiltonian. Let the
+        # prepared owner authenticate the actual method, auxiliary and bounds.
+        return (
+            (
+                self._device_name == "cpu"
+                and self._capabilities.family == "density_functional"
+                and self._density_fitting_mode == _native.DENSITY_FITTING_CPU_REFERENCE
+            )
+            or self._composite_rks_second_order
+            or (
+                self._cuda_rks_second_order
+                and self._precision_mode == _native.PRECISION_FP64
+            )
         )
 
     def _method_descriptor(
@@ -4579,22 +4591,25 @@ class Calculator:
         )
         self._preflight_hf_basis(native_atoms, compute_forces=compute_forces)
         resource_plan = None
-        # CPU DF uses the batch owner's pre-allocation admission once,
-        # rather than constructing an internal plan only to revalidate it as
-        # an external one. Bind the exact property set to that preparation.
-        batch_admits_cpu_df = (
+        # A CPU KS singlepoint already uses PreparedBatch. Pass the requested
+        # outputs to that owner instead of revalidating its own plan as external.
+        batch_admits_cpu_ks = (
             self._resource_budget is not None
             and self._device_name == "cpu"
             and self._capabilities.family == "density_functional"
-            and self._density_fitting_mode
-            in (
-                _native.DENSITY_FITTING_CPU_REFERENCE,
-                _native.DENSITY_FITTING_AUTO,
+            and (
+                self._dispersion_method_ir is None
+                or compute_forces
+                or self._density_fitting_mode
+                in (
+                    _native.DENSITY_FITTING_CPU_REFERENCE,
+                    _native.DENSITY_FITTING_AUTO,
+                )
             )
             and requested_properties <= {"energy", "forces"}
         )
         if (
-            not batch_admits_cpu_df
+            not batch_admits_cpu_ks
             and self._resource_budget is not None
             and (
                 self._dispersion_method_ir is None
@@ -4610,9 +4625,8 @@ class Calculator:
         if self._dispersion_method_ir is not None or (
             self._capabilities.family == "density_functional"
         ):
-            # Ordinary named corrections build their plan once during batch
-            # preparation. Requested CPU forces use the property-bound
-            # electronic plus correction plan above, not an energy-only plan.
+            # For ordinary CPU KS and CPU force requests, the owner plans the
+            # electronic and any correction work together for the requested outputs.
             # Reuse the prepared-batch owner because the stationary snapshot ABI
             # is intentionally tied to a live native owner.  This avoids a second
             # scientific implementation in the single-system path. Energy-only
@@ -4631,7 +4645,7 @@ class Calculator:
                 ),
                 resource_plan=resource_plan,
                 _resource_properties=requested_properties
-                if batch_admits_cpu_df
+                if batch_admits_cpu_ks
                 else None,
             ) as batch:
                 execution_properties = requested_properties - PROPERTY_NAMES

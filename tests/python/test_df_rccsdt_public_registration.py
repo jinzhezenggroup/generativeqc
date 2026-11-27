@@ -11,7 +11,10 @@ import numpy as np
 import pytest
 from generativeqc import Calculator, _generated_methods, _native
 
-from tools.generativeqc_validation.native_registry_stub import install_registry_stub
+from tools.generativeqc_validation.native_registry_stub import (
+    install_initial_guess_default_stub,
+    install_registry_stub,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -60,6 +63,7 @@ def available_cc_library(monkeypatch: pytest.MonkeyPatch) -> None:
     install_registry_stub(
         library, frozenset({"energy", "forces"}), supports_batch=False
     )
+    install_initial_guess_default_stub(library)
     monkeypatch.setattr(_native, "load_library", lambda **_kwargs: library)
 
 
