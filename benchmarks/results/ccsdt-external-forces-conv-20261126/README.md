@@ -38,8 +38,8 @@ high-water mark, any exposed cgroup peak, and sampled GPU device memory.
 | C5 | 3,830.93 median (2) | PySCF | 6,760.91 (one) | 4.6327e-12 | 1.1114e-08 | 5.0135e-09 |
 | C6 | 11,642.08 median (2) | Psi4 | 8,607.15 (one) | 3.2401e-12 | 1.587e-06 | 3.4604e-07 |
 | C6 | 11,642.08 median (2) | PySCF | 17,533.39 (one) | 1.2449e-11 | 2.1165e-08 | 7.6774e-09 |
-| C7 | — | Psi4 | 18,777.03 (one) | — | — | — |
-| C7 | — | PySCF | 44,309.32 (one) | — | — | — |
+| C7 | 24,256.72 median (2), H200 | Psi4 | 18,777.03 (one) | 3.7062e-11 | 3.6041e-06 | 8.6067e-07 |
+| C7 | 24,256.72 median (2), H200 | PySCF | 44,309.32 (one) | 4.4338e-12 | 2.1027e-09 | 8.1318e-10 |
 
 A single sample is shown with its own wall time. The replay uses every
 available H100-to-reference pair and reports incomplete cases explicitly.
@@ -50,8 +50,15 @@ energy difference was `4.1496e-11 Eh`. The force RMS difference was
 `8.6069e-7 Eh/Bohr`, and the largest component difference was
 `3.6041e-6 Eh/Bohr` on the fourth atom (carbon), along `z`. This exceeds
 the `3e-6 Eh/Bohr` component threshold used for the H100 comparisons.
-The replay reports this pair under `cpu_reference_pairs`. C7 remains
-incomplete for H100 validation and endpoint timing.
+The replay reports this pair under `cpu_reference_pairs`.
+
+The pinned C7 path needs a 106.46 GiB single-card allocation, so its two
+GenerativeQC endpoints ran on H200. They agree with PySCF to `4.4e-12 Eh`
+and `2.1e-9 Eh/Bohr`. A Richardson-extrapolated central difference of the
+fourth carbon's `z` force agrees with GenerativeQC to `1.6e-10 Eh/Bohr` and
+with PySCF to `1.4e-10 Eh/Bohr`. The Psi4 component differs from it by
+`3.6e-6 Eh/Bohr`, so the only C7 limit excess belongs to the Psi4 reference
+vector. See the [C7 addendum](C7-addendum.md).
 
 ## Resource sizing
 
@@ -208,4 +215,5 @@ run at 5e-14 Eh and 1e-12 for the convergence check. Every job starts from
 a fresh geometry and solves the energy without a gradient. The replay uses
 the force convention `(E(-h) - E(+h)) / (2*h)` and two Richardson levels.
 
-See [C7 measurement results](C7-addendum.md) for the locally archived addendum.
+See [C7 measurement results](C7-addendum.md) for the H200 endpoints, the
+finite-difference table and the allocation ledger.
