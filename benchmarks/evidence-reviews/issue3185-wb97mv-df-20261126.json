@@ -1,0 +1,17 @@
+{
+  "schema": "generativeqc.legacy-large-evidence-family.v1",
+  "family": "issue3185-wb97mv-df-20261126",
+  "owner": "WB97M-V DF trajectory qualification for issue #3185",
+  "reason": "Retain every attempted trajectory and cold3 endpoint with full-precision observables, failures, work counts and the independent reference vectors needed to replay the gate. The retained archive contains only the two issue trajectories' endpoint records.",
+  "review_document": "benchmarks/results/issue3185-wb97mv-df-20261126/README.md",
+  "files": [
+    {
+      "path": "benchmarks/results/issue3185-wb97mv-df-20261126/samples.json.xz",
+      "family": "issue3185-wb97mv-df-20261126",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Both release arms' original endpoint observations, negative trials and dense Direct reference samples.",
+      "bytes": 337080,
+      "sha256": "8ee220d091dce54b524e7b730eec0975eb3170d4da9bdce03b364deb7e46e536"
+    }
+  ]
+}

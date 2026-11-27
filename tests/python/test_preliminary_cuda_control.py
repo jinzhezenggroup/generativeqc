@@ -274,6 +274,7 @@ struct Plan {
   bool preparation_skipped{};
   Plan() { policy->kind = initial_guess::PreliminaryKind::Minao; }
   const System& system() const { return system_; }
+  bool density_fitted_range_exchange() const noexcept { return false; }
   CudaKsPlan* cuda_plan() { return &cuda; }
   const auto& initial_guess_policy() const { return policy; }
   void invalidate_final_state() { cuda.invalidate_final_state(); }
