@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/factorized_hessian_radial_pair.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Private prepared-window record layout and launch ABI. Compiler-owned factorized_second generates the Gaussian/Coulomb geometry and all differentiated arithmetic.",
+  "regions": []
+}

@@ -317,6 +317,25 @@ def run_native_cuda(
             raise NotImplementedError(
                 "native CUDA Hessian lacks shared ResourceBudget admission"
             )
+        if (
+            direction is None
+            and options.grid_bytes >= 4 << 30
+            and options.integral_bytes >= 3 << 30
+        ):
+            # Only an explicit device lease can lift the default response cap.
+            # plan_cuda_hessian still subtracts all overlapping primal owners.
+            limits = budget.limits()
+            explicit_caps = (
+                limits.get("device"),
+                limits.get(f"device:{calculator._device_id}"),
+            )
+            options.device_bytes = max(
+                options.device_bytes,
+                min(
+                    20 << 30,
+                    min((cap for cap in explicit_caps if cap is not None), default=0),
+                ),
+            )
         plan, request, capacity = plan_cuda_hessian(
             calculator,
             atoms,

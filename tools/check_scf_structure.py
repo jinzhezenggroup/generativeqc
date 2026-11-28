@@ -429,6 +429,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/md_transform_layout.hpp",
     "scf/aot_shell_registry.hpp",
     "scf/cuda/direct_jk_kernels.hpp",
+    "scf/cuda/direct_response_pair_kernels.hpp",
     "scf/cuda/direct_md_j.hpp",
     "scf/cuda/packed_basis.",
     "scf/cuda/checked_layout.",
@@ -471,6 +472,7 @@ CUDA_ALLOWED["cuda_one_electron_export"] = tuple(
 )
 CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "direct_jk_kernels.hpp",
+    "direct_response_pair_kernels.hpp",
     "direct_md_j.hpp",
     "one_electron_export_kernels.hpp",
 )
@@ -480,6 +482,13 @@ CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
     "scf/cuda/direct_spd_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
+)
+CUDA_MODULES["cuda_direct_response_pair_consumer"] = (
+    "direct_response_pair_kernels.cu",
+)
+CUDA_ALLOWED["cuda_direct_response_pair_consumer"] = (
+    "scf/cuda/direct_queue_index.cuh",
+    "scf/cuda/direct_response_pair_kernels.hpp",
 )
 CUDA_MODULES["canonical_source_layout"] = ("direct_source_layout.hpp",)
 CUDA_ALLOWED["canonical_source_layout"] = ()

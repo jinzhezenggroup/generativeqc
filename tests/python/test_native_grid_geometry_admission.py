@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,10 +14,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _translation_unit(source: str) -> str:
     host = source[: source.index("unsigned blocks(")]
-    host = host.replace('#include "response/grid_geometry_response.cuh"', "")
-    host = host.replace("namespace ad = generativeqc_grid_geometry_ad;", "")
-    # The device-only pair record depends on the response AD header omitted above.
-    host = re.sub(r"(?ms)^struct PartitionPair \{.*?^\};\n", "", host)
+    # The extracted helper is compiled with a host-only C++ compiler.
+    host = host.replace("__host__ __device__ ", "")
+    # The layout/admission logic does not use these device contraction headers.
+    for header in ("cuda_contraction.cuh", "cuda_square_linalg.hpp"):
+        host = host.replace(f'#include "tensor/{header}"\n', "")
+    # Only the generated jet's storage contributes to host layout. Keep the
+    # production pair records and their size assertions, without CUDA codegen.
+    host = host.replace(
+        '#include "response/grid_geometry_response.cuh"',
+        "namespace generativeqc_grid_geometry_ad { "
+        "struct Jet { double value, left, right, mixed; }; }",
+    )
     start = source.index("cudaError_t cuda_grid_geometry_workspace(")
     workspace = source[
         start : source.index(

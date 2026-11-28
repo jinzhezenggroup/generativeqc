@@ -35,6 +35,9 @@ cublasStatus_t cublasSetMathMode(cublasHandle_t, cublasMath_t);
 cublasStatus_t cublasDgemm(cublasHandle_t, cublasOperation_t, cublasOperation_t, int, int, int,
                            const double*, const double*, int, const double*, int, const double*,
                            double*, int);
+cublasStatus_t cublasDtrsm(cublasHandle_t, cublasSideMode_t, cublasFillMode_t, cublasOperation_t,
+                           cublasDiagType_t, int, int, const double*, const double*, int, double*,
+                           int);
 cublasStatus_t cublasDtrsmBatched(cublasHandle_t, cublasSideMode_t, cublasFillMode_t,
                                   cublasOperation_t, cublasDiagType_t, int, int, const double*,
                                   const double* const*, int, double* const*, int, int);

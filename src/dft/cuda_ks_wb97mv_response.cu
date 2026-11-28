@@ -1,27 +1,66 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 #include "dft/cuda_hessian_semilocal_model.hpp"
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_wb97mv_model.hpp"
 #include "dft/cuda_ks_wb97mv_response.hpp"
+#include "dft/cuda_xc_transition_integer.cuh"
 #include "dft/r2scan_rvv10_model.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/split_hybrid_cuda_selection.hpp"
 #include "generated_split_hybrid_registry.cuh"
+#include "integrals/coulomb_derivative_envelope.hpp"
 #include "molecule/basis.hpp"
 #include "r2scan_cuda_domain.hpp"
 #include "response/wb97mv_fock_response.cuh"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda_density_fitting_basis.hpp"
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
+#include "tensor/cuda_contraction.cuh"
+#include "tensor/cuda_dense_operations.hpp"
 
 namespace generativeqc::dft {
 namespace {
+/** Each s/p shell component has the same Cartesian normalization. Divide
+ * the shell-pair sum bound by its ordered component count, rounding upward.
+ * Fill both triangles in the public Cartesian AO order (shell-major). */
+std::vector<double> certified_coulomb_norms(const core::System& system, std::size_t nao) {
+  using Envelope = integrals::CoulombDerivativeEnvelope;
+  if (system.basis_representation != core::kCartesianBasis || nao > 256) return {};
+  std::vector<std::size_t> offsets{0};
+  for (const auto& shell : system.shells) {
+    if (shell.angular_momentum > 1 || shell.primitives.size() > 16 ||
+        shell.atom_index >= system.atoms.size())
+      return {};
+    offsets.push_back(offsets.back() + 2 * shell.angular_momentum + 1);
+  }
+  if (offsets.back() != nao) return {};
+  std::vector<double> norms(nao * nao);
+  for (std::size_t left = 0; left < system.shells.size(); ++left)
+    for (std::size_t right = 0; right <= left; ++right) {
+      const auto& bra = system.shells[left];
+      const auto& ket = system.shells[right];
+      const auto bound = Envelope::pair(bra, ket, system.atoms[bra.atom_index].position,
+                                        system.atoms[ket.atom_index].position);
+      if (!bound || !std::isfinite((*bound)[0])) return {};
+      const auto components =
+          (offsets[left + 1] - offsets[left]) * (offsets[right + 1] - offsets[right]);
+      const auto norm = Envelope::upper((*bound)[0] / components);
+      for (auto mu = offsets[left]; mu < offsets[left + 1]; ++mu)
+        for (auto nu = offsets[right]; nu < offsets[right + 1]; ++nu)
+          norms[mu * nao + nu] = norms[nu * nao + mu] = norm;
+    }
+  return norms;
+}
+
 /** An exact LR term shares no fitted lease. Fitted LR must retain its own
  * accepted operator/metric on the same orbital system as the fitted primary. */
 bool range_provider_matches(const CudaKsResidentFockBinding& source) {
@@ -236,23 +275,72 @@ __global__ void audit(const double* value, const double* reference, std::size_t 
 }
 
 struct ActionCounts {
-  std::uint64_t quartets, eris, actions, grid_actions;
+  std::uint64_t quartets, eris, pair_product_bound, actions, grid_actions;
 };
 
 // These slots have independent owners: each Direct enqueue resets its own
 // flag. The generated maps must never clear a previous Direct failure.
 constexpr unsigned status_count = 3;
+constexpr std::size_t transition_tile_points = 128;
+constexpr std::uint64_t transition_product_limit = 64ULL << 30;
+// A wide FP64 semilocal operator can reuse this projection across every
+// Cartesian solve; keep its one-time dense work independently bounded.
+constexpr std::uint64_t wide_r2scan_transition_product_limit = 3ULL << 40;
+constexpr std::uint64_t complete_fitted_product_limit = 40ULL << 40;
+constexpr std::uint64_t transition_correction_limit = 2ULL << 20;
+constexpr std::size_t direct_transform_tile = 64;
+constexpr std::size_t direct_occupied_tile = 16;
+constexpr std::size_t metric_projection_max_ao = 256;
+constexpr std::uint64_t direct_transform_product_limit = 1ULL << 40;
+constexpr std::uint64_t direct_transform_gather_limit = 1ULL << 35;
 
 __device__ bool failed_action(const int* status) { return status[0] || status[1] || status[2]; }
 
+struct MetricProjection {
+  const double* core{};
+  double *rhs{}, *rows{}, *jets{}, *projected{}, *fields{};
+  int *offsets{}, *refused{};
+  std::size_t coordinates{}, rotations{};
+  bool ready{};
+};
+
+__global__ void pack_metric_rows(std::size_t nao, std::size_t coordinates, const double* core,
+                                 const int* offsets, double* rows, int* refused) {
+  const auto matrix = nao * nao;
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+       index < coordinates * matrix; index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto column = index / matrix, atom = column / 3;
+    const auto row = index / nao % nao, ao = index % nao;
+    const auto* overlap = core + (2 * column + 1) * matrix;
+    const auto value = overlap[row * nao + ao];
+    const auto begin = static_cast<std::size_t>(offsets[atom]);
+    const auto end = static_cast<std::size_t>(offsets[atom + 1]);
+    const auto owned_row = row >= begin && row < end;
+    const auto owned_ao = ao >= begin && ao < end;
+    if (!(isfinite(value) && ((owned_row || owned_ao) || value == 0))) atomicExch(refused, 1);
+    // The diagonal owner block occurs in both E U and U^T E^T.
+    if (owned_row)
+      rows[ao * (3 * nao) + (column % 3) * nao + row] =
+          owned_ao ? 0.25 * (value + overlap[ao * nao + row])
+                   : 0.5 * (value + overlap[ao * nao + row]);
+  }
+}
+
+__global__ void audit_metric_projection(std::size_t size, const double* rhs, int* refused) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < size;
+       index += std::size_t(gridDim.x) * blockDim.x)
+    if (!isfinite(rhs[index])) atomicExch(refused, 1);
+}
+
 __global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
-                             std::uint64_t grid_bound, ActionCounts* total, int* status) {
-  if (total->grid_actions == grid_bound) {
+                             std::uint64_t grid_bound, std::uint64_t pair_products,
+                             ActionCounts* total, int* status, bool grid) {
+  if (grid && total->grid_actions == grid_bound) {
     status[0] |= 8;
     return;
   }
   // Grid quadrature was submitted even if the Fock candidate fails its audit.
-  ++total->grid_actions;
+  total->grid_actions += grid;
   if (failed_action(status)) return;
   if (counts[0] > bound || counts[2] > bound - counts[0] || counts[1] > bound ||
       counts[3] > bound - counts[1]) {
@@ -261,12 +349,13 @@ __global__ void count_action(const std::uint64_t* counts, std::uint64_t bound,
   }
   const auto quartets = counts[0] + counts[2], eris = counts[1] + counts[3];
   if (quartets > UINT64_MAX - total->quartets || eris > UINT64_MAX - total->eris ||
-      total->actions == UINT64_MAX) {
+      pair_products > UINT64_MAX - total->pair_product_bound || total->actions == UINT64_MAX) {
     status[0] |= 8;
     return;
   }
   total->quartets += quartets;
   total->eris += eris;
+  total->pair_product_bound += pair_products;
   ++total->actions;
 }
 
@@ -275,6 +364,102 @@ __global__ void publish_private_fock(const double* candidate, double* output, st
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
        index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
     output[index] = failed_action(status) ? nan("") : candidate[index];
+}
+
+__global__ void symmetric_coulomb_panel(const double* input, double* output, std::size_t nao) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < nao * nao;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto transpose = (index % nao) * nao + index / nao;
+    output[index] = 0.5 * (input[index] + input[transpose]);
+  }
+}
+
+__global__ void gather_fitted_slice(const double* raw, double* slice, std::size_t pairs,
+                                    std::size_t auxiliary, std::size_t naux) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < pairs;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x)
+    slice[index] = raw[index * naux + auxiliary];
+}
+
+/** Expand one symmetric AO matrix per tile entry. The input has one
+ * contiguous packed AO triangle per slice (an AO pair or an OV rotation). */
+__global__ void unpack_coulomb_slices(const double* input, double* output, std::size_t stride,
+                                      std::size_t nao, std::size_t elements) {
+  const auto plane = nao * nao;
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
+       index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto slice = index / plane;
+    const auto row = index % nao, column = (index % plane) / nao;
+    const auto high = row > column ? row : column, low = row > column ? column : row;
+    output[index] = input[slice * stride + high * (high + 1) / 2 + low];
+  }
+}
+
+__global__ void repeat_orbital_frame(const double* frame, double* copies, std::size_t plane,
+                                     std::size_t elements) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < elements;
+       index += std::size_t(gridDim.x) * blockDim.x)
+    copies[index] = frame[index % plane];
+}
+
+/** The first half-transform produces [pair][rotation]. Transpose in padded
+ * tiles so the second half can read contiguous triangles for each rotation. */
+__global__ void transpose_coulomb_window(const double* input, double* output, std::size_t pairs,
+                                         std::size_t rotations, std::size_t count) {
+  __shared__ double tile[32][33];
+  const auto rotation_base = std::size_t(blockIdx.x) * 32;
+  const auto pair_base = std::size_t(blockIdx.y) * 32;
+  const auto lane = threadIdx.x, strip = threadIdx.y;
+  for (unsigned offset = strip; offset < 32; offset += blockDim.y) {
+    const auto rotation = rotation_base + lane, pair = pair_base + offset;
+    if (rotation < rotations && pair < count)
+      tile[offset][lane] = input[pair * rotations + rotation];
+  }
+  __syncthreads();
+  for (unsigned offset = strip; offset < 32; offset += blockDim.y) {
+    const auto rotation = rotation_base + offset, pair = pair_base + lane;
+    if (rotation < rotations && pair < count) output[rotation * pairs + pair] = tile[lane][offset];
+  }
+}
+
+/** The projection is B^T (w E_xc'' B) on the cached linearization. Publish
+ * the omitted triangle once; the physical residual still uses the unprojected
+ * action. Never use this for rows that needed directional correction. */
+__global__ void mirror_transition_triangle(double* matrix, std::size_t order) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < order * order;
+       index += std::size_t(gridDim.x) * blockDim.x) {
+    const auto row = index % order, column = index / order;
+    if (row > column) matrix[row * order + column] = matrix[index];
+  }
+}
+
+/** Submit disjoint rectangular products below the diagonal and full diagonal
+ * tiles. Recursive bisection uses large rectangles instead of launching one
+ * GEMM for every pair of small tiles. Count actual scalar products submitted. */
+cublasStatus_t transition_triangle(const tensor::CudaDenseOperations& blas, const double* fields,
+                                   const double* tangents, double* matrix, int leading, int rank,
+                                   int first, int count, const double* alpha, const double* beta,
+                                   std::uint64_t& products) {
+  const auto submit = [&](int row, int column, int height, int width) {
+    const auto error =
+        blas.product(true, false, height, width, rank, alpha, fields + std::size_t(row) * rank,
+                     rank, tangents + std::size_t(column) * rank, rank, beta,
+                     matrix + std::size_t(column) * leading + row, leading);
+    if (error == CUBLAS_STATUS_SUCCESS) products += std::uint64_t(height) * width * rank;
+    return error;
+  };
+  constexpr int diagonal_tile = 512;
+  if (count <= diagonal_tile) return submit(first, first, count, count);
+  const auto left = ((count / 2 + diagonal_tile / 2) / diagonal_tile) * diagonal_tile;
+  const auto right = count - left;
+  auto error = submit(first + left, first, right, left);
+  if (error == CUBLAS_STATUS_SUCCESS)
+    error = transition_triangle(blas, fields, tangents, matrix, leading, rank, first, left, alpha,
+                                beta, products);
+  if (error == CUBLAS_STATUS_SUCCESS)
+    error = transition_triangle(blas, fields, tangents, matrix, leading, rank, first + left, right,
+                                alpha, beta, products);
+  return error;
 }
 }  // namespace
 
@@ -297,9 +482,19 @@ struct CudaKsWb97mvResponse::Impl {
   maps::Extents shape{}, range_shape{};
   cudaStream_t stream{};
   void* arena{};
-  std::size_t arena_bytes{}, matrix{}, elements{}, map_bytes{}, compensation_elements{};
+  std::size_t arena_bytes{}, grid_provider_bytes{}, matrix{}, elements{}, map_bytes{},
+      compensation_elements{};
   void *map_workspace{}, *grid_workspace{};
   std::size_t grid_bytes{};
+  tensor::CudaDenseOperations transition_blas;
+  cublasHandle_t integer_blas{};
+  tensor::CudaContractionContext fitted_coulomb_blas;
+  double* fitted_coulomb_aux{};
+  void* transition_workspace{};
+  MetricProjection metric_projection;
+  transition_integer::Workspace integer_projection;
+  std::size_t transition_occupied{}, transition_tile{};
+  std::uint64_t transition_products{};
   double *coulomb{}, *exchange{}, *long_range{}, *primary{}, *potential{}, *candidate{}, *zero{},
       *fitted_panel{}, *range_whitened{}, *seed{}, *exchange_coefficient{}, *range_coefficient{},
       *compensation{};
@@ -307,7 +502,8 @@ struct CudaKsWb97mvResponse::Impl {
   std::uint64_t *census{}, *range_census{};
   ActionCounts* action_counts{};
   std::uint64_t grid_actions{};
-  bool ready{}, used{};
+  std::size_t pair_product_bound{};
+  bool ready{}, used{}, reference_audit_pending{};
   const char* failure_check{};
 
   Impl(methods::PreparedBatch& owner, std::size_t index, CudaKsFinalStateToken token,
@@ -322,6 +518,11 @@ struct CudaKsWb97mvResponse::Impl {
     if (stream) (void)cudaStreamSynchronize(stream);
     scf::destroy_cuda_direct_jk_plan(range_direct);
     scf::destroy_cuda_direct_jk_plan(direct);
+    (void)transition_blas.close();
+    if (integer_blas) (void)cublasDestroy(integer_blas);
+    if (integer_projection.product) (void)runtime::resource_cuda_free(integer_projection.product);
+    if (metric_projection.rhs) (void)runtime::resource_cuda_free(metric_projection.rhs);
+    if (transition_workspace) (void)runtime::resource_cuda_free(transition_workspace);
     if (arena) (void)runtime::resource_cuda_free(arena);
   }
 
@@ -374,7 +575,8 @@ struct CudaKsWb97mvResponse::Impl {
     return failed[0] || failed[1] || failed[2] ? cudaErrorInvalidValue : cudaSuccess;
   }
 
-  generativeqc_status prepare_resident(std::string& detail) {
+  generativeqc_status prepare_resident(std::string& detail, bool repeated_rhs = false,
+                                       bool dense_only = false) {
     if (!direct) return GENERATIVEQC_STATUS_SUCCESS;
     const auto base_bytes = scf::cuda_direct_jk_plan_diagnostic(direct).device_bytes;
     auto remaining = std::min(options.max_resident_integral_bytes,
@@ -391,15 +593,55 @@ struct CudaKsWb97mvResponse::Impl {
       detail.clear();
       return GENERATIVEQC_STATUS_SUCCESS;
     };
-    auto result = fitted ? scf::prepare_cuda_direct_jk_range_resident_values(
-                               direct, remaining, (1U << 28) - 1, scf::FockOperator::LongRange,
-                               source.correction->spec.exchange.omega, detail)
-                         : scf::prepare_cuda_direct_jk_resident_values(direct, remaining, detail);
+    const auto& spec = source.primary->strategy().spec;
+    std::vector<double> norms;
+    if (dense_only && repeated_rhs && options.grid.wide_cartesian_grid && source.nao > 96 &&
+        !fitted && !source.correction && source.spins == 1 && spec.coulomb.present &&
+        !spec.exchange.present) {
+      // Even all nAO² omitted terms would contribute at most
+      // 2^-54 ||D||_max for nAO <= 256. This induced-norm budget applies
+      // to signed response panels as well as positive reference densities.
+      try {
+        norms = certified_coulomb_norms(source.primary->system(), source.nao);
+      } catch (const std::bad_alloc&) {
+        // This metadata is optional; the identical slot layout remains exact.
+      }
+    }
+    auto result =
+        fitted ? scf::prepare_cuda_direct_jk_range_resident_values(
+                     direct, remaining, (1U << 28) - 1, scf::FockOperator::LongRange,
+                     source.correction->spec.exchange.omega, detail)
+               : scf::prepare_cuda_direct_jk_resident_values(direct, remaining, detail, norms);
     if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
     auto diagnostic = scf::cuda_direct_jk_plan_diagnostic(direct);
     receipt.resident_integral_bytes = diagnostic.resident_value_bytes;
     receipt.resident_source_evaluations = diagnostic.resident_values_completed;
-    receipt.device_bytes = arena_bytes + diagnostic.device_bytes;
+    receipt.device_bytes = arena_bytes + grid_provider_bytes + diagnostic.device_bytes;
+    if (repeated_rhs && !fitted && !source.correction && source.spins == 1 &&
+        spec.coulomb.present &&
+        (!spec.exchange.present || spec.exchange.op == scf::FockOperator::FullRange)) {
+      const auto allowance =
+          std::min(options.max_resident_integral_bytes - receipt.resident_integral_bytes,
+                   options.max_device_bytes - receipt.device_bytes);
+      const auto max_products = static_cast<std::size_t>(std::min<std::uint64_t>(
+          options.max_direct_eri_evaluations, std::numeric_limits<std::size_t>::max()));
+      result = scf::prepare_cuda_direct_jk_response_pairs(direct, spec.exchange.present, allowance,
+                                                          max_products, receipt.resident_pair_bytes,
+                                                          pair_product_bound, detail);
+      if (result != GENERATIVEQC_STATUS_SUCCESS) return optional(result);
+      if (pair_product_bound && !spec.exchange.present && source.nao > 96) {
+        // Only this private response plan uses the rows. The enclosing
+        // transaction audits the reconstruction before admitting an action.
+        // Both projected CPKS and its independent physical fallback consume
+        // them. Neither the SCF plan nor the displaced nuclear provider does.
+        result = scf::retire_cuda_direct_jk_response_values(direct, detail);
+        if (result != GENERATIVEQC_STATUS_SUCCESS) return result;
+      }
+      diagnostic = scf::cuda_direct_jk_plan_diagnostic(direct);
+      receipt.device_bytes = arena_bytes + grid_provider_bytes + diagnostic.device_bytes;
+      receipt.resident_integral_bytes =
+          diagnostic.resident_value_bytes + receipt.resident_pair_bytes;
+    }
     if (fitted || !source.correction || !receipt.resident_integral_bytes)
       return GENERATIVEQC_STATUS_SUCCESS;
     remaining = options.max_device_bytes - receipt.device_bytes;
@@ -437,8 +679,36 @@ struct CudaKsWb97mvResponse::Impl {
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
+  cudaError_t project_fitted_coulomb(const double* density) {
+    const auto pairs = static_cast<int>(matrix);
+    const auto aux = static_cast<int>(fitted.naux);
+    auto* first = fitted_coulomb_aux;
+    auto* second = first + aux;
+    // Raw B is row-major [pair,aux], while the accepted W is [out_aux,source_aux].
+    // BLAS sees their transposes. Apply B W^T W B^T without replacing the SCF
+    // metric or duplicating the three-center tensor. Preserve both symmetric
+    // projections of the generated RKS map, including for an arbitrary input.
+    symmetric_coulomb_panel<<<maps::blocks(matrix), 128, 0, stream>>>(density, coulomb, shape.nao);
+    auto error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    constexpr double one = 1.0, zero = 0.0;
+    const auto multiply = [&](bool transpose, int rows, int reduction, const double* left,
+                              const double* right, double* result) {
+      return generativeqc_tensor::submit_column_gemm({fitted_coulomb_blas.handle(), transpose,
+                                                      false, rows, 1, reduction, &one, left, aux,
+                                                      right, reduction, &zero, result, rows});
+    };
+    if (multiply(false, aux, pairs, fitted_panel, coulomb, first) != CUBLAS_STATUS_SUCCESS ||
+        multiply(true, aux, aux, fitted.whitening, first, second) != CUBLAS_STATUS_SUCCESS ||
+        multiply(false, aux, aux, fitted.whitening, second, first) != CUBLAS_STATUS_SUCCESS ||
+        multiply(true, pairs, aux, fitted_panel, first, coulomb) != CUBLAS_STATUS_SUCCESS)
+      return cudaErrorNotSupported;
+    symmetric_coulomb_panel<<<maps::blocks(matrix), 128, 0, stream>>>(coulomb, primary, shape.nao);
+    return cudaGetLastError();
+  }
+
   cudaError_t evaluate(const double* density, const double* grid_potential, const double* hcore,
-                       bool response) {
+                       bool response, bool grid_action = true) {
     check(cudaMemsetAsync(status, 0, status_count * sizeof(int), stream));
     const auto* beta = source.spins == 2 ? density + matrix : nullptr;
     const auto& spec = source.primary->strategy().spec;
@@ -449,6 +719,10 @@ struct CudaKsWb97mvResponse::Impl {
         const auto launch = source.spins == 1 ? maps::launch_rks_fitted : maps::launch_uks_fitted;
         check(launch(shape, seed, density, exchange_coefficient, fitted_panel, primary,
                      map_workspace, map_bytes, status, stream));
+      } else if (fitted_coulomb_blas.handle()) {
+        failure_check = "resident fitted Coulomb response contraction";
+        check(project_fitted_coulomb(density));
+        failure_check = "induced Fock assembly and finite symmetric audit";
       } else {
         const auto launch =
             source.spins == 1 ? maps::launch_rks_fitted_coulomb : maps::launch_uks_fitted_coulomb;
@@ -456,11 +730,20 @@ struct CudaKsWb97mvResponse::Impl {
                      map_bytes, status, stream));
       }
     } else {
-      const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
-          direct, spec, density, matrix, coulomb, spec.exchange.present ? exchange : nullptr,
-          compensation, compensation_elements, status + 1, 0, census, detail, true, beta,
-          beta_exchange, false);
-      if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
+      if (pair_product_bound && (response || reference_audit_pending)) {
+        // The authenticated SCF Fock is still the reference oracle; the
+        // resident rows avoid another traversal of the canonical quartets.
+        check(cudaMemsetAsync(census, 0, 2 * sizeof(*census), stream));
+        check(scf::enqueue_cuda_direct_jk_response_pairs(
+            direct, density, coulomb, spec.exchange.present ? exchange : nullptr));
+        if (!response) receipt.reference_pair_products = pair_product_bound;
+      } else {
+        const auto result = scf::enqueue_cuda_direct_jk_compensated_device(
+            direct, spec, density, matrix, coulomb, spec.exchange.present ? exchange : nullptr,
+            compensation, compensation_elements, status + 1, 0, census, detail, true, beta,
+            beta_exchange, false);
+        if (result != GENERATIVEQC_STATUS_SUCCESS) return cudaErrorNotSupported;
+      }
       check(source.spins == 1
                 ? maps::launch_rks_exact(shape, coulomb, exchange, exchange_coefficient, primary,
                                          map_workspace, map_bytes, status, stream)
@@ -501,7 +784,7 @@ struct CudaKsWb97mvResponse::Impl {
       const auto pairs = static_cast<std::uint64_t>(max_points) * max_points;
       const auto grid_bound = pairs ? UINT64_MAX / pairs : UINT64_MAX;
       count_action<<<1, 1, 0, stream>>>(census, options.max_direct_eri_evaluations, grid_bound,
-                                        action_counts, status);
+                                        pair_product_bound, action_counts, status, grid_action);
       return cudaGetLastError();
     }
     int failure_flags{};
@@ -666,6 +949,11 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
       check(cuda_wb97mv_grid_workspace(owner->vv10_reference.shape(), vv10_options, vv10_bytes));
     }
     Layout layout;
+    const bool try_fitted_coulomb_blas = owner->options.grid.wide_cartesian_grid && owner->fitted &&
+                                         !whiten_primary && grid_shape.spins == 1 &&
+                                         !owner->source.correction &&
+                                         owner->matrix <= std::numeric_limits<int>::max() &&
+                                         owner->fitted.naux <= std::numeric_limits<int>::max();
     const auto grid_offset = layout.add(owner->grid_bytes / sizeof(double));
     const auto vv10_offset = layout.add(vv10_bytes / sizeof(double));
     const auto map_offset = layout.add(owner->map_bytes / sizeof(double));
@@ -678,6 +966,8 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     const auto zero_offset = layout.add(owner->matrix);
     const auto fitted_offset =
         layout.add(owner->fitted ? product(owner->matrix, owner->fitted.naux) : 0);
+    const auto fitted_coulomb_aux_offset =
+        layout.add(try_fitted_coulomb_blas ? product(2, owner->fitted.naux) : 0);
     const auto range_whitened_offset =
         layout.add(owner->fitted_range ? product(owner->matrix, owner->fitted_range.naux) : 0);
     // Only exchange needs staging for prewhitening. Pure J retains raw values.
@@ -693,19 +983,22 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     const auto status_offset = layout.add(2);
     const auto census_offset = layout.add(4 + sizeof(ActionCounts) / sizeof(double));
     owner->arena_bytes = layout.bytes;
-    require(owner->arena_bytes < options.max_device_bytes,
+    if (owner->options.grid.wide_cartesian_grid)
+      owner->grid_provider_bytes = CudaWb97mvGridResponse::wide_grid_provider_allowance();
+    require(owner->arena_bytes < options.max_device_bytes &&
+                owner->grid_provider_bytes < options.max_device_bytes - owner->arena_bytes,
             "physical response workspace exceeds its explicit device bound");
+    const auto base_bytes = owner->arena_bytes + owner->grid_provider_bytes;
     scf::CudaDirectJkDiagnostic diagnostic;
     if (direct_actions) {
       result = scf::create_cuda_direct_jk_resident_plan_on_stream(
           lease.device_id, {owner->source.primary->system()}, 0,
-          options.max_device_bytes - owner->arena_bytes, lease.stream, &owner->direct, diagnostic,
-          detail);
+          options.max_device_bytes - base_bytes, lease.stream, &owner->direct, diagnostic, detail);
       if (result != GENERATIVEQC_STATUS_SUCCESS) return result;
       require(scf::cuda_direct_jk_linear_available(owner->direct),
               "physical response requires admitted canonical Direct storage");
     }
-    owner->receipt.device_bytes = owner->arena_bytes + diagnostic.device_bytes;
+    owner->receipt.device_bytes = base_bytes + diagnostic.device_bytes;
     require(owner->receipt.device_bytes <= options.max_device_bytes,
             "physical response total device storage exceeds its explicit bound");
     check(runtime::resource_cuda_malloc(&owner->arena, owner->arena_bytes));
@@ -722,6 +1015,7 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     owner->candidate = panel(candidate_offset);
     owner->zero = panel(zero_offset);
     owner->fitted_panel = panel(fitted_offset);
+    owner->fitted_coulomb_aux = panel(fitted_coulomb_aux_offset);
     owner->range_whitened = panel(range_whitened_offset);
     owner->seed = panel(seed_offset);
     owner->exchange_coefficient = panel(coefficient_offset);
@@ -781,6 +1075,13 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
     };
     prepare_grid(owner->grid, grid_shape, owner->options.grid, lease, owner->grid_workspace,
                  owner->grid_bytes);
+    constexpr auto fitted_provider_bytes = tensor::CudaContractionContext::kProviderAllowance;
+    // A conditional graph cannot own implicit BLAS allocation nodes. Prepare
+    // the provider's bounded workspace before any CPKS action is captured.
+    if (try_fitted_coulomb_blas &&
+        fitted_provider_bytes <= options.max_device_bytes - owner->receipt.device_bytes &&
+        owner->fitted_coulomb_blas.prepare(owner->stream))
+      owner->receipt.device_bytes += fitted_provider_bytes;
     if (!options.defer_resident_integrals) {
       result = owner->prepare_resident(detail);
       if (result != GENERATIVEQC_STATUS_SUCCESS) return result;
@@ -797,7 +1098,14 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch& batch,
       check(cudaGetLastError());
       reference_potential = owner->potential;
     }
-    check(owner->evaluate(lease.density, reference_potential, owner->source.hcore, false));
+    const auto& spec = owner->source.primary->strategy().spec;
+    owner->reference_audit_pending =
+        options.audit_after_resident_admission && options.defer_resident_integrals &&
+        options.grid.wide_cartesian_grid && !separate && !owner->fitted &&
+        !owner->source.correction && grid_shape.spins == 1 && spec.coulomb.present &&
+        !spec.exchange.present;
+    if (!owner->reference_audit_pending)
+      check(owner->evaluate(lease.density, reference_potential, owner->source.hcore, false));
     check(owner->authenticate(lease.stream));
     owner->ready = true;
     impl_ = std::move(owner);
@@ -820,8 +1128,10 @@ cudaError_t CudaKsWb97mvResponse::apply(const double* direction, double* output,
 }
 
 cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* output,
-                                             cudaStream_t stream, bool private_panel) noexcept {
-  if (!impl_ || !impl_->ready) return cudaErrorInvalidResourceHandle;
+                                             cudaStream_t stream, bool private_panel,
+                                             bool local_xc) noexcept {
+  if (!impl_ || !impl_->ready || impl_->reference_audit_pending)
+    return cudaErrorInvalidResourceHandle;
   try {
     auto& owner = *impl_;
     owner.failure_check = "induced Fock action buffer admission";
@@ -881,15 +1191,20 @@ cudaError_t CudaKsWb97mvResponse::apply_impl(const double* direction, double* ou
     } drain{stream, !private_panel};
     owner.used = true;
     owner.failure_check = "induced Fock XC response";
-    check(owner.grid.enqueue_private_response(direction, owner.potential, stream));
+    runtime::cuda_trace::TraceRegion xc_trace("hessian_cpks_physical_grid", stream);
+    if (local_xc) check(owner.grid.enqueue_private_response(direction, owner.potential, stream));
     if (owner.expected.identity.model.nonlocal_grid) {
       check(owner.vv10_grid.enqueue_private_response(direction, owner.candidate, stream));
       sum_grid_potentials<<<maps::blocks(owner.elements), 128, 0, stream>>>(
           owner.potential, owner.candidate, owner.potential, owner.elements);
       check(cudaGetLastError());
     }
+    xc_trace.finish();
     owner.failure_check = "induced Fock assembly and finite symmetric audit";
-    check(owner.evaluate(direction, owner.potential, owner.zero, true));
+    check(runtime::cuda_trace::trace_call("hessian_cpks_physical_jk", stream, [&] {
+      return owner.evaluate(direction, local_xc ? owner.potential : owner.zero, owner.zero, true,
+                            local_xc);
+    }));
     if (!private_panel) check(owner.gate());
     error = owner.authenticate(stream, private_panel);
     if (error != cudaSuccess) {
@@ -917,7 +1232,8 @@ const char* CudaKsWb97mvResponse::failure_check() const noexcept {
 }
 
 generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_additional_bytes,
-                                                           std::string& detail) {
+                                                           bool repeated_rhs, std::string& detail,
+                                                           bool dense_only) {
   if (!impl_ || !impl_->ready || impl_->used || impl_->receipt.resident_integral_bytes) {
     detail = "optional integral admission requires an unused prepared response owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -928,10 +1244,17 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_a
     const auto remaining = owner.options.max_device_bytes - owner.receipt.device_bytes;
     owner.options.max_device_bytes =
         owner.receipt.device_bytes + std::min(remaining, maximum_additional_bytes);
-    const auto result = owner.prepare_resident(detail);
+    const auto result = owner.prepare_resident(detail, repeated_rhs, dense_only);
     if (result != GENERATIVEQC_STATUS_SUCCESS) {
       owner.ready = false;
       return result;
+    }
+    if (owner.reference_audit_pending) {
+      const double* potential{};
+      check(owner.grid.reference_potential(potential));
+      check(owner.evaluate(owner.reference.reference().density, potential, owner.source.hcore,
+                           false));
+      owner.reference_audit_pending = false;
     }
     check(owner.authenticate(owner.stream));
     detail.clear();
@@ -941,6 +1264,555 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t maximum_a
     detail = error.what();
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
+}
+
+cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t max_bytes) noexcept {
+  if (!impl_ || !impl_->ready || impl_->used) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  auto error = owner.authenticate(owner.stream);
+  if (error != cudaSuccess) return error;
+  const auto before = owner.grid.work().workspace_bytes;
+  error = owner.grid.retain_fixed_point_linearization(
+      std::min(max_bytes, owner.options.max_device_bytes - owner.receipt.device_bytes));
+  if (error != cudaSuccess) return error;
+  owner.receipt.device_bytes += owner.grid.work().workspace_bytes - before;
+  return cudaSuccess;
+}
+
+cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::CudaCpksShape& shape,
+                                                            std::size_t max_bytes) noexcept {
+  if (!impl_ || !impl_->ready || impl_->used) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  const auto axes = owner.grid.transition_axes();
+  const auto points = owner.reference.shape().points;
+  const auto occupied = shape.occupied[0];
+  const bool direct_projection = can_seed_direct_operator(shape);
+  const bool complete = can_seed_fitted_operator(shape) || direct_projection;
+  if (direct_projection && !scf::cuda_direct_coulomb_rows(owner.direct, owner.stream).values)
+    return cudaSuccess;
+  if (owner.transition_workspace || shape.spins != 1 || owner.source.spins != 1 ||
+      shape.nao != owner.source.nao || shape.nao < 32 || (shape.nao > 96 && !complete) ||
+      !occupied || occupied >= shape.nao || points < 4096 || (axes != 4 && axes != 5) ||
+      (owner.fitted && axes != 5 && !complete) || owner.source.correction ||
+      owner.expected.identity.model.nonlocal_grid)
+    return cudaSuccess;
+  const auto rotations = occupied * (shape.nao - occupied);
+  const auto products_per_point = axes * rotations * rotations;
+  const auto limit = complete                      ? complete_fitted_product_limit
+                     : axes == 5 && shape.nao > 64 ? wide_r2scan_transition_product_limit
+                                                   : transition_product_limit;
+  if (points > limit / products_per_point) return cudaSuccess;
+  const auto tile =
+      complete && shape.nao <= 128 ? transition_tile_points / 2 : transition_tile_points;
+  const auto pairs = shape.nao * (shape.nao + 1) / 2;
+  const auto occupied_tile = std::min(occupied, direct_occupied_tile);
+  const auto tile_rotations = occupied_tile * (shape.nao - occupied);
+  const auto coulomb_elements =
+      direct_projection
+          ? pairs * tile_rotations +
+                direct_transform_tile * (2 * owner.matrix + shape.nao * occupied + tile_rotations)
+      : complete ? owner.matrix + shape.nao * occupied + 2 * owner.fitted.naux * rotations
+                 : 0;
+  const auto bytes = std::max((2 * axes * rotations + 4 * shape.nao) * tile + 1, coulomb_elements) *
+                     sizeof(double);
+  const auto allowance =
+      std::min(max_bytes, owner.options.max_device_bytes - owner.receipt.device_bytes);
+  if (bytes > allowance) return cudaSuccess;
+  auto error = owner.authenticate(owner.stream);
+  if (error != cudaSuccess) return error;
+  error = runtime::resource_cuda_malloc(&owner.transition_workspace, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  auto library = owner.transition_blas.create();
+  if (library == CUBLAS_STATUS_SUCCESS) library = owner.transition_blas.bind(owner.stream);
+  if (library != CUBLAS_STATUS_SUCCESS) {
+    (void)owner.transition_blas.close();
+    return runtime::resource_cuda_free(std::exchange(owner.transition_workspace, nullptr));
+  }
+  owner.transition_occupied = occupied;
+  owner.transition_tile = tile;
+  owner.transition_products = products_per_point * points;
+  owner.receipt.transition_workspace_bytes = bytes;
+  owner.receipt.device_bytes += bytes;
+  return cudaSuccess;
+}
+
+bool CudaKsWb97mvResponse::can_seed_fitted_operator(
+    const response::CudaCpksShape& shape) const noexcept {
+  if (!impl_ || !impl_->ready || !impl_->options.grid.wide_cartesian_grid || !impl_->fitted ||
+      shape.spins != 1 || shape.nao != impl_->source.nao || shape.nao <= 96 || shape.nao > 256 ||
+      !shape.occupied[0] || shape.occupied[0] >= shape.nao || impl_->fitted.naux > 512 ||
+      impl_->source.primary->strategy().spec.exchange.present || impl_->source.correction ||
+      impl_->expected.identity.model.nonlocal_correlation ||
+      !impl_->options.grid.supports_wide_cartesian_grid())
+    return false;
+  const auto points = impl_->reference.shape().points;
+  const auto rotations = shape.occupied[0] * (shape.nao - shape.occupied[0]);
+  // Estimate eligibility before fixed points are retained. The builder later
+  // validates the actual cached axes and can refuse without publishing a seed.
+  const auto axes =
+      impl_->options.grid.functional_code == semilocal_family_code(SemilocalFamily::R2scan) ? 5 : 4;
+  return points >= 4096 && points <= complete_fitted_product_limit / (axes * rotations * rotations);
+}
+
+bool CudaKsWb97mvResponse::can_seed_direct_operator(
+    const response::CudaCpksShape& shape) const noexcept {
+  if (!impl_ || !impl_->ready || !impl_->options.grid.wide_cartesian_grid || impl_->fitted ||
+      !impl_->direct || shape.spins != 1 || shape.nao != impl_->source.nao || shape.nao <= 96 ||
+      shape.nao > 256 || !shape.occupied[0] || shape.occupied[0] >= shape.nao ||
+      impl_->source.primary->strategy().spec.exchange.present || impl_->source.correction ||
+      impl_->expected.identity.model.nonlocal_correlation ||
+      !impl_->options.grid.supports_wide_cartesian_grid())
+    return false;
+  // NAO is bounded above before forming either product. The two AO-to-OV
+  // transforms run once per lower-triangle AO pair and once per OV rotation.
+  const auto occupied = shape.occupied[0], rotations = occupied * (shape.nao - occupied);
+  const auto pairs = shape.nao * (shape.nao + 1) / 2;
+  const auto tiles = 1 + (occupied - 1) / direct_occupied_tile;
+  const auto points = impl_->reference.shape().points;
+  const auto axes =
+      impl_->options.grid.functional_code == semilocal_family_code(SemilocalFamily::R2scan) ? 5 : 4;
+  return points >= 4096 &&
+         points <= complete_fitted_product_limit / (axes * rotations * rotations) &&
+         (pairs + rotations) * shape.nao * (shape.nao * occupied + rotations) <=
+             direct_transform_product_limit &&
+         (pairs * tiles + rotations) * shape.nao * shape.nao <= direct_transform_gather_limit;
+}
+
+bool CudaKsWb97mvResponse::has_transition_builder() const noexcept {
+  return impl_ && impl_->transition_workspace;
+}
+
+cudaError_t CudaKsWb97mvResponse::retain_metric_projection(const double* frozen_core,
+                                                           std::size_t max_bytes) noexcept {
+  if (!impl_ || !impl_->ready || impl_->used) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  auto& metric = owner.metric_projection;
+  const auto shape = owner.reference.shape();
+  if (!frozen_core || metric.rhs || !owner.transition_workspace ||
+      !owner.options.grid.wide_cartesian_grid || owner.grid.transition_axes() != 5 ||
+      shape.nao > metric_projection_max_ao || shape.atoms > metric_projection_max_ao)
+    return cudaSuccess;
+  const auto coordinates = 3 * shape.atoms;
+  const auto rotations = owner.transition_occupied * (shape.nao - owner.transition_occupied);
+  constexpr std::uint64_t max_products = 2ULL << 40;
+  if (!coordinates || !rotations || shape.points > max_products / (5 * rotations * coordinates))
+    return cudaSuccess;
+  const auto& system = owner.source.primary->system();
+  if (system.basis_representation != core::kCartesianBasis || system.atoms.size() != shape.atoms)
+    return cudaSuccess;
+  std::array<int, metric_projection_max_ao + 1> offsets{};
+  std::size_t previous{};
+  for (const auto& shell : system.shells) {
+    const auto atom = shell.atom_index, angular = shell.angular_momentum;
+    // Grid AO columns and the stationary shell order must agree. An
+    // interleaved or unsupported shell topology retains the ordinary action.
+    if (atom >= shape.atoms || atom < previous || angular > 1) return cudaSuccess;
+    offsets[atom + 1] += (angular + 1) * (angular + 2) / 2;
+    previous = atom;
+  }
+  for (std::size_t atom = 0; atom < shape.atoms; ++atom) offsets[atom + 1] += offsets[atom];
+  if (static_cast<std::size_t>(offsets[shape.atoms]) != shape.nao) return cudaSuccess;
+
+  const auto projected_size = rotations * coordinates;
+  const auto row_size = 3 * owner.matrix;
+  const auto jet_size = 8 * shape.nao * owner.transition_tile;
+  const auto intermediate_size = 3 * jet_size;
+  const auto field_size = 5 * coordinates * owner.transition_tile;
+  const auto bytes =
+      sizeof(double) * (projected_size + row_size + jet_size + intermediate_size + field_size) +
+      sizeof(int) * (shape.atoms + 2);
+  if (bytes > max_bytes || bytes > owner.options.max_device_bytes - owner.receipt.device_bytes)
+    return cudaSuccess;
+  auto error = owner.authenticate(owner.stream);
+  if (error != cudaSuccess) return error;
+  void* allocation{};
+  error = runtime::resource_cuda_malloc(&allocation, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  auto* rhs = static_cast<double*>(allocation);
+  auto* rows = rhs + projected_size;
+  auto* jets = rows + row_size;
+  auto* projected = jets + jet_size;
+  auto* fields = projected + intermediate_size;
+  auto* device_offsets = reinterpret_cast<int*>(fields + field_size);
+  error = cudaMemcpyAsync(device_offsets, offsets.data(), sizeof(int) * (shape.atoms + 1),
+                          cudaMemcpyHostToDevice, owner.stream);
+  const auto settled = cudaStreamSynchronize(owner.stream);
+  if (error != cudaSuccess || settled != cudaSuccess) {
+    (void)runtime::resource_cuda_free(allocation);
+    return settled != cudaSuccess ? settled : error;
+  }
+  metric = {frozen_core, rhs,       rows,           jets,
+            projected,   fields,    device_offsets, device_offsets + shape.atoms + 1,
+            coordinates, rotations, false};
+  owner.receipt.device_bytes += bytes;
+  // This optional lease is restricted to a shape and architecture with
+  // aligned int8 tensor products. It never changes the fixed-grid provider.
+  const auto rank = 5 * owner.transition_tile;
+  const auto block = std::size_t(transition_integer::block_width);
+  if (rotations < 8 * block || rotations % block || rank > 640 || rank % 4) return cudaSuccess;
+  int device{}, major{};
+  if ((error = cudaGetDevice(&device)) != cudaSuccess ||
+      (error = cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device)) !=
+          cudaSuccess)
+    return error;
+  if (major != 12) return cudaSuccess;
+  const auto extent = ((rotations / 2 + block / 2) / block) * block;
+  const auto integer_count = extent * extent;
+  const auto digit_count = transition_integer::digits * rank * rotations;
+  const auto integer_bytes = sizeof(int) * (integer_count + 2 * rotations) + 4 * digit_count;
+  constexpr auto provider_allowance = tensor::CudaContractionContext::kProviderAllowance;
+  if (integer_bytes + provider_allowance > max_bytes - bytes ||
+      integer_bytes + provider_allowance >
+          owner.options.max_device_bytes - owner.receipt.device_bytes)
+    return cudaSuccess;
+  if (cublasCreate(&owner.integer_blas) != CUBLAS_STATUS_SUCCESS ||
+      cublasSetStream(owner.integer_blas, owner.stream) != CUBLAS_STATUS_SUCCESS) {
+    if (owner.integer_blas) (void)cublasDestroy(std::exchange(owner.integer_blas, nullptr));
+    return cudaSuccess;
+  }
+  void* integer_storage{};
+  error = runtime::resource_cuda_malloc(&integer_storage, integer_bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    (void)cudaGetLastError();
+    (void)cublasDestroy(std::exchange(owner.integer_blas, nullptr));
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  auto* products = static_cast<int*>(integer_storage);
+  auto* digit_storage = reinterpret_cast<signed char*>(products + integer_count + 2 * rotations);
+  owner.integer_projection = {products,
+                              products + integer_count,
+                              digit_storage,
+                              digit_storage + digit_count,
+                              digit_storage + 2 * digit_count,
+                              digit_storage + 3 * digit_count,
+                              false};
+  owner.receipt.device_bytes += integer_bytes + provider_allowance;
+  return cudaSuccess;
+}
+
+const double* CudaKsWb97mvResponse::metric_projection(std::size_t column) const noexcept {
+  if (!impl_ || !impl_->ready) return nullptr;
+  const auto& metric = impl_->metric_projection;
+  return metric.ready && column < metric.coordinates ? metric.rhs + column * metric.rotations
+                                                     : nullptr;
+}
+
+cudaError_t CudaKsWb97mvResponse::seed_local_xc(void* context, const response::CudaCpksShape& shape,
+                                                const response::CudaCpksReference& reference,
+                                                double* matrix, cudaStream_t stream) noexcept {
+  if (!context || !matrix) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.impl_ || !self.impl_->ready) return cudaErrorInvalidResourceHandle;
+  auto& owner = *self.impl_;
+  if (!owner.transition_workspace || shape.nao != owner.source.nao || shape.spins != 1 ||
+      shape.occupied[0] != owner.transition_occupied ||
+      reference.coefficient_layout != response::CudaCpksLayout::column_major ||
+      reference.coefficients != owner.frame.coefficients || reference.stream != owner.stream)
+    return cudaErrorNotSupported;
+  auto error = owner.authenticate(stream);
+  if (error != cudaSuccess) return error;
+  const auto axes = owner.grid.transition_axes();
+  const auto points = owner.reference.shape().points;
+  const auto rotations = owner.transition_occupied * (shape.nao - owner.transition_occupied);
+  const auto panel = axes * rotations * owner.transition_tile;
+  auto* fields = static_cast<double*>(owner.transition_workspace);
+  auto* tangents = fields + panel;
+  auto* jets = tangents + panel;
+  auto* refused = reinterpret_cast<int*>(jets + 4 * shape.nao * owner.transition_tile);
+  static_assert(2 * sizeof(int) <= sizeof(double));
+  auto* correction_count = refused + 1;
+  error = cudaMemsetAsync(refused, 0, 2 * sizeof(int), stream);
+  if (error != cudaSuccess) return error;
+  error = owner.grid.enqueue_transition_census(correction_count, stream);
+  int correction_points{};
+  if (error == cudaSuccess)
+    error = cudaMemcpyAsync(&correction_points, correction_count, sizeof(int),
+                            cudaMemcpyDeviceToHost, stream);
+  const auto counted = cudaStreamSynchronize(stream);
+  if (counted != cudaSuccess) return counted;
+  if (error != cudaSuccess) return error;
+  runtime::cuda_trace::trace_counter("cpks_transition_correction_points",
+                                     std::max(correction_points, 0));
+  runtime::cuda_trace::trace_counter("cpks_transition_point_tile", owner.transition_tile);
+  if (correction_points < 0 ||
+      static_cast<std::uint64_t>(correction_points) > transition_correction_limit / rotations)
+    return cudaErrorNotSupported;
+  std::uint64_t products{};
+  const bool triangle =
+      correction_points == 0 && rotations >= 2048 &&
+      (self.can_seed_fitted_operator(shape) || self.can_seed_direct_operator(shape));
+  auto& integer = owner.integer_projection;
+  const bool integer_path = triangle && integer.product && !integer.disabled;
+  std::uint64_t integer_products{};
+  if (integer_path) {
+    error = cudaMemsetAsync(correction_count, 0, sizeof(int), stream);
+    if (error != cudaSuccess) return error;
+  }
+  auto& metric = owner.metric_projection;
+  metric.ready = false;
+  bool project_metric = metric.rhs && correction_points == 0;
+  const auto order = static_cast<int>(shape.nao);
+  const auto occupied = static_cast<int>(owner.transition_occupied);
+  if (project_metric) {
+    error = cudaMemsetAsync(metric.refused, 0, sizeof(int), stream);
+    if (error != cudaSuccess) return error;
+    pack_metric_rows<<<maps::blocks(metric.coordinates * owner.matrix), 128, 0, stream>>>(
+        shape.nao, metric.coordinates, metric.core, metric.offsets, metric.rows, metric.refused);
+    if ((error = cudaGetLastError()) != cudaSuccess) return error;
+  }
+  // A unit RKS rotation yields 4 times the bilinear feature (occupation
+  // two and two mirrored density legs). The OV projection reads one leg.
+  constexpr double occupation_and_lift = 4.0, zero = 0.0, one = 1.0;
+  std::size_t begin{};
+  for (; begin < points && error == cudaSuccess;) {
+    const auto count = std::min(points - begin, owner.transition_tile);
+    error = owner.grid.enqueue_transition_tile(reference.coefficients, owner.transition_occupied,
+                                               begin, count, jets, fields, tangents,
+                                               correction_points != 0, refused, stream);
+    if (error != cudaSuccess) break;
+    const auto rows = static_cast<int>(axes * count);
+    const auto columns = static_cast<int>(rotations);
+    const auto* beta = begin ? &one : &zero;
+    if (integer_path && rows % 4 == 0) {
+      error = transition_integer::project(owner.integer_blas, integer, fields, tangents, matrix,
+                                          columns, rows, begin == 0, correction_count, stream);
+      if (error != cudaSuccess) break;
+      const auto logical = rotations * (rotations + transition_integer::block_width) / 2 * rows;
+      products += logical;
+      integer_products +=
+          logical * (transition_integer::digits * (transition_integer::digits + 1) / 2);
+    } else {
+      const auto result =
+          triangle ? transition_triangle(owner.transition_blas, fields, tangents, matrix, columns,
+                                         rows, 0, columns, &occupation_and_lift, beta, products)
+                   : owner.transition_blas.product(true, false, columns, columns, rows,
+                                                   &occupation_and_lift, fields, rows, tangents,
+                                                   rows, beta, matrix, columns);
+      if (result != CUBLAS_STATUS_SUCCESS) {
+        error = cudaErrorNotSupported;
+        break;
+      }
+      if (!triangle) products += rotations * rotations * rows;
+    }
+    if (project_metric) {
+      const auto dot_count = static_cast<int>(4 * count);
+      const auto* mo = reference.coefficients;
+      auto& blas = owner.transition_blas;
+      const auto panel_size = order * dot_count;
+      auto* occupied_jets = metric.jets + panel_size;
+      auto* occupied_rows = metric.projected + 3 * panel_size;
+      constexpr double two = 2;
+      if (blas.product(false, false, order, dot_count, order, &one, mo, order, jets, order, &zero,
+                       metric.jets, order) != CUBLAS_STATUS_SUCCESS ||
+          blas.product(false, false, order, dot_count, occupied, &two, mo, order, jets, order,
+                       &zero, occupied_jets, order) != CUBLAS_STATUS_SUCCESS ||
+          blas.product(false, false, 3 * order, 2 * dot_count, order, &one, metric.rows, 3 * order,
+                       metric.jets, order, &zero, metric.projected,
+                       3 * order) != CUBLAS_STATUS_SUCCESS) {
+        project_metric = false;
+      } else {
+        error = owner.grid.enqueue_metric_feature_tile(
+            count, metric.offsets, metric.jets, occupied_jets, metric.projected, occupied_rows,
+            metric.fields, metric.refused, stream);
+        if (error != cudaSuccess) break;
+        // The weighted transition tangent already owns the point XC Hessian.
+        // Its transpose against the metric JVP yields the physical OV Fock
+        // with no rotation lift (the metric JVP is a full density direction).
+        project_metric = blas.product(true, false, columns, static_cast<int>(metric.coordinates),
+                                      rows, &one, tangents, rows, metric.fields, rows, beta,
+                                      metric.rhs, columns) == CUBLAS_STATUS_SUCCESS;
+      }
+    }
+    begin += count;
+  }
+  if (error == cudaSuccess && triangle) {
+    mirror_transition_triangle<<<maps::blocks(rotations * rotations), 128, 0, stream>>>(matrix,
+                                                                                        rotations);
+    error = cudaGetLastError();
+  }
+  int refused_host{};
+  int metric_refused{};
+  int integer_refused{};
+  if (error == cudaSuccess && integer_path)
+    error = cudaMemcpyAsync(&integer_refused, correction_count, sizeof(int), cudaMemcpyDeviceToHost,
+                            stream);
+  if (error == cudaSuccess && project_metric) {
+    const auto size = rotations * metric.coordinates;
+    audit_metric_projection<<<maps::blocks(size), 128, 0, stream>>>(size, metric.rhs,
+                                                                    metric.refused);
+    error = cudaGetLastError();
+    if (error == cudaSuccess)
+      error = cudaMemcpyAsync(&metric_refused, metric.refused, sizeof(int), cudaMemcpyDeviceToHost,
+                              stream);
+  }
+  if (error == cudaSuccess)
+    error = cudaMemcpyAsync(&refused_host, refused, sizeof(int), cudaMemcpyDeviceToHost, stream);
+  const auto settled = cudaStreamSynchronize(stream);
+  owner.grid.record_transition_projection(products, correction_points * rotations);
+  if (settled != cudaSuccess) return settled;
+  if (integer_path) {
+    runtime::cuda_trace::trace_counter("cpks_transition_int8_products", integer_products);
+    if (integer_refused || error == cudaErrorNotSupported) {
+      // No consumer sees the partial matrix. Rebuild once from the original
+      // features, with no further integer attempts for this retained owner.
+      integer.disabled = true;
+      return seed_local_xc(context, shape, reference, matrix, stream);
+    }
+  }
+  if (error != cudaSuccess) return error;
+  error = owner.authenticate(stream);
+  if (error != cudaSuccess) return error;
+  if (refused_host || begin != points || products > owner.transition_products)
+    return cudaErrorNotSupported;
+  metric.ready = project_metric && !metric_refused;
+  if (metric.ready)
+    runtime::cuda_trace::trace_counter("cpks_metric_projection_products",
+                                       axes * points * rotations * metric.coordinates);
+  return cudaSuccess;
+}
+
+cudaError_t CudaKsWb97mvResponse::seed_fitted_operator(void* context,
+                                                       const response::CudaCpksShape& shape,
+                                                       const response::CudaCpksReference& reference,
+                                                       double* matrix,
+                                                       cudaStream_t stream) noexcept {
+  if (!context || !matrix) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.can_seed_fitted_operator(shape)) return cudaErrorNotSupported;
+  auto error = seed_local_xc(context, shape, reference, matrix, stream);
+  if (error != cudaSuccess) return error;
+  auto& owner = *self.impl_;
+  const auto nao = static_cast<int>(shape.nao), occupied = static_cast<int>(shape.occupied[0]);
+  const auto virtuals = nao - occupied, rotations = occupied * virtuals;
+  const auto naux = static_cast<int>(owner.fitted.naux);
+  auto* slice = static_cast<double*>(owner.transition_workspace);
+  auto* half = slice + owner.matrix;
+  auto* projected = half + nao * occupied;
+  auto* whitened = projected + naux * rotations;
+  const auto* mo = reference.coefficients;
+  const auto* virtual_coefficients = mo + nao * occupied;
+  constexpr double one = 1, zero = 0, four = 4;
+  auto& blas = owner.transition_blas;
+  // The AO slice is symmetric. Project to [virtual,occupied] in column-major
+  // order, exactly the CPKS rotation flattening. RKS P=2CC^T contributes
+  // two mirrored legs, so the kernel in this basis is 4*(WT)^T*(WT).
+  for (int aux = 0; aux < naux; ++aux) {
+    gather_fitted_slice<<<maps::blocks(owner.matrix), 128, 0, stream>>>(owner.fitted_panel, slice,
+                                                                        owner.matrix, aux, naux);
+    if ((error = cudaGetLastError()) != cudaSuccess) break;
+    if (blas.product(false, false, nao, occupied, nao, &one, slice, nao, mo, nao, &zero, half,
+                     nao) != CUBLAS_STATUS_SUCCESS ||
+        blas.product(true, false, virtuals, occupied, nao, &one, virtual_coefficients, nao, half,
+                     nao, &zero, projected + aux * rotations, virtuals) != CUBLAS_STATUS_SUCCESS) {
+      error = cudaErrorNotSupported;
+      break;
+    }
+  }
+  if (error == cudaSuccess &&
+      (blas.product(false, false, rotations, naux, naux, &one, projected, rotations,
+                    owner.fitted.whitening, naux, &zero, whitened,
+                    rotations) != CUBLAS_STATUS_SUCCESS ||
+       blas.product(false, true, rotations, rotations, naux, &four, whitened, rotations, whitened,
+                    rotations, &one, matrix, rotations) != CUBLAS_STATUS_SUCCESS))
+    error = cudaErrorNotSupported;
+  const auto settled = cudaStreamSynchronize(stream);
+  return settled != cudaSuccess ? settled : error;
+}
+
+cudaError_t CudaKsWb97mvResponse::seed_direct_operator(void* context,
+                                                       const response::CudaCpksShape& shape,
+                                                       const response::CudaCpksReference& reference,
+                                                       double* matrix,
+                                                       cudaStream_t stream) noexcept {
+  if (!context || !matrix) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.can_seed_direct_operator(shape) || !self.has_transition_builder())
+    return cudaErrorNotSupported;
+  auto& owner = *self.impl_;
+  const auto rows = scf::cuda_direct_coulomb_rows(owner.direct, stream);
+  if (!rows.values) return cudaErrorNotSupported;
+  auto error = runtime::cuda_trace::trace_call("hessian_cpks_seed_grid", stream, [&] {
+    return seed_local_xc(context, shape, reference, matrix, stream);
+  });
+  if (error != cudaSuccess) return error;
+
+  runtime::cuda_trace::TraceRegion coulomb_trace("hessian_cpks_seed_direct_j", stream);
+  const auto nao = static_cast<int>(shape.nao), occupied = static_cast<int>(shape.occupied[0]);
+  const auto virtuals = nao - occupied, rotations = occupied * virtuals;
+  const std::size_t pairs = shape.nao * (shape.nao + 1) / 2;
+  const auto half_size = nao * occupied;
+  const auto occupied_tile = std::min(occupied, static_cast<int>(direct_occupied_tile));
+  const auto tile_rotations = occupied_tile * virtuals;
+  auto* intermediate = static_cast<double*>(owner.transition_workspace);
+  auto* slices = intermediate + pairs * tile_rotations;
+  auto* half = slices + direct_transform_tile * owner.matrix;
+  auto* projected = half + direct_transform_tile * half_size;
+  auto* mo = projected + direct_transform_tile * tile_rotations;
+  const auto* virtual_coefficients = mo + half_size;
+  const auto frames = direct_transform_tile * owner.matrix;
+  repeat_orbital_frame<<<maps::blocks(frames), 128, 0, stream>>>(reference.coefficients, mo,
+                                                                 owner.matrix, frames);
+  if ((error = cudaGetLastError()) != cudaSuccess) return error;
+  constexpr double one = 1, zero = 0, four = 4;
+  const auto transform = [&](const double* input, std::size_t stride, int count, int first_occupied,
+                             int occupied_count, double* output, const double* scale,
+                             const double* beta) -> cudaError_t {
+    const auto elements = count * owner.matrix;
+    unpack_coulomb_slices<<<maps::blocks(elements), 128, 0, stream>>>(input, slices, stride, nao,
+                                                                      elements);
+    if (const auto launch = cudaGetLastError(); launch != cudaSuccess) return launch;
+    auto& blas = owner.transition_blas;
+    const auto half_stride = nao * occupied_count;
+    const auto rotation_stride = virtuals * occupied_count;
+    if (blas.product_strided(false, false, nao, occupied_count, nao, &one, slices, nao,
+                             owner.matrix, mo + first_occupied * nao, nao, owner.matrix, &zero,
+                             half, nao, half_stride, count) != CUBLAS_STATUS_SUCCESS)
+      return cudaErrorNotSupported;
+    owner.receipt.direct_projection_products += std::uint64_t(count) * nao * half_stride;
+    const auto status = blas.product_strided(
+        true, false, virtuals, occupied_count, nao, scale, virtual_coefficients, nao, owner.matrix,
+        half, nao, half_stride, beta, output, virtuals, rotation_stride, count);
+    if (status != CUBLAS_STATUS_SUCCESS) return cudaErrorNotSupported;
+    owner.receipt.direct_projection_products += std::uint64_t(count) * nao * rotation_stride;
+    return cudaSuccess;
+  };
+  // The column-major flattening is OV with virtual fastest, just like CPKS.
+  // Expanding each packed triangle supplies both AO orientations once. The
+  // second transform multiplies by four for RKS occupation and rotation lift.
+  // Blocking occupied columns rereads pair rows but never repeats a GEMM
+  // term. This keeps the live pair-by-rotation intermediate bounded.
+  for (int first = 0; first < occupied && error == cudaSuccess; first += occupied_tile) {
+    const auto occupied_count = std::min(occupied - first, occupied_tile);
+    const auto columns = static_cast<std::size_t>(occupied_count * virtuals);
+    for (std::size_t start = 0; start < pairs && error == cudaSuccess;
+         start += direct_transform_tile) {
+      const auto count = std::min(pairs - start, direct_transform_tile);
+      error = transform(rows.values + start * rows.stride, rows.stride, static_cast<int>(count),
+                        first, occupied_count, projected, &one, &zero);
+      if (error != cudaSuccess) break;
+      const dim3 blocks((columns + 31) / 32, (count + 31) / 32);
+      transpose_coulomb_window<<<blocks, dim3(32, 8), 0, stream>>>(projected, intermediate + start,
+                                                                   pairs, columns, count);
+      error = cudaGetLastError();
+    }
+    for (std::size_t start = 0; start < columns && error == cudaSuccess;
+         start += direct_transform_tile) {
+      const auto count = std::min(columns - start, direct_transform_tile);
+      error = transform(intermediate + start * pairs, pairs, static_cast<int>(count), 0, occupied,
+                        matrix + (first * virtuals + start) * rotations, &four, &one);
+    }
+  }
+  const auto settled = cudaStreamSynchronize(stream);
+  return settled != cudaSuccess ? settled : error;
 }
 
 cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
@@ -954,6 +1826,7 @@ cudaError_t CudaKsWb97mvResponse::collect_work() noexcept {
   if (completed != cudaSuccess) return completed;
   owner.receipt.response_quartets = counts.quartets;
   owner.receipt.response_eris = counts.eris;
+  owner.receipt.response_pair_product_bound = counts.pair_product_bound;
   owner.receipt.actions = counts.actions;
   owner.grid_actions = counts.grid_actions;
   owner.failure_check = nullptr;
@@ -983,6 +1856,18 @@ cudaError_t CudaKsWb97mvResponse::induced_fock(void* context, const double* dire
   if (!self.impl_ || shape.nao != self.impl_->source.nao || shape.spins != self.impl_->source.spins)
     return cudaErrorInvalidValue;
   return self.apply_impl(direction, output, stream, true);
+}
+
+cudaError_t CudaKsWb97mvResponse::induced_nonlocal_fock(void* context, const double* direction,
+                                                        double* output,
+                                                        const response::CudaCpksShape& shape,
+                                                        cudaStream_t stream) noexcept {
+  if (!context) return cudaErrorInvalidValue;
+  auto& self = *static_cast<CudaKsWb97mvResponse*>(context);
+  if (!self.impl_ || !self.impl_->transition_workspace || shape.nao != self.impl_->source.nao ||
+      shape.spins != 1 || shape.occupied[0] != self.impl_->transition_occupied)
+    return cudaErrorInvalidValue;
+  return self.apply_impl(direction, output, stream, true, false);
 }
 
 }  // namespace generativeqc::dft

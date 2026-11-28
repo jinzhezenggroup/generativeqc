@@ -16,6 +16,7 @@
 #include "api/native_method_inputs.hpp"
 #include "api/precision.hpp"
 #include "api/prepared_publication.hpp"
+#include "dft/cuda_ks_hessian_reference_scope.hpp"
 #include "generativeqc/generativeqc.h"
 #include "methods/batch_capabilities.hpp"
 #include "methods/method.hpp"
@@ -907,11 +908,13 @@ generativeqc_status generativeqc_batch_restore_hf_warm_states(
   }
 }
 
+enum class BatchExecution { Standard, SelectedForces, DenseHessianReference };
+
 static generativeqc_status execute_batch(generativeqc_batch* batch,
                                          const generativeqc_batch_input_descriptor* inputs,
                                          uint32_t input_count,
                                          generativeqc_batch_item_result_descriptor* results,
-                                         uint32_t result_count, bool selective_forces) {
+                                         uint32_t result_count, BatchExecution execution) {
   generativeqc::runtime::host_trace::Region trace("batch_execute");
   if (batch == nullptr) {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -986,6 +989,18 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
     const bool compute_forces = std::any_of(results, results + result_count, [](const auto& item) {
       return item.forces != nullptr || item.force_count != 0;
     });
+    std::optional<generativeqc::dft::CudaKsHessianReferenceScope> hessian_reference;
+    if (execution == BatchExecution::DenseHessianReference) {
+      const auto& lifecycle = batch->plan->execution_lifecycle();
+      if (!batch->resource_ledger || system_count != 1 || inputs || compute_forces ||
+          lifecycle.state() != generativeqc::runtime::CompiledExecutionState::Bound ||
+          lifecycle.warmed()) {
+        batch->context->last_detail =
+            "CUDA dense Hessian reference requires a fresh, budgeted single-system energy solve";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+      hessian_reference.emplace();
+    }
     if (compute_forces && batch->cpu_hessian_host_properties &&
         !(batch->cpu_hessian_host_properties & GENERATIVEQC_PROPERTY_FORCES)) {
       batch->context->last_detail = "force replay is outside the admitted CPU Hessian host budget";
@@ -997,7 +1012,7 @@ static generativeqc_status execute_batch(generativeqc_batch* batch,
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     std::vector<generativeqc::methods::BatchItemResult> native;
-    if (selective_forces) {
+    if (execution == BatchExecution::SelectedForces) {
       // The additive bridge uses the existing output descriptors as per-item
       // work requests. Keep the legacy whole-fleet ABI schedule unchanged.
       std::vector<std::uint8_t> requests(system_count);
@@ -1086,7 +1101,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
                                                uint32_t input_count,
                                                generativeqc_batch_item_result_descriptor* results,
                                                uint32_t result_count) {
-  return execute_batch(batch, inputs, input_count, results, result_count, false);
+  return execute_batch(batch, inputs, input_count, results, result_count, BatchExecution::Standard);
 }
 
 /** Private additive bridge for Python/native KS mixed force consumers. NULL/0
@@ -1097,7 +1112,19 @@ generativeqc_status generativeqc_ks_batch_execute_selected_forces_v1(
     generativeqc_batch* batch, const generativeqc_batch_input_descriptor* inputs,
     uint32_t input_count, generativeqc_batch_item_result_descriptor* results,
     uint32_t result_count) {
-  return execute_batch(batch, inputs, input_count, results, result_count, true);
+  return execute_batch(batch, inputs, input_count, results, result_count,
+                       BatchExecution::SelectedForces);
+}
+
+/** Private resource-planned SCF entry point for the dense CUDA Hessian.
+ * Reuse ordinary batch validation and publication; only optional source
+ * admission changes. No process-global setting or retained replay flag. */
+generativeqc_status generativeqc_ks_batch_execute_hessian_reference_v1(
+    generativeqc_batch* batch, const generativeqc_batch_input_descriptor* inputs,
+    uint32_t input_count, generativeqc_batch_item_result_descriptor* results,
+    uint32_t result_count) {
+  return execute_batch(batch, inputs, input_count, results, result_count,
+                       BatchExecution::DenseHessianReference);
 }
 
 generativeqc_status generativeqc_batch_get_precision_provenance(

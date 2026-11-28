@@ -6,9 +6,21 @@
   "regions": [
     {
       "start": "__global__ void pair_reduce(",
-      "stop": "cudaError_t features(",
+      "stop": "__global__ void append_geometry(",
       "role": "scientific",
       "reason": "Deterministic integration and physical-spin lifting of compiler-AD ordered-pair cotangents, including the generated local beta coefficient; no handwritten response derivative equations."
+    },
+    {
+      "start": "__device__ double adjoint_sum(",
+      "stop": "cudaError_t build_ao_adjoint(",
+      "role": "scientific",
+      "reason": "Native integration and atom/axis reduction of compiler-generated AO adjoints; derivatives and per-point contractions come from the generated maps."
+    },
+    {
+      "start": "__global__ void stage_grid_potential_tile(",
+      "stop": "cudaError_t launch_tiled_grid_potential(",
+      "role": "scientific",
+      "reason": "Native shared-memory reduction of compiler-generated point-potential contributions, not a replacement derivative formula."
     }
   ]
 }

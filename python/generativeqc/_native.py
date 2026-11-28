@@ -1930,6 +1930,12 @@ def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDL
     if selected_forces is not None:
         selected_forces.argtypes = library.generativeqc_batch_execute.argtypes
         selected_forces.restype = ctypes.c_int
+    hessian_reference = getattr(
+        library, "generativeqc_ks_batch_execute_hessian_reference_v1", None
+    )
+    if hessian_reference is not None:
+        hessian_reference.argtypes = library.generativeqc_batch_execute.argtypes
+        hessian_reference.restype = ctypes.c_int
     d3_prepare = getattr(library, "generativeqc_d3_batch_prepare", None)
     if d3_prepare is not None:
         library.generativeqc_d3_table_sha256.argtypes = []

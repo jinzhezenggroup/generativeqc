@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 
 #include "scf/cuda_direct_jk.hpp"
@@ -72,9 +73,45 @@ std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan* plan);
  * the original exact route intact; driver/numerical failures must propagate.
  * Values are released with the plan. Repeated preparation is idempotent.
  */
-generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
-                                                           std::size_t maximum_bytes,
-                                                           std::string& detail);
+generativeqc_status prepare_cuda_direct_jk_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail,
+    std::span<const double> certified_norms = {});
+
+/** The private dense pure-Coulomb Hessian may supply outward-rounded public
+ * AO-pair Coulomb norms. Only slots whose bound product is below this value
+ * are explicitly zeroed; the stable canonical/contiguous layouts do not move. */
+inline constexpr double cuda_direct_response_zero_bound = 0x1p-70;
+
+/** Reorder the complete unscreened, unprojected FP64 full-range source for
+ * repeated J or J/K actions. Budget refusal leaves the canonical route intact.
+ * Coulomb-only admission is bounded by bytes and products rather than the
+ * narrower mixed-exchange row schedule's AO range.
+ * Nonzero bytes and an admitted product bound identify the published lease. */
+generativeqc_status prepare_cuda_direct_jk_response_pairs(
+    CudaDirectJkPlan* plan, bool include_exchange, std::size_t maximum_bytes,
+    std::size_t maximum_products, std::size_t& bytes, std::size_t& product_bound,
+    std::string& detail);
+
+/** After reference reconstruction, a dedicated pure-Coulomb response owner
+ * may drop the duplicate canonical value table. Only a complete, fenced row
+ * lease is eligible; the underlying integral provider remains available. */
+generativeqc_status retire_cuda_direct_jk_response_values(CudaDirectJkPlan* plan,
+                                                          std::string& detail);
+
+/** Borrow the prepared pair layout and scratch on the owning stream. Density
+ * and output are disjoint public-AO buffers checked by the response owner. */
+cudaError_t enqueue_cuda_direct_jk_response_pairs(CudaDirectJkPlan* plan, const double* density,
+                                                  double* coulomb, double* exchange) noexcept;
+
+/** Borrow immutable FP64 (ij|kl) rows from a pure Coulomb response lease.
+ * Both indices are public lower-triangle AO pairs, including diagonals.
+ * The stride includes padding; read only actual pairs, on the owning stream. */
+struct CudaDirectCoulombRows {
+  const double* values{};
+  std::size_t stride{};
+};
+CudaDirectCoulombRows cuda_direct_coulomb_rows(const CudaDirectJkPlan* plan,
+                                               cudaStream_t stream) noexcept;
 
 /** Replace a complete FP64 LR source by LR + full_scale * Full in place.
  * A bounded temporary source uses the same canonical rows and compiler-owned

@@ -35,7 +35,9 @@ if typing.TYPE_CHECKING:
     from collections.abc import Iterator
 
 
-def _fixture(spins: int = 2, points: int = 9, *, vacuum: bool = False) -> dict:
+def _fixture(
+    spins: int = 2, points: int = 9, *, vacuum: bool = False, orbitals: int = 4
+) -> dict:
     """Independent Gaussian polynomial jets, including real-spherical d/f.
 
     Coefficients are already normalized basis records, as required by the
@@ -51,6 +53,7 @@ def _fixture(spins: int = 2, points: int = 9, *, vacuum: bool = False) -> dict:
         [(-1, (2, 0, 0)), (-1, (0, 2, 0)), (2, (0, 0, 2))],
         [(2, (0, 0, 3)), (-3, (2, 0, 1)), (-3, (0, 2, 1))],
     ]
+    terms = (terms * ((orbitals + 3) // 4))[:orbitals]
     primitives = np.array([[0.7, 0.8], [1.1, -0.2]] * len(terms))
     records = np.zeros((len(terms), 16))
     for orbital, polynomial in enumerate(terms):
@@ -506,8 +509,16 @@ def test_native_failure_does_not_publish(probe: Path, mode: str) -> None:
     assert np.all(np.array(result["response"]) == 91.25)
 
 
-def test_private_response_propagates_failure_then_replays(probe: Path) -> None:
-    assert _native(probe, _fixture(), mode="private-replay") == {"private_replay": True}
+@pytest.mark.parametrize("orbitals,points", ((4, 9), (36, 4096), (35, 4097)))
+def test_private_response_propagates_failure_then_replays(
+    probe: Path, orbitals: int, points: int
+) -> None:
+    """Even and partial tiles agree with the checked response after a bad action."""
+    fixture = _fixture(1, points, orbitals=orbitals)
+    fixture["weights"] /= points
+    assert _native(probe, fixture, mode="private-replay", tile=128) == {
+        "private_replay": True
+    }
 
 
 def test_native_work_budget_not_just_storage_budget(probe: Path) -> None:

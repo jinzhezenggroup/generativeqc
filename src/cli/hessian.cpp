@@ -672,10 +672,11 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   policy.cpks.gmres.max_iterations = invocation.response_iterations;
   if (invocation.response_fp32_proposal)
     policy.cpks.resident_precision = response::CudaCpksResidentPrecision::fp32_proposal;
+  if (!hvp) dft::configure_wide_dense_cuda_hessian(policy);
   dft::CudaKsWb97mvHessian endpoint;
   using Mode = dft::CudaKsWb97mvHessianMode;
   const auto prepared = endpoint.prepare(
-      *batch, 0, token, hvp ? Mode::action_only : Mode::dense_and_action, policy, detail);
+      *batch, 0, token, hvp ? Mode::action_only : Mode::dense_only, policy, detail);
   if (prepared != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error("native Hessian preparation failed: " + detail);
   const auto hessian_prepared = std::chrono::steady_clock::now();
@@ -735,6 +736,8 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
                                 : Json(nullptr)},
       {"induced_resident_integral_bytes", work.induced.resident_integral_bytes},
       {"induced_resident_source_evaluations", work.induced.resident_source_evaluations},
+      {"induced_resident_pair_bytes", work.induced.resident_pair_bytes},
+      {"induced_response_pair_product_bound", work.induced.response_pair_product_bound},
       {"induced_response_eris", work.induced.response_eris},
       {"induced_response_quartets", work.induced.response_quartets},
       {"exact_primitive_components", work.exact.component_evaluations},

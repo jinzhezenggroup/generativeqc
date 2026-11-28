@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -155,6 +156,8 @@ void run(const char* source, const char* result) {
   options.exchange_fraction = read<double>(input, 1)[0];
   options.coulomb = header[4] == 0;
   options.spectral_metric = header[5] != 0;
+  options.split_coulomb_action =
+      options.coulomb && !options.spectral_metric && !options.exchange_fraction;
   auto* eigenvectors =
       options.spectral_metric ? storage.upload(read<double>(input, metric_count)) : nullptr;
   check(cudaStreamSynchronize(storage.stream));
@@ -211,6 +214,36 @@ void run(const char* source, const char* result) {
     }
   };
   preserved();
+  if (options.split_coulomb_action) {
+    constexpr double sentinel = -970.0;
+    auto* fock = static_cast<double*>(storage.allocate(panels * sizeof(double)));
+    storage.set(pointers[5], sentinel);
+    auto fock_output = output;
+    fock_output.energy = nullptr;
+    fock_output.fock_direction = fock;
+    check(response.apply(delta_density, delta_raw, delta_metric, fock_output, storage.stream,
+                         &detail, CudaWb97mvDfAction::fock_direction));
+    require(download(pointers[5], 1)[0] == sentinel, "unrequested weight was published");
+    const auto frozen = download(fock, panels);
+    const auto compare = [](double actual, double expected) {
+      return std::abs(actual - expected) <= 5e-12 + 3e-12 * std::abs(expected);
+    };
+    require(std::equal(frozen.begin(), frozen.end(), expected.begin() + 1 + panels, compare),
+            "partitioned frozen Fock differs from all-output action");
+    auto weight_output = output;
+    weight_output.fock_direction = nullptr;
+    check(response.apply(delta_density, delta_raw, delta_metric, weight_output, storage.stream,
+                         &detail, CudaWb97mvDfAction::source_weights));
+    std::size_t offset = 1 + 2 * panels;
+    for (unsigned index = 3; index < pointers.size(); ++index) {
+      const auto weights = download(pointers[index], counts[index]);
+      require(std::equal(weights.begin(), weights.end(), expected.data() + offset, compare),
+              "partitioned raw weights differ from all-output action");
+      offset += counts[index];
+    }
+    check(apply(output));
+  }
+  const auto completed_before_rejections = response.work().completed_actions;
   auto alias = output;
   alias.energy = pointers[1];
   require(apply(alias) != cudaSuccess, "overlapping outputs admitted");
@@ -258,7 +291,8 @@ void run(const char* source, const char* result) {
   require(apply(output) == cudaErrorInvalidResourceHandle, "stale owner admitted");
   preserved();
   const auto work = response.work();
-  require(work.completed_actions == 2, "failed action reported completed");
+  require(work.completed_actions == completed_before_rejections,
+          "failed action reported completed");
   std::ofstream file(result, std::ios::binary);
   file.write(reinterpret_cast<const char*>(expected.data()), expected.size() * sizeof(double));
   std::cout << "{\"lifecycle\":true,\"workspace_bytes\":" << work.workspace_bytes

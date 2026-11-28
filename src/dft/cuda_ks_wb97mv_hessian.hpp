@@ -24,8 +24,11 @@ struct CudaKsWb97mvHessianOptions {
   std::size_t max_assembly_terms{1ULL << 30};
   std::uint64_t max_nuclear_pairs{16'777'216};
   /** Optional repeated-RHS CPKS representation, additionally constrained by
-   * the existing response/aggregate budgets. Zero retains physical GMRES. */
-  std::size_t max_resident_cpks_bytes{128ULL << 10};
+   * the response/aggregate budgets and the rotation-to-RHS amortization gate.
+   * The extended ceiling accommodates up to 724 FP64 rotations in eligible
+   * Direct RKS; other paths retain their smaller admission limit. Zero
+   * retains physical GMRES. */
+  std::size_t max_resident_cpks_bytes{4ULL << 20};
   /** Optional full-Hessian frozen exact derivatives, inside max_device_bytes.
    * Stores O(3N*spin*AO^2) first Fock derivatives plus frozen HVP columns,
    * never a four-index derivative tensor. Zero keeps directional replay. */
@@ -39,15 +42,41 @@ struct CudaKsWb97mvHessianOptions {
   CudaKsWb97mvResponseOptions induced{};
   CudaGridGeometryOptions geometry{.max_ao_replay_terms = 1ULL << 33};
   CudaWb97mvGridOptions grid{};
-  integrals::CudaOneElectronOptions one_electron{};
+  // The mandatory planner bounds bytes and mathematical work before expanding
+  // attraction centers. An additional fixed descriptor count is unnecessary.
+  integrals::CudaOneElectronOptions one_electron{.max_jobs = SIZE_MAX};
   CudaWb97mvJkOptions exact{};
   CudaWb97mvDfOptions fitted{};
-  integrals::CudaDfNuclearOptions raw_df{};
+  integrals::CudaDfNuclearOptions raw_df{.max_groups = SIZE_MAX};
   integrals::CudaEcpNuclearOptions ecp{};
 };
 
-/** Select the storage contract at preparation, before any workspace is admitted. */
-enum class CudaKsWb97mvHessianMode { action_only, dense_and_action };
+/** Resolve the finite wide dense work profile for callers that explicitly
+ * reserve larger grid, integral and aggregate device arenas. The backend still
+ * charges each actual allocation and retains its own numerical/work gates. */
+inline void configure_wide_dense_cuda_hessian(CudaKsWb97mvHessianOptions& options) noexcept {
+  if (options.max_device_bytes < (8ULL << 30) || options.grid.max_workspace_bytes < (4ULL << 30) ||
+      options.exact.max_workspace_bytes < (3ULL << 30))
+    return;
+  options.geometry.max_partition_pairs = 1ULL << 29;
+  options.induced.max_device_bytes = 4ULL << 30;
+  options.induced.max_direct_eri_evaluations = 1ULL << 27;
+  options.induced.max_resident_integral_bytes = 1ULL << 30;
+  options.one_electron.max_parallel_workspace_bytes = 768ULL << 20;
+  options.max_resident_cpks_bytes = 64ULL << 20;
+  options.max_frozen_exact_bytes = 32ULL << 20;
+  options.max_frozen_core_bytes = 64ULL << 20;
+  options.exact.max_frozen_replay_candidates = 1ULL << 24;
+  options.exact.max_primitive_component_evaluations = 1ULL << 31;
+  options.exact.max_projection_terms = 1ULL << 31;
+  options.exact.max_reduction_terms = 1ULL << 33;
+}
+
+/** Select the storage contract before any workspace is admitted.
+ * A dense-only owner may retain Cartesian-only providers; a combined owner
+ * must also support arbitrary nuclear directions.
+ */
+enum class CudaKsWb97mvHessianMode { action_only, dense_and_action, dense_only };
 
 enum class CudaKsWb97mvHessianStatus { failed, response_not_converged, converged };
 

@@ -65,6 +65,33 @@ function(generativeqc_add_hessian_aot target inventory)
       COMMENT "Generating native Hessian AD leaf ${_program}")
     list(APPEND _sources "${_output}")
   endforeach()
+  # Keep each bounded s/p degree class in its own unit. The handwritten
+  # runtime owns windows, status publication and resource admission.
+  foreach(_kind IN ITEMS pair aux quartet fitted2 fitted3)
+    if(_kind STREQUAL "pair")
+      set(_classes 00 01 10 11)
+    elseif(_kind STREQUAL "aux")
+      set(_classes 00 10)
+    elseif(_kind STREQUAL "fitted2")
+      set(_classes 00 10 11)
+    elseif(_kind STREQUAL "fitted3")
+      set(_classes 00 01 10 11 20 21)
+    else()
+      set(_classes 00 10 11 20 21 22)
+    endif()
+    foreach(_class IN LISTS _classes)
+      string(SUBSTRING "${_class}" 0 1 _left)
+      string(SUBSTRING "${_class}" 1 1 _right)
+      set(_output "${_directory}/contracted_${_kind}_${_class}.cu")
+      generativeqc_register_generated_sources(
+        OUTPUTS "${_output}"
+        GENERATOR "${PROJECT_SOURCE_DIR}/tools/generate_contracted_coulomb.py"
+        DEPENDS "${PROJECT_SOURCE_DIR}/src/dft/contracted_coulomb.hpp"
+        ARGS --kind "${_kind}" --left "${_left}" --right "${_right}" --output "${_output}"
+        COMMENT "Generating contracted Coulomb ${_kind} ${_class}")
+      list(APPEND _sources "${_output}")
+    endforeach()
+  endforeach()
   set(_registry "${_directory}/registry.cpp")
   generativeqc_register_generated_sources(
     OUTPUTS "${_registry}" GENERATOR "${_generator}" DEPENDS "${inventory}"
@@ -189,6 +216,7 @@ function(generativeqc_add_hessian_aot target inventory)
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_response.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_df_nuclear.cu"
+    "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_df_sweep.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_ks_wb97mv_ecp_nuclear.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_one_electron_response.cu"
     "${PROJECT_SOURCE_DIR}/src/integrals/cuda_df_nuclear_response.cu"
@@ -212,13 +240,17 @@ function(generativeqc_add_hessian_aot target inventory)
     generativeqc_ensure_cuda_wheel_import_interface()
     target_link_libraries(${target} PUBLIC generativeqc_cuda_wheel_imports)
   else()
-    target_link_libraries(${target} PUBLIC CUDA::cudart)
+    target_link_libraries(${target} PUBLIC CUDA::cudart CUDA::cublas)
   endif()
   target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>")
   # Both moving-grid consumers include the generated force-owner pair layout.
   set_property(SOURCE "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu"
     "${PROJECT_SOURCE_DIR}/src/dft/cuda_wb97mv_grid.cu" APPEND
     PROPERTY COMPILE_OPTIONS --expt-relaxed-constexpr)
+  # Keep FP64 multiply-add contraction local to Hessian grid geometry;
+  # ordinary grids, functional evaluation, and integral AD keep their policies.
+  set_property(SOURCE "${PROJECT_SOURCE_DIR}/src/dft/cuda_grid_geometry.cu" APPEND
+    PROPERTY COMPILE_OPTIONS --fmad=true)
   set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE ON
     CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON CUDA_SEPARABLE_COMPILATION OFF)
   if(GENERATIVEQC_BUILD_TESTS)

@@ -84,6 +84,16 @@ int cublasDgemm(cublasHandle_t handle, cublasOperation_t transpose_left,
   return capture(handle, transpose_left, transpose_right, rows, columns, reduction, alpha, left,
                  left_ld, right, right_ld, beta, output, output_ld);
 }
+int cublasDgemmStridedBatched(cublasHandle_t handle, cublasOperation_t transpose_left,
+                              cublasOperation_t transpose_right, int rows, int columns,
+                              int reduction, const double* alpha, const double* left, int left_ld,
+                              long long left_stride, const double* right, int right_ld,
+                              long long right_stride, const double* beta, double* output,
+                              int output_ld, long long output_stride, int batches) {
+  return capture(handle, transpose_left, transpose_right, rows, columns, reduction, alpha, left,
+                 left_ld, left_stride, right, right_ld, right_stride, beta, output, output_ld,
+                 output_stride, batches);
+}
 #ifdef GENERATIVEQC_TEST_HAS_GEAM
 int cublasDgeam(cublasHandle_t handle, cublasOperation_t transpose_left,
                 cublasOperation_t transpose_right, int rows, int columns, const double* alpha,
@@ -152,7 +162,7 @@ int main() {
       compare([&] { return cublasDnrm2(&provider, count, input, 7, output); },
               [&] { return operations.norm(count, input, 7, output); });
       for (bool transpose_left : {false, true})
-        for (bool transpose_right : {false, true})
+        for (bool transpose_right : {false, true}) {
           compare(
               [&] {
                 return cublasDgemm(&provider, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
@@ -164,6 +174,22 @@ int main() {
                                           &coefficient, input, 9, input, 11, &coefficient, output,
                                           13);
               });
+          constexpr long long left_stride = 29, right_stride = 1LL << 33, output_stride = 43;
+          compare(
+              [&] {
+                return cublasDgemmStridedBatched(
+                    &provider, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N,
+                    transpose_right ? CUBLAS_OP_T : CUBLAS_OP_N, count, 7, 3, &coefficient, input,
+                    9, left_stride, input, 11, right_stride, &coefficient, output, 13,
+                    output_stride, 5);
+              },
+              [&] {
+                return operations.product_strided(transpose_left, transpose_right, count, 7, 3,
+                                                  &coefficient, input, 9, left_stride, input, 11,
+                                                  right_stride, &coefficient, output, 13,
+                                                  output_stride, 5);
+              });
+        }
     }
   }
 

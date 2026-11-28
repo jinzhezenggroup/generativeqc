@@ -21,6 +21,7 @@ cublasStatus_t cublasDsyr2k_v2(cublasHandle_t arg0, cublasFillMode_t arg1, cubla
 cublasStatus_t cublasDsyrk_v2(cublasHandle_t arg0, cublasFillMode_t arg1, cublasOperation_t arg2, int arg3, int arg4, const double* arg5, const double* arg6, int arg7, const double* arg8, double* arg9, int arg10);
 cublasStatus_t cublasDtrsmBatched(cublasHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, cublasDiagType_t arg4, int arg5, int arg6, const double* arg7, const double*const* arg8, int arg9, double*const* arg10, int arg11, int arg12);
 cublasStatus_t cublasDtrsm_v2(cublasHandle_t arg0, cublasSideMode_t arg1, cublasFillMode_t arg2, cublasOperation_t arg3, cublasDiagType_t arg4, int arg5, int arg6, const double* arg7, const double* arg8, int arg9, double* arg10, int arg11);
+cublasStatus_t cublasGemmEx(cublasHandle_t arg0, cublasOperation_t arg1, cublasOperation_t arg2, int arg3, int arg4, int arg5, const void* arg6, const void* arg7, cudaDataType arg8, int arg9, const void* arg10, cudaDataType arg11, int arg12, const void* arg13, void* arg14, cudaDataType arg15, int arg16, cublasComputeType_t arg17, cublasGemmAlgo_t arg18);
 cublasStatus_t cublasGetMathMode(cublasHandle_t arg0, cublasMath_t* arg1);
 cublasStatus_t cublasGetPointerMode_v2(cublasHandle_t arg0, cublasPointerMode_t* arg1);
 cublasStatus_t cublasGetProperty(libraryPropertyType arg0, int* arg1);

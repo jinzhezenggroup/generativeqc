@@ -139,9 +139,10 @@ namespace generativeqc::integrals {
 inline constexpr std::size_t mandatory_bytes = 256, optional_bytes = 512;
 cudaError_t cuda_one_electron_workspace(const CudaOneElectronShape&,
                                         std::span<const CudaOneElectronShell>,
-                                        const CudaOneElectronOptions& options,
-                                        std::size_t& bytes) noexcept {
+                                        const CudaOneElectronOptions& options, std::size_t& bytes,
+                                        CudaOneElectronAdmissionLimit* limit) noexcept {
   bytes = 0;
+  if (limit && options.max_jobs == 1) *limit = {"ordered jobs", 2, options.max_jobs};
   if (options.max_workspace_bytes < mandatory_bytes || options.max_jobs == 1)
     return cudaErrorInvalidValue;
   bytes = options.parallel_streams && options.max_workspace_bytes >= optional_bytes
@@ -172,7 +173,7 @@ cudaError_t CudaOneElectronResponse::apply(const double*, const CudaOneElectronW
 }
 cudaError_t CudaOneElectronResponse::enqueue_private(const double*, const CudaOneElectronWeights&,
                                                      const CudaOneElectronOutput&, int*,
-                                                     cudaStream_t) noexcept {
+                                                     cudaStream_t, std::size_t) noexcept {
   return cudaSuccess;
 }
 }  // namespace generativeqc::integrals

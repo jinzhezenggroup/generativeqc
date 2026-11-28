@@ -171,6 +171,10 @@ def fitted_coulomb_charge_maps(nao: int, naux: int, spins: int) -> dict[str, Pro
         solve_fitted_charge(whitening, fixed_rhs),
         field("inverse_motion_charge", (second,)),
     )
+    full_rank_motion = {
+        **motions(frozen, moving),
+        "weight_direction_metric": _symmetric_pair(metric_half, (1, 0), "pq->pq"),
+    }
     return {
         "fit_charge": Program({"fitted_charge": solve_fitted_charge(whitening, rhs)}),
         "fit_charge_spectral": Program(
@@ -185,12 +189,21 @@ def fitted_coulomb_charge_maps(nao: int, naux: int, spins: int) -> dict[str, Pro
             }
         ),
         "reference_coulomb_spectral": Program(reference),
-        "response_coulomb": Program(
+        "response_coulomb": Program(full_rank_motion),
+        # Expose both sides of the same auxiliary solve. The dense Hessian
+        # can fold s_L^T M^-1 s_R without replaying moving source cotangents.
+        "response_coulomb_fock": Program(
             {
-                **motions(frozen, moving),
-                "weight_direction_metric": _symmetric_pair(
-                    metric_half, (1, 0), "pq->pq"
-                ),
+                "fock_direction": full_rank_motion["fock_direction"],
+                "frozen_charge_motion": frozen,
+                "frozen_rhs": frozen_rhs,
+            }
+        ),
+        "response_coulomb_weights": Program(
+            {
+                name: root
+                for name, root in full_rank_motion.items()
+                if name.startswith("weight_direction_")
             }
         ),
         "response_coulomb_spectral": Program(

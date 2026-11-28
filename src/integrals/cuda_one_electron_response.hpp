@@ -72,14 +72,20 @@ struct CudaOneElectronWork {
   std::uint64_t parallel_actions{};
 };
 
+/** Optional explanation of a rejected host-only resource bound. */
+struct CudaOneElectronAdmissionLimit {
+  const char* resource{};
+  std::size_t required{}, maximum{};
+};
+
 /** Checked host-only closure/work/arena admission; does not initialize CUDA.
  * Every needed ordered shell class/component must already be in the linked AOT
  * inventory. Missing or overlapping closure is rejected before kernel work.
  * All mathematical centers, including coincident physical atoms, are retained. */
 cudaError_t cuda_one_electron_workspace(const CudaOneElectronShape& shape,
                                         std::span<const CudaOneElectronShell> shells,
-                                        const CudaOneElectronOptions& options,
-                                        std::size_t& bytes) noexcept;
+                                        const CudaOneElectronOptions& options, std::size_t& bytes,
+                                        CudaOneElectronAdmissionLimit* limit = nullptr) noexcept;
 
 /** Compiler-AD S and T+effective-charge V nuclear source, not a Hessian endpoint.
  * Preparation owns bounded integer scheduling metadata only. All primitive
@@ -108,16 +114,18 @@ class CudaOneElectronResponse {
                     const CudaOneElectronOutput& output, cudaStream_t stream) noexcept;
   /** Enqueue into private device panels and accumulate failures into a
    * disjoint, initialized device status. The enclosing transaction owns
-   * stream completion and must reject publication on failure. */
+   * stream completion and must reject publication on failure. A specified
+   * frozen column requires its exact unit direction and zero weight motion;
+   * in that mode only the two matrix directions and the HVP are written. */
   cudaError_t enqueue_private(const double* direction, const CudaOneElectronWeights& weights,
                               const CudaOneElectronOutput& output, int* transaction_status,
-                              cudaStream_t stream) noexcept;
+                              cudaStream_t stream, std::size_t frozen_column = SIZE_MAX) noexcept;
   const CudaOneElectronWork& work() const noexcept;
 
  private:
   cudaError_t apply_impl(const double* direction, const CudaOneElectronWeights& weights,
                          const CudaOneElectronOutput& output, int* transaction_status,
-                         cudaStream_t stream) noexcept;
+                         cudaStream_t stream, std::size_t frozen_column = SIZE_MAX) noexcept;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

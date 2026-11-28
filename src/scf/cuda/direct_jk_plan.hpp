@@ -136,6 +136,9 @@ struct CudaDirectJkPlan {
   /** Published screened bucket extents, frozen before optional ERI allocation.
    * Empty retains the unscreened RHF layout. No replay downloads row counts. */
   std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
+  /** Optional pair-major view of one unscreened strict full-range source. */
+  const double *resident_coulomb_pairs{}, *resident_exchange_pairs{};
+  std::size_t resident_pair_stride{};
   ~CudaDirectJkPlan();
 };
 

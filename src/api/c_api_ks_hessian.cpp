@@ -210,10 +210,11 @@ extern "C" generativeqc_status generativeqc_ks_hessian_cuda_v2(
     if (options->response_fp32_proposal)
       policy.cpks.resident_precision =
           generativeqc::response::CudaCpksResidentPrecision::fp32_proposal;
+    if (matrix) generativeqc::dft::configure_wide_dense_cuda_hessian(policy);
     generativeqc::dft::CudaKsWb97mvHessian endpoint;
     using Mode = generativeqc::dft::CudaKsWb97mvHessianMode;
     status = endpoint.prepare(*batch->plan, index, token,
-                              matrix ? Mode::dense_and_action : Mode::action_only, policy, detail);
+                              matrix ? Mode::dense_only : Mode::action_only, policy, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       return status;
@@ -225,8 +226,12 @@ extern "C" generativeqc_status generativeqc_ks_hessian_cuda_v2(
       throw std::runtime_error(result.failure_check);
     generativeqc::runtime::cuda_resource_check(error);
     if (!result.converged()) {
+      const auto& linear = result.response.gmres;
       batch->context->last_detail =
-          "native stationary response did not converge; no Hessian result published";
+          "native stationary response did not converge (completed directions " +
+          std::to_string(result.completed_directions) + ", solver status " +
+          std::to_string(static_cast<int>(result.response.status)) + ", iterations " +
+          std::to_string(linear.iterations) + "); no Hessian result published";
       return GENERATIVEQC_STATUS_NOT_CONVERGED;
     }
     std::vector<double> published(output_count);

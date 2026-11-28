@@ -165,9 +165,15 @@ cudaError_t CudaKsWb97mvDfResponse::apply(const double* delta_density,
                                           const double* delta_three_center,
                                           const double* delta_metric,
                                           const CudaWb97mvDfOutput& output, cudaStream_t stream,
-                                          const char** detail) noexcept {
+                                          const char** detail, CudaWb97mvDfAction action) noexcept {
   return impl_ ? impl_->response.apply(delta_density, delta_three_center, delta_metric, output,
-                                       stream, detail)
+                                       stream, detail, action)
+               : cudaErrorInvalidResourceHandle;
+}
+cudaError_t CudaKsWb97mvDfResponse::borrow_private_coulomb_sweep(
+    CudaDfCoulombSweepInput& output, cudaStream_t stream) const noexcept {
+  output = {};
+  return impl_ ? impl_->response.borrow_private_coulomb_sweep(output, stream)
                : cudaErrorInvalidResourceHandle;
 }
 CudaWb97mvDfShape CudaKsWb97mvDfResponse::shape() const noexcept {

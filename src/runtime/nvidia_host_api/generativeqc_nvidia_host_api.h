@@ -51,6 +51,8 @@ typedef enum { CUBLAS_SIDE_LEFT = 0, CUBLAS_SIDE_RIGHT = 1 } cublasSideMode_t;
 typedef enum { CUBLAS_DIAG_NON_UNIT = 0, CUBLAS_DIAG_UNIT = 1 } cublasDiagType_t;
 typedef enum { CUBLAS_POINTER_MODE_HOST = 0, CUBLAS_POINTER_MODE_DEVICE = 1 } cublasPointerMode_t;
 typedef enum { CUBLAS_DEFAULT_MATH = 0, CUBLAS_PEDANTIC_MATH = 2 } cublasMath_t;
+typedef enum { CUBLAS_COMPUTE_32I = 72 } cublasComputeType_t;
+typedef enum { CUBLAS_GEMM_DEFAULT = -1 } cublasGemmAlgo_t;
 
 typedef struct cusolverDnContext* cusolverDnHandle_t;
 typedef struct cusolverDnParams* cusolverDnParams_t;

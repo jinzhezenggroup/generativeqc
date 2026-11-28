@@ -53,6 +53,19 @@ struct CudaCpksReference {
 using CudaCpksInducedFock = cudaError_t (*)(void*, const double*, double*, const CudaCpksShape&,
                                             cudaStream_t) noexcept;
 
+/** Optional FP64 cached-operator seed (e.g. a batched local XC projection).
+ * Column-major [rotation,rotation]. The matching build provider supplies
+ * exactly the missing terms. NotSupported is a settled refusal: no work may
+ * still borrow the target and the ordinary build overwrites every entry. */
+using CudaCpksOperatorSeed = cudaError_t (*)(void*, const CudaCpksShape&, const CudaCpksReference&,
+                                             double*, cudaStream_t) noexcept;
+
+/** Optional initial guess from the authenticated, immutable FP64 operator.
+ * The strict solver still checks the residual, and CPKS still replays the
+ * physical operator. NotSupported must leave no unsettled borrowed work. */
+using CudaCpksRotationGuess = cudaError_t (*)(void*, const double*, const double*, double*,
+                                              std::size_t, bool, cudaStream_t) noexcept;
+
 struct CudaCpksResult {
   CudaCpksStatus status{CudaCpksStatus::running};
   CudaGmresResult gmres{};
@@ -69,7 +82,7 @@ struct CudaCpksDenseReceipt {
   CudaGmresDeviceReceipt last;
   std::size_t iterations, cached_actions, physical_checks;
   CudaCpksStatus failure;
-  int revoke_cache;
+  int revoke_cache, upstream_flags;
 };
 
 /** Registered by the dense owner for private FP64 output only. Every solve
@@ -80,6 +93,7 @@ struct CudaCpksDenseReceipt {
 struct CudaCpksDenseReplay {
   CudaCpksDenseReceipt* receipt;
   int* column_status;
+  const int* upstream_detail;
   CudaGmresReplay solver;
 };
 
@@ -101,8 +115,38 @@ class CudaCpksOperatorCache {
     bytes_ = bytes;
     precision_ = precision;
     ready_ = false;
+    build_refused_ = false;
     columns_ = actions_ = checks_ = 0;
+    seed_ = nullptr;
+    complement_ = nullptr;
+    guess_ = nullptr;
+    guess_owner_ = nullptr;
+    clear_metric_projection();
   }
+  /** Install a bounded FP64 builder before the lease builds any columns. An
+   * absent complement denotes a complete projection: if refused, use the
+   * physical operator directly instead of building expensive unit columns. */
+  void set_build_decomposition(CudaCpksOperatorSeed seed, CudaCpksInducedFock complement) noexcept {
+    if (!ready_) {
+      seed_ = seed;
+      complement_ = complement;
+    }
+  }
+  void set_rotation_guess(CudaCpksRotationGuess guess, void* owner) noexcept {
+    if (!ready_) {
+      guess_ = guess;
+      guess_owner_ = owner;
+    }
+  }
+  /** Borrow the projected XC response to this exact overlap direction for
+   * the next solve's initial RHS only. The final Fock still uses provider_. */
+  void set_metric_projection(const double* overlap, const double* xc_ov,
+                             CudaCpksInducedFock complement) noexcept {
+    metric_overlap_ = overlap;
+    metric_xc_ov_ = xc_ov;
+    metric_complement_ = complement;
+  }
+  void clear_metric_projection() noexcept { set_metric_projection(nullptr, nullptr, nullptr); }
   std::size_t columns() const noexcept { return columns_; }
   std::size_t actions() const noexcept { return actions_; }
   std::size_t physical_checks() const noexcept { return checks_; }
@@ -119,8 +163,14 @@ class CudaCpksOperatorCache {
   CudaCpksShape shape_{};
   CudaCpksReference reference_{};
   CudaCpksInducedFock provider_{};
+  CudaCpksOperatorSeed seed_{};
+  CudaCpksInducedFock complement_{};
+  CudaCpksRotationGuess guess_{};
+  void* guess_owner_{};
+  const double *metric_overlap_{}, *metric_xc_ov_{};
+  CudaCpksInducedFock metric_complement_{};
   void* context_{};
-  bool ready_{};
+  bool ready_{}, build_refused_{};
   friend cudaError_t solve_cuda_cpks(const CudaCpksShape&, const CudaCpksOptions&,
                                      const CudaCpksReference&, const double*, const double*,
                                      CudaCpksInducedFock, void*, double*, double*, void*,

@@ -11,15 +11,19 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "core/types.hpp"
 #include "dft/cuda_ks_resident_fock.hpp"
 
 using cudaStream_t = void*;
 using cudaError_t = int;
+constexpr int cudaDevAttrComputeCapabilityMajor = 0;
+inline cudaError_t cudaDeviceGetAttribute(int*, int, int) { std::abort(); }
 constexpr int cudaSuccess = 0, cudaErrorInvalidValue = 1, cudaErrorNotSupported = 2,
               cudaErrorInvalidResourceHandle = 3, cudaErrorStreamCaptureUnsupported = 4,
               cudaErrorMemoryAllocation = 5;
@@ -37,6 +41,11 @@ struct QueueDimension {
   unsigned x;
 };
 inline QueueDimension blockIdx{0}, threadIdx{0}, blockDim{128}, gridDim{1};
+struct dim3 {
+  unsigned x;
+  dim3(unsigned first, unsigned) : x(first) {}
+  operator unsigned() const { return x; }
+};
 using std::isfinite;
 
 namespace queue_test {
@@ -45,7 +54,7 @@ inline int launches{}, fail_launch{}, fences{}, late_reads{};
 inline bool returned{}, capturing{}, revoked{};
 inline bool valid_fock_binding{true};
 inline unsigned spins = 1;
-inline bool fitted{};
+inline bool fitted{}, pure{}, allow_pair_rows{};
 enum class ResidentFailure {
   none,
   canonical_oom,
@@ -143,9 +152,6 @@ constexpr int GENERATIVEQC_STATUS_SUCCESS = 0, GENERATIVEQC_STATUS_INVALID_ARGUM
               GENERATIVEQC_STATUS_NUMERICAL_FAILURE = 2, GENERATIVEQC_STATUS_OUT_OF_MEMORY = 3,
               GENERATIVEQC_STATUS_NOT_IMPLEMENTED = 4, GENERATIVEQC_STATUS_CUDA_ERROR = 5;
 namespace generativeqc {
-namespace core {
-struct System {};
-}  // namespace core
 namespace molecule {
 inline std::size_t cartesian_ao_count(const core::System&) { return 2; }
 }  // namespace molecule
@@ -315,9 +321,40 @@ inline generativeqc_status prepare_cuda_direct_jk_range_resident_values(CudaDire
 }
 inline generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
                                                                   std::size_t allowance,
-                                                                  std::string& detail) {
+                                                                  std::string& detail,
+                                                                  std::span<const double> = {}) {
   return prepare_cuda_direct_jk_range_resident_values(plan, allowance, (1U << 28) - 1,
                                                       FockOperator::FullRange, 0, detail);
+}
+inline constexpr double cuda_direct_response_zero_bound = 0x1p-70;
+inline generativeqc_status prepare_cuda_direct_jk_response_pairs(
+    CudaDirectJkPlan* plan, bool exchange, std::size_t allowance, std::size_t max_products,
+    std::size_t& bytes, std::size_t& products, std::string&) {
+  if (!queue_test::pure || exchange) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if (!queue_test::allow_pair_rows || allowance < 64 || max_products < 16)
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  bytes = 64;
+  products = 16;
+  plan->diagnostic.device_bytes += bytes;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+inline generativeqc_status retire_cuda_direct_jk_response_values(CudaDirectJkPlan*, std::string&) {
+  std::abort();  // No pair-layout lease was admitted.
+}
+struct CudaDirectCoulombRows {
+  const double* values{};
+  std::size_t stride{};
+};
+inline CudaDirectCoulombRows cuda_direct_coulomb_rows(const CudaDirectJkPlan*, cudaStream_t) {
+  return {};
+}
+inline cudaError_t enqueue_cuda_direct_jk_response_pairs(CudaDirectJkPlan*, const double* density,
+                                                         double* coulomb, double* exchange) {
+  if (!queue_test::allow_pair_rows || exchange) std::abort();
+  // Match the scalar fixture's Coulomb map, using a distinct admission path.
+  queue_test::pending.emplace_back(
+      [=] { std::fill_n(coulomb, 4, density[0] + density[1] + density[2] + density[3]); });
+  return cudaSuccess;
 }
 inline generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t count,
@@ -355,12 +392,13 @@ struct Family {
 };
 inline const Family* semilocal_family_metadata_from_code(unsigned code) {
   static constexpr Family wb97mv{SemilocalFamily::Wb97mv, 1};
-  return code == 1 ? &wb97mv : nullptr;
+  static constexpr Family pbe{SemilocalFamily::Pbe, 1};
+  return code == 1 ? &wb97mv : code == 2 ? &pbe : nullptr;
 }
-// This queue fixture supplies only the WB97M-V electronic model.
 inline unsigned cuda_split_hybrid_variational_domain(unsigned) { return 0; }
-inline bool cuda_hessian_canonical_semilocal(SemilocalFamily, double, double, double) {
-  return false;
+inline bool cuda_hessian_canonical_semilocal(SemilocalFamily family, double fraction,
+                                             double exchange, double correlation) {
+  return family == SemilocalFamily::Pbe && fraction == 0 && exchange == 1 && correlation == 1;
 }
 template <class... Args>
 bool r2scan_rvv10_model_matches(Args&&...) {
@@ -413,10 +451,12 @@ struct CudaWb97mvGridOptions {
   CudaWb97mvGridComponent component{CudaWb97mvGridComponent::combined};
   std::size_t max_pair_evaluations{};
   std::size_t max_workspace_bytes{std::numeric_limits<std::size_t>::max()};
+  bool wide_cartesian_grid{};
+  bool supports_wide_cartesian_grid() const { return false; }
 };
 struct CudaWb97mvGridWork {
   bool pair_budget_exceeded{};
-  std::size_t active_nonlocal_points{}, response_actions{}, response_pairs{};
+  std::size_t active_nonlocal_points{}, response_actions{}, response_pairs{}, workspace_bytes{};
 };
 struct CudaWb97mvGridShape {
   std::size_t atoms{1}, primitives{1}, nao{2}, points{1};
@@ -440,6 +480,19 @@ inline cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&,
   return cudaSuccess;
 }
 struct CudaWb97mvGridResponse {
+  static std::size_t wide_grid_provider_allowance() { return 0; }
+  cudaError_t retain_fixed_point_linearization(std::size_t) { return cudaSuccess; }
+  unsigned transition_axes() const { return 0; }
+  void record_transition_projection(std::uint64_t, std::uint64_t) {}
+  cudaError_t enqueue_transition_census(int*, cudaStream_t) { return cudaErrorNotSupported; }
+  cudaError_t enqueue_transition_tile(const double*, std::size_t, std::size_t, std::size_t, double*,
+                                      double*, double*, bool, int*, cudaStream_t) {
+    return cudaErrorNotSupported;
+  }
+  template <class... Args>
+  cudaError_t enqueue_metric_feature_tile(Args&&...) {
+    std::abort();
+  }
   cudaError_t prepare(const CudaWb97mvGridShape&, const CudaWb97mvGridOptions&,
                       const CudaWb97mvGridReference&, void*, std::size_t) {
     return cudaSuccess;
@@ -465,7 +518,7 @@ inline generativeqc_status dft_cuda_resident_fock_sources(PreparedBatch&, std::s
   // Keep the real lifetime binding and shared model-admission contract in scope.
   binding = {0,
              &scf::primary,
-             &scf::correction,
+             queue_test::pure ? nullptr : &scf::correction,
              queue_test::metadata.data(),
              queue_test::metadata.data() + 8,
              2,
@@ -496,9 +549,82 @@ struct CudaKsGridReference {
 };
 }  // namespace dft
 namespace response {
+enum class CudaCpksLayout { column_major };
 struct CudaCpksShape {
   std::size_t nao{};
   unsigned spins{};
+  std::size_t occupied[2]{};
+};
+struct CudaCpksReference {
+  const double* coefficients{};
+  cudaStream_t stream{};
+  CudaCpksLayout coefficient_layout{CudaCpksLayout::column_major};
 };
 }  // namespace response
+namespace tensor {
+constexpr int CUBLAS_STATUS_SUCCESS = 0;
+struct CudaContractionContext {
+  static constexpr std::size_t kProviderAllowance = 96ULL << 20;
+  bool prepare(cudaStream_t) { return false; }
+  void* handle() const { return nullptr; }
+};
+struct CudaDenseOperations {
+  int create() { return 1; }
+  int bind(cudaStream_t) { return 1; }
+  int close() { return CUBLAS_STATUS_SUCCESS; }
+  int product(bool, bool, int, int, int, const double*, const double*, int, const double*, int,
+              const double*, double*, int) const {
+    return 1;
+  }
+  template <class... Args>
+  int product_strided(Args...) const {
+    std::abort();
+  }
+};
+}  // namespace tensor
 }  // namespace generativeqc
+
+using generativeqc::tensor::CUBLAS_STATUS_SUCCESS;
+using cublasStatus_t = int;
+using cublasHandle_t = void*;
+inline cublasStatus_t cublasCreate(cublasHandle_t*) { std::abort(); }
+inline cublasStatus_t cublasSetStream(cublasHandle_t, cudaStream_t) { std::abort(); }
+inline cublasStatus_t cublasDestroy(cublasHandle_t) { std::abort(); }
+namespace generativeqc::dft::transition_integer {
+constexpr int digits = 8, block_width = 512;
+struct Workspace {
+  int *product{}, *exponent{};
+  signed char *left{}, *right{}, *packed_left{}, *packed_right{};
+  bool disabled{};
+};
+template <class... Args>
+cudaError_t project(Args&&...) {
+  std::abort();
+}
+}  // namespace generativeqc::dft::transition_integer
+namespace generativeqc::runtime::cuda_trace {
+struct TraceRegion {
+  TraceRegion(const char*, cudaStream_t) {}
+  void finish() {}
+};
+template <class Function>
+decltype(auto) trace_call(const char*, cudaStream_t, Function&& function) {
+  return function();
+}
+inline void trace_counter(const char*, std::uint64_t) {}
+}  // namespace generativeqc::runtime::cuda_trace
+namespace generativeqc_tensor {
+struct ColumnGemm {
+  void* handle;
+  bool transpose_left, transpose_right;
+  int rows, columns, reduction;
+  const double *alpha, *left;
+  int left_stride;
+  const double* right;
+  int right_stride;
+  const double* beta;
+  double* output;
+  int output_stride;
+};
+inline int submit_column_gemm(ColumnGemm) { std::abort(); }
+}  // namespace generativeqc_tensor

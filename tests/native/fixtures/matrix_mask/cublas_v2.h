@@ -25,6 +25,9 @@ cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t, cublasOperation_t, cubl
                                          int, int, const double*, const double*, int, long long,
                                          const double*, int, long long, const double*, double*, int,
                                          long long, int);
+cublasStatus_t cublasDtrsm(cublasHandle_t, cublasSideMode_t, cublasFillMode_t, cublasOperation_t,
+                           cublasDiagType_t, int, int, const double*, const double*, int, double*,
+                           int);
 cublasStatus_t cublasDtrsmBatched(cublasHandle_t, cublasSideMode_t, cublasFillMode_t,
                                   cublasOperation_t, cublasDiagType_t, int, int, const double*,
                                   const double* const*, int, double* const*, int, int);

@@ -15,12 +15,59 @@ from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from generativeqc_compiler.xc.grid_center_pair import emit_center_pair_layout
 from generativeqc_compiler.xc.grid_geometry_response import (
     ao_motion_program,
+    ao_s_radial_moment_program,
+    ao_s_radial_spatial_program,
     local_program,
     lower_cuda_geometry_powers,
     prepared_center_norm_program,
 )
 
 from tools.generate_df_kernels import write_if_changed
+
+
+def emit_cuda_s_radial() -> list[str]:
+    """Emit the compact evaluator and the spatial reader from the radial pullback."""
+    distance = {f"d{axis}": f"distance[{axis}]" for axis in range(3)}
+    graph, roots = ao_s_radial_moment_program()
+    emitter = CudaEmitter(
+        graph, {**distance, "weight": "weight", "exponent": "exponent"}
+    )
+    emitter.emit(roots)
+    text = [
+        "__device__ inline void accumulate_s_radial(const double* distance, double exponent,",
+        "    double weight, double* moments) {",
+        *emitter.lines,
+        *(
+            f"moments[{index}]+={emitter.reference(root)};"
+            for index, root in enumerate(roots)
+        ),
+        "}",
+    ]
+    graph, roots = ao_s_radial_spatial_program()
+    variables = {
+        **distance,
+        **{f"moment{i}": f"moments[{i} * stride]" for i in range(4)},
+    }
+    text.extend(
+        [
+            "__device__ inline double s_radial_spatial(unsigned jet, const double* distance,",
+            "    const double* moments, std::size_t stride) {",
+            "switch (jet) {",
+        ]
+    )
+    for index, root in enumerate(roots):
+        emitter = CudaEmitter(graph, variables)
+        emitter.emit((root,))
+        text.extend(
+            (
+                f"case {index}: {{",
+                *emitter.lines,
+                f"return {emitter.reference(root)};",
+                "}",
+            )
+        )
+    text.extend(("default: return 0;", "}", "}"))
+    return text
 
 
 def generate(backend: str = "cuda") -> str:
@@ -124,6 +171,7 @@ def generate(backend: str = "cuda") -> str:
         text.append(f"output[{index}] = {emitter.reference(root)};")
     text.append("}")
     if backend == "cuda":
+        text.extend(emit_cuda_s_radial())
         # Bind unit directions to the same Taylor jet ordering as ao_motion.
         lookup = {index: offset for offset, index in enumerate(jet_indices(3))}
         first, mixed = [], []

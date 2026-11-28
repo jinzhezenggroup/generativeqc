@@ -135,6 +135,26 @@ def test_fitted_charge_reference_and_response(spins: int) -> None:
     ]
     reference = execute(maps[f"{prefix}_reference_coulomb"], case).outputs
     response = execute(maps[f"{prefix}_response_coulomb"], case).outputs
+    split = {
+        **execute(maps[f"{prefix}_response_coulomb_fock"], case).outputs,
+        **execute(maps[f"{prefix}_response_coulomb_weights"], case).outputs,
+    }
+    rhs = split.pop("frozen_rhs")
+    charge_motion = split.pop("frozen_charge_motion")
+    density = case["density"].sum(axis=0)
+    expected_rhs = np.einsum("ij,ijp->p", density, case["d_three_center"]) - (
+        case["d_metric"] @ case["accepted_charge"]
+    )
+    np.testing.assert_allclose(rhs, expected_rhs, atol=3e-14, rtol=2e-13)
+    np.testing.assert_allclose(
+        charge_motion,
+        np.linalg.solve(case["metric"], expected_rhs),
+        atol=3e-14,
+        rtol=2e-13,
+    )
+    assert split.keys() == response.keys()
+    for name, value in split.items():
+        np.testing.assert_allclose(value, response[name], atol=3e-14, rtol=2e-13)
     expected = df_oracle(case["density"], case["three_center"], case["metric"], 0)
     for name, value in expected.items():
         np.testing.assert_allclose(reference[name], value, atol=3e-14, rtol=2e-13)

@@ -31,7 +31,9 @@ class CudaKsWb97mvNuclearJk {
 
   generativeqc_status prepare(methods::PreparedBatch& batch, std::size_t item,
                               const CudaKsFinalStateToken& expected,
-                              const CudaWb97mvJkOptions& options, std::string& detail);
+                              const CudaWb97mvJkOptions& options, std::string& detail,
+                              bool screened_frozen = false,
+                              CudaWb97mvJkAdmissionFailure* failure = nullptr);
   cudaError_t apply(const double* direction, const double* delta_density,
                     const CudaWb97mvJkOutput& output, cudaStream_t stream) noexcept;
   /** Write the frozen directional Fock and HVP under the live density lease. */
@@ -39,6 +41,10 @@ class CudaKsWb97mvNuclearJk {
                                             const double* delta_density,
                                             const CudaWb97mvJkOutput& output,
                                             int* transaction_status, cudaStream_t stream) noexcept;
+  /** Populate the complete private frozen table when sources need streaming. */
+  cudaError_t enqueue_private_frozen_dense(double* direction, const double* zero_delta_density,
+                                           double* table, int* transaction_status,
+                                           cudaStream_t stream) noexcept;
   const CudaWb97mvJkWork& work() const noexcept;
 
  private:

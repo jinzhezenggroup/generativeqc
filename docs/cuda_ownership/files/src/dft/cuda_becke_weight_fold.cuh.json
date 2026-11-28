@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_becke_weight_fold.cuh",
+  "role": "scientific",
+  "subsystem": "xc",
+  "reason": "Handwritten FP64 folding of frozen Becke weight curvature across Cartesian directions. Reuses the shared partition-switch evaluator and retains the bounded scalar/mixed-geometry fallback for unsupported inputs.",
+  "regions": []
+}

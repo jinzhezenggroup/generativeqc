@@ -4,5 +4,5 @@
     "generated/response/grid_geometry_response.cuh"
   ],
   "owner": "python/generativeqc_compiler/xc/grid_geometry_response.py",
-  "scope": "Build-time scalar mixed-jet norm, ratio and Becke maps from incumbent grid AD, elementary product/complement AD and AO Taylor-motion AD over canonical order-three spatial jets. Native scheduling owns binary representation, traversal, resource gates and live quadrature provenance, not derivative equations. No full nuclear XC/VV10 or Hessian authority."
+  "scope": "Build-time scalar mixed-jet norm, ratio and Becke maps from incumbent grid AD, explicit product/complement AD and AO Taylor-motion AD over canonical order-three spatial jets. Also emits the s-shell radial AO starting jet for the Cartesian owner schedule. Native scheduling owns binary representation, traversal, resource gates and live quadrature provenance, not derivative equations. No full nuclear XC/VV10 or Hessian authority."
 }

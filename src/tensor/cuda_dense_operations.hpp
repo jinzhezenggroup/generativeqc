@@ -38,6 +38,15 @@ class CudaDenseOperations {
                          const double* right, int right_ld, const double* beta, double* output,
                          int output_ld) const;
 
+  /** Independent column-major FP64 products with nonzero batch strides.
+   * Output batches must be disjoint. */
+  cublasStatus_t product_strided(bool transpose_left, bool transpose_right, int rows, int columns,
+                                 int reduction, const double* alpha, const double* left,
+                                 int left_ld, long long left_stride, const double* right,
+                                 int right_ld, long long right_stride, const double* beta,
+                                 double* output, int output_ld, long long output_stride,
+                                 int batches) const;
+
   /** Publish A + A^T into disjoint column-major square storage.
    * The optional successful-submission counter includes partial work on failure.
    * Providers without GEAM retain bounded copy/strided-vector execution; errors

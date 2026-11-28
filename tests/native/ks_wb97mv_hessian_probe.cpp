@@ -4,12 +4,16 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -24,6 +28,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda_density_fitting_device.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 
 namespace {
 using namespace generativeqc;
@@ -65,6 +70,88 @@ void grid_topology(dft::CudaKsGridReference& grid, const char* offsets, const ch
   array(offsets, download(geometry.atom_offsets, atoms + 1));
   array(radii, download(geometry.atomic_radii, atoms));
 }
+
+void probe_response_pairs(bool include_exchange, bool wide) {
+  core::System system;
+  for (std::uint32_t atom = 0; atom < (wide ? 26U : 8U); ++atom) {
+    const auto site = static_cast<double>(atom);
+    system.atoms.push_back({1, {site * 1.1, 0.2 * (atom % 3), -0.3 * (atom % 2)}});
+    system.shells.push_back({atom, 0, {{0.75, 1.0}}});
+    system.shells.push_back({atom, 1, {{0.45, 1.0}}});
+  }
+  std::string detail;
+  require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  int device{};
+  check(cudaGetDevice(&device));
+  cudaStream_t raw_stream{};
+  check(cudaStreamCreateWithFlags(&raw_stream, cudaStreamNonBlocking));
+  const std::unique_ptr<std::remove_pointer_t<cudaStream_t>, decltype(&cudaStreamDestroy)> stream(
+      raw_stream, cudaStreamDestroy);
+  scf::CudaDirectJkPlan* raw_plan{};
+  scf::CudaDirectJkDiagnostic shape;
+  const auto budget = (wide ? 512ULL : 64ULL) << 20;
+  require(scf::create_cuda_direct_jk_resident_plan_on_stream(device, {system}, 0, budget,
+                                                             stream.get(), &raw_plan, shape,
+                                                             detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  const std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+      raw_plan, scf::destroy_cuda_direct_jk_plan);
+  require(scf::prepare_cuda_direct_jk_resident_values(plan.get(), budget, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  const auto original = scf::cuda_direct_jk_plan_diagnostic(plan.get());
+  const auto before = original.device_bytes;
+  std::size_t bytes{}, products{};
+  require(
+      scf::prepare_cuda_direct_jk_response_pairs(plan.get(), include_exchange, 1, SIZE_MAX, bytes,
+                                                 products, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+          !bytes && !products &&
+          scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes == before,
+      "short response pair budget changed the plan");
+  require(
+      scf::prepare_cuda_direct_jk_response_pairs(plan.get(), include_exchange, budget, 1, bytes,
+                                                 products, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+          !bytes && !products,
+      "response pair layout ignored product limit");
+  require(scf::retire_cuda_direct_jk_response_values(plan.get(), detail) !=
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes == before,
+          "refused response rows must leave the canonical source owned by the plan");
+  require(scf::prepare_cuda_direct_jk_response_pairs(plan.get(), include_exchange, budget, SIZE_MAX,
+                                                     bytes, products,
+                                                     detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              bytes && products &&
+              scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes == before + bytes,
+          "response pair allocation not published: " + detail);
+  if (wide) {
+    require(scf::retire_cuda_direct_jk_response_values(plan.get(), detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    const auto retired = scf::cuda_direct_jk_plan_diagnostic(plan.get());
+    require(original.resident_value_bytes && !retired.resident_value_bytes &&
+                retired.device_bytes == before + bytes - original.resident_value_bytes &&
+                retired.resident_values_completed == original.resident_values_completed,
+            "retiring the redundant value table changed live bytes or lost completed work");
+  }
+  const auto elements = shape.nbf * shape.nbf;
+  Storage storage;
+  auto* density_panel = storage.allocate(elements);
+  auto* output = storage.allocate(elements);
+  auto* exchange = include_exchange ? storage.allocate(elements) : nullptr;
+  std::vector<double> density(elements);
+  for (std::size_t index = 0; index < elements; ++index)
+    density[index] = 0.07 * std::cos(0.1 * static_cast<double>(index));
+  check(cudaMemcpyAsync(density_panel, density.data(), elements * sizeof(double),
+                        cudaMemcpyHostToDevice, stream.get()));
+  check(scf::enqueue_cuda_direct_jk_response_pairs(plan.get(), density_panel, output, exchange));
+  check(cudaStreamSynchronize(stream.get()));
+  std::cout << std::setprecision(17) << "{\"nao\":" << shape.nbf;
+  array("density", density);
+  array("coulomb", download(output, elements));
+  if (include_exchange) array("exchange", download(exchange, elements));
+  std::cout << "}\n";
+}
+
 void run(bool unrestricted, const std::string& mode, bool full) {
   const bool fitted = mode.find("df") != std::string::npos,
              fitted_range = mode.find("-lrdf") != std::string::npos,
@@ -998,6 +1085,11 @@ void run(bool unrestricted, const std::string& mode, bool full) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    const auto mode = argc == 2 ? std::string_view(argv[1]) : std::string_view{};
+    if (mode == "coulomb-pairs" || mode == "hybrid-pairs" || mode == "coulomb-pairs-wide") {
+      probe_response_pairs(mode == "hybrid-pairs", mode == "coulomb-pairs-wide");
+      return 0;
+    }
     require(argc == 3 || argc == 4, "usage: probe rks|uks direct|df[-spherical][-ecp] [full]");
     require(std::string(argv[1]) == "rks" || std::string(argv[1]) == "uks", "invalid spin mode");
     run(std::string(argv[1]) == "uks", argv[2], argc == 4 && std::string(argv[3]) == "full");

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <climits>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "core/types.hpp"
+#include "dft/cuda_wb97mv_df_sweep.hpp"
 #include "integrals/cuda_df_nuclear_response.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda/df_source_domain.hpp"
@@ -95,10 +97,19 @@ void host_admission() {
       auxiliary{{{1, 0, 2, 2, 0, 1, 0}}};
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital, auxiliary, {}, bytes));
-  const auto admitted = bytes;
+  // Optional batch windows may fall back while a mandatory scalar arena fits.
+  std::size_t minimum = 1, maximum = bytes;
+  while (minimum < maximum) {
+    CudaDfNuclearOptions options;
+    options.max_workspace_bytes = minimum + (maximum - minimum) / 2;
+    if (cuda_df_nuclear_workspace(shape, orbital, auxiliary, options, bytes) == cudaSuccess)
+      maximum = options.max_workspace_bytes;
+    else
+      minimum = options.max_workspace_bytes + 1;
+  }
   for (unsigned gate = 0; gate < 6; ++gate) {
     CudaDfNuclearOptions options;
-    if (gate == 0) options.max_workspace_bytes = admitted - 1;
+    if (gate == 0) options.max_workspace_bytes = minimum - 1;
     if (gate == 1) options.max_groups = 1;
     if (gate == 2) options.max_component_evaluations = 1;
     if (gate == 3) options.max_projection_terms = 1;
@@ -125,12 +136,91 @@ void host_admission() {
               empty.contract(nullptr, {}, {}, nullptr) == cudaErrorInvalidResourceHandle,
           "unprepared source admitted");
 }
-void run(const char* source, const char* result) {
+void qualify_frozen_sweep(Storage& storage, const scf::CudaDfReadonlyBasis& basis,
+                          const std::vector<CudaDfNuclearShell>& orbital,
+                          const std::vector<CudaDfNuclearShell>& auxiliary,
+                          CudaDfNuclearResponse& response) {
+  const auto nao = basis.nao, naux = basis.naux, coordinates = 3 * basis.atoms;
+  const auto panel = nao * nao, raw = panel * naux, metric = naux * naux;
+  std::vector<double> density(panel), charge(naux), pair_weights(raw), metric_weights(metric);
+  for (std::size_t aux = 0; aux < naux; ++aux)
+    charge[aux] = 0.2 * std::cos(static_cast<double>(aux + 1));
+  for (std::size_t pair = 0; pair < panel; ++pair) {
+    density[pair] = 0.15 * std::cos(static_cast<double>(pair % nao + pair / nao + 1));
+    for (std::size_t aux = 0; aux < naux; ++aux)
+      pair_weights[pair * naux + aux] = density[pair] * charge[aux];
+  }
+  for (std::size_t index = 0; index < metric; ++index)
+    metric_weights[index] = -0.5 * charge[index / naux] * charge[index % naux];
+  const auto* device_density = storage.upload(density);
+  const auto* device_charge = storage.upload(charge);
+  const auto* device_pair_weights = storage.upload(pair_weights);
+  const auto* device_metric_weights = storage.upload(metric_weights);
+  auto* zero_weights = storage.allocate(raw + metric);
+  check(cudaMemsetAsync(zero_weights, 0, (raw + metric) * sizeof(double), storage.stream));
+  auto* status = reinterpret_cast<int*>(storage.allocate(1));
+  check(cudaMemsetAsync(status, 0, sizeof(int), storage.stream));
+  const dft::CudaDfFrozenTables output{storage.allocate(coordinates * coordinates),
+                                       storage.allocate(panel * coordinates),
+                                       storage.allocate(naux * coordinates)};
+  storage.set(output.hessian, 7);
+  const auto sweep = [&](std::size_t bytes) {
+    return dft::cuda_wb97mv_df_frozen_sweep(basis, orbital, auxiliary, device_density,
+                                            device_charge, output, bytes, status, storage.stream);
+  };
+  require(sweep(0) == cudaErrorNotSupported && download(output.hessian, 1).front() == 7,
+          "unadmitted dense sweep touched caller storage");
+  require(sweep(96ULL << 20) == cudaSuccess, "supported contracted sweep was not admitted");
+  int device_status{};
+  check(cudaMemcpy(&device_status, status, sizeof(int), cudaMemcpyDeviceToHost));
+  require(!device_status, "contracted frozen source audit rejected");
+  const auto hessian = download(output.hessian, coordinates * coordinates);
+  const auto fock = download(output.explicit_fock, panel * coordinates);
+  const auto rhs = download(output.auxiliary_rhs, naux * coordinates);
+  auto* direction = storage.allocate(coordinates);
+  auto* derivatives = storage.allocate(raw + metric);
+  auto* column_gradient = storage.allocate(2 * coordinates);
+  const auto same = [](double actual, double expected, const char* detail) {
+    require(std::abs(actual - expected) <= 4e-11, detail);
+  };
+  std::vector<double> unit(coordinates);
+  for (std::size_t column = 0; column < coordinates; ++column) {
+    unit[column] = 1;
+    check(cudaMemcpy(direction, unit.data(), coordinates * sizeof(double), cudaMemcpyHostToDevice));
+    unit[column] = 0;
+    check(response.values(direction, {nullptr, nullptr, derivatives, derivatives + raw},
+                          storage.stream));
+    check(response.contract(
+        direction, {device_pair_weights, device_metric_weights, zero_weights, zero_weights + raw},
+        {column_gradient, column_gradient + coordinates}, storage.stream));
+    const auto motion = download(derivatives, raw + metric);
+    const auto frozen = download(column_gradient + coordinates, coordinates);
+    for (std::size_t row = 0; row < coordinates; ++row)
+      same(hessian[column * coordinates + row], frozen[row], "mixed fitted source mismatch");
+    for (std::size_t pair = 0; pair < panel; ++pair) {
+      double expected{};
+      for (std::size_t aux = 0; aux < naux; ++aux)
+        expected += motion[pair * naux + aux] * charge[aux];
+      same(fock[column * panel + pair], expected, "explicit fitted Fock source mismatch");
+    }
+    for (std::size_t aux = 0; aux < naux; ++aux) {
+      double expected{};
+      for (std::size_t pair = 0; pair < panel; ++pair)
+        expected += motion[pair * naux + aux] * density[pair];
+      for (std::size_t other = 0; other < naux; ++other)
+        expected -= motion[raw + other * naux + aux] * charge[other];
+      same(rhs[column * naux + aux], expected, "auxiliary response RHS mismatch");
+    }
+  }
+}
+void run(const char* source, const char* result, bool retain_tape, bool batch_sp,
+         bool contracted_sweep) {
   std::ifstream file(source, std::ios::binary);
   const auto header = read<std::uint64_t>(file, 8);
-  require(header[0] >= 2 && header[0] <= 8 && header[1] > 0 && header[1] <= 8 && header[2] > 0 &&
-              header[2] <= 8 && header[3] <= 1 && header[4] <= 1 && header[6] <= 5 &&
-              header[7] <= 2,
+  const std::uint64_t shell_limit = batch_sp ? 32 : 8;
+  require(header[0] >= 2 && header[0] <= 8 && header[1] > 0 && header[1] <= shell_limit &&
+              header[2] > 0 && header[2] <= shell_limit && header[3] <= 1 && header[4] <= 1 &&
+              header[6] <= 5 && header[7] <= 2,
           "invalid fixture metadata");
   core::System orbital, auxiliary;
   const double omega = header[7] == 2 ? read<double>(file, 1)[0] : header[7] ? 0.3 : 0;
@@ -146,8 +236,11 @@ void run(const char* source, const char* result) {
     auto& system = kind ? auxiliary : orbital;
     for (std::size_t index = 0; index < header[1 + kind]; ++index) {
       const auto metadata = read<std::uint64_t>(file, 3);
-      require(metadata[0] < header[0] && metadata[1] <= (kind ? 4 : 3) && metadata[2] > 0 &&
-                  metadata[2] <= 8,
+      require(metadata[0] < header[0] &&
+                  metadata[1] <= (batch_sp ? 1
+                                  : kind   ? 4
+                                           : 3) &&
+                  metadata[2] > 0 && metadata[2] <= 8,
               "invalid shell");
       const auto radial = read<double>(file, 2 * metadata[2]);
       core::Shell shell{static_cast<unsigned>(metadata[0]), static_cast<unsigned>(metadata[1]), {}};
@@ -191,6 +284,8 @@ void run(const char* source, const char* result) {
   CudaDfNuclearOptions options;
   options.radial_tile = header[5];
   options.range_omega = header[6] == 5 ? 0.3 : policy.range_omega;
+  options.retain_directional_source = batch_sp;
+  options.batch_cartesian_sp = batch_sp;
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital_shells, auxiliary_shells, options, bytes));
   auto* arena = storage.allocate((bytes + sizeof(double) - 1) / sizeof(double));
@@ -210,6 +305,18 @@ void run(const char* source, const char* result) {
     return;
   }
   check(prepared);
+  if (retain_tape && !batch_sp) {
+    const auto tape_bytes = response.directional_source_workspace();
+    require(tape_bytes != 0, "all-s direction tape unavailable after streamed prepare");
+    auto* tape = storage.allocate((tape_bytes + sizeof(double) - 1) / sizeof(double));
+    require(response.bind_directional_source(tape, tape_bytes - 1) == cudaErrorInvalidValue,
+            "undersized direction tape was admitted");
+    check(response.bind_directional_source(tape, tape_bytes));
+    require(response.work().workspace_bytes == bytes + tape_bytes,
+            "separate direction tape missing from workspace receipt");
+  }
+  if (contracted_sweep)
+    qualify_frozen_sweep(storage, basis, orbital_shells, auxiliary_shells, response);
   auto* value_storage = storage.allocate(2 * (raw_count + metric_count));
   auto* vector_storage = storage.allocate(6 * shape.atoms);
   const CudaDfNuclearValues values{value_storage, value_storage + raw_count,
@@ -228,6 +335,90 @@ void run(const char* source, const char* result) {
             "replay or rejected pass changed published outputs");
   };
   preserved();
+  if (retain_tape) {
+    const auto original_motion = download(direction, 3 * shape.atoms);
+    auto different_motion = original_motion;
+    different_motion.front() += 0.125;
+    check(response.values(direction, values, storage.stream));
+    check(cudaMemcpy(direction, different_motion.data(), different_motion.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(response.contract(direction, weights, vectors, storage.stream));
+    const auto without_matching_tape = download(vector_storage, expected_vectors.size());
+    check(response.contract(direction, weights, vectors, storage.stream));
+    require(download(vector_storage, expected_vectors.size()) == without_matching_tape,
+            "contract reused a tape after overwriting the device direction");
+    // Move different atoms in successive values passes. The latter pass must
+    // not confuse a prior moving group's second jet with its fixed first jet.
+    for (std::size_t coordinate : {std::size_t{0}, original_motion.size() - 1}) {
+      std::vector<double> unit_motion(original_motion.size());
+      unit_motion[coordinate] = 1;
+      check(cudaMemcpy(direction, unit_motion.data(), unit_motion.size() * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      const auto before = response.work();
+      check(response.values(direction, values, storage.stream));
+      const auto directional_count = raw_count + metric_count;
+      const auto full_direction = download(values.direction_three_center, directional_count);
+      check(response.contract(direction, weights, vectors, storage.stream));
+      const auto after = response.work();
+      require(after.component_evaluations - before.component_evaluations <
+                  before.component_evaluations_per_pass,
+              "resident replay did not avoid a full primitive pass");
+      const auto replayed = download(vector_storage, expected_vectors.size());
+      check(response.values(
+          direction, {nullptr, nullptr, values.direction_three_center, values.direction_metric},
+          storage.stream));
+      require(download(values.direction_three_center, directional_count) == full_direction,
+              "omitting the stationary panels changed their directional derivatives");
+      check(response.contract(direction, weights, vectors, storage.stream));
+      require(download(vector_storage, expected_vectors.size()) == replayed,
+              "JVP-only publication did not retain the matching contraction tape");
+      check(response.contract(direction, weights, vectors, storage.stream));
+      const auto streamed = download(vector_storage, expected_vectors.size());
+      for (std::size_t index = 0; index < streamed.size(); ++index)
+        require(std::abs(replayed[index] - streamed[index]) <= 2e-11,
+                "cross-column source reuse changed the contraction");
+    }
+    check(cudaMemcpy(direction, original_motion.data(), original_motion.size() * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(response.values(direction, values, storage.stream));
+    check(response.contract(direction, weights, vectors, storage.stream));
+    preserved();
+  }
+  if (batch_sp) {
+    const auto coordinates = 3 * shape.atoms;
+    const auto original_motion = download(direction, coordinates);
+    auto* zero = storage.allocate(raw_count + metric_count);
+    check(cudaMemsetAsync(zero, 0, (raw_count + metric_count) * sizeof(double), storage.stream));
+    auto* comparison = storage.allocate(3 * coordinates);
+    const CudaDfNuclearWeights fixed{weights.three_center, weights.metric, zero, zero + raw_count};
+    const CudaDfNuclearVectors expanded{comparison, comparison + coordinates};
+    auto* compact = comparison + 2 * coordinates;
+    for (const auto coordinate : {std::size_t{0}, coordinates - 1, coordinates}) {
+      auto motion = original_motion;
+      if (coordinate < coordinates) {
+        std::fill(motion.begin(), motion.end(), 0);
+        motion[coordinate] = 1;
+      }
+      check(cudaMemcpy(direction, motion.data(), coordinates * sizeof(double),
+                       cudaMemcpyHostToDevice));
+      check(response.contract(direction, fixed, expanded, storage.stream));
+      check(response.values(
+          direction, {nullptr, nullptr, values.direction_three_center, values.direction_metric},
+          storage.stream));
+      check(response.contract_fixed_weights(direction, fixed.three_center, fixed.metric, compact,
+                                            storage.stream));
+      const auto expected = download(expanded.hvp, coordinates);
+      const auto actual = download(compact, coordinates);
+      for (std::size_t index = 0; index < coordinates; ++index)
+        require(std::abs(expected[index] - actual[index]) <= 2e-11,
+                "fixed-weight replay changed mixed source curvature");
+    }
+    check(cudaMemcpy(direction, original_motion.data(), coordinates * sizeof(double),
+                     cudaMemcpyHostToDevice));
+    check(response.values(direction, values, storage.stream));
+    preserved();
+  }
+  const auto successful = response.work();
   auto alias = values;
   alias.metric = alias.three_center;
   require(response.values(direction, alias, storage.stream) != cudaSuccess,
@@ -298,7 +489,9 @@ void run(const char* source, const char* result) {
           "stale owner admitted");
   preserved();
   const auto work = response.work();
-  require(work.value_passes == 2 && work.contraction_passes == 2, "failed pass reported completed");
+  require(work.value_passes == successful.value_passes &&
+              work.contraction_passes == successful.contraction_passes,
+          "failed pass reported completed");
   std::ofstream output(result, std::ios::binary);
   output.write(reinterpret_cast<const char*>(expected_values.data()),
                expected_values.size() * sizeof(double));
@@ -318,8 +511,13 @@ int main(int argc, char** argv) {
   try {
     host_admission();
     if (argc == 2 && std::string(argv[1]) == "--host-only") return 0;
-    require(argc == 3, "usage: probe fixture.bin result.bin | --host-only");
-    run(argv[1], argv[2]);
+    const auto mode = argc == 4 ? std::string(argv[3]) : "";
+    require(argc == 3 || mode == "--retain-tape" || mode == "--batch-sp" ||
+                mode == "--contracted-sweep",
+            "usage: probe fixture.bin result.bin [--retain-tape|--batch-sp|--contracted-sweep]"
+            " | --host-only");
+    run(argv[1], argv[2], mode == "--retain-tape" || mode == "--batch-sp", mode == "--batch-sp",
+        mode == "--contracted-sweep");
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

@@ -26,6 +26,16 @@ struct CudaWb97mvDfOptions {
   bool coulomb{true};
   /** Differentiate a separated fixed-rank branch rather than a full inverse. */
   bool spectral_metric{};
+  /** Permit independent Fock and weight publication from full-rank Coulomb. */
+  bool split_coulomb_action{};
+};
+
+enum class CudaWb97mvDfAction { all, fock_direction, source_weights };
+
+/** Borrowed immutable full-rank RKS Coulomb inputs for the private dense sweep.
+ * The caller must stay on the original stream and in the authenticated transaction. */
+struct CudaDfCoulombSweepInput {
+  const double *charge{}, *three_center{}, *whitening{};
 };
 
 /** Immutable physical DF sources on the original owner stream. Density is
@@ -56,6 +66,9 @@ struct CudaWb97mvDfReference {
 struct CudaWb97mvDfOutput {
   double *energy{}, *fock{}, *fock_direction{}, *weight_three_center{}, *weight_metric{},
       *weight_direction_three_center{}, *weight_direction_metric{};
+  /** Optional pair, only for the split Fock action. Requesting both also
+   * publishes the stationary three-center and metric cotangents. */
+  double *frozen_charge_motion{}, *frozen_rhs{};
 };
 
 struct CudaWb97mvDfWork {
@@ -66,6 +79,7 @@ struct CudaWb97mvDfWork {
   std::uint64_t attempted_actions{}, completed_actions{}, affine_terms{};
   std::size_t matrix_reference_terms{}, matrix_action_terms{};
   std::uint64_t matrix_terms{};
+  bool split_coulomb_action{};
 };
 
 /** Host-only checked admission using the literal compiler-emitted schedule. */
@@ -98,8 +112,11 @@ class CudaWb97mvDfResponse {
                       std::size_t workspace_bytes, const char** detail = nullptr) noexcept;
   cudaError_t apply(const double* delta_density, const double* delta_three_center,
                     const double* delta_metric, const CudaWb97mvDfOutput& output,
-                    cudaStream_t stream, const char** detail = nullptr) noexcept;
+                    cudaStream_t stream, const char** detail = nullptr,
+                    CudaWb97mvDfAction action = CudaWb97mvDfAction::all) noexcept;
   const CudaWb97mvDfWork& work() const noexcept;
+  cudaError_t borrow_private_coulomb_sweep(CudaDfCoulombSweepInput& output,
+                                           cudaStream_t stream) const noexcept;
 
  private:
   struct Impl;

@@ -1694,6 +1694,18 @@ class PreparedBatch:
             if mixed_native_forces
             else self._library.generativeqc_batch_execute
         )
+        if (
+            self._hessian_request is not None
+            and self._hessian_request.identity.backend == "cuda"
+            and self._hessian_request.identity.observables == ("hessian",)
+            and not compute_forces
+            and coordinates is None
+        ):
+            execute_native = getattr(
+                self._library,
+                "generativeqc_ks_batch_execute_hessian_reference_v1",
+                execute_native,
+            )
         if compute_forces and self._output_aware_cpu_forces:
             # Energy-default preparation admits only value operators. Recheck
             # derivative support before a later explicit force replay; never

@@ -138,6 +138,63 @@ def _native(
     return json.loads(result.stdout)
 
 
+@pytest.mark.parametrize(
+    "mode", ("coulomb-pairs", "hybrid-pairs", "coulomb-pairs-wide")
+)
+def test_resident_response_pairs_against_libcint(mode: str) -> None:
+    """A bounded pair layout preserves every AO output for a general density."""
+    executable = os.environ.get("GENERATIVEQC_KS_WB97MV_HESSIAN_PROBE")
+    if not executable:
+        pytest.skip("requires native stationary probe and Slurm GPU")
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require finite srun"
+    gto = pytest.importorskip("pyscf.gto")
+    completed = subprocess.run(
+        [executable, mode],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    molecule = gto.M(
+        atom=[
+            ("H", (site * 1.1, 0.2 * (site % 3), -0.3 * (site % 2)))
+            for site in range(26 if mode == "coulomb-pairs-wide" else 8)
+        ],
+        basis={"H": [[0, [0.75, 1.0]], [1, [0.45, 1.0]]]},
+        unit="Bohr",
+        cart=True,
+        verbose=0,
+    )
+    nao = molecule.nao_nr()
+    assert result["nao"] == nao
+    density = np.asarray(result["density"]).reshape(nao, nao)
+    assert not np.allclose(density, density.T)
+    if mode == "coulomb-pairs-wide":
+        from pyscf import scf
+
+        expected = scf.hf.get_jk(molecule, density, hermi=0, with_k=False)[0]
+    else:
+        integrals = molecule.intor("int2e")
+        expected = np.einsum("ijkl,kl->ij", integrals, density)
+    np.testing.assert_allclose(
+        np.asarray(result["coulomb"]).reshape(nao, nao),
+        expected,
+        atol=3e-13,
+        rtol=3e-13,
+    )
+    if mode == "hybrid-pairs":
+        expected_exchange = np.einsum("ikjl,kl->ij", integrals, density)
+        assert not np.allclose(expected_exchange, expected_exchange.T)
+        np.testing.assert_allclose(
+            np.asarray(result["exchange"]).reshape(nao, nao),
+            expected_exchange,
+            atol=3e-13,
+            rtol=3e-13,
+        )
+
+
 @pytest.mark.parametrize("method_case", ("lda", "pbe"))
 def test_direct_semilocal_hessian_borrows_live_force_centers(method_case: str) -> None:
     """A force replay revokes the first lease without changing the HVP."""

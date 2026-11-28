@@ -61,6 +61,17 @@ cublasStatus_t CudaDenseOperations::product(bool transpose_left, bool transpose_
                                                   right_ld, beta, output, output_ld});
 }
 
+cublasStatus_t CudaDenseOperations::product_strided(
+    bool transpose_left, bool transpose_right, int rows, int columns, int reduction,
+    const double* alpha, const double* left, int left_ld, long long left_stride,
+    const double* right, int right_ld, long long right_stride, const double* beta, double* output,
+    int output_ld, long long output_stride, int batches) const {
+  return generativeqc_tensor::submit_column_batched_gemm(
+      {handle_, transpose_left, transpose_right, rows, columns, reduction, alpha, left, left_ld,
+       left_stride, right, right_ld, right_stride, beta, output, output_ld, output_stride,
+       batches});
+}
+
 namespace {
 
 template <class Handle>

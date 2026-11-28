@@ -31,6 +31,10 @@ struct CudaDfNuclearOptions {
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
   /** Must match the live basis source and a complete linked AOT radial closure. */
   double range_omega{};
+  /** Optionally retain one directional source tape within the workspace budget. */
+  bool retain_directional_source{};
+  /** Require the batched Cartesian s/p closure instead of per-group launches. */
+  bool batch_cartesian_sp{};
 };
 
 /** The actual immutable DF basis and its enclosing original-stream capability.
@@ -45,7 +49,8 @@ struct CudaDfNuclearReference {
 
 /** Full ordered raw arrays: A[AO,AO,aux] and V[aux,aux]. Directions differentiate
  * only geometry, never a projection/normalization gauge. No coordinate-major
- * molecular derivative tensor or fitted four-center tensor is materialized. */
+ * molecular derivative tensor or fitted four-center tensor is materialized.
+ * Both primal outputs may be omitted together when only the JVP is consumed. */
 struct CudaDfNuclearValues {
   double *three_center{}, *metric{}, *direction_three_center{}, *direction_metric{};
 };
@@ -83,8 +88,12 @@ cudaError_t cuda_df_nuclear_workspace(const CudaDfNuclearShape& shape,
 
 /** Bounded two-pass raw DF nuclear AD, not a stationary Hessian endpoint.
  * values supplies A_R,V_R for the physical inverse/Fock response. After CPKS
- * and moving-weight AD, contract streams the source again to form w I' and
- * w I''R + w_R I'. Both passes are explicitly counted. A mandatory shell cache
+ * and moving-weight AD, contract forms w I' and w I''R + w_R I'. If admitted,
+ * it consumes the previous values pass's all-s source tape once, only for an
+ * identical device direction under the same live basis lease. Otherwise it
+ * streams the source again. Verified Cartesian directions can also reuse
+ * invariant primal/first jets for groups not incident to the moving atom.
+ * Both passes are explicitly counted. A mandatory shell cache
  * evaluates each primitive component once per pass; public expansion gathers
  * never repeat primitive work or introduce a left-coordinate source traversal.
  *
@@ -107,10 +116,20 @@ class CudaDfNuclearResponse {
                       std::span<const CudaDfNuclearShell> auxiliary,
                       const CudaDfNuclearOptions& options, const CudaDfNuclearReference& reference,
                       void* workspace, std::size_t workspace_bytes) noexcept;
+  // Before the first action, an owner may supply disjoint optional storage
+  // after all mandatory allocations. The storage must outlive this consumer.
+  std::size_t directional_source_workspace() const noexcept;
+  cudaError_t bind_directional_source(void* workspace, std::size_t bytes) noexcept;
   cudaError_t values(const double* direction, const CudaDfNuclearValues& output,
                      cudaStream_t stream) noexcept;
   cudaError_t contract(const double* direction, const CudaDfNuclearWeights& weights,
                        const CudaDfNuclearVectors& output, cudaStream_t stream) noexcept;
+  /** Fixed three-center and metric cotangents, with no gradient publication.
+   * Admitted only for the batched s/p source. A matched unit-direction tape
+   * skips projection of groups not incident to the moving atom. */
+  cudaError_t contract_fixed_weights(const double* direction, const double* three_center,
+                                     const double* metric, double* hvp,
+                                     cudaStream_t stream) noexcept;
   const CudaDfNuclearWork& work() const noexcept;
 
  private:

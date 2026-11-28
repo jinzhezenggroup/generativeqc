@@ -12,6 +12,7 @@ Write each run to a new directory under `.artifacts/benchmarks/`; output into
 | Correlated/CBS endpoints | `ccsdt_cbs_endpoint.py`, `df_cbs_qm7_endpoint.py`, `ccsdt_prepared_endpoint.py` |
 | Prepared execution and cache behavior | `prepared_lifecycle.py`, `runtime_cache_state.py` |
 | Native DFT force endpoints | `native_dft_force_endpoint.py`, `native_dft_force_audit.py`, `native_dft_force_science_audit.py` |
+| Direct and fitted water Hessian vs GPU4PySCF | `water_hessian_gpu4pyscf.py` |
 | Qualification and publication | `readme_defaults_qualification.py`, `../tools/evidence.py` |
 
 The [combined #3064/#3065 RTX 5090 cohort](results/readme-rtx5090-composed-20261111/README.md)
@@ -30,6 +31,12 @@ do not replace selected slow points in the existing strict cohort.
 Read the selected runner's `--help` and its protocol before measuring. Use finite
 Slurm allocations for all real GPU work and preserve scheduler device visibility.
 An old source-matched timing is not evidence for a new checkout.
+
+For the water Hessian, compare stock timings within the same Slurm allocation
+on the same device. When stock Direct CPKS leaves an observable residual, pass
+the input-matched residual-audited receipt with `compare --accuracy-reference`.
+It supplies the numerical oracle only; the reported baseline runtime and stock
+matrix discrepancy still come from unmodified GPU4PySCF.
 
 ## Historical experiments
 

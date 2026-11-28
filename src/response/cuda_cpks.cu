@@ -69,10 +69,15 @@ struct SolveAudit {
   int physical_failure;
 };
 
+constexpr unsigned resident_rows = 32;
+constexpr unsigned resident_warps = 8;
+constexpr unsigned resident_columns = 256;
+constexpr std::size_t resident_partial_cap = 8ULL << 20;
+
 struct Plan {
   std::size_t matrix{}, matrices{}, dimension{}, bytes{}, tensor_bytes{}, gmres_bytes{};
   std::size_t status{}, densities{}, induced{}, rhs{}, diagonal{}, solution{}, weights{};
-  std::size_t tensor{}, gmres{};
+  std::size_t tensor{}, gmres{}, resident_partial{}, resident_tiles{};
   SpinPlan spin[2]{};
 };
 
@@ -134,6 +139,15 @@ bool plan_workspace(const CudaCpksShape& shape, const CudaCpksOptions& options,
       plan.gmres_bytes > std::numeric_limits<std::size_t>::max() - sizeof(double) + 1 ||
       !reserve((plan.gmres_bytes + sizeof(double) - 1) / sizeof(double), plan.gmres))
     return false;
+  // Partition wide cached matvecs across reduction tiles to expose enough
+  // memory parallelism. A tight arena can still use the streaming matvec.
+  if (plan.dimension >= 2048 && elements <= options.max_workspace_bytes / sizeof(double)) {
+    const auto tiles = (plan.dimension - 1) / resident_columns + 1;
+    const auto budget = std::min(resident_partial_cap / sizeof(double),
+                                 options.max_workspace_bytes / sizeof(double) - elements);
+    if (tiles <= budget / plan.dimension && reserve(tiles * plan.dimension, plan.resident_partial))
+      plan.resident_tiles = tiles;
+  }
   plan.bytes = elements * sizeof(double);
   return plan.bytes <= options.max_workspace_bytes;
 }
@@ -239,6 +253,16 @@ struct Execution {
   }
 };
 
+__global__ void subtract_metric_projection(double* rhs, const double* xc_ov, std::size_t dimension,
+                                           int* status) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < dimension;
+       index += std::size_t(gridDim.x) * blockDim.x) {
+    const double value = rhs[index] - xc_ov[index];
+    if (!isfinite(value)) atomicOr(status, 1);
+    rhs[index] = value;
+  }
+}
+
 cudaError_t apply(void* context, const double* rotation, double* output, std::size_t dimension,
                   cudaStream_t stream) noexcept {
   auto& execution = *static_cast<Execution*>(context);
@@ -295,18 +319,89 @@ __global__ void resident_action(const Storage* matrix, const double* input, doub
     output[row] = value;
   }
 }
+
+template <typename Storage>
+__global__ void resident_partial_action(const Storage* matrix, const double* input, double* partial,
+                                        std::size_t dimension) {
+  // A warp reads contiguous rows of each column. Other warps in the CTA
+  // work on disjoint columns, avoiding a single long dependency chain.
+  __shared__ double sums[resident_warps][resident_rows];
+  const auto lane = threadIdx.x % resident_rows;
+  const auto warp = threadIdx.x / resident_rows;
+  const auto row = std::size_t{blockIdx.x} * resident_rows + lane;
+  const auto first = std::size_t{blockIdx.y} * resident_columns;
+  const auto last = min(first + resident_columns, dimension);
+  double value = 0;
+  if (row < dimension) {
+    for (auto column = first + warp; column < last; column += resident_warps)
+      value = fma(static_cast<double>(matrix[column * dimension + row]), input[column], value);
+  }
+  sums[warp][lane] = value;
+  __syncthreads();
+  if (warp == 0 && row < dimension) {
+    for (unsigned other = 1; other < resident_warps; ++other) value += sums[other][lane];
+    partial[blockIdx.y * dimension + row] = value;
+  }
+}
+
+__global__ void finish_resident_action(const double* partial, double* output, std::size_t dimension,
+                                       std::size_t tiles) {
+  const auto row = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
+  if (row >= dimension) return;
+  double value = 0;
+  for (std::size_t tile = 0; tile < tiles; ++tile) value += partial[tile * dimension + row];
+  output[row] = value;
+}
+
 __global__ void compress_column(const double* input, float* output, std::size_t dimension) {
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < dimension;
        index += static_cast<std::size_t>(blockDim.x) * gridDim.x)
     output[index] = static_cast<float>(input[index]);
 }
+
+__global__ void accumulate_seeded_column(const double* complement, double* column,
+                                         std::size_t dimension, int* status) {
+  for (std::size_t row = blockIdx.x * blockDim.x + threadIdx.x; row < dimension;
+       row += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto value = column[row] + complement[row];
+    if (!isfinite(value)) atomicExch(status, 1);
+    column[row] = value;
+  }
+}
+
+__global__ void finish_complete_seed(double* matrix, const double* gaps, std::size_t dimension,
+                                     int* status) {
+  for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < dimension;
+       index += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    auto& diagonal = matrix[index * (dimension + 1)];
+    diagonal += gaps[index];
+    if (!isfinite(diagonal)) atomicExch(status, 1);
+  }
+}
 struct ResidentExecution {
   const void* matrix;
   CudaCpksResidentPrecision precision;
+  double* partial;
+  std::size_t tiles;
 };
 cudaError_t apply_resident(void* context, const double* input, double* output,
                            std::size_t dimension, cudaStream_t stream) noexcept {
   auto& resident = *static_cast<ResidentExecution*>(context);
+  if (resident.tiles) {
+    const dim3 grid(static_cast<unsigned>((dimension - 1) / resident_rows + 1),
+                    static_cast<unsigned>(resident.tiles));
+    if (resident.precision == CudaCpksResidentPrecision::fp32_proposal)
+      resident_partial_action<<<grid, resident_rows * resident_warps, 0, stream>>>(
+          static_cast<const float*>(resident.matrix), input, resident.partial, dimension);
+    else
+      resident_partial_action<<<grid, resident_rows * resident_warps, 0, stream>>>(
+          static_cast<const double*>(resident.matrix), input, resident.partial, dimension);
+    const auto error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    finish_resident_action<<<maps::blocks(dimension), 128, 0, stream>>>(resident.partial, output,
+                                                                        dimension, resident.tiles);
+    return cudaGetLastError();
+  }
   if (resident.precision == CudaCpksResidentPrecision::fp32_proposal)
     resident_action<<<maps::blocks(dimension), 128, 0, stream>>>(
         static_cast<const float*>(resident.matrix), input, output, dimension);
@@ -340,8 +435,9 @@ __global__ void propagate_failure(const CudaCpksDenseReceipt* aggregate, int* st
 
 __global__ void finish_dense(const CudaGmresDeviceReceipt* solver, const SolveAudit* audit,
                              bool cached, CudaCpksDenseReceipt* aggregate, int* column_status,
-                             const double* density, const double* weights, std::size_t count,
-                             double* out_density, double* out_weights) {
+                             const int* upstream_detail, const double* density,
+                             const double* weights, std::size_t count, double* out_density,
+                             double* out_weights) {
   const bool solved = solver->code == static_cast<int>(CudaGmresStatus::converged);
   const bool accepted = solved && !audit->status;
   for (std::size_t index = blockIdx.x * blockDim.x + threadIdx.x; index < count;
@@ -359,11 +455,13 @@ __global__ void finish_dense(const CudaGmresDeviceReceipt* solver, const SolveAu
   if (aggregate->failure == CudaCpksStatus::running) {
     aggregate->last = *solver;
     if (cached && accepted) aggregate->last.residual_norm = audit->physical_residual_norm;
-    if (!accepted)
+    if (!accepted) {
+      aggregate->upstream_flags = *column_status | (upstream_detail ? *upstream_detail : 0);
       aggregate->failure = !solved || audit->physical_failure ? CudaCpksStatus::linear_solve_failed
                                                               : CudaCpksStatus::numerical_failure;
+    }
   }
-  if (!accepted) *column_status = 1;
+  if (!accepted) *column_status |= 1;
 }
 
 struct DrainOnFailure {
@@ -523,7 +621,7 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
       if (overlaps(pointer, bytes, writes[other].first, writes[other].second))
         return cudaErrorInvalidValue;
   }
-  const bool cached = operator_cache && plan.dimension;
+  bool cached = operator_cache && plan.dimension && !operator_cache->build_refused_;
   const bool mixed =
       cached && options.resident_precision == CudaCpksResidentPrecision::fp32_proposal;
   if (cached) {
@@ -606,7 +704,14 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
         stream);
     if (error != cudaSuccess) return error;
   }
+  const auto* metric_xc_ov = cached && !mixed && operator_cache->ready_ && shape.spins == 1 &&
+                                     operator_cache->metric_overlap_ == overlap_direction &&
+                                     operator_cache->metric_complement_
+                                 ? operator_cache->metric_xc_ov_
+                                 : nullptr;
+  if (metric_xc_ov) execution.provider = operator_cache->metric_complement_;
   error = execution.induced(stream);
+  execution.provider = induced_fock;
   if (error != cudaSuccess) return error;
   for (unsigned spin = 0; spin < shape.spins; ++spin) {
     const auto& block = plan.spin[spin];
@@ -618,6 +723,11 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
                                plan.tensor_bytes, execution.status(), stream);
     if (error != cudaSuccess) return error;
   }
+  if (metric_xc_ov) {
+    subtract_metric_projection<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
+        base + plan.rhs, metric_xc_ov, plan.dimension, execution.status());
+    if ((error = cudaGetLastError()) != cudaSuccess) return error;
+  }
   bool failed{};
   if (!dense_replay || (cached && !operator_cache->ready_)) {
     error = checkpoint(execution, stream, failed);
@@ -627,16 +737,32 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
       return cudaSuccess;
     }
   }
-  if (cached && !operator_cache->ready_) {
+  const bool build_operator = cached && !operator_cache->ready_;
+  if (build_operator) {
     auto& cache = *operator_cache;
-    for (std::size_t column = 0; column < plan.dimension; ++column) {
+    bool seeded = false;
+    if (!mixed && cache.seed_) {
+      error = cache.seed_(context, shape, reference, static_cast<double*>(cache.values_), stream);
+      if (error != cudaSuccess && error != cudaErrorNotSupported) return error;
+      seeded = error == cudaSuccess;
+    }
+    if (!mixed && cache.seed_ && !cache.complement_ && !seeded) {
+      cache.build_refused_ = true;
+      cached = false;
+    }
+    const bool complete_seed = seeded && !cache.complement_;
+    // The complement provider never escapes the one-time build. Both
+    // physical residuals and retry GMRES use the complete induced Fock.
+    if (seeded && cache.complement_) execution.provider = cache.complement_;
+    for (std::size_t column = 0; cached && !complete_seed && column < plan.dimension; ++column) {
       unit_rotation<<<maps::blocks(plan.dimension), 128, 0, stream>>>(base + plan.solution,
                                                                       plan.dimension, column);
       if ((error = cudaGetLastError()) != cudaSuccess) return error;
       // The weighted-density output panel is dead until final assembly and
       // can hold an FP64 column while we encode it into the FP32 lease.
-      auto* column64 = mixed ? base + plan.weights
-                             : static_cast<double*>(cache.values_) + column * plan.dimension;
+      auto* column64 = mixed || seeded
+                           ? base + plan.weights
+                           : static_cast<double*>(cache.values_) + column * plan.dimension;
       error = apply(&execution, base + plan.solution, column64, plan.dimension, stream);
       if (error != cudaSuccess) return error;
       ++result.induced_fock_actions;
@@ -644,8 +770,21 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
         compress_column<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
             column64, static_cast<float*>(cache.values_) + column * plan.dimension, plan.dimension);
         if ((error = cudaGetLastError()) != cudaSuccess) return error;
+      } else if (seeded) {
+        accumulate_seeded_column<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
+            column64, static_cast<double*>(cache.values_) + column * plan.dimension, plan.dimension,
+            execution.status());
+        if ((error = cudaGetLastError()) != cudaSuccess) return error;
       }
       ++cache.columns_;
+    }
+    execution.provider = induced_fock;
+    if (complete_seed) {
+      finish_complete_seed<<<maps::blocks(plan.dimension), 128, 0, stream>>>(
+          static_cast<double*>(cache.values_), base + plan.diagonal, plan.dimension,
+          execution.status());
+      if ((error = cudaGetLastError()) != cudaSuccess) return error;
+      cache.columns_ = plan.dimension;
     }
     error = checkpoint(execution, stream, failed);
     if (error != cudaSuccess) return error;
@@ -659,12 +798,24 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
     cache.reference_ = reference;
     cache.provider_ = induced_fock;
     cache.context_ = context;
-    cache.ready_ = true;
+    cache.ready_ = cached;
   }
-  ResidentExecution resident{cached ? operator_cache->values_ : nullptr,
-                             options.resident_precision};
+  ResidentExecution resident{cached ? operator_cache->values_ : nullptr, options.resident_precision,
+                             plan.resident_tiles ? base + plan.resident_partial : nullptr,
+                             plan.resident_tiles};
   auto strict = options.gmres;
   const double* seed = nullptr;
+  if (cached && !mixed && !dense_replay && operator_cache->guess_) {
+    error = operator_cache->guess_(
+        operator_cache->guess_owner_, static_cast<const double*>(operator_cache->values_),
+        base + plan.rhs, base + plan.solution, plan.dimension, build_operator, stream);
+    if (error == cudaSuccess) {
+      seed = base + plan.solution;
+      result.proposal_seeded = true;
+    } else if (error != cudaErrorNotSupported) {
+      return error;
+    }
+  }
   if (mixed && strict.max_iterations > 1) {
     auto proposal = strict;
     proposal.max_iterations = std::min<std::size_t>(12, strict.max_iterations / 2);
@@ -763,8 +914,8 @@ cudaError_t solve_cuda_cpks(const CudaCpksShape& shape, const CudaCpksOptions& o
   if (dense_replay) {
     finish_dense<<<maps::blocks(plan.matrices), 128, 0, stream>>>(
         solver_receipt, execution.audit(), cached, dense_replay->receipt,
-        dense_replay->column_status, base + plan.densities, base + plan.weights, plan.matrices,
-        density_direction, weighted_density_direction);
+        dense_replay->column_status, dense_replay->upstream_detail, base + plan.densities,
+        base + plan.weights, plan.matrices, density_direction, weighted_density_direction);
     if ((error = cudaGetLastError()) != cudaSuccess) return error;
     drain.active = false;
     return cudaSuccess;

@@ -11,6 +11,70 @@ int main() {
     assert(stub::allocation_attempts == 0);
   }
   token.strict_physical_fock = true;
+  {
+    // A screened Cartesian provider can serve a dense matrix, but must not be
+    // published in an owner that promises arbitrary-direction actions.
+    std::string detail;
+    stub::canonical_source_limit = true;
+    for (const auto mode : {Mode::action_only, Mode::dense_and_action}) {
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, mode, {}, detail) ==
+             GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      assert(stub::screened_exact_preparations == 0 && stub::live_bytes == 0);
+    }
+    {
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, Mode::dense_only, {}, detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      assert(stub::screened_exact_preparations == 1);
+      assert(owner.work().frozen_exact_bytes && owner.work().device_bytes == stub::live_bytes);
+    }
+    assert(stub::live_bytes == 0);
+    stub::canonical_source_limit = false;
+  }
+  // Both raw providers may fit a tape individually while starving a later
+  // mandatory provider. Drive the actual Hessian owner at its streamed bound.
+  stub::df = stub::range_df = true;
+  {
+    dft::CudaKsWb97mvHessianOptions options;
+    options.max_resident_cpks_bytes = 0;
+    options.grid.replay_nuclear_maps = false;
+    options.one_electron.parallel_streams = 0;
+    std::string detail;
+    std::size_t streamed_bytes{}, mandatory_allocations{};
+    {
+      dft::CudaKsWb97mvHessian owner;
+      stub::allocation_attempts = 0;
+      assert(owner.prepare(batch, 0, token, Mode::dense_only, options, detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      streamed_bytes = owner.work().device_bytes;
+      mandatory_allocations = stub::allocation_attempts;
+    }
+    stub::retain_df_tape = true;
+    for (const auto tapes : {0U, 1U, 2U}) {
+      options.max_device_bytes = streamed_bytes + tapes * stub::df_tape_bytes;
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, Mode::dense_only, options, detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      assert(owner.work().device_bytes == options.max_device_bytes);
+      assert(owner.work().device_bytes == stub::live_bytes);
+    }
+    assert(stub::live_bytes == 0);
+    // Simulate physical allocation failure after the budget check. The
+    // mandatory state stays usable and the second tape can still be admitted.
+    stub::allocation_attempts = 0;
+    stub::fail_allocation = mandatory_allocations + 1;
+    {
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, Mode::dense_only, options, detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      assert(owner.work().device_bytes == streamed_bytes + stub::df_tape_bytes);
+      assert(owner.work().device_bytes == stub::live_bytes);
+    }
+    assert(stub::live_bytes == 0);
+    stub::fail_allocation = 0;
+    stub::retain_df_tape = false;
+  }
   std::size_t controls{};
   for (const auto points : {8U, 32U, 256U})
     for (const auto spins : {1U, 2U})

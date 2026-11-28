@@ -46,7 +46,17 @@ struct Plan {
     require(shape.atoms <= options.max_workspace_bytes / sizeof(double),
             "one-electron effective charges exceed the device budget");
     options.max_workspace_bytes -= shape.atoms * sizeof(double);
-    check(integrals::cuda_one_electron_workspace(shape, shells, options, bytes));
+    integrals::CudaOneElectronAdmissionLimit limit;
+    const auto status =
+        integrals::cuda_one_electron_workspace(shape, shells, options, bytes, &limit);
+    if (status == cudaErrorInvalidValue && limit.resource)
+      throw std::invalid_argument(std::string("one-electron ") + limit.resource +
+                                  " exceed the bound (required " + std::to_string(limit.required) +
+                                  ", maximum " + std::to_string(limit.maximum) + ")");
+    if (status != cudaSuccess && status != cudaErrorMemoryAllocation)
+      throw std::runtime_error(std::string("one-electron workspace admission: ") +
+                               cudaGetErrorString(status));
+    check(status);
     require(bytes <= options.max_workspace_bytes,
             "one-electron arena plus effective charges exceed the device budget");
     device_bytes = bytes + shape.atoms * sizeof(double);
@@ -161,10 +171,10 @@ cudaError_t CudaKsOneElectronResponse::apply(const double* direction,
 }
 cudaError_t CudaKsOneElectronResponse::enqueue_private(
     const double* direction, const integrals::CudaOneElectronWeights& weights,
-    const integrals::CudaOneElectronOutput& output, int* transaction_status,
-    cudaStream_t stream) noexcept {
+    const integrals::CudaOneElectronOutput& output, int* transaction_status, cudaStream_t stream,
+    std::size_t frozen_column) noexcept {
   return impl_ ? impl_->response.enqueue_private(direction, weights, output, transaction_status,
-                                                 stream)
+                                                 stream, frozen_column)
                : cudaErrorInvalidResourceHandle;
 }
 CudaKsOneElectronWork CudaKsOneElectronResponse::work() const noexcept {

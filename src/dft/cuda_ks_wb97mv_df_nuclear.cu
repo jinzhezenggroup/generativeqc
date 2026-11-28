@@ -28,13 +28,17 @@ struct CudaKsWb97mvDfNuclear::Impl {
   scf::CudaDfReadonlySource fitted;
   scf::CudaDfReadonlyBasis basis;
   integrals::CudaDfNuclearShape shape{};
+  std::vector<integrals::CudaDfNuclearShell> orbital, auxiliary;
+  bool cartesian{};
   integrals::CudaDfNuclearResponse response;
   void* arena{};
+  void* tape{};
   cudaStream_t stream{};
   Impl(methods::PreparedBatch& owner, std::size_t index, CudaKsFinalStateToken token)
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
+    if (tape) (void)runtime::resource_cuda_free(tape);
     if (arena) (void)runtime::resource_cuda_free(arena);
   }
   static cudaError_t authenticate(void* context) noexcept {
@@ -103,7 +107,10 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     require(auxiliary_system && scf::cuda_density_fitting_integral_source_geometry_matches(
                                     owner->fitted.integrals, 0, orbital_system, *auxiliary_system),
             "DF topology lacks its actual normalized source identity");
-    std::vector<integrals::CudaDfNuclearShell> orbital, auxiliary;
+    auto& orbital = owner->orbital;
+    auto& auxiliary = owner->auxiliary;
+    owner->cartesian = orbital_system.basis_representation == core::kCartesianBasis &&
+                       auxiliary_system->basis_representation == core::kCartesianBasis;
     std::size_t primitive_begin{};
     const auto topology = [&](const core::System& system, auto& shells) {
       std::size_t ao_begin{}, cartesian_begin{};
@@ -125,11 +132,25 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     owner->shape = {owner->basis.atoms, owner->basis.primitives,    owner->basis.nao,
                     owner->basis.naux,  owner->basis.cartesian_nao, owner->basis.cartesian_naux};
     std::size_t bytes{};
-    check(integrals::cuda_df_nuclear_workspace(owner->shape, orbital, auxiliary, options, bytes));
-    check(runtime::resource_cuda_malloc(&owner->arena, bytes));
+    auto admitted = options;
+    const auto allocate = [&]() {
+      check(
+          integrals::cuda_df_nuclear_workspace(owner->shape, orbital, auxiliary, admitted, bytes));
+      return runtime::resource_cuda_malloc(&owner->arena, bytes);
+    };
+    auto allocation = allocate();
+    if (allocation == cudaErrorMemoryAllocation && admitted.retain_directional_source &&
+        !admitted.batch_cartesian_sp) {
+      // A failed cudaMalloc can leave a sticky error that the first kernel
+      // check would otherwise mistake for a failure of the streamed retry.
+      if (cudaPeekAtLastError() == cudaErrorMemoryAllocation) (void)cudaGetLastError();
+      admitted.retain_directional_source = false;
+      allocation = allocate();
+    }
+    check(allocation);
     const integrals::CudaDfNuclearReference reference{owner->basis, owner->stream,
                                                       Impl::authenticate, owner.get()};
-    check(owner->response.prepare(owner->shape, orbital, auxiliary, options, reference,
+    check(owner->response.prepare(owner->shape, orbital, auxiliary, admitted, reference,
                                   owner->arena, bytes));
     impl_ = std::move(owner);
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -140,6 +161,19 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     detail = error.what();
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+}
+cudaError_t CudaKsWb97mvDfNuclear::retain_directional_source(std::size_t available) {
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  const auto bytes = owner.response.directional_source_workspace();
+  if (!bytes || bytes > available) return cudaSuccess;
+  auto error = runtime::resource_cuda_malloc(&owner.tape, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    if (cudaPeekAtLastError() == cudaErrorMemoryAllocation) (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  return owner.response.bind_directional_source(owner.tape, bytes);
 }
 cudaError_t CudaKsWb97mvDfNuclear::values(const double* direction,
                                           const integrals::CudaDfNuclearValues& output,
@@ -152,6 +186,26 @@ cudaError_t CudaKsWb97mvDfNuclear::contract(const double* direction,
                                             cudaStream_t stream) noexcept {
   return impl_ ? impl_->response.contract(direction, weights, output, stream)
                : cudaErrorInvalidResourceHandle;
+}
+cudaError_t CudaKsWb97mvDfNuclear::contract_fixed_weights(const double* direction,
+                                                          const double* three_center,
+                                                          const double* metric, double* hvp,
+                                                          cudaStream_t stream) noexcept {
+  return impl_
+             ? impl_->response.contract_fixed_weights(direction, three_center, metric, hvp, stream)
+             : cudaErrorInvalidResourceHandle;
+}
+cudaError_t CudaKsWb97mvDfNuclear::private_frozen_sweep(const double* charge,
+                                                        CudaDfFrozenTables output,
+                                                        std::size_t max_scratch_bytes, int* status,
+                                                        cudaStream_t stream) noexcept {
+  if (!impl_ || stream != impl_->stream) return cudaErrorInvalidResourceHandle;
+  if (!impl_->cartesian) return cudaErrorNotSupported;
+  auto error = Impl::authenticate(impl_.get());
+  if (error != cudaSuccess) return error;
+  return cuda_wb97mv_df_frozen_sweep(impl_->basis, impl_->orbital, impl_->auxiliary,
+                                     impl_->grid.reference().density, charge, output,
+                                     max_scratch_bytes, status, stream);
 }
 integrals::CudaDfNuclearShape CudaKsWb97mvDfNuclear::shape() const noexcept {
   return impl_ ? impl_->shape : integrals::CudaDfNuclearShape{};

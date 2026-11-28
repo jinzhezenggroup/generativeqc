@@ -54,6 +54,22 @@ for(auto& task:tasks)task.run();return ++q::calls==q::fail?17:0;}
 int cudaGetLastError(){return ++q::launches==q::fail_launch?19:0;}
 void check(int error){if(error)throw std::runtime_error("injected failure");}
 std::size_t product(std::size_t a,std::size_t b){return a*b;}
+namespace runtime::cuda_trace {
+struct TraceShape{std::size_t batch,nao,naux;bool fp64,unused;};
+struct TraceOperation{TraceOperation(const char*,cudaStream_t,TraceShape){}};
+struct TraceRegion{TraceRegion(const char*,cudaStream_t){} void finish(){}};
+void trace_counter(const char*,std::size_t){}
+template<class Function> int trace_call(const char*,cudaStream_t,Function fn){return fn();}
+}
+constexpr int CUBLAS_STATUS_SUCCESS=0;
+namespace generativeqc_tensor {
+struct ColumnGemm{
+void* handle;bool transpose_left,transpose_right;int rows,cols,inner;
+const double *alpha,*left;int left_stride;const double* right;int right_stride;
+const double* beta;double* output;int output_stride;};
+int submit_column_gemm(const ColumnGemm&){throw std::runtime_error("unexpected BLAS call");}
+}
+const char* rhs_failure_reason(int){return "invalid upstream RHS";}
 // Instrument staging destruction without dereferencing storage after its lifetime.
 template<class T>struct TrackedVector:std::vector<T>{
 using std::vector<T>::vector;
@@ -72,8 +88,9 @@ double rhs_norm{},residual_norm{},tolerance{};
 std::size_t operator_actions{},preconditioner_actions{};CudaGmresStatus status{};};
 struct CudaCpksDenseReceipt{
 std::size_t iterations{};CudaGmresReceipt last;
-CudaCpksStatus failure{};};
-struct CudaCpksDenseReplay{CudaCpksDenseReceipt* receipt;int* column_status;struct{} solver;};
+CudaCpksStatus failure{};int upstream_flags{};};
+struct CudaCpksDenseReplay{
+CudaCpksDenseReceipt* receipt;int *column_status,*upstream_status;struct{} solver;};
 }
 struct DenseAssemblyAudit{
 std::size_t completed;int failed;response::CudaCpksDenseReceipt cpks;};
@@ -85,7 +102,7 @@ namespace core {constexpr int kCartesianBasis=1;}
 void symmetric(const double*,std::size_t,double,double,int*){
 q::pending.push_back({nullptr,[]{}});}
 enum class CudaKsWb97mvHessianStatus{failed,response_not_converged,converged};
-enum class CudaKsWb97mvHessianMode{dense_and_action};
+enum class CudaKsWb97mvHessianMode{action_only,dense_and_action,dense_only};
 struct CudaKsWb97mvHessianResult{
 CudaKsWb97mvHessianStatus status=CudaKsWb97mvHessianStatus::failed;
 const char* failure_check{};
@@ -120,12 +137,19 @@ struct Geometry{int admit_actions(std::size_t){return 0;}}geometry,vv10_geometry
 struct{bool d3{};std::optional<D4Correction> d4;}corrections;
 dispersion::D4Tables d4_tables;
 dispersion::ChargeTables eeq_tables;
-bool has_df{},has_ecp{},operator_matrix{};
+bool has_df{},has_ecp{},has_exact{},operator_matrix{},cpks_factor{};
+std::size_t panels{2};
+double *xc_relaxation{},*df_relaxation{};
+struct{void* handle(){return nullptr;}}xc_relaxation_blas;
+struct{struct Shape{std::size_t nao{2},naux{};};Shape shape()const{return {};}}grid_reference;
+struct{decltype(grid_reference) nuclear;}full_df;
 struct{unsigned spins{1};}frame;
 struct{Primary* primary;void* correction{};}fock;Primary primary;
 struct{void collect_dense(const response::CudaCpksDenseReceipt&) {}}cpks_operator;
 struct Induced{
 Owner* owner;
+struct Work{std::size_t resident_pair_bytes{},resident_source_evaluations{},direct_projection_products{};};
+Work work()const{return {};}
 int collect_work(){
 double receipt{};
 const auto e=cudaMemcpyAsync(&receipt,owner->at(owner->candidate),sizeof(receipt),
@@ -194,6 +218,18 @@ q::require(q::pending.empty(),"child failure retained work");
 q::require(std::all_of(output,output+4,[](double x){return x==27;}),"rejected output changed");++controls;}
 q::reset();q::reject=true;q::require(run()==23&&q::fences==0&&q::calls==0,"admission queued work");++controls;
 }
+{
+q::reset();CudaKsWb97mvHessian owner;owner.impl_->stream=stream;
+double input[2]{1,2},output[4]{27,27,27,27};CudaKsWb97mvHessianResult result;
+owner.impl_->mode=CudaKsWb97mvHessianMode::dense_only;
+q::require(owner.apply(input,output,stream,result)==cudaErrorInvalidResourceHandle&&
+!result.converged()&&q::calls==0&&output[0]==27&&output[1]==27,"dense-only action admitted");
+q::require(owner.hessian(output,stream,result)==0&&result.converged(),"dense-only matrix refused");
+q::reset();owner.impl_->mode=CudaKsWb97mvHessianMode::action_only;
+q::require(owner.hessian(output,stream,result)==cudaErrorInvalidResourceHandle&&q::calls==0,
+"action-only matrix admitted");
+q::require(owner.apply(input,output,stream,result)==0&&result.converged(),"action-only HVP refused");
+}
 for(auto correction:{Correction::none,Correction::d3,Correction::d4}){
 q::reset();q::require(prepare_upload(stream,correction)==0,"valid upload");
 q::require(q::pending.empty()&&q::late_staging==0,"successful upload retained work");
@@ -233,7 +269,11 @@ def _translation_unit(source: str) -> str:
         + uploads
         + "return 0;}catch(...){return 17;}}\n"
     )
-    return _RUNTIME + guard + methods + prepare + _MAIN
+    geometry = (
+        '#include "dft/cuda_grid_geometry.hpp"\n'
+        "using generativeqc::dft::cuda_grid_cartesian_repair_exhausted;\n"
+    )
+    return _RUNTIME + geometry + guard + methods + prepare + _MAIN
 
 
 def test_stationary_failure_paths_drain_borrows(
@@ -242,11 +282,60 @@ def test_stationary_failure_paths_drain_borrows(
     source = (_ROOT / "src/dft/cuda_ks_wb97mv_hessian.cu").read_text()
     fixture = tmp_path / "stationary_lifetime.cpp"
     fixture.write_text(_translation_unit(source))
+    # The queued CUDA double already supplies the runtime types used by the
+    # real geometry header. Resolve its CUDA include without needing a toolkit.
+    (tmp_path / "cuda_runtime_api.h").touch()
     executable = native_cxx.build_executable(
-        [fixture], tmp_path / "stationary_lifetime", compile_args=("-std=c++20", "-O0")
+        [fixture],
+        tmp_path / "stationary_lifetime",
+        compile_args=("-std=c++20", "-O0", f"-I{tmp_path}", f"-I{_ROOT / 'src'}"),
     )
     result = subprocess.run(
         [str(executable)], capture_output=True, text=True, check=False, timeout=30
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PASS queued lifetime controls=" in result.stdout
+
+
+def test_transition_projection_rejects_unsupported_selectors(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    source = (_ROOT / "src/dft/cuda_wb97mv_grid.cu").read_text()
+    start = source.index("unsigned CudaWb97mvGridResponse::transition_axes()")
+    end = source.index("\n}", start) + 2
+    fixture = tmp_path / "transition_axes.cpp"
+    fixture.write_text(
+        r"""
+#include <cassert>
+#include "dft/semilocal_family.hpp"
+using namespace generativeqc::dft;
+struct CudaWb97mvGridResponse {
+  struct { std::uint32_t functional_code; } options_;
+  unsigned fixed_point_axes_;
+  unsigned transition_axes() const noexcept;
+};
+"""
+        + source[start:end]
+        + r"""
+int main() {
+  const auto axes = [](std::uint32_t code, unsigned count) {
+    return CudaWb97mvGridResponse{{code}, count}.transition_axes();
+  };
+  // M06-2X uses a generated selector, not an entry in SemilocalFamily.
+  constexpr auto m06_2x = std::uint32_t{0x201c2};
+  assert(axes(m06_2x, 0) == 0 && axes(m06_2x, 5) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Lda), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Wb97mv), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Pbe), 4) == 4);
+  assert(axes(semilocal_family_code(SemilocalFamily::B3lyp), 4) == 4);
+  assert(axes(semilocal_family_code(SemilocalFamily::R2scan), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::R2scan), 5) == 5);
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [fixture],
+        tmp_path / "transition_axes",
+        compile_args=("-std=c++20", "-O0", f"-I{_ROOT / 'src'}"),
+    )
+    subprocess.run([str(executable)], check=True, timeout=30)

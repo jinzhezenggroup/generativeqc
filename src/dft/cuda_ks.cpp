@@ -21,6 +21,7 @@
 #include "dft/cuda_ks_cold_factor_policy.hpp"
 #include "dft/cuda_ks_diis_policy.hpp"
 #include "dft/cuda_ks_final_validation_policy.hpp"
+#include "dft/cuda_ks_hessian_reference_scope.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
@@ -486,7 +487,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::CompiledExecutionRegion device_chunk_region;
   std::unique_ptr<scf::cuda_execution::DirectJkSourceLease> phase_source;
   bool phase_source_cold{};
-  bool phase_source_range{};
+  bool phase_source_range{}, phase_source_hessian_reference{};
   double range_warm_energy{std::numeric_limits<double>::infinity()};
   double range_warm_energy_correction{};
   std::string range_bucket_policy, range_capacity_policy, range_selection_policy;
@@ -552,6 +553,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void retire_phase_source(bool audit) {
     range_warm_energy = std::numeric_limits<double>::infinity();
     phase_source_range = false;
+    phase_source_hessian_reference = false;
     phase_source_screening = 0.0;
     if (!phase_source) return;
     auto retired = std::move(phase_source);
@@ -597,6 +599,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     const auto& strategy = provider.strategy();
     const auto& source_strategy = has_range_correction ? *range_correction : strategy;
+    const auto& system = provider.system();
+    const auto direct_nbf = molecule::cartesian_ao_count(system);
+    const bool managed_source =
+        runtime::active_device_resource_ledger && CudaKsHessianReferenceScope::active() && cold &&
+        !frozen_warm && !warm_updates && !mixed_source && !has_exchange && !nonlocal_correlation &&
+        !has_range_correction && spins == 1 && direct_nbf > 96 && direct_nbf <= 256 &&
+        system.ecp_terms.empty() && functional == semilocal_family_code(SemilocalFamily::R2scan);
     // Residency changes storage for exact ERIs; it cannot replace a fitted
     // radial operator. A fitted primary may have either kind of independent
     // LR provider, so the provider's existence alone does not admit this cache.
@@ -613,15 +622,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (((fitted_coulomb || fitted_exchange) && !separate_direct_range) || incremental_direct_jk ||
         (precision_schedule.any_lower_precision() && !strict_refinement &&
          !experimental_mixed_point && !mixed_source) ||
-        runtime::active_device_resource_ledger ||
+        (runtime::active_device_resource_ledger && !managed_source) ||
         strategy.spec.coulomb.op != scf::FockOperator::FullRange ||
         strategy.spec.exchange.op != scf::FockOperator::FullRange)
       return;
-    const auto& system = provider.system();
-    const auto direct_nbf = molecule::cartesian_ao_count(system);
     unsigned maximum_angular = 0;
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
+    if (managed_source && maximum_angular > 1) return;
     // The fitted composition qualifies generated SPD consumers only. Higher
     // angular sources require their own primary-provider census/consumer proof.
     if ((fitted_coulomb || fitted_exchange) && separate_direct_range && maximum_angular > 2) return;
@@ -732,6 +740,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
         return;
       }
     }
+    std::optional<runtime::DeviceUnpromisedCapacityScope> unpromised;
+    auto source_budget = options.reference_memory_budget_bytes
+                             ? options.reference_memory_budget_bytes
+                             : std::numeric_limits<std::size_t>::max();
+    if (managed_source) {
+      unpromised.emplace();
+      source_budget = std::min(source_budget, runtime::device_resource_available(device));
+    }
     // KS/XC/grid/DIIS/eigensolver and prepared-provider storage is admitted
     // before optional values. Include host setup, not just free device VRAM.
     auto required = sum(resource.state_device_bytes, resource.xc_device_bytes);
@@ -773,14 +789,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (combine_source_eligible && (!composite_build || std::strcmp(composite_build, "0") != 0))
       combination = DirectJkExchangeCombination{provider.strategy().spec, range_correction->spec};
     check(phase_source->prepare(
-              device, {system}, options.max_iterations, direct_nbf, required,
-              options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
-                                                    : std::numeric_limits<std::size_t>::max(),
+              device, {system}, options.max_iterations, direct_nbf, required, source_budget,
               selection,
               has_range_correction ? "cuda_ks_range_resident_values_prepare"
                                    : "cuda_ks_resident_values_prepare",
-              source_cold_phase, generic_fock, phase_source_screening, buckets.ceiling, false,
-              auto_policy, buckets.mask, spins,
+              source_cold_phase, generic_fock, phase_source_screening,
+              managed_source ? std::min(buckets.ceiling, std::size_t{3} << 30) : buckets.ceiling,
+              false, auto_policy, buckets.mask, spins,
               (automatic_range || separate_direct_range ||
                (has_exchange && (host.ceiling || disk.ceiling) && !mixed_source)) &&
                   !std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
@@ -825,6 +840,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       return;
     }
     phase_source_range = has_range_correction;
+    phase_source_hessian_reference = managed_source;
     if (phase_source_range) {
       range_selection_policy = range_policy_value("GENERATIVEQC_KS_RANGE_RESIDENT_VALUES");
       range_bucket_policy = range_policy_value("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK");
@@ -883,6 +899,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     runtime::cuda_trace::TraceOperation trace(
         has_exchange ? "cuda_ks_exact_jk_shared" : "cuda_ks_exact_j", stream,
         {1, n, 0, resident_source, false});
+    const auto& preparation = provider.diagnostic();
+    runtime::cuda_trace::trace_counter("prepared_fock_device_bytes", preparation.device_bytes);
+    runtime::cuda_trace::trace_counter("prepared_fock_budget_bytes",
+                                       preparation.device_budget_bytes);
+    runtime::cuda_trace::trace_counter(
+        "prepared_generated_coulomb", scf::cuda_direct_jk_generated_coulomb_available(
+                                          provider.cuda_direct_source(), provider.strategy().spec));
     if (resident_source) {
       // Source construction already recorded its completed recurrences once.
       // A resident F[D] executes FP64 products/scatter and no new recurrences.
@@ -3315,6 +3338,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           retire_phase_source(false);
         else
           audit_phase_source();
+        if (phase_source_hessian_reference) retire_phase_source(false);
         if (auditing_phase && output.converged && warm_updates) {
           // Preserve the accepted source-schedule energy before preparing the
           // independent incumbent fallback. Both refer to the same warm D.

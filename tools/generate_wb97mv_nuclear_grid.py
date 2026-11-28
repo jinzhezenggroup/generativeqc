@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import itertools
 import sys
+from collections import defaultdict
+from fractions import Fraction
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
@@ -21,6 +24,191 @@ from generativeqc_compiler.method.wb97mv_nuclear_grid import (
 from generativeqc_compiler.tensor.cuda_affine import emit_affine_cuda, emit_affine_work
 
 from tools.generate_df_kernels import write_if_changed
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from generativeqc_compiler.tensor import Node, Program
+
+
+def _ao_adjoint_terms(
+    node: Node, scale: Fraction = Fraction(1)
+) -> Iterator[tuple[Node, Fraction]]:
+    """Flatten only exact rational linear combinations from the AO VJP."""
+    if node.op == "add":
+        for child, coefficient in zip(
+            node.inputs, node.attrs["coefficients"], strict=True
+        ):
+            yield from _ao_adjoint_terms(child, scale * Fraction(*coefficient))
+    else:
+        yield node, scale
+
+
+def _fused_ao_adjoints(programs: dict[str, Program]) -> str:
+    """Factor both generated AO transposes into shared matrix-vector products.
+
+    The two density orientations must occur with exactly equal rational
+    coefficients for each output. Only then can one contraction apply the sum
+    of both orientations. Signed/asymmetric matrices still work; a changed IR
+    outside this lowering contract fails at generation rather than dropping terms.
+    """
+    layouts = {
+        "feature_direction": {"bar_d_ao": "first"},
+        "feature_mixed": {"bar_d_left_ao": "second", "bar_left_ao": "left"},
+    }
+    fields = ("rho", "g0", "g1", "g2", "tau")
+    ao_inputs = {f"{prefix}ao{jet}" for prefix in ("", "d_") for jet in range(4)}
+    contractions: dict[tuple[str, str], str] = {}
+    coefficients = []
+    terms = 0
+    for name, layout in layouts.items():
+        program = programs[name]
+        if set(program.outputs) != {
+            f"{stem}{axis}" for stem in layout for axis in range(4)
+        }:
+            raise ValueError("unsupported fused AO adjoint outputs")
+        weight = "first_partial" if name == "feature_direction" else "base_partial"
+        for stem, panel in layout.items():
+            for axis in range(4):
+                orientations = (defaultdict(Fraction), defaultdict(Fraction))
+                for term, scale in _ao_adjoint_terms(program.outputs[f"{stem}{axis}"]):
+                    if term.op != "einsum" or len(term.inputs) != 3:
+                        raise ValueError("unsupported fused AO adjoint term")
+                    field_weights, first, second = term.inputs
+                    labels = term.attrs["labels"], term.attrs["output"]
+                    if labels == (((0,), (1, 2), (0, 2)), (0, 1)):
+                        matrix, orbital, side = first, second, 0
+                    elif labels == (((0,), (0, 1), (1, 2)), (0, 2)):
+                        matrix, orbital, side = second, first, 1
+                    else:
+                        raise ValueError("unsupported fused AO adjoint indices")
+                    matrix_name = matrix.attrs.get("name")
+                    orbital_name = orbital.attrs.get("name")
+                    if (
+                        matrix.op != "input"
+                        or matrix_name not in ("density", "d_density")
+                        or orbital.op != "input"
+                        or orbital_name not in ao_inputs
+                    ):
+                        raise ValueError("unsupported fused AO adjoint operand")
+                    for field, factor in _ao_adjoint_terms(field_weights):
+                        field_name = field.attrs.get("name", "")
+                        if (
+                            field.op != "input"
+                            or not field_name.startswith("bar_")
+                            or field_name[4:] not in fields
+                        ):
+                            raise ValueError("unsupported fused AO adjoint field")
+                        index = fields.index(field_name[4:])
+                        orientations[side][matrix_name, orbital_name, index] += (
+                            scale * factor * Fraction(*term.attrs["coefficient"])
+                        )
+                if orientations[0] != orientations[1]:
+                    raise ValueError(
+                        "unpaired density orientations in fused AO adjoint"
+                    )
+                expression = []
+                for (matrix, orbital, field), coefficient in orientations[0].items():
+                    if not coefficient:
+                        continue
+                    symbol = contractions.setdefault(
+                        (matrix, orbital), f"product_{len(contractions)}"
+                    )
+                    expression.append(
+                        f"({float(coefficient):.17g}) * {weight}[{field} * points + point] * {symbol}"
+                    )
+                terms += len(expression)
+                value = f"{panel}_{axis}"
+                coefficients.extend(
+                    (
+                        f"    const double {value} = {' + '.join(expression) or '0.0'};",
+                        f"    if (!isfinite({value})) atomicExch(status, 1);",
+                    )
+                )
+    # Both branches multiply the same left jet in the stationary contraction.
+    # Combine them once for both the full-panel and bounded point-tile layouts.
+    outputs = [
+        line
+        for axis in range(4)
+        for line in (
+            f"    const double combined_{axis} = first_{axis} + left_{axis};",
+            f"    if (!isfinite(combined_{axis})) atomicExch(status, 1);",
+            f"    first[{axis} * size + index] = combined_{axis};",
+            f"    second[{axis} * tile_size + lane] = second_{axis};",
+        )
+    ]
+    lines = [
+        "namespace generativeqc_wb97mv_nuclear_ao_adjoints {",
+        "inline bool work_fused_ao(Extents shape, std::size_t& work) {",
+        "  work = 0;",
+        f"  return add_work(work, {{shape.points, shape.nao, shape.nao, {len(contractions)}}}) &&",
+        f"         add_work(work, {{shape.points, shape.nao, {terms + 4}}});",
+        "}",
+        "template <bool Tiled>",
+        "__global__ void fused_ao(Extents shape, std::size_t begin, std::size_t count,",
+        "                        const double* ao,",
+        "                        const double* right, const double* density, const double* d_density,",
+        "                        const double* first_partial, const double* base_partial,",
+        "                        double* first, double* second, int* status) {",
+        "  if (atomicAdd(status, 0)) return;",
+        "  const auto points = shape.points, size = points * shape.nao;",
+        "  const auto tile_size = Tiled ? count * shape.nao : size;",
+        "  for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < tile_size;",
+        "       lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {",
+        "    const auto index = Tiled ? lane + begin * shape.nao : lane;",
+        "    const auto point = index / shape.nao, orbital = index % shape.nao;",
+        *(f"    double {symbol} = 0;" for symbol in contractions.values()),
+        "    for (std::size_t inner = 0; inner < shape.nao; ++inner) {",
+        "      const auto position = point * shape.nao + inner;",
+        "      const auto row = orbital * shape.nao + inner, column = inner * shape.nao + orbital;",
+        "      const double base = density[row] + density[column];",
+        "      const double delta = d_density[row] + d_density[column];",
+    ]
+    for (matrix, orbital), symbol in contractions.items():
+        operand = "right" if orbital.startswith("d_") else "ao"
+        matrix_value = "delta" if matrix == "d_density" else "base"
+        lines.append(
+            f"      {symbol} += {matrix_value} * {operand}[{orbital[-1]} * size + position];"
+        )
+    # Reuse the same IR-derived coefficients with symmetric density products.
+    # The frozen-density schedule supplies P_s A and P_s dA, P_s=(P+P^T)/2.
+    # Store both cotangents in full-panel order after all reads of the tile.
+    precontracted = [
+        "__global__ void frozen_ao_products(Extents shape, std::size_t begin, std::size_t count,",
+        "                       const double* base, const double* moving,",
+        "                       const double* first_partial, const double* base_partial,",
+        "                       double* first, double* second, int* status) {",
+        "  if (atomicAdd(status, 0)) return;",
+        "  const auto points = shape.points, size = points * shape.nao;",
+        "  const auto tile_size = count * shape.nao;",
+        "  for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < tile_size;",
+        "       lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {",
+        "    const auto index = lane + begin * shape.nao, point = index / shape.nao;",
+    ]
+    for (matrix, orbital), symbol in contractions.items():
+        if matrix == "d_density":
+            value = "0.0"
+        elif orbital.startswith("d_"):
+            value = f"2.0 * moving[{orbital[-1]} * tile_size + lane]"
+        else:
+            value = f"2.0 * base[{orbital[-1]} * size + index]"
+        precontracted.append(f"    const double {symbol} = {value};")
+    return "\n".join(
+        [
+            *lines,
+            "    }",
+            *coefficients,
+            *outputs,
+            "  }",
+            "}",
+            *precontracted,
+            *coefficients,
+            *(line.replace("* tile_size + lane", "* size + index") for line in outputs),
+            "  }",
+            "}",
+            "}",
+        ]
+    )
 
 
 def _leg_variables(side: str, point: str) -> dict[str, str]:
@@ -71,6 +259,7 @@ def generate() -> str:
             namespace="generativeqc_wb97mv_nuclear_ao_adjoints",
             extents={"point": "points", "ao": "nao"},
         ),
+        _fused_ao_adjoints(adjoints),
         "namespace generativeqc_wb97mv_nuclear_ad {",
     ]
     for spins in (1, 2):

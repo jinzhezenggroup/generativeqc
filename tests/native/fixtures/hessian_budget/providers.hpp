@@ -25,12 +25,51 @@ inline cudaError_t resource_cuda_malloc(T** output, std::size_t bytes) {
   return cudaMalloc(reinterpret_cast<void**>(output), bytes);
 }
 inline cudaError_t resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+namespace cuda_trace {
+struct TraceShape {
+  std::size_t systems, nao, naux;
+  bool source_backed, streamed;
+};
+struct TraceOperation {
+  TraceOperation(const char*, cudaStream_t, TraceShape) {}
+};
+template <class Function>
+decltype(auto) trace_call(const char*, cudaStream_t, Function&& function) {
+  return function();
+}
+inline void trace_counter(const char*, std::size_t) {}
+}  // namespace cuda_trace
 }  // namespace generativeqc::runtime
+
+namespace generativeqc::tensor {
+struct CudaContractionContext {
+  static constexpr std::size_t kProviderAllowance = 96ULL << 20;
+  bool prepare(cudaStream_t) { return false; }
+  void* handle() const { return nullptr; }
+};
+}  // namespace generativeqc::tensor
+
+namespace generativeqc::solver::cuda {
+struct PreparedSymmetricEigenHandles {
+  struct View {
+    void* solver{};
+  };
+  int create() { return 1; }
+  int bind_stream(cudaStream_t) { return 1; }
+  void reset() {}
+  View view() const { return {}; }
+};
+inline int query_lower_cholesky(void*, int, double*, int&) { return 1; }
+}  // namespace generativeqc::solver::cuda
 
 namespace stub {
 inline std::size_t points = 8;
 inline unsigned spins = 1;
 inline bool df = false, range_df = false;
+inline bool canonical_source_limit = false;
+inline bool retain_df_tape = false;
+inline constexpr std::size_t df_tape_bytes = 256;
+inline std::size_t screened_exact_preparations = 0;
 enum class Provider { none, core, induced, exact, raw_df, fitted, raw_df_range, fitted_range, ecp };
 inline Provider reject_provider = Provider::none;
 inline std::size_t grid_scalar() { return 21600 + (points - 8) * 128; }
@@ -128,7 +167,14 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&, const CudaWb9
               : stub::grid_scalar();
   return cudaSuccess;
 }
+CudaWb97mvGridResponse::CudaWb97mvGridResponse() = default;
 CudaWb97mvGridResponse::~CudaWb97mvGridResponse() = default;
+std::size_t CudaWb97mvGridResponse::wide_grid_provider_allowance() noexcept { return 0; }
+cudaError_t CudaWb97mvGridResponse::retain_wide_nuclear_products(std::size_t) noexcept {
+  return cudaSuccess;
+}
+bool CudaWb97mvGridResponse::admits_cartesian_mixed(std::size_t) const noexcept { return false; }
+const double* CudaWb97mvGridResponse::private_becke_energy() const noexcept { return nullptr; }
 cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                             const CudaWb97mvGridOptions& options,
                                             const CudaWb97mvGridReference&, void*,
@@ -155,6 +201,15 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
   if (error != cudaSuccess || required != bytes) return cudaErrorInvalidValue;
   work_.workspace_bytes = bytes;
   return cudaSuccess;
+}
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_workspace() const noexcept { return 0; }
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_provider_allowance() noexcept {
+  return 0;
+}
+cudaError_t CudaGridGeometryResponse::prepare_cartesian_weight_fold(const double*, void*,
+                                                                    std::size_t,
+                                                                    cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
 }
 std::size_t cuda_ks_one_electron_workspace(const core::System&,
                                            const integrals::CudaOneElectronShape&,
@@ -194,9 +249,73 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch&, std::
   return impl_->allocate(1200, options.max_device_bytes, stub::Provider::induced);
 }
 CudaKsWb97mvResponseWork CudaKsWb97mvResponse::work() const noexcept { return impl_->work; }
-generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::string&) {
+generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, bool, std::string&, bool) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
+cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t) noexcept {
+  return cudaSuccess;  // Decline optional residency without charging the mandatory budget.
+}
+cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::CudaCpksShape&,
+                                                            std::size_t) noexcept {
+  return cudaSuccess;
+}
+bool CudaKsWb97mvResponse::can_seed_direct_operator(const response::CudaCpksShape&) const noexcept {
+  return false;
+}
+bool CudaKsWb97mvResponse::can_seed_fitted_operator(const response::CudaCpksShape&) const noexcept {
+  return false;
+}
+bool CudaKsWb97mvResponse::has_transition_builder() const noexcept { return false; }
+cudaError_t CudaKsWb97mvResponse::retain_metric_projection(const double*, std::size_t) noexcept {
+  return cudaSuccess;
+}
+const double* CudaKsWb97mvResponse::metric_projection(std::size_t) const noexcept {
+  return nullptr;
+}
+cudaError_t CudaKsWb97mvResponse::seed_direct_operator(void*, const response::CudaCpksShape&,
+                                                       const response::CudaCpksReference&, double*,
+                                                       cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+cudaError_t CudaKsWb97mvResponse::seed_fitted_operator(void*, const response::CudaCpksShape&,
+                                                       const response::CudaCpksReference&, double*,
+                                                       cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+cudaError_t CudaKsWb97mvResponse::seed_local_xc(void*, const response::CudaCpksShape&,
+                                                const response::CudaCpksReference&, double*,
+                                                cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+cudaError_t CudaKsWb97mvResponse::induced_nonlocal_fock(void*, const double*, double*,
+                                                        const response::CudaCpksShape&,
+                                                        cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+struct CudaKsWb97mvNuclearJk::Impl : stub::Storage {
+  CudaWb97mvJkWork work;
+};
+CudaKsWb97mvNuclearJk::CudaKsWb97mvNuclearJk() = default;
+CudaKsWb97mvNuclearJk::~CudaKsWb97mvNuclearJk() = default;
+generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch&, std::size_t,
+                                                   const CudaKsFinalStateToken&,
+                                                   const CudaWb97mvJkOptions& options, std::string&,
+                                                   bool screened_frozen,
+                                                   CudaWb97mvJkAdmissionFailure* failure) {
+  if (failure) *failure = {};
+  if (stub::canonical_source_limit && !screened_frozen) {
+    if (failure) *failure = CudaWb97mvJkAdmissionFailure::canonical_source_limit;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  assert(!screened_frozen ||
+         (stub::canonical_source_limit && options.prefer_fresh_direction_batches));
+  stub::screened_exact_preparations += screened_frozen;
+  impl_ = std::make_unique<Impl>();
+  impl_->work.omitted_frozen_source_groups = screened_frozen ? 1 : 0;
+  impl_->work.workspace_bytes = 1700;
+  return impl_->allocate(1700, options.max_workspace_bytes, stub::Provider::exact);
+}
+const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept { return impl_->work; }
 #define STUB_PROVIDER(CLASS, OPTIONS, WORK, BYTES, ID, REF)                                \
   struct CLASS::Impl : stub::Storage {                                                     \
     WORK work;                                                                             \
@@ -211,16 +330,44 @@ generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, std::str
     return impl_->allocate(BYTES, options.max_workspace_bytes, ID);                        \
   }                                                                                        \
   WORK REF CLASS::work() const noexcept { return impl_->work; }
-STUB_PROVIDER(CudaKsWb97mvNuclearJk, CudaWb97mvJkOptions, CudaWb97mvJkWork, 1700,
-              stub::Provider::exact, const&)
-STUB_PROVIDER(CudaKsWb97mvDfNuclear, integrals::CudaDfNuclearOptions, integrals::CudaDfNuclearWork,
-              700, options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df,
-              const&)
+struct CudaKsWb97mvDfNuclear::Impl : stub::Storage {
+  integrals::CudaDfNuclearWork work;
+  void* tape{};
+  ~Impl() { cudaFree(tape); }
+};
+CudaKsWb97mvDfNuclear::CudaKsWb97mvDfNuclear() = default;
+CudaKsWb97mvDfNuclear::~CudaKsWb97mvDfNuclear() = default;
+generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch&, std::size_t,
+                                                   const CudaKsFinalStateToken&,
+                                                   const integrals::CudaDfNuclearOptions& options,
+                                                   std::string&) {
+  impl_ = std::make_unique<Impl>();
+  // Model the real raw provider: an optional contiguous tape fits whenever it
+  // falls inside this provider's cap, even if the owner needs the bytes later.
+  const auto bytes = 700 + (stub::retain_df_tape && options.retain_directional_source &&
+                                    options.max_workspace_bytes >= 700 + stub::df_tape_bytes
+                                ? stub::df_tape_bytes
+                                : 0);
+  impl_->work.workspace_bytes = bytes;
+  return impl_->allocate(
+      bytes, options.max_workspace_bytes,
+      options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df);
+}
+cudaError_t CudaKsWb97mvDfNuclear::retain_directional_source(std::size_t available) {
+  if (!stub::retain_df_tape || available < stub::df_tape_bytes) return cudaSuccess;
+  const auto status = cudaMalloc(&impl_->tape, stub::df_tape_bytes);
+  if (status == cudaSuccess) impl_->work.workspace_bytes += stub::df_tape_bytes;
+  return status == cudaErrorMemoryAllocation ? cudaSuccess : status;
+}
+const integrals::CudaDfNuclearWork& CudaKsWb97mvDfNuclear::work() const noexcept {
+  return impl_->work;
+}
 STUB_PROVIDER(CudaKsWb97mvDfResponse, CudaWb97mvDfOptions, CudaWb97mvDfWork, 900,
               options.coulomb ? stub::Provider::fitted : stub::Provider::fitted_range, )
 STUB_PROVIDER(CudaKsWb97mvEcpNuclear, integrals::CudaEcpNuclearOptions,
               integrals::CudaEcpNuclearWork, 1100, stub::Provider::ecp, const&)
 #undef STUB_PROVIDER
+integrals::CudaDfNuclearShape CudaKsWb97mvDfNuclear::shape() const noexcept { return {}; }
 std::size_t CudaKsWb97mvEcpNuclear::mandatory_workspace(const core::System&,
                                                         const CudaWb97mvGridShape&,
                                                         integrals::CudaEcpNuclearOptions) {
