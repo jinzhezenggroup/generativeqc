@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_xc_transition_integer.cuh",
+  "role": "performance_exception",
+  "subsystem": "xc",
+  "reason": "Bounded integer tensor representation of the compiler-derived transition-feature Gram. The device-resident FP64 operator remains the fallback and audits the final physical response independently.",
+  "regions": []
+}

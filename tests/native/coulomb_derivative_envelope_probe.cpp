@@ -1,10 +1,32 @@
+#include <bit>
+#include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <limits>
+#include <string_view>
 
 #include "integrals/coulomb_derivative_envelope.hpp"
 
-int main() {
+int main(int argc, char** argv) {
   using namespace generativeqc;
+  if (argc == 2 && std::string_view(argv[1]) == "--rounding") {
+    using Envelope = integrals::CoulombDerivativeEnvelope;
+    using Limits = std::numeric_limits<double>;
+    for (const auto value : {0.0, -0.0, Limits::denorm_min(), -Limits::denorm_min(),
+                             std::nextafter(Limits::min(), 0.0), Limits::min(), 0.5, 1.0, -1.0,
+                             Limits::max(), Limits::infinity(), -Limits::infinity()}) {
+      if (std::bit_cast<std::uint64_t>(Envelope::upper(value)) !=
+              std::bit_cast<std::uint64_t>(std::nextafter(value, Limits::infinity())) ||
+          std::bit_cast<std::uint64_t>(Envelope::lower(value)) !=
+              std::bit_cast<std::uint64_t>(std::max(0.0, std::nextafter(value, 0.0))))
+        return 1;
+    }
+    return std::isnan(Envelope::upper(Limits::quiet_NaN())) &&
+                   Envelope::lower(Limits::quiet_NaN()) == 0.0
+               ? 0
+               : 1;
+  }
   core::System system;
   std::size_t count{}, limit{};
   double budget{};
@@ -43,6 +65,18 @@ int main() {
     system.atoms = std::move(atoms);
   }
   std::cout << std::setprecision(17);
+  if (argc == 2 && std::string_view(argv[1]) == "--value-pair-bounds") {
+    using Envelope = integrals::CoulombDerivativeEnvelope;
+    for (const auto& left : system.shells)
+      for (const auto& right : system.shells) {
+        const auto bound = Envelope::pair(left, right, system.atoms[left.atom_index].position,
+                                          system.atoms[right.atom_index].position);
+        if (!bound) return 2;
+        const auto components = (2 * left.angular_momentum + 1) * (2 * right.angular_momentum + 1);
+        std::cout << Envelope::upper((*bound)[0] / components) << '\n';
+      }
+    return 0;
+  }
   if (!limit && count == 4) {
     using Envelope = integrals::CoulombDerivativeEnvelope;
     const auto ab = Envelope::pair(system.shells[0], system.shells[1],
@@ -60,9 +94,15 @@ int main() {
                 << '\n';
     return 0;
   }
-  const auto omitted = integrals::coulomb_derivative_omissions(system, budget, limit);
+  const bool bitmap = argc == 2 && std::string_view(argv[1]) == "--rank-bitmap";
+  const auto omitted = integrals::coulomb_derivative_omissions(system, budget, limit, bitmap);
   std::cout << omitted.bound << '\n';
   std::cerr << "candidate_checks=" << omitted.candidate_checks << '\n';
+  if (bitmap) {
+    std::cout << omitted.rank_count << ' ' << omitted.size() << '\n';
+    for (auto word : omitted.omitted_rank_words) std::cout << word << '\n';
+    return omitted.omitted_rank_words.empty() ? 3 : 0;
+  }
   for (const auto& source : omitted.sources)
     std::cout << source[0] << ' ' << source[1] << ' ' << source[2] << ' ' << source[3] << '\n';
 }

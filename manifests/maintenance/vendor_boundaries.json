@@ -1,6 +1,24 @@
 {
   "schema": 1,
   "files": {
+    "src/dft/cuda_ks_wb97mv_response.cu": {
+      "classification": "migration",
+      "contract": "src/dft/cuda_ks_wb97mv_response.hpp",
+      "reason": "The stationary response owner binds the private handle for optional integer transition products to its admitted stream. This bounded handle lifetime does not authorize other vendor submissions in the scientific owner.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 3,
+        "cublasSetStream": 1
+      }
+    },
+    "src/dft/cuda_xc_transition_integer.cuh": {
+      "classification": "provider",
+      "contract": "src/dft/cuda_xc_transition_integer.cuh",
+      "reason": "Private signed-digit transition product provider submits bounded int8 tiles with exact int32 accumulation. The stationary grid owner retains scientific admission, FP64 reconstruction and fallback policy.",
+      "references": {
+        "cublasGemmEx": 1
+      }
+    },
     "src/tensor/cuda_vector_accumulation.hpp": {
       "classification": "provider",
       "contract": "src/tensor/cuda_vector_accumulation.hpp",
@@ -314,11 +332,13 @@
     "src/tensor/cuda_square_linalg.hpp": {
       "classification": "provider",
       "contract": "src/solver/generalized_eigen.hpp",
-      "reason": "Borrowed square-padded FP64 column-major products and lower-triangular solves for shared generalized-eigen and final-state phases; rank, transposes and leading dimensions remain explicit, while stream, handle modes, workspace and numerical admission remain with the owner.",
+      "reason": "Borrowed FP64 column-major products and lower-triangular solves for generalized-eigen, final-state and CPKS phases. The CPKS vector solve temporarily binds bounded caller-owned workspace and restores the private handle's zero-workspace contract; numerical admission remains with the owner.",
       "references": {
         "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
-        "cublasDtrsmBatched": 1
+        "cublasDtrsm": 1,
+        "cublasDtrsmBatched": 1,
+        "cublasSetWorkspace": 2
       }
     },
     "src/tensor/cuda_symmetric_product.cuh": {

@@ -31,8 +31,12 @@ struct Plan {
       action_terms{}, spectral_scratch{}, inverse_seed{}, charge_eigenbasis{}, raw_charge{},
       rotated_charge_motion{}, inverse_motion_charge{}, matrix_reference_terms{},
       matrix_action_terms{}, pairs{}, packed{};
-  std::array<std::size_t, 7> offsets{}, counts{};
+  std::array<std::size_t, 9> offsets{}, counts{};
+  struct Work {
+    std::size_t affine{}, products{};
+  } fock_only, weights_only;
   bool fit_charge{};
+  bool split_coulomb_action{};
   bool reserve(std::size_t count, std::size_t& offset) {
     offset = bytes;
     std::size_t increment{};
@@ -167,9 +171,29 @@ cudaError_t plan(const CudaWb97mvDfShape& shape, const CudaWb97mvDfOptions& opti
                                               METRIC_LEAF(options, workspace_uks_response_coulomb),
                                               METRIC_LEAF(options, work_uks_response_coulomb)));
   if (!supported) return cudaErrorInvalidValue;
+  if (options.split_coulomb_action && result.fit_charge && !options.spectral_metric) {
+    const auto partition = [&](auto workspace, auto work, Plan::Work& charge) {
+      std::size_t bytes{};
+      return workspace(extents, bytes) == cudaSuccess &&
+             work(extents, charge.affine, charge.products) && bytes <= result.map_bytes &&
+             charge.affine <= result.action_terms && charge.products <= result.matrix_action_terms;
+    };
+    const bool rks = shape.spins == 1;
+    result.split_coulomb_action =
+        partition(rks ? maps::workspace_rks_response_coulomb_fock
+                      : maps::workspace_uks_response_coulomb_fock,
+                  rks ? maps::work_rks_response_coulomb_fock : maps::work_uks_response_coulomb_fock,
+                  result.fock_only) &&
+        partition(
+            rks ? maps::workspace_rks_response_coulomb_weights
+                : maps::workspace_uks_response_coulomb_weights,
+            rks ? maps::work_rks_response_coulomb_weights : maps::work_uks_response_coulomb_weights,
+            result.weights_only);
+  }
   if (detail) *detail = "fitted response workspace exceeds its explicit device bound";
+  const auto charge = result.split_coulomb_action ? shape.naux : 0;
   result.counts = {1,          result.panels, result.panels, result.raw, result.metric,
-                   result.raw, result.metric};
+                   result.raw, result.metric, charge,        charge};
   for (std::size_t index = 0; index < result.counts.size(); ++index)
     if (!result.reserve(result.counts[index], result.offsets[index])) return cudaErrorInvalidValue;
   std::size_t spectral_scratch{};
@@ -442,13 +466,16 @@ struct CudaWb97mvDfResponse::Impl {
         options.symmetry_relative_tolerance, check, status());
     return cudaGetLastError();
   }
-  cudaError_t audit_outputs(bool reference, const char** detail = nullptr) const {
-    auto error =
-        audit(at(layout.offsets[reference ? 1 : 2]), Check::fock_output, shape.nao, shape.spins);
-    if (error == cudaSuccess)
+  cudaError_t audit_outputs(bool reference, const char** detail = nullptr,
+                            CudaWb97mvDfAction action = CudaWb97mvDfAction::all) const {
+    auto error = cudaSuccess;
+    if (action != CudaWb97mvDfAction::source_weights)
+      error =
+          audit(at(layout.offsets[reference ? 1 : 2]), Check::fock_output, shape.nao, shape.spins);
+    if (error == cudaSuccess && action != CudaWb97mvDfAction::fock_direction)
       error = audit(at(layout.offsets[reference ? 3 : 5]), Check::three_center_output, shape.nao, 1,
                     shape.naux);
-    if (error == cudaSuccess)
+    if (error == cudaSuccess && action != CudaWb97mvDfAction::fock_direction)
       error = audit(at(layout.offsets[reference ? 4 : 6]), Check::metric_output, shape.naux);
     return error == cudaSuccess ? gate(status(), source.stream, detail)
                                 : drain(error, source.stream);
@@ -618,6 +645,7 @@ cudaError_t CudaWb97mvDfResponse::prepare(const CudaWb97mvDfShape& shape,
     state->receipt.matrix_reference_terms = state->receipt.matrix_terms =
         layout.matrix_reference_terms;
     state->receipt.matrix_action_terms = layout.matrix_action_terms;
+    state->receipt.split_coulomb_action = layout.split_coulomb_action;
     impl_ = std::move(state);
     if (detail) *detail = nullptr;
     return cudaSuccess;
@@ -632,7 +660,7 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
                                         const double* delta_three_center,
                                         const double* delta_metric,
                                         const CudaWb97mvDfOutput& output, cudaStream_t stream,
-                                        const char** detail) noexcept {
+                                        const char** detail, CudaWb97mvDfAction action) noexcept {
   if (detail) *detail = "invalid fitted action buffers or owner";
   if (!impl_) return cudaErrorInvalidResourceHandle;
   auto& state = *impl_;
@@ -642,6 +670,18 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
   auto error = state.authenticate(stream);
   if (error != cudaSuccess) return error;
   const auto& layout = state.layout;
+  if (!layout.split_coulomb_action) action = CudaWb97mvDfAction::all;
+  const bool fitted_charge = output.frozen_charge_motion || output.frozen_rhs;
+  if (fitted_charge && (action != CudaWb97mvDfAction::fock_direction ||
+                        !output.frozen_charge_motion || !output.frozen_rhs))
+    return cudaErrorInvalidValue;
+  const auto publishes = [action, fitted_charge](unsigned field) {
+    if (field >= 7) return fitted_charge;
+    if (action == CudaWb97mvDfAction::fock_direction)
+      return field == 2 || (fitted_charge && (field == 3 || field == 4));
+    if (action == CudaWb97mvDfAction::source_weights) return field >= 3;
+    return true;
+  };
   const auto& source = state.source;
   const auto& options = state.options;
   const double* inputs[] = {
@@ -656,13 +696,16 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
                        output.weight_three_center,
                        output.weight_metric,
                        output.weight_direction_three_center,
-                       output.weight_direction_metric};
+                       output.weight_direction_metric,
+                       output.frozen_charge_motion,
+                       output.frozen_rhs};
   for (unsigned index = 0; index < input_count; ++index) {
     if (!disjoint(state.arena, layout.bytes, inputs[index], counts[index] * sizeof(double)))
       return cudaErrorInvalidValue;
     if ((error = device_buffer(inputs[index], source.device_id)) != cudaSuccess) return error;
   }
-  for (unsigned index = 0; index < 7; ++index) {
+  for (unsigned index = 0; index < layout.counts.size(); ++index) {
+    if (!publishes(index)) continue;
     if (!disjoint(state.arena, layout.bytes, outputs[index], layout.counts[index] * sizeof(double)))
       return cudaErrorInvalidValue;
     if ((error = device_buffer(outputs[index], source.device_id)) != cudaSuccess) return error;
@@ -671,16 +714,21 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
                     counts[input] * sizeof(double)))
         return cudaErrorInvalidValue;
     for (unsigned previous = 0; previous < index; ++previous)
-      if (!disjoint(outputs[index], layout.counts[index] * sizeof(double), outputs[previous],
+      if (publishes(previous) &&
+          !disjoint(outputs[index], layout.counts[index] * sizeof(double), outputs[previous],
                     layout.counts[previous] * sizeof(double)))
         return cudaErrorInvalidValue;
   }
-  if (receipt.affine_terms > UINT64_MAX - layout.action_terms ||
-      receipt.matrix_terms > UINT64_MAX - layout.matrix_action_terms)
+  const auto charge = action == CudaWb97mvDfAction::fock_direction ? layout.fock_only
+                      : action == CudaWb97mvDfAction::source_weights
+                          ? layout.weights_only
+                          : Plan::Work{layout.action_terms, layout.matrix_action_terms};
+  if (receipt.affine_terms > UINT64_MAX - charge.affine ||
+      receipt.matrix_terms > UINT64_MAX - charge.products)
     return cudaErrorInvalidValue;
   auto* status = state.status();
   error = cudaMemsetAsync(status, 0, sizeof(int), stream);
-  if (error == cudaSuccess)
+  if (error == cudaSuccess && action != CudaWb97mvDfAction::fock_direction)
     error =
         state.audit(delta_density, Check::density_direction, state.shape.nao, state.shape.spins);
   if (error == cudaSuccess)
@@ -690,8 +738,8 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
   if (error == cudaSuccess) error = gate(status, stream, detail);
   if (error == cudaSuccess) {
     if (detail) *detail = "failed to evaluate fitted inverse direction";
-    receipt.affine_terms += layout.action_terms;
-    receipt.matrix_terms += layout.matrix_action_terms;
+    receipt.affine_terms += charge.affine;
+    receipt.matrix_terms += charge.products;
     if (options.spectral_metric && layout.fit_charge) {
       auto* scratch = state.at(layout.spectral_scratch);
       tensor::launch_pseudoinverse_vector_jvp(
@@ -726,7 +774,21 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
     const auto* dressed = state.at(layout.dressed);
     const auto* seed = state.at(layout.seed);
     const auto* inverse = state.at(layout.inverse);
-    if (!options.coulomb) {
+    if (action == CudaWb97mvDfAction::fock_direction) {
+      const auto launch =
+          rks ? maps::launch_rks_response_coulomb_fock : maps::launch_uks_response_coulomb_fock;
+      error = launch(state.extents(), fit, seed, delta_metric, delta_three_center, source.density,
+                     source.three_center, source.whitening, state.at(layout.offsets[2]),
+                     state.at(layout.offsets[7]), state.at(layout.offsets[8]),
+                     state.at(layout.map_offset), layout.map_bytes, status, stream);
+    } else if (action == CudaWb97mvDfAction::source_weights) {
+      const auto launch = rks ? maps::launch_rks_response_coulomb_weights
+                              : maps::launch_uks_response_coulomb_weights;
+      error = launch(state.extents(), fit, seed, delta_density, delta_metric, delta_three_center,
+                     source.density, source.three_center, source.whitening,
+                     state.at(layout.offsets[6]), state.at(layout.offsets[5]),
+                     state.at(layout.map_offset), layout.map_bytes, status, stream);
+    } else if (!options.coulomb) {
       const auto* fraction = state.at(layout.exchange_fraction);
       if (options.spectral_metric)
         error = output(rks ? maps::launch_rks_response_exchange_spectral
@@ -774,13 +836,14 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
       error = state.spectral_dense(Impl::SpectralMap::weight_motion, state.at(layout.inverse_seed),
                                    state.at(layout.offsets[6]));
   }
-  if (error == cudaSuccess) error = state.audit_outputs(false, detail);
+  if (error == cudaSuccess) error = state.audit_outputs(false, detail, action);
   if (error != cudaSuccess) return drain(error, stream);
   if ((error = state.authenticate(stream)) != cudaSuccess) return error;
-  for (unsigned index = 0; index < 7 && error == cudaSuccess; ++index)
-    error =
-        cudaMemcpyAsync(outputs[index], state.at(layout.offsets[index]),
-                        layout.counts[index] * sizeof(double), cudaMemcpyDeviceToDevice, stream);
+  for (unsigned index = 0; index < layout.counts.size() && error == cudaSuccess; ++index)
+    if (publishes(index))
+      error =
+          cudaMemcpyAsync(outputs[index], state.at(layout.offsets[index]),
+                          layout.counts[index] * sizeof(double), cudaMemcpyDeviceToDevice, stream);
   error = drain(error, stream);
   if (error == cudaSuccess) {
     if (detail) *detail = nullptr;
@@ -788,6 +851,18 @@ cudaError_t CudaWb97mvDfResponse::apply(const double* delta_density,
   }
   return error;
 }
+cudaError_t CudaWb97mvDfResponse::borrow_private_coulomb_sweep(CudaDfCoulombSweepInput& output,
+                                                               cudaStream_t stream) const noexcept {
+  output = {};
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  const auto& state = *impl_;
+  if (!state.layout.split_coulomb_action || state.shape.spins != 1) return cudaErrorNotSupported;
+  const auto error = state.authenticate(stream);
+  if (error == cudaSuccess)
+    output = {state.at(state.layout.fit), state.source.three_center, state.source.whitening};
+  return error;
+}
+
 const CudaWb97mvDfWork& CudaWb97mvDfResponse::work() const noexcept {
   static const CudaWb97mvDfWork empty;
   return impl_ ? impl_->receipt : empty;

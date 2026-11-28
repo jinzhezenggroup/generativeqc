@@ -31,8 +31,10 @@ struct CudaDfNuclearOptions {
   double symmetry_absolute_tolerance{1e-12}, symmetry_relative_tolerance{1e-10};
   /** Must match the live basis source and a complete linked AOT radial closure. */
   double range_omega{};
-  /** Optionally retain one all-s directional source tape within the workspace budget. */
+  /** Optionally retain one directional source tape within the workspace budget. */
   bool retain_directional_source{};
+  /** Require the batched Cartesian s/p closure instead of per-group launches. */
+  bool batch_cartesian_sp{};
 };
 
 /** The actual immutable DF basis and its enclosing original-stream capability.
@@ -47,7 +49,8 @@ struct CudaDfNuclearReference {
 
 /** Full ordered raw arrays: A[AO,AO,aux] and V[aux,aux]. Directions differentiate
  * only geometry, never a projection/normalization gauge. No coordinate-major
- * molecular derivative tensor or fitted four-center tensor is materialized. */
+ * molecular derivative tensor or fitted four-center tensor is materialized.
+ * Both primal outputs may be omitted together when only the JVP is consumed. */
 struct CudaDfNuclearValues {
   double *three_center{}, *metric{}, *direction_three_center{}, *direction_metric{};
 };
@@ -121,6 +124,12 @@ class CudaDfNuclearResponse {
                      cudaStream_t stream) noexcept;
   cudaError_t contract(const double* direction, const CudaDfNuclearWeights& weights,
                        const CudaDfNuclearVectors& output, cudaStream_t stream) noexcept;
+  /** Fixed three-center and metric cotangents, with no gradient publication.
+   * Admitted only for the batched s/p source. A matched unit-direction tape
+   * skips projection of groups not incident to the moving atom. */
+  cudaError_t contract_fixed_weights(const double* direction, const double* three_center,
+                                     const double* metric, double* hvp,
+                                     cudaStream_t stream) noexcept;
   const CudaDfNuclearWork& work() const noexcept;
 
  private:

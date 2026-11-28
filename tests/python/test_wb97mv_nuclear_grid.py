@@ -558,6 +558,9 @@ def _native_action(
     )
     assert process.returncode == 0, process.stderr
     result = json.loads(process.stdout)
+    if mode.startswith("fixed-"):
+        assert result["prepared"] == result["applied"] == 0
+        return result
     assert result["nuclear_lifecycle"]
     assert result["private_mixed_replay"]
     assert result["private_direction_replay"]
@@ -649,6 +652,38 @@ def test_bounded_private_ao_adjoint_matches_expanded_contraction() -> None:
     )
     assert tight["workspace_bytes"] < full["workspace_bytes"]
     np.testing.assert_array_equal(tight["mixed"], full["mixed"])
+
+
+@pytest.mark.parametrize("family", ("r2scan", "pbe"))
+def test_wide_nuclear_tiles_match_reference_actions(family: str) -> None:
+    """Check wide fixed, moving, and mixed responses on a partial final tile."""
+    if not os.environ.get("GENERATIVEQC_CUDA_WB97MV_GRID_PROBE"):
+        pytest.skip("requires optional native CUDA WB97M-V grid probe")
+    points = 4109
+    fixture = _data(1, points=points, orbital_replicas=25)
+    for field in ("weights", "weight_left", "weight_right", "weight_mixed"):
+        fixture[field] /= points
+    scales = (1.0, 1.0)
+    baseline = _native_action(fixture, tile=0, mode=f"nuclear-{family}", scales=scales)
+    wide = _native_action(fixture, tile=0, mode=f"nuclear-{family}-wide", scales=scales)
+    fixed = _native_action(fixture, tile=0, mode=f"fixed-{family}-wide", scales=scales)
+    for field in ("energy", "potential", "fixed_response", "response", "mixed"):
+        np.testing.assert_allclose(wide[field], baseline[field], atol=2e-12, rtol=2e-10)
+    np.testing.assert_allclose(
+        fixed["potential"], baseline["potential"], atol=2e-12, rtol=2e-10
+    )
+    np.testing.assert_allclose(
+        fixed["response"], baseline["fixed_response"], atol=2e-12, rtol=2e-10
+    )
+    np.testing.assert_allclose(
+        fixed["private_response"], baseline["fixed_response"], atol=2e-12, rtol=2e-10
+    )
+
+    step = 0.001
+    positive = _scaled_libxc_grid(*_displaced(fixture, 0, step), family, scales)[1]
+    negative = _scaled_libxc_grid(*_displaced(fixture, 0, -step), family, scales)[1]
+    expected = ((positive - negative) / (2 * step)).ravel()
+    np.testing.assert_allclose(wide["response"], expected, atol=2e-8, rtol=2e-6)
 
 
 @pytest.mark.parametrize("spins", (1, 2))

@@ -318,6 +318,23 @@ def test_native_contract_without_device(cpks_probe: Path) -> None:
     assert json.loads(result.stdout) == {"contract": "passed"}
 
 
+def test_integer_transition_projects_signed_scaled_columns(cpks_probe: Path) -> None:
+    assert os.environ.get("SLURM_JOB_ID"), "real-GPU tests must run through srun"
+    cp = pytest.importorskip("cupy")
+    if int(cp.cuda.Device(0).compute_capability) // 10 != 12:
+        pytest.skip("integer projection is qualified on CUDA SM12x")
+    result = subprocess.run(
+        [str(cpks_probe), "integer-projection"],
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    receipt = json.loads(result.stdout)
+    assert receipt["normalized_error"] < 4e-15
+    assert receipt["refused_extreme"] == 1
+
+
 def _native(
     cpks_probe: Path,
     model: dict,
@@ -343,6 +360,7 @@ def _native(
                 model["frozen"],
                 model["overlap_direction"],
                 model["operation"],
+                model.get("metric_projection", np.empty(0)),
             )
         ]
     )
@@ -432,6 +450,43 @@ def test_successful_replay_after_rejected_upstream_audit(cpks_probe: Path) -> No
     assert replay["converged"] and expected["converged"]
     for panel in ("density", "weights"):
         np.testing.assert_allclose(replay[panel], expected[panel], atol=2e-12, rtol=0)
+
+
+def test_wide_cached_cpks_matches_diagonal_response(cpks_probe: Path) -> None:
+    # 2162 rotations leave partial tiles in both dimensions. The physical
+    # model is F'[D'] = D'/32, independent of the resident operator build.
+    nao, occupied = 93, 46
+    energies = np.r_[
+        np.linspace(-1.3, -0.5, occupied), np.linspace(0.5, 1.4, nao - occupied)
+    ]
+    rng = np.random.default_rng(408)
+    frozen = np.zeros((nao, nao))
+    frozen[:occupied, occupied:] = rng.uniform(-0.2, 0.2, (occupied, nao - occupied))
+    frozen[occupied:, :occupied] = frozen[:occupied, occupied:].T
+    gaps = energies[None, occupied:] - energies[:occupied, None]
+    density_ov = -2 * frozen[:occupied, occupied:] / (gaps + 2 / 32)
+    model = {
+        "nao": nao,
+        "counts": (occupied,),
+        "coefficients": np.eye(nao)[None],
+        "energies": energies[None],
+        "frozen": frozen[None],
+        "overlap_direction": np.zeros((nao, nao)),
+        "operation": np.empty(0),
+    }
+    result = _native(cpks_probe, model, mode="cached-seed-complete-diagonal")
+    assert result["cuda_error"] == 0 and result["converged"], result
+    assert result["residual"] <= result["tolerance"]
+    for key, block in (
+        ("density", density_ov),
+        ("weights", density_ov * energies[:occupied, None]),
+    ):
+        expected = np.zeros_like(frozen)
+        expected[:occupied, occupied:] = block
+        expected[occupied:, :occupied] = block.T
+        np.testing.assert_allclose(
+            np.asarray(result[key]).reshape(nao, nao), expected, atol=2e-11, rtol=2e-11
+        )
 
 
 def test_exhaustion_and_budget_do_not_publish(cpks_probe: Path) -> None:
@@ -624,3 +679,56 @@ def test_cached_operator_rebuilds_after_physical_residual_rejection(
         np.testing.assert_allclose(
             replay[field], expected[field], rtol=2e-12, atol=2e-12
         )
+
+
+@pytest.mark.parametrize("refused", [False, True])
+def test_complete_projected_operator_falls_back_without_building_columns(
+    cpks_probe: Path, refused: bool
+) -> None:
+    """A known RKS map F[P] = P/32 has a response matrix I/16 before gaps."""
+    model = _model(5, (2,), orthogonal=True)
+    model["operation"] = np.eye(25) / 32
+    expected = _native(cpks_probe, model, layout="column")
+    mode = "cached-seed-complete-refused" if refused else "cached-seed-complete"
+    result = _native(cpks_probe, model, layout="column", mode=mode)
+    assert expected["converged"] and result["converged"], result
+    assert result["seeds"] == 1 and result["complements"] == 0
+    assert result["cached_columns"] == (0 if refused else 6)
+    assert result["physical_checks"] == (0 if refused else 2)
+    for field in ("density", "weights"):
+        np.testing.assert_allclose(result[field], expected[field], rtol=0, atol=2e-12)
+
+
+@pytest.mark.parametrize("projection", ["matching", "other-overlap", "corrupt"])
+def test_metric_projection_only_replaces_the_initial_rhs(
+    cpks_probe: Path, projection: str
+) -> None:
+    model = _model(5, (2,), orthogonal=True)
+    coefficients = model["coefficients"][0]
+    occupied, virtuals = coefficients[:, :2], coefficients[:, 2:]
+    moving = (
+        -0.5 * coefficients @ coefficients.T @ model["overlap_direction"] @ occupied
+    )
+    density = 2 * (moving @ occupied.T + occupied @ moving.T)
+    metric_ov = (occupied.T @ density @ virtuals) / 32
+    if projection != "matching":
+        metric_ov += 1e-3
+    expected = _native(cpks_probe, model, mode="cached-reuse")
+    result = _native(
+        cpks_probe,
+        {**model, "metric_projection": metric_ov},
+        mode=f"cached-metric-{projection}",
+    )
+    assert expected["converged"] and result["cuda_error"] == 0
+    assert result["complements"] == (projection != "other-overlap")
+    assert result["physical_checks"] == 2
+    if projection == "corrupt":
+        assert not result["converged"]
+        np.testing.assert_array_equal(result["density"], 9817.0)
+        np.testing.assert_array_equal(result["weights"], -3277.0)
+    else:
+        assert result["converged"], result
+        for field in ("density", "weights"):
+            np.testing.assert_allclose(
+                result[field], expected[field], rtol=0, atol=2e-12
+            )

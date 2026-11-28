@@ -2503,9 +2503,9 @@ std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan* plan) {
   return direct_jk_product(count, sizeof(double));
 }
 
-generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
-                                                           std::size_t maximum_bytes,
-                                                           std::string& detail) {
+generativeqc_status prepare_cuda_direct_jk_resident_values(
+    CudaDirectJkPlan* plan, std::size_t maximum_bytes, std::string& detail,
+    std::span<const double> certified_norms) {
   const auto layout = prepare_cuda_direct_jk_resident_layout(plan, detail);
   if (layout != GENERATIVEQC_STATUS_SUCCESS) return layout;
   return direct_jk_guard(plan, detail, [&] {
@@ -2525,14 +2525,70 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     const auto diagnostic_total = direct_jk_sum(plan->diagnostic.device_bytes, required);
     struct Lease {
       cudaStream_t stream;
-      double* values{};
+      double *values{}, *certificate{};
       ~Lease() {
-        if (values) {
+        if (values || certificate) {
           (void)cudaStreamSynchronize(stream);
-          (void)runtime::resource_cuda_free(values);
+          if (certificate) (void)runtime::resource_cuda_free(certificate);
+          if (values) (void)runtime::resource_cuda_free(values);
         }
       }
     } lease{plan->stream};
+    const double* bounds = plan->canonical_bounds;
+    double screening = plan->screening_tolerance;
+    std::size_t omitted{};
+    if (!certified_norms.empty()) {
+      const auto order = plan->diagnostic.nbf;
+      direct_jk_require(
+          order <= 256 && certified_norms.size() == order * order &&
+              std::all_of(certified_norms.begin(), certified_norms.end(),
+                          [](double norm) { return norm >= 0 && std::isfinite(norm); }),
+          "invalid dense Coulomb response omission certificate");
+      const auto certificate_bytes = certified_norms.size_bytes();
+      const auto pairs = order * (order + 1) / 2;
+      // An unscreened sorted source is only a permutation. Verify that its
+      // row prefix still describes the full canonical inventory.
+      const bool complete = required / sizeof(double) == pairs * (pairs + 1) / 2;
+      if (plan->diagnostic.batch_size == 1 && plan->canonical_cartesian &&
+          !plan->canonical_transform && complete && !screening &&
+          plan->canonical_batch.nbf == order && certificate_bytes <= maximum_bytes - required) {
+        const auto allocated = runtime::resource_cuda_malloc(
+            reinterpret_cast<void**>(&lease.certificate), certificate_bytes);
+        if (allocated == cudaErrorMemoryAllocation)
+          (void)cudaGetLastError();
+        else
+          direct_jk_check(allocated);
+      }
+      if (lease.certificate) {
+        bounds = lease.certificate;
+        screening = cuda_direct_response_zero_bound;
+        direct_jk_check(cudaMemcpyAsync(lease.certificate, certified_norms.data(),
+                                        certified_norms.size_bytes(), cudaMemcpyHostToDevice,
+                                        plan->stream));
+        // Count the same FP64 product predicate used by the producer. The
+        // complete layout contains each lower-triangle pair product once;
+        // sorting pair norms makes the count O(P log P), not O(P²).
+        std::vector<double> ordered_norms;
+        try {
+          ordered_norms.reserve(order * (order + 1) / 2);
+        } catch (const std::bad_alloc&) {
+          bounds = plan->canonical_bounds;
+          screening = plan->screening_tolerance;
+        }
+        if (screening) {
+          for (std::size_t row = 0; row < order; ++row)
+            for (std::size_t column = 0; column <= row; ++column)
+              ordered_norms.push_back(certified_norms[row * order + column]);
+          std::sort(ordered_norms.begin(), ordered_norms.end());
+          for (auto pair = ordered_norms.begin(); pair != ordered_norms.end(); ++pair) {
+            const auto first_kept =
+                std::partition_point(ordered_norms.begin(), pair + 1,
+                                     [&](double other) { return *pair * other < screening; });
+            omitted += first_kept - ordered_norms.begin();
+          }
+        }
+      }
+    }
     const auto allocation =
         runtime::resource_cuda_malloc(reinterpret_cast<void**>(&lease.values), required);
     if (allocation == cudaErrorMemoryAllocation) {
@@ -2542,6 +2598,10 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
       if (pending != cudaErrorMemoryAllocation) direct_jk_check(pending);
     }
     direct_jk_check(allocation);
+    // This dense lease keeps even skipped slots so replay and pair reordering
+    // share their exact original inventory. The producer need not write them.
+    if (lease.certificate && bounds == lease.certificate)
+      direct_jk_check(cudaMemsetAsync(lease.values, 0, required, plan->stream));
     direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
     std::size_t value_offset = 0;
     plan->diagnostic.resident_values_submitted = 0;
@@ -2556,8 +2616,8 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
               direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
               offsets[first + 1U] - offsets[first], offsets[second],
               offsets[second + 1U] - offsets[second], first == second, false, true, false,
-              DirectCoulombRange::Full, 0.0, plan->screening_tolerance, plan->canonical_bounds,
-              nullptr, nullptr, nullptr, nullptr, lease.values + value_offset, nullptr, nullptr,
+              DirectCoulombRange::Full, 0.0, screening, bounds, nullptr, nullptr, nullptr, nullptr,
+              lease.values + value_offset, nullptr, nullptr,
               direct_jk_resident_bucket_count(plan, item, first, second));
           direct_jk_check(cudaGetLastError());
           value_offset += direct_jk_resident_bucket_count(plan, item, first, second);
@@ -2573,7 +2633,8 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
                                     cudaMemcpyDeviceToHost, plan->stream));
     fence.complete();
-    plan->diagnostic.resident_values_completed = value_offset;
+    direct_jk_require(omitted <= value_offset, "certified Coulomb response source inventory drift");
+    plan->diagnostic.resident_values_completed = value_offset - omitted;
     if (failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite resident Direct source values"};
@@ -2603,19 +2664,20 @@ generativeqc_status prepare_cuda_direct_jk_response_pairs(
       plan->resident_bucket_mask != (1U << 28) - 1 || !plan->resident_bucket_offsets.empty() ||
       plan->canonical_transform || plan->diagnostic.batch_size != 1 ||
       plan->canonical_batch.nbf != plan->batch.nbf || plan->screening_tolerance != 0.0 ||
-      plan->diagnostic.nbf < 32 || plan->diagnostic.nbf > 96)
+      plan->diagnostic.nbf < 32 || (include_exchange && plan->diagnostic.nbf > 96))
     return GENERATIVEQC_STATUS_SUCCESS;
   return direct_jk_guard(plan, detail, [&] {
     const auto nao = plan->diagnostic.nbf;
-    const auto pairs = nao * (nao + 1) / 2;
-    const auto stride = (pairs + 31) / 32 * 32;
+    const auto pairs = direct_jk_product(nao, direct_jk_sum(nao, 1)) / 2;
+    const auto stride = direct_jk_sum(pairs, 31) / 32 * 32;
     // This also bounds the odd exchange path for a fully asymmetric density.
-    const auto work = pairs * pairs * (include_exchange ? 3 : 1);
-    const auto plane = pairs * stride;
-    const auto required = plane * sizeof(double) * (include_exchange ? 2 : 1);
+    const auto work = direct_jk_product(direct_jk_product(pairs, pairs), include_exchange ? 3 : 1);
+    const auto plane = direct_jk_product(pairs, stride);
+    const auto required = direct_jk_product(plane, sizeof(double) * (include_exchange ? 2 : 1));
     if (required > maximum_bytes || work > maximum_products) return;
-    direct_jk_require(plan->resident_value_count == pairs * (pairs + 1) / 2,
-                      "Coulomb pair layout requires a complete canonical source");
+    direct_jk_require(
+        plan->resident_value_count == direct_jk_product(pairs, direct_jk_sum(pairs, 1)) / 2,
+        "Coulomb pair layout requires a complete canonical source");
     const auto total = direct_jk_sum(plan->device_bytes, required);
     const auto diagnostic_total = direct_jk_sum(plan->diagnostic.device_bytes, required);
     struct PairLease {
@@ -2666,6 +2728,37 @@ generativeqc_status prepare_cuda_direct_jk_response_pairs(
     plan->diagnostic.host_preparation_bytes += host_growth;
     bytes = required;
     product_bound = work;
+  });
+}
+
+CudaDirectCoulombRows cuda_direct_coulomb_rows(const CudaDirectJkPlan* plan,
+                                               cudaStream_t stream) noexcept {
+  if (!plan || plan->stream != stream || plan->resident_exchange_pairs) return {};
+  return {plan->resident_coulomb_pairs, plan->resident_pair_stride};
+}
+
+generativeqc_status retire_cuda_direct_jk_response_values(CudaDirectJkPlan* plan,
+                                                          std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan && plan->resident_coulomb_pairs && !plan->resident_exchange_pairs &&
+                          plan->resident_values,
+                      "retiring resident Direct values requires a complete Coulomb row lease");
+    const auto allocation =
+        std::find(plan->allocations.begin(), plan->allocations.end(), plan->resident_values);
+    const auto bytes = plan->diagnostic.resident_value_bytes;
+    direct_jk_require(allocation != plan->allocations.end() && bytes &&
+                          bytes <= plan->device_bytes && bytes <= plan->diagnostic.device_bytes,
+                      "resident Direct value allocation accounting drift");
+    // Row publication fenced on this stream. Do not change either ledger or
+    // destructor ownership unless the physical release succeeds.
+    direct_jk_check(runtime::resource_cuda_free(*allocation));
+    plan->allocations.erase(allocation);
+    plan->resident_values = nullptr;
+    plan->resident_value_count = 0;
+    plan->diagnostic.resident_value_count = 0;
+    plan->diagnostic.resident_value_bytes = 0;
+    plan->device_bytes -= bytes;
+    plan->diagnostic.device_bytes -= bytes;
   });
 }
 

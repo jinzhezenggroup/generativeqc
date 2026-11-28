@@ -126,9 +126,17 @@ def test_screened_frozen_jk_is_private_and_bounded(tmp_path: Path) -> None:
     _native(fixture, tmp_path, part="full_hybrid", cache_mode="screened-table")
 
 
-@pytest.mark.parametrize("primitives,p_centers", ((1, 2), (3, 2), (3, 3)))
+@pytest.mark.parametrize(
+    "primitives,p_centers,part",
+    (
+        (1, 2, "full_hybrid"),
+        (3, 2, "full_hybrid"),
+        (3, 3, "full_hybrid"),
+        (3, 2, "coulomb"),
+    ),
+)
 def test_indexed_frozen_jk_matches_dense_replay(
-    tmp_path: Path, primitives: int, p_centers: int
+    tmp_path: Path, primitives: int, p_centers: int, part: str
 ) -> None:
     """Cover short and two-chunk radial folds, including three distinct p centers."""
     fixture = _fixture(spins=1)
@@ -154,7 +162,7 @@ def test_indexed_frozen_jk_matches_dense_replay(
         panels=np.stack([0.25 * np.eye(nao) + 0.05, np.zeros((nao, nao))]),
         direction=np.zeros((4, 3)),
     )
-    _native(fixture, tmp_path, part="full_hybrid", cache_mode="indexed-table")
+    _native(fixture, tmp_path, part=part, cache_mode="indexed-table")
 
 
 def _oracle(fixture: dict, part: str) -> tuple:
@@ -310,10 +318,9 @@ def test_native_jk_retained_window_budget_fallback(
     )
     assert retained_work["retained_source_bytes"] > 0
     assert streamed_work["retained_source_bytes"] == 0
-    assert (
-        retained_work["bytes"] - streamed_work["bytes"]
-        == retained_work["retained_source_bytes"]
-    )
+    # The streaming plan may spend part of the saved bytes on reusable
+    # geometry scratch; retained source bytes are not the arena size delta.
+    assert streamed_work["bytes"] < retained_work["bytes"]
     assert retained_work["streaming_tiles"] == streamed_work["streaming_tiles"] > 1
     assert retained_work["components"] == streamed_work["components"]
     for actual, expected in zip(retained, streamed, strict=True):

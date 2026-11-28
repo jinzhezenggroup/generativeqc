@@ -10,6 +10,7 @@ generativeqc::dft::CudaKsFinalStateToken configure(unsigned spins, bool fitted) 
   using namespace generativeqc;
   queue_test::spins = spins;
   queue_test::fitted = fitted;
+  queue_test::pure = queue_test::allow_pair_rows = false;
   queue_test::revoked = queue_test::capturing = false;
   std::fill(queue_test::metadata.begin(), queue_test::metadata.end(), 0);
   auto& primary = scf::primary.model;
@@ -149,6 +150,52 @@ void run_resident(unsigned spins, queue_test::ResidentFailure failure) {
   queue_test::resident_failure = Failure::none;
   std::cout << "PASS resident spins=" << spins << " failure=" << static_cast<int>(failure) << '\n';
 }
+
+void run_deferred_audit(bool allow_rows, bool matching_fock) {
+  using namespace generativeqc;
+  auto token = configure(1, false);
+  queue_test::pure = true;
+  queue_test::allow_pair_rows = allow_rows;
+  scf::primary.model.spec.exchange.present = false;
+  token.identity.determinant.model = scf::primary.model;
+  token.identity.model.functional = 2;
+  token.identity.model.nonlocal_correlation.reset();
+  token.identity.model.range_correction.reset();
+  auto* metadata = queue_test::metadata.data();
+  std::fill_n(metadata, 4, 1.0);        // core Hamiltonian
+  std::fill_n(metadata + 32, 4, 2.0);   // density, giving J = 8 in this fixture
+  std::fill_n(metadata + 112, 4, 4.0);  // XC potential
+  std::fill_n(metadata + 8, 4, matching_fock ? 13.0 : 12.0);
+
+  methods::PreparedBatch batch;
+  dft::CudaKsWb97mvResponse owner;
+  dft::CudaKsWb97mvResponseOptions options;
+  options.defer_resident_integrals = options.audit_after_resident_admission = true;
+  options.grid.wide_cartesian_grid = true;
+  std::string detail;
+  expect(owner.prepare(batch, 0, token, options, detail) == GENERATIVEQC_STATUS_SUCCESS,
+         detail.c_str());
+  double direction[4]{1, 1, 1, 1}, output[4]{27, 27, 27, 27};
+  const auto action = [&] { return owner.apply(direction, output, queue_test::stream); };
+  expect(action() == cudaErrorInvalidResourceHandle && output[0] == 27,
+         "deferred owner published an action before the Fock audit");
+  const auto admitted = owner.retain_integrals(1024, true, detail, true);
+  if (matching_fock) {
+    expect(admitted == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
+    expect(owner.work().reference_pair_products == (allow_rows ? 16 : 0) &&
+               owner.work().reference_quartets == (allow_rows ? 0 : 1),
+           "the audit did not use the admitted provider after row admission/refusal");
+    expect(action() == cudaSuccess && output[0] == 4,
+           "successful audit did not admit the physical action");
+  } else {
+    expect(admitted == GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+               detail.find("accepted SCF Fock") != std::string::npos,
+           "a discrepant reconstructed Fock passed its deferred audit");
+    expect(action() == cudaErrorInvalidResourceHandle && output[0] == 27,
+           "failed audit published a response action");
+  }
+  expect(queue_test::pending.empty(), "deferred audit left borrowed work outstanding");
+}
 }  // namespace
 
 int main() {
@@ -162,6 +209,8 @@ int main() {
             queue_test::ResidentFailure::values_oom, queue_test::ResidentFailure::numerical,
             queue_test::ResidentFailure::unsupported, queue_test::ResidentFailure::creation_device})
         run_resident(spins, failure);
+    for (bool allow_rows : {false, true})
+      for (bool matching_fock : {false, true}) run_deferred_audit(allow_rows, matching_fock);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

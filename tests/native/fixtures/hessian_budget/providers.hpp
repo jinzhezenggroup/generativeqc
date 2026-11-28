@@ -25,7 +25,42 @@ inline cudaError_t resource_cuda_malloc(T** output, std::size_t bytes) {
   return cudaMalloc(reinterpret_cast<void**>(output), bytes);
 }
 inline cudaError_t resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+namespace cuda_trace {
+struct TraceShape {
+  std::size_t systems, nao, naux;
+  bool source_backed, streamed;
+};
+struct TraceOperation {
+  TraceOperation(const char*, cudaStream_t, TraceShape) {}
+};
+template <class Function>
+decltype(auto) trace_call(const char*, cudaStream_t, Function&& function) {
+  return function();
+}
+inline void trace_counter(const char*, std::size_t) {}
+}  // namespace cuda_trace
 }  // namespace generativeqc::runtime
+
+namespace generativeqc::tensor {
+struct CudaContractionContext {
+  static constexpr std::size_t kProviderAllowance = 96ULL << 20;
+  bool prepare(cudaStream_t) { return false; }
+  void* handle() const { return nullptr; }
+};
+}  // namespace generativeqc::tensor
+
+namespace generativeqc::solver::cuda {
+struct PreparedSymmetricEigenHandles {
+  struct View {
+    void* solver{};
+  };
+  int create() { return 1; }
+  int bind_stream(cudaStream_t) { return 1; }
+  void reset() {}
+  View view() const { return {}; }
+};
+inline int query_lower_cholesky(void*, int, double*, int&) { return 1; }
+}  // namespace generativeqc::solver::cuda
 
 namespace stub {
 inline std::size_t points = 8;
@@ -132,19 +167,14 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&, const CudaWb9
               : stub::grid_scalar();
   return cudaSuccess;
 }
+CudaWb97mvGridResponse::CudaWb97mvGridResponse() = default;
 CudaWb97mvGridResponse::~CudaWb97mvGridResponse() = default;
-// Host resource doubles do not support the optional numerical weight fold.
+std::size_t CudaWb97mvGridResponse::wide_grid_provider_allowance() noexcept { return 0; }
+cudaError_t CudaWb97mvGridResponse::retain_wide_nuclear_products(std::size_t) noexcept {
+  return cudaSuccess;
+}
 bool CudaWb97mvGridResponse::admits_cartesian_mixed(std::size_t) const noexcept { return false; }
 const double* CudaWb97mvGridResponse::private_becke_energy() const noexcept { return nullptr; }
-std::size_t CudaGridGeometryResponse::cartesian_weight_fold_workspace() const noexcept { return 0; }
-std::size_t CudaGridGeometryResponse::cartesian_weight_fold_provider_allowance() noexcept {
-  return 0;
-}
-cudaError_t CudaGridGeometryResponse::prepare_cartesian_weight_fold(const double*, void*,
-                                                                    std::size_t,
-                                                                    cudaStream_t) noexcept {
-  return cudaErrorNotSupported;
-}
 cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                             const CudaWb97mvGridOptions& options,
                                             const CudaWb97mvGridReference&, void*,
@@ -171,6 +201,15 @@ cudaError_t CudaGridGeometryResponse::prepare(const CudaGridGeometryShape& shape
   if (error != cudaSuccess || required != bytes) return cudaErrorInvalidValue;
   work_.workspace_bytes = bytes;
   return cudaSuccess;
+}
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_workspace() const noexcept { return 0; }
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_provider_allowance() noexcept {
+  return 0;
+}
+cudaError_t CudaGridGeometryResponse::prepare_cartesian_weight_fold(const double*, void*,
+                                                                    std::size_t,
+                                                                    cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
 }
 std::size_t cuda_ks_one_electron_workspace(const core::System&,
                                            const integrals::CudaOneElectronShape&,
@@ -210,7 +249,7 @@ generativeqc_status CudaKsWb97mvResponse::prepare(methods::PreparedBatch&, std::
   return impl_->allocate(1200, options.max_device_bytes, stub::Provider::induced);
 }
 CudaKsWb97mvResponseWork CudaKsWb97mvResponse::work() const noexcept { return impl_->work; }
-generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, bool, std::string&) {
+generativeqc_status CudaKsWb97mvResponse::retain_integrals(std::size_t, bool, std::string&, bool) {
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t) noexcept {
@@ -219,6 +258,29 @@ cudaError_t CudaKsWb97mvResponse::retain_fixed_grid_points(std::size_t) noexcept
 cudaError_t CudaKsWb97mvResponse::retain_transition_builder(const response::CudaCpksShape&,
                                                             std::size_t) noexcept {
   return cudaSuccess;
+}
+bool CudaKsWb97mvResponse::can_seed_direct_operator(const response::CudaCpksShape&) const noexcept {
+  return false;
+}
+bool CudaKsWb97mvResponse::can_seed_fitted_operator(const response::CudaCpksShape&) const noexcept {
+  return false;
+}
+bool CudaKsWb97mvResponse::has_transition_builder() const noexcept { return false; }
+cudaError_t CudaKsWb97mvResponse::retain_metric_projection(const double*, std::size_t) noexcept {
+  return cudaSuccess;
+}
+const double* CudaKsWb97mvResponse::metric_projection(std::size_t) const noexcept {
+  return nullptr;
+}
+cudaError_t CudaKsWb97mvResponse::seed_direct_operator(void*, const response::CudaCpksShape&,
+                                                       const response::CudaCpksReference&, double*,
+                                                       cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
+cudaError_t CudaKsWb97mvResponse::seed_fitted_operator(void*, const response::CudaCpksShape&,
+                                                       const response::CudaCpksReference&, double*,
+                                                       cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
 }
 cudaError_t CudaKsWb97mvResponse::seed_local_xc(void*, const response::CudaCpksShape&,
                                                 const response::CudaCpksReference&, double*,
@@ -305,6 +367,7 @@ STUB_PROVIDER(CudaKsWb97mvDfResponse, CudaWb97mvDfOptions, CudaWb97mvDfWork, 900
 STUB_PROVIDER(CudaKsWb97mvEcpNuclear, integrals::CudaEcpNuclearOptions,
               integrals::CudaEcpNuclearWork, 1100, stub::Provider::ecp, const&)
 #undef STUB_PROVIDER
+integrals::CudaDfNuclearShape CudaKsWb97mvDfNuclear::shape() const noexcept { return {}; }
 std::size_t CudaKsWb97mvEcpNuclear::mandatory_workspace(const core::System&,
                                                         const CudaWb97mvGridShape&,
                                                         integrals::CudaEcpNuclearOptions) {

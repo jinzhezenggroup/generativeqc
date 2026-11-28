@@ -4,7 +4,9 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <new>
 #include <optional>
 #include <vector>
 
@@ -19,10 +21,24 @@ namespace generativeqc::integrals {
 struct CoulombDerivativeEnvelope {
   using Polynomial = std::array<double, 4>;
   using Orders = std::array<double, 3>;
-  static_assert(std::numeric_limits<double>::is_iec559);
+  static_assert(std::numeric_limits<double>::is_iec559 &&
+                std::numeric_limits<double>::digits == 53 &&
+                std::numeric_limits<double>::max_exponent == 1024);
+  static constexpr auto infinity_bits =
+      std::bit_cast<std::uint64_t>(std::numeric_limits<double>::infinity());
 
-  static double upper(double value) noexcept { return std::nextafter(value, INFINITY); }
-  static double lower(double value) noexcept { return std::max(0.0, std::nextafter(value, 0.0)); }
+  // Nonnegative finite binary64 encodings increase by one per ULP, including
+  // across the subnormal boundary. Keep the library semantics for other inputs.
+  static double upper(double value) noexcept {
+    const auto bits = std::bit_cast<std::uint64_t>(value);
+    if (bits < infinity_bits) return std::bit_cast<double>(bits + 1);
+    return std::nextafter(value, INFINITY);
+  }
+  static double lower(double value) noexcept {
+    const auto bits = std::bit_cast<std::uint64_t>(value);
+    if (bits <= infinity_bits) return std::bit_cast<double>(bits - (bits != 0));
+    return std::max(0.0, std::nextafter(value, 0.0));
+  }
 
   /** The returned bound counts all ordered AO components in both shell pairs. */
   static std::optional<Orders> pair(const core::Shell& first, const core::Shell& second,
@@ -163,8 +179,14 @@ using CoulombSource = std::array<std::size_t, 4>;
 
 struct CoulombDerivativeOmissions {
   std::vector<CoulombSource> sources;
+  std::vector<std::uint64_t> omitted_rank_words;
+  std::size_t rank_count{}, omitted_rank_count{};
   double bound{};
   std::size_t candidate_checks{};
+
+  [[nodiscard]] std::size_t size() const noexcept {
+    return omitted_rank_words.empty() ? sources.size() : omitted_rank_count;
+  }
   // Guard the density weights on device; this is the largest unweighted
   // discarded derivative bound over individual frozen unit columns.
   static constexpr double max_bound = 1e-14;
@@ -176,10 +198,13 @@ struct CoulombDerivativeOmissions {
  * right atom: an orbit has no derivative in columns owned by other atoms.
  * Each ledger covers all three Cartesian axes and all left rows before
  * density contraction. The candidate limit bounds pair storage and the
- * rank/individual-quartet checks independently of the theoretical census. */
+ * rank/individual-quartet checks independently of the theoretical census.
+ * A bitmap-aware consumer can avoid expanding accepted ranks to shell IDs;
+ * bitmap allocation refusal still returns the bounded sorted source list. */
 inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::System& system,
                                                                double budget,
-                                                               std::size_t candidate_limit) {
+                                                               std::size_t candidate_limit,
+                                                               bool prefer_rank_bitmap = false) {
   using Envelope = CoulombDerivativeEnvelope;
   CoulombDerivativeOmissions result;
   const auto shell_count = system.shells.size();
@@ -192,8 +217,11 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
   struct Pair {
     std::array<std::size_t, 2> shells;
     Envelope::Orders bounds;
+    std::size_t ordinal;
   };
   const auto& shells = system.shells;
+  std::vector<std::array<std::size_t, 2>> canonical_pairs;
+  canonical_pairs.reserve(pair_count);
   std::array<std::vector<Pair>, 3> by_dominant_order;
   for (std::size_t first = 0; first < shell_count; ++first)
     for (std::size_t second = first; second < shell_count; ++second) {
@@ -209,7 +237,8 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
                        [](double value) { return std::isfinite(value); }))
         return {};
       const auto order = std::max_element(bound->begin(), bound->end()) - bound->begin();
-      by_dominant_order[order].push_back({{first, second}, *bound});
+      by_dominant_order[order].push_back({{first, second}, *bound, canonical_pairs.size()});
+      canonical_pairs.push_back({first, second});
     }
   for (unsigned order = 0; order < by_dominant_order.size(); ++order) {
     auto& pairs = by_dominant_order[order];
@@ -221,16 +250,57 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
   }
   struct Candidate {
     double bound;
-    CoulombSource source;
+    std::array<std::size_t, 2> pairs;
     Envelope::RightAtomBounds columns;
   };
-  const auto column_bound = [&shells](const Candidate& candidate, std::size_t atom) {
-    const auto& source = candidate.source;
-    return candidate.columns(
-        shells[source[0]].atom_index == atom || shells[source[1]].atom_index == atom,
-        shells[source[2]].atom_index == atom || shells[source[3]].atom_index == atom);
+  const auto owners = [&](const Candidate& candidate) {
+    const auto& left = canonical_pairs[candidate.pairs[0]];
+    const auto& right = canonical_pairs[candidate.pairs[1]];
+    return std::array{shells[left[0]].atom_index, shells[left[1]].atom_index,
+                      shells[right[0]].atom_index, shells[right[1]].atom_index};
   };
-  std::vector<Candidate> candidates;
+  const auto source = [&](const auto& pairs) -> CoulombSource {
+    const auto& left = canonical_pairs[pairs[0]];
+    const auto& right = canonical_pairs[pairs[1]];
+    return {left[0], left[1], right[0], right[1]};
+  };
+  // A bounded bitmap publishes stable lexicographic order without sorting
+  // accepted orbits. Sparse cases and allocation refusal retain the output sort.
+  const bool rank_representable =
+      pair_count < SIZE_MAX && pair_count <= SIZE_MAX / (pair_count + 1);
+  const auto ranks = rank_representable ? pair_count * (pair_count + 1) / 2 : 0;
+  const auto words = ranks ? 1 + (ranks - 1) / 64 : 0;
+  constexpr std::size_t max_ranks_per_check = 2;
+  std::vector<std::uint64_t> accepted;
+  if (words <= candidate_limit / (64 / max_ranks_per_check)) {
+    try {
+      accepted.resize(words);
+    } catch (const std::bad_alloc&) {
+      // A missing optional bitmap is not a certificate failure.
+    }
+  }
+  std::size_t accepted_count{};
+  const auto accept = [&](std::array<std::size_t, 2> pairs) {
+    if (accepted.empty()) {
+      result.sources.push_back(source(pairs));
+    } else {
+      const auto row = pairs[0];
+      const auto rank = row * (2 * pair_count - row + 1) / 2 + pairs[1] - row;
+      accepted[rank / 64] |= std::uint64_t{1} << (rank % 64);
+      ++accepted_count;
+    }
+  };
+  // Charge all tiny sources against every atom at once. A directed upper bound
+  // on the number of possible ranks keeps it below 1/16 of the budget;
+  // the normal owner-specific ledger still decides the remaining omissions.
+  const auto count_upper = Envelope::upper(static_cast<double>(ranks));
+  const auto tiny_cutoff =
+      accepted.empty() ? 0.0 : Envelope::lower(Envelope::lower(budget / count_upper) * 0x1p-4);
+  std::size_t tiny_count{};
+  // Nonnegative binary64 bounds in distinct exponent bins have strict
+  // order. Keep the original bound/source tie-break within each bin.
+  constexpr unsigned exponent_count = 2048;
+  std::vector<std::vector<Candidate>> candidates(exponent_count);
   const auto charge = [&](std::size_t checks) {
     if (checks > candidate_limit - result.candidate_checks) return false;
     result.candidate_checks += checks;
@@ -256,45 +326,97 @@ inline CoulombDerivativeOmissions coulomb_derivative_omissions(const core::Syste
               return Envelope::upper(
                          8 * Envelope::upper(coefficient * right.bounds[right_order])) <= budget;
             });
-        if (!charge(static_cast<std::size_t>(eligible - begin))) return {};
-        for (auto iter = begin; iter != eligible; ++iter) {
+        auto iter = begin;
+        const auto eligible_count = static_cast<std::size_t>(eligible - begin);
+        if (!charge(eligible_count)) return {};
+        if (tiny_cutoff && eligible_count >= 32 && charge(std::bit_width(eligible_count))) {
+          // Both-owner bounds dominate either single owner. Replacing all
+          // three right bounds by their dominant one produces a monotone test
+          // in the existing right-pair order, without evaluating each quartet.
+          const auto tiny_end = std::partition_point(begin, eligible, [&](const Pair& right) {
+            const auto dominant = right.bounds[right_order];
+            return Envelope::quartet(left.bounds, {dominant, dominant, dominant}).both <=
+                   tiny_cutoff;
+          });
+          tiny_count += static_cast<std::size_t>(tiny_end - begin);
+          for (; iter != tiny_end; ++iter)
+            accept({std::min(left.ordinal, iter->ordinal), std::max(left.ordinal, iter->ordinal)});
+        }
+        for (; iter != eligible; ++iter) {
           const auto& first = left.shells < iter->shells ? left : *iter;
           const auto& second = left.shells < iter->shells ? *iter : left;
           Candidate candidate{
-              0,
-              {first.shells[0], first.shells[1], second.shells[0], second.shells[1]},
-              Envelope::quartet(first.bounds, second.bounds)};
-          for (const auto shell : candidate.source)
-            candidate.bound =
-                std::max(candidate.bound, column_bound(candidate, shells[shell].atom_index));
-          if (candidate.bound <= budget) candidates.push_back(candidate);
+              0, {first.ordinal, second.ordinal}, Envelope::quartet(first.bounds, second.bounds)};
+          const auto atoms = owners(candidate);
+          const bool shared = atoms[0] == atoms[2] || atoms[0] == atoms[3] ||
+                              atoms[1] == atoms[2] || atoms[1] == atoms[3];
+          candidate.bound = shared ? candidate.columns.both
+                                   : std::max(candidate.columns.left, candidate.columns.right);
+          if (candidate.bound <= budget) {
+            const auto exponent = std::bit_cast<std::uint64_t>(candidate.bound) >> 52;
+            candidates[exponent].push_back(candidate);
+          }
         }
       }
     }
   }
-  std::sort(candidates.begin(), candidates.end(), [](const auto& left, const auto& right) {
-    if (left.bound != right.bound) return left.bound < right.bound;
-    return left.source < right.source;
-  });
-  std::vector<double> by_atom(system.atoms.size());
-  for (const auto& candidate : candidates) {
-    std::array<std::size_t, 4> atoms;
-    for (unsigned slot = 0; slot < atoms.size(); ++slot)
-      atoms[slot] = shells[candidate.source[slot]].atom_index;
-    std::sort(atoms.begin(), atoms.end());
-    const auto end = std::unique(atoms.begin(), atoms.end());
-    const auto fits = [&](std::size_t atom) {
-      return Envelope::upper(by_atom[atom] + column_bound(candidate, atom)) <= budget;
-    };
-    if (!std::all_of(atoms.begin(), end, fits)) continue;
-    for (auto iter = atoms.begin(); iter != end; ++iter) {
-      auto& total = by_atom[*iter];
-      total = Envelope::upper(total + column_bound(candidate, *iter));
-      result.bound = std::max(result.bound, total);
-    }
-    result.sources.push_back(candidate.source);
+  if (tiny_count) {
+    result.bound = Envelope::upper(Envelope::upper(static_cast<double>(tiny_count)) * tiny_cutoff);
+    if (result.bound > budget) return {};
   }
-  std::sort(result.sources.begin(), result.sources.end());
+  std::vector<double> by_atom(system.atoms.size(), result.bound);
+  for (auto& bin : candidates) {
+    std::sort(bin.begin(), bin.end(), [](const auto& left, const auto& right) {
+      if (left.bound != right.bound) return left.bound < right.bound;
+      return left.pairs < right.pairs;
+    });
+    for (const auto& candidate : bin) {
+      const auto atoms = owners(candidate);
+      std::array<double, 4> next;
+      unsigned present{};
+      bool fits = true;
+      for (unsigned slot = 0; slot < atoms.size(); ++slot) {
+        const auto atom = atoms[slot];
+        if (std::find(atoms.begin(), atoms.begin() + slot, atom) != atoms.begin() + slot) continue;
+        const auto column = candidate.columns(atoms[0] == atom || atoms[1] == atom,
+                                              atoms[2] == atom || atoms[3] == atom);
+        next[slot] = Envelope::upper(by_atom[atom] + column);
+        if (next[slot] > budget) {
+          fits = false;
+          break;
+        }
+        present |= 1U << slot;
+      }
+      if (!fits) continue;
+      for (unsigned slot = 0; slot < atoms.size(); ++slot) {
+        if (!(present & (1U << slot))) continue;
+        by_atom[atoms[slot]] = next[slot];
+        result.bound = std::max(result.bound, next[slot]);
+      }
+      accept(candidate.pairs);
+    }
+    std::vector<Candidate>{}.swap(bin);
+  }
+  if (accepted.empty()) {
+    std::sort(result.sources.begin(), result.sources.end());
+  } else if (prefer_rank_bitmap) {
+    result.omitted_rank_words = std::move(accepted);
+    result.rank_count = ranks;
+    result.omitted_rank_count = accepted_count;
+  } else {
+    result.sources.reserve(accepted_count);
+    std::size_t first{}, row{};
+    for (std::size_t word = 0; word < accepted.size(); ++word) {
+      for (auto bits = accepted[word]; bits; bits &= bits - 1) {
+        const auto rank = 64 * word + std::countr_zero(bits);
+        while (rank >= row + pair_count - first) {
+          row += pair_count - first;
+          ++first;
+        }
+        result.sources.push_back(source(std::array{first, first + rank - row}));
+      }
+    }
+  }
   return result;
 }
 

@@ -38,10 +38,13 @@ class CudaKsWb97mvDfResponse {
                               const CudaWb97mvDfOptions& options, std::string& detail);
   cudaError_t apply(const double* delta_density, const double* delta_three_center,
                     const double* delta_metric, const CudaWb97mvDfOutput& output,
-                    cudaStream_t stream, const char** detail = nullptr) noexcept;
+                    cudaStream_t stream, const char** detail = nullptr,
+                    CudaWb97mvDfAction action = CudaWb97mvDfAction::all) noexcept;
   CudaWb97mvDfShape shape() const noexcept;
   /** Includes the adapter's retained raw A, not just algebra scratch. */
   CudaWb97mvDfWork work() const noexcept;
+  cudaError_t borrow_private_coulomb_sweep(CudaDfCoulombSweepInput& output,
+                                           cudaStream_t stream) const noexcept;
 
  private:
   struct Impl;

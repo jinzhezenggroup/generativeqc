@@ -24,7 +24,10 @@
 #include "response/r2scan_stationary.cuh"
 #include "response/wb97mv_grid_response.cuh"
 #include "response/wb97mv_nuclear_grid.cuh"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "tensor/cuda_contraction.cuh"
+#include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::dft {
 namespace {
@@ -60,6 +63,7 @@ struct Layout {
       adjoint_bytes{}, adjoint_partials{}, adjoint_build_work{}, adjoint_dot_work{}, adjoint_tile{};
   std::size_t cartesian_ao_owners{};
   bool replay{}, fused_adjoint{}, reuse_right_adjoint{}, factored_only{};
+  bool wide_cartesian_grid{};
   std::size_t reference_work{}, direction_feature_work{}, direction_work{}, mixed_work{};
   std::size_t point_linearization{}, point_replay_mask{}, point_probe_status{};
   unsigned point_linearization_axes{};
@@ -74,6 +78,13 @@ bool factored_potential_work(const CudaWb97mvGridShape& shape, std::size_t& work
   return nuclear_maps::add_work(work, {shape.points, pairs, Product::ao_count + 1}) &&
          nuclear_maps::add_work(work, {shape.points, shape.nao, Product::transform_terms}) &&
          nuclear_maps::add_work(work, {pairs, 1 + (shape.points - 1) / potential_tile_limit, 128});
+}
+
+template <class Product>
+bool wide_potential_work(const CudaWb97mvGridShape& shape, std::size_t& work) noexcept {
+  return nuclear_maps::add_work(work, {shape.points, shape.nao, shape.nao, Product::ao_count}) &&
+         nuclear_maps::add_work(work, {shape.points, shape.nao, Product::transform_terms}) &&
+         nuclear_maps::add_work(work, {shape.nao, shape.nao});
 }
 
 bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& options,
@@ -116,11 +127,16 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
       !product(shape.points, shape.nao, plan.ao_elements) ||
       !product(plan.ao_elements, 4, plan.ao_elements))
     return false;
-  if (factored && (!options.nuclear_response || nonlocal || shape.spins != 1 ||
-                   !options.max_nuclear_adjoint_bytes || shape.nao <= 64 || shape.nao > 96 ||
-                   shape.points < 4096))
+  const bool wide_grid = options.wide_cartesian_grid;
+  if ((wide_grid && (!factored || !options.supports_wide_cartesian_grid() || shape.nao <= 96 ||
+                     shape.nao > 256 || shape.atoms > 96 || shape.points > 96 * 1024)) ||
+      (factored &&
+       (nonlocal || shape.spins != 1 || shape.points < 4096 ||
+        (options.nuclear_response && !options.max_nuclear_adjoint_bytes) ||
+        (!wide_grid && (!options.nuclear_response || shape.nao <= 64 || shape.nao > 96)))))
     return false;
   plan.factored_only = factored;
+  plan.wide_cartesian_grid = wide_grid;
   std::size_t centers{}, primitives{}, records{}, elements{};
   if (!product(shape.atoms, 3, centers) || !product(shape.primitives, 2, primitives) ||
       !product(shape.nao, 16, records) || centers > SIZE_MAX - primitives ||
@@ -143,6 +159,19 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
                     !product(pair_elements, options.nuclear_response ? 10 : 4, pair_elements))))
     return false;
   plan.tensor_bytes = std::max(features, potential);
+  if (wide_grid && !options.nuclear_response) {
+    // CPKS uses the same admitted contractions, but needs neither moving AO
+    // panels nor nuclear adjoint scratch. One feature product per AO field.
+    plan.tensor_bytes =
+        2 * ad::FixedPotential::ao_count * shape.nao * potential_tile_limit * sizeof(double);
+    using nuclear_maps::add_work;
+    if (!add_work(plan.reference_work, {shape.points, shape.nao, shape.nao, 4}) ||
+        !add_work(plan.reference_work,
+                  {shape.points, shape.nao, ad::large_fixed_features_epilogue}) ||
+        !wide_potential_work<ad::FixedPotential>(shape, plan.reference_work) ||
+        plan.reference_work > options.max_nuclear_affine_terms)
+      return false;
+  }
   if (options.nuclear_response) {
     if (!options.max_nuclear_affine_terms ||
         !product(shape.points, 5 * shape.spins + 4, plan.full_fields))
@@ -161,18 +190,22 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
            2 * ad::MovingPotential::ao_count * shape.nao * potential_tile_limit * sizeof(double)});
       using nuclear_maps::add_work;
       const auto feature_bound = [&](std::size_t& total, unsigned products, unsigned epilogue) {
-        return add_work(total, {shape.points, 96, shape.nao, products}) &&
-               add_work(total, {shape.points, 96, epilogue}) && add_work(total, {2, plan.matrix});
+        const auto rows = wide_grid ? shape.nao : 96;
+        return add_work(total, {shape.points, rows, shape.nao, products}) &&
+               add_work(total, {shape.points, rows, epilogue}) &&
+               (wide_grid || add_work(total, {2, plan.matrix}));
       };
       if (!feature_bound(plan.reference_work, ad::large_fixed_features_products,
                          ad::large_fixed_features_epilogue) ||
-          !factored_potential_work<ad::FixedPotential>(shape, plan.reference_work) ||
+          !(wide_grid ? wide_potential_work<ad::FixedPotential>(shape, plan.reference_work)
+                      : factored_potential_work<ad::FixedPotential>(shape, plan.reference_work)) ||
           !add_work(plan.reference_work, {sum_work}) ||
           !feature_bound(plan.direction_feature_work, ad::large_moving_features_products,
                          ad::large_moving_features_epilogue))
         return false;
       plan.direction_work = plan.direction_feature_work;
-      if (!factored_potential_work<ad::MovingPotential>(shape, plan.direction_work) ||
+      if (!(wide_grid ? wide_potential_work<ad::MovingPotential>(shape, plan.direction_work)
+                      : factored_potential_work<ad::MovingPotential>(shape, plan.direction_work)) ||
           std::max(plan.reference_work, plan.direction_work) > options.max_nuclear_affine_terms)
         return false;
     } else {
@@ -320,7 +353,7 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
       elements = mandatory_elements;
     }
   }
-  if (factored && !plan.adjoint_bytes) return false;
+  if (factored && options.nuclear_response && !plan.adjoint_bytes) return false;
   const auto retained_elements = elements;
   if (!plan.adjoint_bytes && options.nuclear_response && options.replay_nuclear_maps &&
       reserve(plan.ao_elements, plan.staged_left_ao) &&
@@ -367,6 +400,7 @@ bool layout_impl(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& 
 
 bool layout(const CudaWb97mvGridShape& shape, const CudaWb97mvGridOptions& options,
             Layout& plan) noexcept {
+  if (options.wide_cartesian_grid) return layout_impl(shape, options, plan, true);
   if (layout_impl(shape, options, plan, false)) return true;
   plan = {};
   return layout_impl(shape, options, plan, true);
@@ -1365,6 +1399,47 @@ cudaError_t build_ao_adjoint(CudaWb97mvGridShape shape, const Layout& plan, doub
   return cudaSuccess;
 }
 
+cudaError_t wide_blas_status(cublasStatus_t status);
+__global__ void symmetrize_wide_density(const double* source, double* result, std::size_t nao);
+
+/** Build the frozen AO transpose from cached P_s A and tiled P_s dA. All
+ * four input jets of a tile have been consumed before retiring its right AO
+ * values. This needs no new arena and leaves the general density-JVP route
+ * unchanged. */
+cudaError_t build_frozen_wide_ao_adjoint(CudaWb97mvGridShape shape, const Layout& plan,
+                                         double* arena, const double* density, const double* frozen,
+                                         cudaStream_t stream,
+                                         const tensor::CudaContractionContext& blas) {
+  const auto order = static_cast<int>(shape.nao);
+  const auto panel = shape.points * shape.nao;
+  auto* symmetric = arena + plan.tensor;
+  auto* products = symmetric + plan.matrix;
+  auto* status = reinterpret_cast<int*>(arena + plan.status);
+  auto* right = arena + plan.right_ao;
+  constexpr double one = 1, zero = 0;
+  symmetrize_wide_density<<<maps::blocks(plan.matrix), 128, 0, stream>>>(density, symmetric,
+                                                                         shape.nao);
+  auto error = cudaGetLastError();
+  const auto tile_points = std::min(
+      potential_tile_limit, (plan.tensor_bytes / sizeof(double) - plan.matrix) / (4 * shape.nao));
+  for (std::size_t begin = 0; error == cudaSuccess && begin < shape.points;) {
+    const auto count = std::min(tile_points, shape.points - begin);
+    const auto tile = count * shape.nao;
+    for (unsigned axis = 0; axis < 4 && error == cudaSuccess; ++axis)
+      error = wide_blas_status(generativeqc_tensor::submit_column_gemm(
+          {blas.handle(), false, false, order, static_cast<int>(count), order, &one, symmetric,
+           order, right + axis * panel + begin * shape.nao, order, &zero, products + axis * tile,
+           order}));
+    if (error != cudaSuccess) break;
+    adjoints::frozen_ao_products<<<maps::blocks(tile), 128, 0, stream>>>(
+        {shape.nao, shape.points}, begin, count, frozen, products, arena + plan.right_partial,
+        arena + plan.base_partial, arena + plan.adjoint_first, arena + plan.adjoint_second, status);
+    error = cudaGetLastError();
+    begin += count;
+  }
+  return error;
+}
+
 bool use_warp_features(const CudaWb97mvGridShape& shape) {
   return shape.nao >= 8 && shape.nao <= 32 && shape.points >= 4096;
 }
@@ -1391,11 +1466,112 @@ __global__ void transpose_feature_densities(unsigned nao, const double* density,
   }
 }
 
+/** The five published features use symmetric AO bilinears (including both
+ * cross terms of ∇ρ). Their two geometric derivative legs can share P·AO. */
+template <bool Moving>
+__global__ void reduce_wide_features(CudaWb97mvGridShape shape, std::size_t begin,
+                                     std::size_t count, const double* ao, const double* motion,
+                                     const double* products, const double* frozen, double* fields,
+                                     int* status) {
+  const auto lane = threadIdx.x % 32;
+  const auto local = std::size_t(blockIdx.x) * (blockDim.x / 32) + threadIdx.x / 32;
+  if (local >= count) return;
+  const auto point = begin + local;
+  const auto panel = shape.points * shape.nao;
+  const auto tile = count * shape.nao;
+  double sums[5]{};
+  for (std::size_t orbital = lane; orbital < shape.nao; orbital += 32) {
+    const auto source = point * shape.nao + orbital;
+    const auto target = local * shape.nao + orbital;
+    const auto dot = [&](unsigned left, unsigned right) {
+      if constexpr (Moving) {
+        if (frozen)
+          return motion[left * panel + source] * frozen[right * panel + source] +
+                 motion[right * panel + source] * frozen[left * panel + source] +
+                 (products ? ao[left * panel + source] * products[right * tile + target] : 0.0);
+        return motion[left * panel + source] * products[right * tile + target] +
+               ao[left * panel + source] * products[(4 + right) * tile + target];
+      }
+      return ao[left * panel + source] * products[right * tile + target];
+    };
+    sums[0] += dot(0, 0);
+    for (unsigned axis = 1; axis <= 3; ++axis) {
+      sums[axis] += dot(axis, 0) + dot(0, axis);
+      sums[4] += 0.5 * dot(axis, axis);
+    }
+  }
+  for (unsigned field = 0; field < 5; ++field) {
+    for (unsigned offset = 16; offset; offset /= 2)
+      sums[field] += __shfl_down_sync(0xffffffffU, sums[field], offset);
+    if (!lane) {
+      if (!isfinite(sums[field])) atomicExch(status, 1);
+      fields[field * shape.points + point] = sums[field];
+    }
+  }
+}
+
+cudaError_t wide_blas_status(cublasStatus_t status) {
+  if (status == CUBLAS_STATUS_SUCCESS) return cudaSuccess;
+  if (status == CUBLAS_STATUS_ALLOC_FAILED) return cudaErrorMemoryAllocation;
+  return cudaErrorUnknown;
+}
+
+cudaError_t wide_features(const CudaWb97mvGridShape& shape, const double* ao, const double* motion,
+                          const double* density, const double* direction, double* scratch,
+                          double* fields, int* status, cudaStream_t stream,
+                          const tensor::CudaContractionContext* blas,
+                          const double* frozen = nullptr) {
+  if (!blas) return cudaErrorInvalidResourceHandle;
+  const auto order = static_cast<int>(shape.nao);
+  const auto panel = shape.points * shape.nao;
+  constexpr double one = 1.0, zero = 0.0;
+  for (std::size_t begin = 0; begin < shape.points;) {
+    const auto count = std::min(potential_tile_limit, shape.points - begin);
+    const auto tile = count * shape.nao;
+    const bool need_product = !(motion && frozen && !direction);
+    for (unsigned axis = 0; need_product && axis < 4; ++axis) {
+      const auto source = axis * panel + begin * shape.nao;
+      // The public density is row-major; AO and the product are column-major tiles.
+      const auto multiply = [&](const double* left, const double* right, double* product,
+                                const double* beta) {
+        return wide_blas_status(generativeqc_tensor::submit_column_gemm(
+            {blas->handle(), true, false, order, static_cast<int>(count), order, &one, left, order,
+             right + source, order, beta, product, order}));
+      };
+      auto error =
+          multiply(motion && frozen ? direction : density, ao, scratch + axis * tile, &zero);
+      if (error != cudaSuccess) return error;
+      if (motion && !frozen) {
+        auto* derivative = scratch + (4 + axis) * tile;
+        error = multiply(direction, ao, derivative, &zero);
+        if (error == cudaSuccess) error = multiply(density, motion, derivative, &one);
+        if (error != cudaSuccess) return error;
+      }
+    }
+    if (motion)
+      reduce_wide_features<true><<<feature_blocks(count), 256, 0, stream>>>(
+          shape, begin, count, ao, motion, need_product ? scratch : nullptr, frozen, fields,
+          status);
+    else
+      reduce_wide_features<false><<<feature_blocks(count), 256, 0, stream>>>(
+          shape, begin, count, ao, nullptr, scratch, nullptr, fields, status);
+    const auto error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    begin += count;
+  }
+  return cudaSuccess;
+}
+
 cudaError_t moving_features(const CudaWb97mvGridShape& shape, const Layout& plan, double* arena,
                             const double* ao, const double* density, const double* direction,
-                            double* fields, cudaStream_t stream) noexcept {
+                            double* fields, cudaStream_t stream,
+                            const tensor::CudaContractionContext* blas,
+                            const double* frozen) noexcept {
   const auto panel = shape.points * shape.nao;
   auto* status = reinterpret_cast<int*>(arena + plan.status);
+  if (plan.wide_cartesian_grid)
+    return wide_features(shape, arena + plan.ao, ao, density, direction, arena + plan.tensor,
+                         fields, status, stream, blas, frozen);
   for (unsigned spin = 0; spin < shape.spins; ++spin) {
     auto* field = fields + 5 * spin * shape.points;
     if (use_warp_features(shape)) {
@@ -1435,9 +1611,13 @@ cudaError_t moving_features(const CudaWb97mvGridShape& shape, const Layout& plan
 }
 
 cudaError_t features(const CudaWb97mvGridShape& shape, const Layout& plan, double* arena,
-                     const double* density, double* fields, cudaStream_t stream) noexcept {
+                     const double* density, double* fields, cudaStream_t stream,
+                     const tensor::CudaContractionContext* blas) noexcept {
   const auto panel = shape.points * shape.nao;
   auto* status = reinterpret_cast<int*>(arena + plan.status);
+  if (plan.wide_cartesian_grid)
+    return wide_features(shape, arena + plan.ao, nullptr, density, nullptr, arena + plan.tensor,
+                         fields, status, stream, blas);
   for (unsigned spin = 0; spin < shape.spins; ++spin) {
     auto* field = fields + 5 * spin * shape.points;
     if (use_warp_features(shape)) {
@@ -1533,13 +1713,15 @@ cudaError_t launch_fused_grid_potential(CudaWb97mvGridShape shape, const double*
 
 /** The point-contiguous tile stores each unweighted AO and transformed AO
  * once. The canonical pair reduction then streams both sets of coefficients. */
-template <class Product>
+template <class Product, bool FoldPlanes = false>
 __global__ void stage_grid_potential_tile(CudaWb97mvGridShape shape, const double* ao,
                                           const double* motion, const double* cotangent,
                                           const double* tangent, std::size_t begin,
                                           std::size_t points, double* tile, int* status) {
   const auto size = points * shape.nao;
   const auto panel = shape.points * shape.nao;
+  constexpr bool reciprocity = FoldPlanes && Product::ao_count == 8;
+  constexpr unsigned stored_planes = reciprocity ? 4 : Product::ao_count;
   for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < size;
        index += std::size_t(gridDim.x) * blockDim.x) {
     const auto point = begin + index % points;
@@ -1555,11 +1737,23 @@ __global__ void stage_grid_potential_tile(CudaWb97mvGridShape shape, const doubl
       weights[field] = cotangent[offset];
       if constexpr (Product::weight_count == 10) weights[field + 5] = tangent[offset];
     }
-    Product::right_transform(jets, weights, right);
-    for (unsigned slot = 0; slot < Product::ao_count; ++slot) {
+    if constexpr (reciprocity) {
+      // For the symmetric point operator K, dF = X + X^T where
+      // X = A^T (K dA + (dK) A / 2). The compiler owns both K transforms.
+      ad::FixedPotential::right_transform(jets + 4, weights, right);
+      ad::FixedPotential::right_transform(jets, weights + 5, right + 4);
+      for (unsigned slot = 0; slot < 4; ++slot) right[slot] += 0.5 * right[slot + 4];
+    } else {
+      Product::right_transform(jets, weights, right);
+    }
+    for (unsigned slot = 0; slot < stored_planes; ++slot) {
       if (!isfinite(right[slot])) atomicExch(status, 1);
-      tile[slot * size + index] = jets[slot];
-      tile[(slot + Product::ao_count) * size + index] = right[slot];
+      // The wide provider folds (plane, point) into the GEMM reduction
+      // dimension. The canonical reduction still owns its plane-major tile.
+      const auto offset = FoldPlanes ? (orbital * stored_planes + slot) * points + index % points
+                                     : slot * size + index;
+      tile[offset] = jets[slot];
+      tile[stored_planes * size + offset] = right[slot];
     }
   }
 }
@@ -1634,6 +1828,57 @@ __global__ void reduce_fixed_potential_pair_tiles(std::size_t nao, const double*
     output[i * nao + j] = value;
     output[j * nao + i] = value;
   }
+}
+
+template <bool Reciprocity>
+__global__ void publish_symmetric_wide_potential(std::size_t order, double* output, int* status) {
+  for (auto index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < order * order;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto row = index % order;
+    const auto column = index / order;
+    if (row < column) continue;
+    const auto transpose = row * order + column;
+    auto value = output[index];
+    if (!isfinite(value) || !isfinite(output[transpose])) atomicExch(status, 1);
+    if constexpr (Reciprocity) {
+      value += output[transpose];
+      if (!isfinite(value)) atomicExch(status, 1);
+      output[index] = value;
+    }
+    output[transpose] = value;
+  }
+}
+
+/** Use the same generated right transform as the canonical tiled assembler.
+ * The complete matrix is accumulated privately; the canonical triangle is
+ * published once to avoid differential roundoff between mirrored entries. */
+template <class Product>
+cudaError_t wide_potential(CudaWb97mvGridShape shape, const double* ao, const double* motion,
+                           const double* coefficients, const double* tangent, double* output,
+                           double* scratch, int* status, cudaStream_t stream,
+                           const tensor::CudaContractionContext* blas) {
+  if (!blas) return cudaErrorInvalidResourceHandle;
+  const auto order = static_cast<int>(shape.nao);
+  constexpr double one = 1.0, zero = 0.0;
+  constexpr bool reciprocity = Product::ao_count == 8;
+  constexpr unsigned stored_planes = reciprocity ? 4 : Product::ao_count;
+  for (std::size_t begin = 0; begin < shape.points;) {
+    const auto count = std::min(potential_tile_limit, shape.points - begin);
+    const auto tile = count * shape.nao;
+    stage_grid_potential_tile<Product, true><<<maps::blocks(tile), 128, 0, stream>>>(
+        shape, ao, motion, coefficients, tangent, begin, count, scratch, status);
+    auto error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    const auto rank = static_cast<int>(count * stored_planes);
+    error = wide_blas_status(generativeqc_tensor::submit_column_gemm(
+        {blas->handle(), true, false, order, order, rank, &one, scratch, rank,
+         scratch + stored_planes * tile, rank, begin ? &one : &zero, output, order}));
+    if (error != cudaSuccess) return error;
+    begin += count;
+  }
+  publish_symmetric_wide_potential<reciprocity>
+      <<<maps::blocks(shape.nao * shape.nao), 128, 0, stream>>>(shape.nao, output, status);
+  return cudaGetLastError();
 }
 
 std::size_t potential_tile_points(CudaWb97mvGridShape shape, const Layout& plan,
@@ -1725,9 +1970,23 @@ cudaError_t CudaWb97mvGridResponse::authenticate(cudaStream_t stream, bool compo
   return error;
 }
 
+CudaWb97mvGridResponse::CudaWb97mvGridResponse() = default;
+
+std::size_t CudaWb97mvGridResponse::wide_grid_provider_allowance() noexcept {
+  return tensor::CudaContractionContext::kProviderAllowance;
+}
+
 CudaWb97mvGridResponse::~CudaWb97mvGridResponse() {
   if (nuclear_graph_) (void)cudaGraphExecDestroy(nuclear_graph_);
   release_point_workspace();
+  release_wide_nuclear_products();
+  if (wide_grid_blas_) (void)cudaStreamSynchronize(reference_.stream);
+}
+
+void CudaWb97mvGridResponse::release_wide_nuclear_products() noexcept {
+  if (!wide_nuclear_products_) return;
+  (void)cudaStreamSynchronize(reference_.stream);
+  (void)runtime::resource_cuda_free(std::exchange(wide_nuclear_products_, nullptr));
 }
 
 void CudaWb97mvGridResponse::release_point_workspace() noexcept {
@@ -1747,6 +2006,7 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   if (nuclear_graph_) (void)cudaGraphExecDestroy(nuclear_graph_);
   nuclear_graph_ = nullptr;
   release_point_workspace();
+  release_wide_nuclear_products();
   work_ = {};
   Layout plan;
   if (!layout(shape, options, plan) || workspace_bytes < plan.bytes || !reference.authenticate ||
@@ -1768,6 +2028,21 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
   beta_ = options.revised_nonlocal ? revised_beta(options.revised_nonlocal->b) : ad::vv10_beta;
   reference_ = reference;
   workspace_ = workspace;
+  if (plan.wide_cartesian_grid) {
+    try {
+      auto blas = std::make_unique<tensor::CudaContractionContext>();
+      // A small, already-budgeted workspace lets cuBLAS parallelize the long
+      // reduction of the narrow AO output without changing the FP64 contract.
+      // Allocation refusal keeps the same stream-bound, workspace-free DGEMM.
+      if (!blas->prepare(reference.stream, tensor::CudaContractionContext::kOptionalWorkspaceBytes))
+        return cudaErrorMemoryAllocation;
+      wide_grid_blas_ = std::move(blas);
+    } catch (const std::bad_alloc&) {
+      return cudaErrorMemoryAllocation;
+    } catch (const std::exception&) {
+      return cudaErrorNotSupported;
+    }
+  }
   work_.workspace_bytes = plan.bytes;
   auto* arena = static_cast<double*>(workspace);
   auto* status = reinterpret_cast<int*>(arena + plan.status);
@@ -1782,7 +2057,8 @@ cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                    reference.points, shape.points, 4, arena + plan.ao, status,
                                    reference.stream);
   if (error == cudaSuccess)
-    error = features(shape, plan, arena, reference.density, arena + plan.base, reference.stream);
+    error = features(shape, plan, arena, reference.density, arena + plan.base, reference.stream,
+                     wide_grid_blas_.get());
   if (error != cudaSuccess) return drain(error, reference.stream);
   if (plan.cartesian_ao_owners) {
     pack_cartesian_ao_owners<<<1, 32, 0, reference.stream>>>(
@@ -1876,6 +2152,62 @@ unsigned CudaWb97mvGridResponse::transition_axes() const noexcept {
              : 0;
 }
 
+namespace {
+__global__ void symmetrize_wide_density(const double* source, double* result, std::size_t nao) {
+  for (std::size_t element = blockIdx.x * blockDim.x + threadIdx.x; element < nao * nao;
+       element += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+    const auto transpose = (element % nao) * nao + element / nao;
+    result[element] = 0.5 * source[element] + 0.5 * source[transpose];
+  }
+}
+}  // namespace
+
+cudaError_t CudaWb97mvGridResponse::retain_wide_nuclear_products(std::size_t max_bytes) noexcept {
+  Layout plan;
+  if (wide_nuclear_products_ || !options_.nuclear_response || !options_.wide_cartesian_grid ||
+      !layout(shape_, options_, plan) || !wide_grid_blas_)
+    return cudaSuccess;
+  const auto bytes = plan.ao_elements * sizeof(double);
+  if (bytes > max_bytes || bytes > options_.max_workspace_bytes - plan.bytes) return cudaSuccess;
+  auto error = authenticate(reference_.stream);
+  if (error != cudaSuccess) return error;
+  void* allocation{};
+  error = runtime::resource_cuda_malloc(&allocation, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  wide_nuclear_products_ = static_cast<double*>(allocation);
+  auto* arena = static_cast<double*>(workspace_);
+  auto* density = arena + plan.tensor;
+  const auto order = static_cast<int>(shape_.nao);
+  const auto stream = reference_.stream;
+  // Antisymmetry admitted by the audit cancels in all five bilinears.
+  symmetrize_wide_density<<<maps::blocks(plan.matrix), 128, 0, stream>>>(reference_.density,
+                                                                         density, shape_.nao);
+  error = cudaGetLastError();
+  constexpr double one = 1, zero = 0;
+  const auto panel = shape_.points * shape_.nao;
+  for (unsigned axis = 0; axis < 4 && error == cudaSuccess; ++axis)
+    error = wide_blas_status(generativeqc_tensor::submit_column_gemm(
+        {wide_grid_blas_->handle(), false, false, order, static_cast<int>(shape_.points), order,
+         &one, density, order, arena + plan.ao + axis * panel, order, &zero,
+         wide_nuclear_products_ + axis * panel, order}));
+  error = drain(error, stream);
+  if (error == cudaSuccess) error = authenticate(stream);
+  if (error != cudaSuccess) {
+    release_wide_nuclear_products();
+    if (error == cudaErrorMemoryAllocation) {
+      (void)cudaGetLastError();
+      return cudaSuccess;
+    }
+    return error;
+  }
+  work_.workspace_bytes += bytes;
+  return cudaSuccess;
+}
+
 cudaError_t CudaWb97mvGridResponse::enqueue_transition_census(int* count,
                                                               cudaStream_t stream) noexcept {
   if (auto error = authenticate(stream); error != cudaSuccess) return error;
@@ -1928,6 +2260,54 @@ cudaError_t CudaWb97mvGridResponse::enqueue_transition_tile(
     default:
       return cudaErrorNotSupported;
   }
+  return cudaGetLastError();
+}
+
+namespace {
+__global__ void pack_metric_feature_tile(std::size_t nao, std::size_t atoms, std::size_t count,
+                                         const int* offsets, const double* all_jets,
+                                         const double* occupied_jets, const double* all_rows,
+                                         const double* occupied_rows, double* fields,
+                                         int* refused) {
+  for (auto entry = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; entry < 3 * atoms * count;
+       entry += std::size_t(gridDim.x) * blockDim.x) {
+    const auto atom = entry / count / 3, axis = entry / count % 3, point = entry % count;
+    double result[5]{};
+    // S' = E U + U^T E^T. The generated RKS metric density is
+    // -(K S' P + P S' K)/2 with K=C C^T and P=2 Cocc Cocc^T. Each
+    // symmetric feature pairs both transposed legs of the same bilinear.
+    for (auto ao = offsets[atom]; ao < offsets[atom + 1]; ++ao) {
+      double all[4], occupied[4], projected_all[4], projected_occupied[4], left[5], right[5];
+      for (unsigned plane = 0; plane < 4; ++plane) {
+        const auto jet = (plane * count + point) * nao + ao;
+        const auto row = (plane * count + point) * (3 * nao) + axis * nao + ao;
+        all[plane] = all_jets[jet];
+        occupied[plane] = occupied_jets[jet];
+        projected_all[plane] = all_rows[row];
+        projected_occupied[plane] = occupied_rows[row];
+      }
+      ad::FixedPotential::transition(all, projected_occupied, left);
+      ad::FixedPotential::transition(occupied, projected_all, right);
+      for (unsigned field = 0; field < 5; ++field) result[field] -= left[field] + right[field];
+    }
+    for (unsigned field = 0; field < 5; ++field) {
+      if (!isfinite(result[field])) atomicExch(refused, 1);
+      fields[entry * 5 + field] = result[field];
+    }
+  }
+}
+}  // namespace
+
+cudaError_t CudaWb97mvGridResponse::enqueue_metric_feature_tile(
+    std::size_t count, const int* atom_offsets, const double* all_jets, const double* occupied_jets,
+    const double* all_rows, const double* occupied_rows, double* fields, int* refused,
+    cudaStream_t stream) noexcept {
+  if (auto error = authenticate(stream); error != cudaSuccess) return error;
+  if (!options_.wide_cartesian_grid || transition_axes() != 5 || !count || count > shape_.points)
+    return cudaErrorInvalidValue;
+  pack_metric_feature_tile<<<maps::blocks(3 * shape_.atoms * count), 128, 0, stream>>>(
+      shape_.nao, shape_.atoms, count, atom_offsets, all_jets, occupied_jets, all_rows,
+      occupied_rows, fields, refused);
   return cudaGetLastError();
 }
 
@@ -2019,7 +2399,11 @@ cudaError_t CudaWb97mvGridResponse::evaluate(bool response, bool defer_status) n
   for (unsigned spin = 0; spin < shape_.spins; ++spin) {
     auto* coefficients = arena + plan.coefficients + 5 * spin * shape_.points;
     auto* output = arena + (response ? plan.candidate : plan.reference) + spin * plan.matrix;
-    if (const auto tile = potential_tile_points(shape_, plan, response && defer_status))
+    if (plan.wide_cartesian_grid)
+      error = wide_potential<ad::FixedPotential>(shape_, arena + plan.ao, nullptr, coefficients,
+                                                 nullptr, output, arena + plan.tensor, status,
+                                                 stream, wide_grid_blas_.get());
+    else if (const auto tile = potential_tile_points(shape_, plan, response && defer_status))
       error = launch_tiled_grid_potential<ad::FixedPotential>(
           shape_, tile, arena + plan.ao, nullptr, coefficients, nullptr, output,
           arena + plan.tensor, status, stream, response && defer_status);
@@ -2135,7 +2519,17 @@ cudaError_t CudaWb97mvGridResponse::evaluate_nuclear(bool response, bool defer_s
   for (unsigned spin = 0; spin < shape_.spins; ++spin) {
     const auto* base = arena + plan.base_partial + 5 * spin * shape_.points;
     auto* output = arena + (response ? plan.candidate : plan.reference) + spin * plan.matrix;
-    if (const auto tile = potential_tile_points(shape_, plan)) {
+    if (plan.wide_cartesian_grid) {
+      if (response)
+        error = wide_potential<ad::MovingPotential>(shape_, arena + plan.ao, arena + plan.right_ao,
+                                                    base, partials + 5 * spin * shape_.points,
+                                                    output, arena + plan.tensor, status, stream,
+                                                    wide_grid_blas_.get());
+      else
+        error = wide_potential<ad::FixedPotential>(shape_, arena + plan.ao, nullptr, base, nullptr,
+                                                   output, arena + plan.tensor, status, stream,
+                                                   wide_grid_blas_.get());
+    } else if (const auto tile = potential_tile_points(shape_, plan)) {
       if (response)
         error = launch_tiled_grid_potential<ad::MovingPotential>(
             shape_, tile, arena + plan.ao, arena + plan.right_ao, base,
@@ -2216,6 +2610,17 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_nuclear_covector(
                                         stream);
 }
 
+cudaError_t CudaWb97mvGridResponse::enqueue_private_frozen_nuclear_direction(
+    const double* ao, const double* weights, const double* points, double* potential,
+    int* transaction_status, cudaStream_t stream) noexcept {
+  if (!transaction_status || !potential) {
+    nuclear_ready_ = false;
+    return cudaErrorInvalidValue;
+  }
+  return prepare_nuclear_direction_impl(ao, weights, points, nullptr, potential, transaction_status,
+                                        stream, true);
+}
+
 cudaError_t CudaWb97mvGridResponse::enqueue_private_induced_density_covector(
     const double* density, int* transaction_status, cudaStream_t stream) noexcept {
   const bool retained = nuclear_ready_ && !nuclear_adjoint_ready_ && transaction_status &&
@@ -2251,8 +2656,8 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_induced_density_covector(
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   // Features are affine in either density or AO motion with the other held
   // fixed. The left-field scratch is unused until the mixed contraction.
-  error =
-      features(shape_, plan, arena, arena + plan.right_density, arena + plan.left_fields, stream);
+  error = features(shape_, plan, arena, arena + plan.right_density, arena + plan.left_fields,
+                   stream, wide_grid_blas_.get());
   if (error != cudaSuccess) return drain(error, stream);
   add_density_features<<<maps::blocks(plan.fields), 128, 0, stream>>>(
       arena + plan.left_fields, arena + plan.direction, plan.fields, status);
@@ -2263,6 +2668,7 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_induced_density_covector(
   record_private_nuclear_status<<<1, 1, 0, stream>>>(status, transaction_status);
   if ((error = cudaGetLastError()) != cudaSuccess) return drain(error, stream);
   nuclear_ready_ = true;
+  nuclear_frozen_density_ = false;
   private_nuclear_status_ = transaction_status;
   ++work_.nuclear_directions;
   work_.nuclear_affine_terms += plan.direction_feature_work;  // Conservative moving-feature bound.
@@ -2271,7 +2677,7 @@ cudaError_t CudaWb97mvGridResponse::enqueue_private_induced_density_covector(
 
 cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
     const double* ao, const double* weights, const double* points, const double* density,
-    double* potential, int* transaction_status, cudaStream_t stream) noexcept {
+    double* potential, int* transaction_status, cudaStream_t stream, bool frozen_density) noexcept {
   nuclear_ready_ = false;
   private_nuclear_status_ = nullptr;
   nuclear_adjoint_ready_ = false;
@@ -2287,7 +2693,7 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
                           {{ao, plan.ao_elements},
                            {weights, shape_.points},
                            {points, 3 * shape_.points},
-                           {density, plan.matrices}},
+                           {density, frozen_density ? 0 : plan.matrices}},
                           potential, potential ? plan.matrices : 0);
   if (error != cudaSuccess) return error;
   auto* arena = static_cast<double*>(workspace_);
@@ -2302,6 +2708,11 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
                                              {weights, shape_.points, plan.right_weights},
                                              {points, 3 * shape_.points, plan.right_points},
                                              {density, plan.matrices, plan.right_density}}) {
+    if (frozen_density && offset == plan.right_density) {
+      error = cudaMemsetAsync(arena + offset, 0, count * sizeof(double), stream);
+      if (error != cudaSuccess) return drain(error, stream);
+      continue;
+    }
     error = cudaMemcpyAsync(arena + offset, input, count * sizeof(double), cudaMemcpyDeviceToDevice,
                             stream);
     if (error != cudaSuccess) return drain(error, stream);
@@ -2315,8 +2726,10 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
   if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
     return error;
   work_.nuclear_affine_terms += terms;
-  error = moving_features(shape_, plan, arena, arena + plan.right_ao, reference_.density,
-                          arena + plan.right_density, arena + plan.direction, stream);
+  error = moving_features(
+      shape_, plan, arena, arena + plan.right_ao, reference_.density,
+      frozen_density && wide_nuclear_products_ ? nullptr : arena + plan.right_density,
+      arena + plan.direction, stream, wide_grid_blas_.get(), wide_nuclear_products_);
   if (error != cudaSuccess) return drain(error, stream);
   if (!transaction_status && (error = numerical_status(status, stream)) != cudaSuccess)
     return error;
@@ -2338,6 +2751,7 @@ cudaError_t CudaWb97mvGridResponse::prepare_nuclear_direction_impl(
   }
   if (error == cudaSuccess) {
     nuclear_ready_ = true;
+    nuclear_frozen_density_ = frozen_density;
     private_nuclear_status_ = transaction_status;
     ++work_.nuclear_directions;
   }
@@ -2352,7 +2766,8 @@ cudaError_t CudaWb97mvGridResponse::enqueue_nuclear_mixed(
   auto* arena = static_cast<double*>(workspace_);
   auto* status = reinterpret_cast<int*>(arena + plan.status);
   auto queued = moving_features(shape_, plan, arena, left_ao, reference_.density,
-                                arena + plan.zero_density, arena + plan.left_fields, stream);
+                                arena + plan.zero_density, arena + plan.left_fields, stream,
+                                wide_grid_blas_.get(), wide_nuclear_products_);
   if (queued != cudaSuccess) return queued;
   const auto panel = shape_.points * shape_.nao;
   const auto* right = arena + plan.right_ao;
@@ -2529,7 +2944,14 @@ cudaError_t CudaWb97mvGridResponse::nuclear_mixed_impl(
   work_.nuclear_affine_terms += build_work + contract_work;
   if (use_adjoint) {
     if (!nuclear_adjoint_ready_) {
-      error = build_ao_adjoint(shape_, plan, arena, reference_.density, stream);
+      const bool tiled = plan.wide_cartesian_grid && private_nuclear_status_ &&
+                         nuclear_frozen_density_ && wide_nuclear_products_ && wide_grid_blas_ &&
+                         plan.tensor_bytes / sizeof(double) >= plan.matrix + 4 * shape_.nao;
+      // The existing fused work bound covers the four tiled products and
+      // generated epilogue; keep the conservative bound for this subpath.
+      error = tiled ? build_frozen_wide_ao_adjoint(shape_, plan, arena, reference_.density,
+                                                   wide_nuclear_products_, stream, *wide_grid_blas_)
+                    : build_ao_adjoint(shape_, plan, arena, reference_.density, stream);
       if (error != cudaSuccess) {
         nuclear_ready_ = false;  // The right panel may already hold some cotangent tiles.
         return drain(error, stream);
@@ -2693,7 +3115,8 @@ cudaError_t CudaWb97mvGridResponse::apply_impl(const double* direction, double* 
       options_.symmetry_relative_tolerance, status);
   error = cudaGetLastError();
   if (error == cudaSuccess)
-    error = features(shape_, plan, arena, direction, arena + plan.direction, stream);
+    error = features(shape_, plan, arena, direction, arena + plan.direction, stream,
+                     wide_grid_blas_.get());
   if (error != cudaSuccess) return failure(error);
   if (!private_panel && (error = numerical_status(status, stream)) != cudaSuccess) return error;
   if ((error = evaluate(true, private_panel)) != cudaSuccess) return error;

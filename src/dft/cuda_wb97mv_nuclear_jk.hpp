@@ -45,6 +45,8 @@ struct CudaWb97mvJkOptions {
   /** Optional source/projection batching, charged in the same workspace arena.
    * Zero or insufficient capacity retains the ordered per-group schedule. */
   std::size_t max_batch_workspace_bytes{128ULL << 20};
+  // Independent bound on read-only cross-window residency; zero streams it.
+  std::size_t max_retained_window_source_bytes{SIZE_MAX};
   /** Reusable projected shell-group tile, within the same arena/cap. Small
    * tiles retain group/incidence sum order; zero disables optional batching. */
   std::size_t max_batch_projection_bytes{16ULL << 20};
@@ -60,6 +62,9 @@ struct CudaWb97mvJkOptions {
    * ceil(limit/32) even when very few bits are set. Zero disables replay.
    * The primitive/projection/reduction and live arena limits still apply. */
   std::size_t max_frozen_replay_candidates{};
+  /** Bound a certified window's right-atom union by grouping source quartets
+   * with matching blocks of non-anchor atoms. Unscreened replay is unchanged. */
+  std::size_t frozen_atom_block_size{};
   std::size_t radial_tile{64};  ///< Primitive streaming bound, in [1,64].
   std::uint64_t max_primitive_component_evaluations{67'108'864};
   std::uint64_t max_projection_terms{268'435'456};
@@ -71,6 +76,9 @@ struct CudaWb97mvJkOptions {
   /** Prefer batched windows over unbatched resident jets for fresh directions.
    * Leave off for HVP pairs that can reuse the full last-direction cache. */
   bool prefer_fresh_direction_batches{};
+  /** Permit the contracted s/p sweep only for a certified dense-only source.
+   * The caller first checks the device's opt-in shared memory capacity. */
+  bool contract_frozen_coulomb{};
   /** Physical fraction of same-spin exchange for full_hybrid; zero otherwise. */
   double full_exchange_fraction{};
   /** Bind both radial sources from the accepted KS state. Unbound leaf probes

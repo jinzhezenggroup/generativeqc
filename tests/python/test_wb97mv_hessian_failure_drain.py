@@ -54,6 +54,22 @@ for(auto& task:tasks)task.run();return ++q::calls==q::fail?17:0;}
 int cudaGetLastError(){return ++q::launches==q::fail_launch?19:0;}
 void check(int error){if(error)throw std::runtime_error("injected failure");}
 std::size_t product(std::size_t a,std::size_t b){return a*b;}
+namespace runtime::cuda_trace {
+struct TraceShape{std::size_t batch,nao,naux;bool fp64,unused;};
+struct TraceOperation{TraceOperation(const char*,cudaStream_t,TraceShape){}};
+struct TraceRegion{TraceRegion(const char*,cudaStream_t){} void finish(){}};
+void trace_counter(const char*,std::size_t){}
+template<class Function> int trace_call(const char*,cudaStream_t,Function fn){return fn();}
+}
+constexpr int CUBLAS_STATUS_SUCCESS=0;
+namespace generativeqc_tensor {
+struct ColumnGemm{
+void* handle;bool transpose_left,transpose_right;int rows,cols,inner;
+const double *alpha,*left;int left_stride;const double* right;int right_stride;
+const double* beta;double* output;int output_stride;};
+int submit_column_gemm(const ColumnGemm&){throw std::runtime_error("unexpected BLAS call");}
+}
+const char* rhs_failure_reason(int){return "invalid upstream RHS";}
 // Instrument staging destruction without dereferencing storage after its lifetime.
 template<class T>struct TrackedVector:std::vector<T>{
 using std::vector<T>::vector;
@@ -72,8 +88,9 @@ double rhs_norm{},residual_norm{},tolerance{};
 std::size_t operator_actions{},preconditioner_actions{};CudaGmresStatus status{};};
 struct CudaCpksDenseReceipt{
 std::size_t iterations{};CudaGmresReceipt last;
-CudaCpksStatus failure{};};
-struct CudaCpksDenseReplay{CudaCpksDenseReceipt* receipt;int* column_status;struct{} solver;};
+CudaCpksStatus failure{};int upstream_flags{};};
+struct CudaCpksDenseReplay{
+CudaCpksDenseReceipt* receipt;int *column_status,*upstream_status;struct{} solver;};
 }
 struct DenseAssemblyAudit{
 std::size_t completed;int failed;response::CudaCpksDenseReceipt cpks;};
@@ -120,12 +137,19 @@ struct Geometry{int admit_actions(std::size_t){return 0;}}geometry,vv10_geometry
 struct{bool d3{};std::optional<D4Correction> d4;}corrections;
 dispersion::D4Tables d4_tables;
 dispersion::ChargeTables eeq_tables;
-bool has_df{},has_ecp{},operator_matrix{};
+bool has_df{},has_ecp{},has_exact{},operator_matrix{},cpks_factor{};
+std::size_t panels{2};
+double *xc_relaxation{},*df_relaxation{};
+struct{void* handle(){return nullptr;}}xc_relaxation_blas;
+struct{struct Shape{std::size_t nao{2},naux{};};Shape shape()const{return {};}}grid_reference;
+struct{decltype(grid_reference) nuclear;}full_df;
 struct{unsigned spins{1};}frame;
 struct{Primary* primary;void* correction{};}fock;Primary primary;
 struct{void collect_dense(const response::CudaCpksDenseReceipt&) {}}cpks_operator;
 struct Induced{
 Owner* owner;
+struct Work{std::size_t resident_pair_bytes{},resident_source_evaluations{},direct_projection_products{};};
+Work work()const{return {};}
 int collect_work(){
 double receipt{};
 const auto e=cudaMemcpyAsync(&receipt,owner->at(owner->candidate),sizeof(receipt),

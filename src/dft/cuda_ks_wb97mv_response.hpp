@@ -24,6 +24,8 @@ struct CudaKsWb97mvResponseOptions {
    * extra provider metadata remain charged to max_device_bytes; zero disables. */
   std::size_t max_resident_integral_bytes{64ULL << 20};
   bool defer_resident_integrals{false};
+  /** Private dense Direct caller: audit the reference after optional row admission. */
+  bool audit_after_resident_admission{false};
   std::size_t max_affine_term_visits{100'000'000};
   /** Padded products in generated shared-memory tiles, charged separately. */
   std::size_t max_matrix_terms{1'000'000'000};
@@ -40,7 +42,10 @@ struct CudaKsWb97mvResponseWork {
   std::size_t resident_integral_bytes{};
   std::uint64_t resident_source_evaluations{};
   std::size_t resident_pair_bytes{};
+  std::uint64_t reference_pair_products{};
   std::uint64_t response_pair_product_bound{};
+  std::size_t transition_workspace_bytes{};
+  std::uint64_t direct_projection_products{};
   CudaWb97mvGridWork grid{}, separate_vv10{};
 };
 
@@ -81,14 +86,32 @@ class CudaKsWb97mvResponse {
    * owners call this only after all mandatory consumers have reserved storage.
    * The additional-byte cap includes extra provider metadata, not just values.
    * Dense repeated-RHS callers can also admit an AO pair layout. A
-   * resource refusal keeps exact replay; numerical/device faults fail. */
+   * resource refusal keeps exact replay; numerical/device faults fail.
+   * Only a dense-only owner may request certified small-value omission.
+   * If the reference audit was deferred, this call must complete it before
+   * the first action, even when the row layout is not admitted. */
   generativeqc_status retain_integrals(std::size_t maximum_additional_bytes, bool repeated_rhs,
-                                       std::string& detail);
+                                       std::string& detail, bool dense_only = false);
   /** Spend only the remaining enclosing budget on fixed semilocal XC work. */
   cudaError_t retain_fixed_grid_points(std::size_t maximum_additional_bytes) noexcept;
   /** Bound the optional one-time RKS transition projection scratch and work. */
   cudaError_t retain_transition_builder(const response::CudaCpksShape& shape,
                                         std::size_t maximum_additional_bytes) noexcept;
+  /** Check the finite arithmetic envelope of a complete pure RKS projection,
+   * before the enclosing owner sets aside a CPKS matrix. */
+  bool can_seed_fitted_operator(const response::CudaCpksShape& shape) const noexcept;
+  bool can_seed_direct_operator(const response::CudaCpksShape& shape) const noexcept;
+  bool has_transition_builder() const noexcept;
+  /** Reserve optional batched metric RHS storage over the interleaved
+   * [coordinate][core/overlap][AO][AO] lease of the dense Hessian. */
+  cudaError_t retain_metric_projection(const double* frozen_core, std::size_t max_bytes) noexcept;
+  const double* metric_projection(std::size_t column) const noexcept;
+  static cudaError_t seed_fitted_operator(void* context, const response::CudaCpksShape& shape,
+                                          const response::CudaCpksReference& reference,
+                                          double* matrix, cudaStream_t stream) noexcept;
+  static cudaError_t seed_direct_operator(void* context, const response::CudaCpksShape& shape,
+                                          const response::CudaCpksReference& reference,
+                                          double* matrix, cudaStream_t stream) noexcept;
   static cudaError_t seed_local_xc(void* context, const response::CudaCpksShape& shape,
                                    const response::CudaCpksReference& reference, double* matrix,
                                    cudaStream_t stream) noexcept;

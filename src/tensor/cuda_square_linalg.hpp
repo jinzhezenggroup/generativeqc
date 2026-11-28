@@ -39,4 +39,24 @@ inline cublasStatus_t square_lower_solve(cublasHandle_t blas, bool right, bool t
       transpose ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, n, n, &one,
       reinterpret_cast<const double* const*>(factors), n, matrices, n, solves);
 }
+
+/** In-place FP64 solve of L L^T x = b for one column. The private handle
+ * normally has no workspace. The caller retains the factor and aligned
+ * scratch through stream completion; report any failure restoring the handle
+ * separately, since the caller cannot safely continue with that handle. */
+inline cublasStatus_t square_lower_vector_solve(cublasHandle_t blas, int order,
+                                                const double* factor, double* rhs, void* scratch,
+                                                std::size_t scratch_bytes,
+                                                cublasStatus_t& restored) noexcept {
+  constexpr double one = 1;
+  auto status = cublasSetWorkspace(blas, scratch, scratch_bytes);
+  const auto solve = [&](cublasOperation_t transpose) {
+    return cublasDtrsm(blas, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, transpose,
+                       CUBLAS_DIAG_NON_UNIT, order, 1, &one, factor, order, rhs, order);
+  };
+  if (status == CUBLAS_STATUS_SUCCESS) status = solve(CUBLAS_OP_N);
+  if (status == CUBLAS_STATUS_SUCCESS) status = solve(CUBLAS_OP_T);
+  restored = cublasSetWorkspace(blas, nullptr, 0);
+  return status;
+}
 }  // namespace generativeqc::tensor::cuda

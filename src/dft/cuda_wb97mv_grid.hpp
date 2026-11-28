@@ -4,10 +4,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 #include "dft/nonlocal_correlation/vv10_parameters.hpp"
 #include "dft/semilocal_family.hpp"
+
+namespace generativeqc::tensor {
+class CudaContractionContext;
+}
 
 namespace generativeqc::dft {
 
@@ -44,6 +49,9 @@ struct CudaWb97mvGridOptions {
   /** Optional fixed-reference FP64 point Jacobians for repeated semilocal RKS actions. */
   std::size_t max_point_linearization_bytes{};
   std::uint64_t max_nuclear_affine_terms{1ULL << 34};
+  /** Require bounded tiled FP64 contractions for supported wide dense RKS Hessians.
+   * The enclosing owner must reserve the provider separately from the arena. */
+  bool wide_cartesian_grid{false};
   /** Physical point code from the converged Fock identity. Curated and
    * split-hybrid families use disjoint codes. Response owners must verify
    * the corresponding stationary domain before constructing these options. */
@@ -54,6 +62,12 @@ struct CudaWb97mvGridOptions {
    * VV10. Molecular callers must source these options from the accepted KS
    * model; retaining only the semilocal part does not prepare a pair domain. */
   std::optional<nlc::Vv10Parameters> revised_nonlocal{};
+
+  /** Point families independently admitted to the wide FP64 product layout. */
+  [[nodiscard]] bool supports_wide_cartesian_grid() const noexcept {
+    return functional_code == semilocal_family_code(SemilocalFamily::R2scan) ||
+           functional_code == semilocal_family_code(SemilocalFamily::Pbe);
+  }
 
   [[nodiscard]] bool includes_nonlocal() const noexcept {
     return (functional_code == semilocal_family_code(SemilocalFamily::Wb97mv) ||
@@ -114,8 +128,9 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape& shape,
  */
 class CudaWb97mvGridResponse {
  public:
-  CudaWb97mvGridResponse() = default;
+  CudaWb97mvGridResponse();
   ~CudaWb97mvGridResponse();
+  static std::size_t wide_grid_provider_allowance() noexcept;
   CudaWb97mvGridResponse(const CudaWb97mvGridResponse&) = delete;
   CudaWb97mvGridResponse& operator=(const CudaWb97mvGridResponse&) = delete;
   CudaWb97mvGridResponse(CudaWb97mvGridResponse&&) = delete;
@@ -130,6 +145,8 @@ class CudaWb97mvGridResponse {
   /** Attempt optional fixed-grid residency after the enclosing owner has
    * admitted all mandatory resources. Capacity refusal keeps the scalar JVP. */
   cudaError_t retain_fixed_point_linearization(std::size_t max_bytes) noexcept;
+  /** Optional immutable P·AO planes for repeated wide nuclear directions. */
+  cudaError_t retain_wide_nuclear_products(std::size_t max_bytes) noexcept;
   /** RKS semilocal tiles for the cached occupied/virtual XC operator. Fields
    * and their weighted tangents are [rotation][point][axis]; the row
    * dimension of both column-major matrices is axes * count. A sticky
@@ -141,6 +158,13 @@ class CudaWb97mvGridResponse {
                                       std::size_t count, double* mo_jets, double* fields,
                                       double* tangents, bool correct, int* refused,
                                       cudaStream_t stream) noexcept;
+  /** Flatten the exact metric density JVP's grid features for all Cartesian
+   * RHSs. Planes are [jet][point][AO] or [jet][point][axis,AO]. */
+  cudaError_t enqueue_metric_feature_tile(std::size_t count, const int* atom_offsets,
+                                          const double* all_jets, const double* occupied_jets,
+                                          const double* all_rows, const double* occupied_rows,
+                                          double* fields, int* refused,
+                                          cudaStream_t stream) noexcept;
   void record_transition_projection(std::uint64_t products, std::uint64_t corrections) noexcept {
     work_.transition_projection_products = products;
     work_.transition_point_corrections = corrections;
@@ -175,6 +199,11 @@ class CudaWb97mvGridResponse {
                                                 const double* points, const double* density,
                                                 double* potential, int* transaction_status,
                                                 cudaStream_t stream) noexcept;
+  /** Frozen-density counterpart, with no density-direction input to replay. */
+  cudaError_t enqueue_private_frozen_nuclear_direction(const double* ao, const double* weights,
+                                                       const double* points, double* potential,
+                                                       int* transaction_status,
+                                                       cudaStream_t stream) noexcept;
   /** Arm the private mixed contractions without assembling an unused dVxc. */
   cudaError_t enqueue_private_nuclear_covector(const double* ao, const double* weights,
                                                const double* points, const double* density,
@@ -218,6 +247,7 @@ class CudaWb97mvGridResponse {
 
  private:
   void release_point_workspace() noexcept;
+  void release_wide_nuclear_products() noexcept;
   cudaError_t authenticate(cudaStream_t stream, bool composable = false) noexcept;
   cudaError_t apply_impl(const double* direction, double* output, cudaStream_t stream,
                          bool private_panel) noexcept;
@@ -227,7 +257,8 @@ class CudaWb97mvGridResponse {
   cudaError_t prepare_nuclear_direction_impl(const double* ao, const double* weights,
                                              const double* points, const double* density,
                                              double* potential, int* transaction_status,
-                                             cudaStream_t stream) noexcept;
+                                             cudaStream_t stream,
+                                             bool frozen_density = false) noexcept;
   cudaError_t build_nuclear_graph() noexcept;
   cudaError_t enqueue_nuclear_mixed(const double* left_ao, const double* mixed_ao,
                                     const double* left_weights, const double* mixed_weights,
@@ -241,14 +272,17 @@ class CudaWb97mvGridResponse {
   CudaWb97mvGridOptions options_{};
   CudaWb97mvGridReference reference_{};
   CudaWb97mvGridWork work_{};
+  std::unique_ptr<tensor::CudaContractionContext> wide_grid_blas_;
   void* workspace_{};
   void* fixed_point_workspace_{};
+  double* wide_nuclear_products_{};
   std::size_t fixed_point_bytes_{}, fixed_point_mask_offset_{};
   unsigned fixed_point_axes_{};
   double beta_{};
   bool ready_{};
   bool nuclear_ready_{};
   bool nuclear_adjoint_ready_{};
+  bool nuclear_frozen_density_{};
   int* private_nuclear_status_{};
   cudaGraphExec_t nuclear_graph_{};
 };

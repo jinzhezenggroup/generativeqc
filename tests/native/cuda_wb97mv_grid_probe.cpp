@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -145,6 +146,9 @@ void contract() {
 }
 
 void evaluate(std::string mode) {
+  const bool wide_cartesian = mode == "nuclear-r2scan-wide" || mode == "fixed-r2scan-wide" ||
+                              mode == "nuclear-pbe-wide" || mode == "fixed-pbe-wide";
+  if (wide_cartesian) mode.resize(mode.size() - 5);
   const bool bounded_factored = mode == "nuclear-pbe-factored";
   const bool tight_adjoint = mode == "nuclear-pbe-adjoint-tight";
   if (bounded_factored || tight_adjoint) mode = "nuclear-pbe";
@@ -154,13 +158,14 @@ void evaluate(std::string mode) {
   response::CudaWb97mvGridShape shape;
   std::cin >> shape.atoms >> shape.primitives >> shape.nao >> shape.points >> shape.spins;
   // Leave room to exercise the final partial tile beyond 4096 points.
-  if (!std::cin || shape.nao > 128 || shape.points > 8192 || shape.spins > 2 || shape.atoms > 128 ||
+  if (!std::cin || shape.nao > 256 || shape.points > 8192 || shape.spins > 2 || shape.atoms > 128 ||
       shape.primitives > 4096)
     throw std::runtime_error("probe shape exceeds finite limits");
   response::CudaWb97mvGridOptions options;
   const bool nuclear = mode.rfind("nuclear", 0) == 0;
   const bool scaled = mode == "nuclear-lda" || mode == "nuclear-pbe" || mode == "nuclear-b3lyp" ||
-                      mode == "nuclear-r2scan" || mode == "nuclear-m06-2x";
+                      mode == "nuclear-r2scan" || mode == "fixed-r2scan" || mode == "fixed-pbe" ||
+                      mode == "nuclear-m06-2x";
   options.nuclear_response = nuclear;
   options.replay_nuclear_maps = mode != "nuclear-serial";
   const bool test_adjoint = mode == "nuclear-pbe" && shape.spins == 1;
@@ -182,8 +187,8 @@ void evaluate(std::string mode) {
   if (scaled) {
     options.functional_code = response::semilocal_family_code(
         mode == "nuclear-lda"      ? response::SemilocalFamily::Lda
-        : mode == "nuclear-pbe"    ? response::SemilocalFamily::Pbe
-        : mode == "nuclear-r2scan" ? response::SemilocalFamily::R2scan
+        : mode.ends_with("pbe")    ? response::SemilocalFamily::Pbe
+        : mode.ends_with("r2scan") ? response::SemilocalFamily::R2scan
                                    : response::SemilocalFamily::B3lyp);
     std::cin >> options.exchange_scale >> options.correlation_scale;
   }
@@ -208,6 +213,10 @@ void evaluate(std::string mode) {
     require(
         response::cuda_wb97mv_grid_workspace(shape, no_adjoint, unusable) == cudaErrorInvalidValue,
         "over-budget affine grid was admitted without its factored replacement");
+  }
+  if (wide_cartesian) {
+    options.wide_cartesian_grid = true;
+    options.max_nuclear_adjoint_bytes = 64ULL << 20;
   }
   std::size_t bytes{};
   check(response::cuda_wb97mv_grid_workspace(shape, options, bytes));
@@ -238,7 +247,8 @@ void evaluate(std::string mode) {
                                               device, stream, authenticate, &owner};
   if (mode == "wrong-device") reference.device_id = device + 1;
   if (mode == "alias-prepare") workspace = base;
-  response::CudaWb97mvGridResponse grid;
+  auto grid_owner = std::make_unique<response::CudaWb97mvGridResponse>();
+  auto& grid = *grid_owner;
   if (mode == "capture-prepare")
     check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
   const auto prepared =
@@ -265,6 +275,7 @@ void evaluate(std::string mode) {
       require(std::abs(expected[index] - replay[index]) <= 2e-13 * (1 + std::abs(expected[index])),
               "private replay disagrees with the checked response");
     std::cout << "{\"private_replay\":true}\n";
+    grid_owner.reset();
     check(cudaStreamDestroy(other));
     check(cudaStreamDestroy(stream));
     return;
@@ -279,6 +290,13 @@ void evaluate(std::string mode) {
   if (nuclear) {
     check(prepared);
     const auto panel = 4 * shape.points * shape.nao;
+    if (wide_cartesian) {
+      check(grid.retain_wide_nuclear_products(panel * sizeof(double) - 1));
+      require(grid.work().workspace_bytes == bytes, "wide product cache exceeded its byte cap");
+      check(grid.retain_wide_nuclear_products(panel * sizeof(double)));
+      require(grid.work().workspace_bytes == bytes + panel * sizeof(double),
+              "wide product cache was not admitted");
+    }
     const auto input_right_ao = read(panel);
     auto* right_ao = storage.upload(input_right_ao);
     auto* left_ao = storage.upload(read(panel));
@@ -434,6 +452,24 @@ void evaluate(std::string mode) {
       require(!status && covector_terms < grid.work().nuclear_affine_terms - before_full,
               "covector-only preparation did not remove potential work");
     }
+    if (wide_cartesian) {
+      const auto* zero_density = storage.upload(std::vector<double>(matrices));
+      check(grid.prepare_nuclear_direction(right_ao, right_weights, right_points, zero_density,
+                                           output, stream));
+      check(mixed());
+      double reference_frozen{};
+      check(
+          cudaMemcpy(&reference_frozen, scalar, sizeof(reference_frozen), cudaMemcpyDeviceToHost));
+      check(cudaMemsetAsync(transaction, 0, sizeof(int), stream));
+      check(grid.enqueue_private_frozen_nuclear_direction(right_ao, right_weights, right_points,
+                                                          output, transaction, stream));
+      private_mixed();
+      check(cudaMemcpy(&candidate, scalar, sizeof(candidate), cudaMemcpyDeviceToHost));
+      check(cudaMemcpy(&status, transaction, sizeof(status), cudaMemcpyDeviceToHost));
+      require(!status && std::abs(candidate - reference_frozen) <=
+                             2e-12 * (1 + std::abs(reference_frozen)),
+              "tiled frozen AO products changed the mixed grid result");
+    }
     check(arm());
     check(cudaMemcpy(checked_direction.data(), output, matrices * sizeof(double),
                      cudaMemcpyDeviceToHost));
@@ -518,6 +554,7 @@ void evaluate(std::string mode) {
               << ",\"private_mixed_replay\":true"
               << ",\"private_direction_replay\":true"
               << ",\"nuclear_lifecycle\":true}\n";
+    grid_owner.reset();
     check(cudaStreamDestroy(other));
     check(cudaStreamDestroy(stream));
     return;
@@ -546,8 +583,15 @@ void evaluate(std::string mode) {
   array(potential, matrices);
   std::cout << ",\"response\":";
   array(output, matrices);
+  if (wide_cartesian && applied == cudaSuccess) {
+    check(grid.enqueue_private_response(moving, output, stream));
+    check(cudaStreamSynchronize(stream));
+    std::cout << ",\"private_response\":";
+    array(output, matrices);
+  }
   std::cout << "}\n";
   check(cudaStreamDestroy(other));
+  grid_owner.reset();
   check(cudaStreamDestroy(stream));
 }
 }  // namespace

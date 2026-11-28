@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/contracted_coulomb.hpp",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Device buffer and launch ABI for linked Cartesian contracted Coulomb jets. The integral compiler owns the derivative leaves.",
+  "regions": []
+}

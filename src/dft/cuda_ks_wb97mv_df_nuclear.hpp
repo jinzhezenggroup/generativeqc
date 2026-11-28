@@ -6,6 +6,7 @@
 #include <string>
 
 #include "dft/cuda_ks_final_state.hpp"
+#include "dft/cuda_wb97mv_df_sweep.hpp"
 #include "integrals/cuda_df_nuclear_response.hpp"
 
 namespace generativeqc::methods {
@@ -42,8 +43,15 @@ class CudaKsWb97mvDfNuclear {
                      cudaStream_t stream) noexcept;
   cudaError_t contract(const double* direction, const integrals::CudaDfNuclearWeights& weights,
                        const integrals::CudaDfNuclearVectors& output, cudaStream_t stream) noexcept;
+  cudaError_t contract_fixed_weights(const double* direction, const double* three_center,
+                                     const double* metric, double* hvp,
+                                     cudaStream_t stream) noexcept;
   integrals::CudaDfNuclearShape shape() const noexcept;
   const integrals::CudaDfNuclearWork& work() const noexcept;
+  /** Optional dense full-range source pass; never used for an arbitrary HVP. */
+  cudaError_t private_frozen_sweep(const double* charge, CudaDfFrozenTables output,
+                                   std::size_t max_scratch_bytes, int* status,
+                                   cudaStream_t stream) noexcept;
 
  private:
   struct Impl;

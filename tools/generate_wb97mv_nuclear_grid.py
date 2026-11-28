@@ -170,7 +170,45 @@ def _fused_ao_adjoints(programs: dict[str, Program]) -> str:
         lines.append(
             f"      {symbol} += {matrix_value} * {operand}[{orbital[-1]} * size + position];"
         )
-    return "\n".join([*lines, "    }", *coefficients, *outputs, "  }", "}", "}"])
+    # Reuse the same IR-derived coefficients with symmetric density products.
+    # The frozen-density schedule supplies P_s A and P_s dA, P_s=(P+P^T)/2.
+    # Store both cotangents in full-panel order after all reads of the tile.
+    precontracted = [
+        "__global__ void frozen_ao_products(Extents shape, std::size_t begin, std::size_t count,",
+        "                       const double* base, const double* moving,",
+        "                       const double* first_partial, const double* base_partial,",
+        "                       double* first, double* second, int* status) {",
+        "  if (atomicAdd(status, 0)) return;",
+        "  const auto points = shape.points, size = points * shape.nao;",
+        "  const auto tile_size = count * shape.nao;",
+        "  for (std::size_t lane = blockIdx.x * blockDim.x + threadIdx.x; lane < tile_size;",
+        "       lane += static_cast<std::size_t>(gridDim.x) * blockDim.x) {",
+        "    const auto index = lane + begin * shape.nao, point = index / shape.nao;",
+    ]
+    for (matrix, orbital), symbol in contractions.items():
+        if matrix == "d_density":
+            value = "0.0"
+        elif orbital.startswith("d_"):
+            value = f"2.0 * moving[{orbital[-1]} * tile_size + lane]"
+        else:
+            value = f"2.0 * base[{orbital[-1]} * size + index]"
+        precontracted.append(f"    const double {symbol} = {value};")
+    return "\n".join(
+        [
+            *lines,
+            "    }",
+            *coefficients,
+            *outputs,
+            "  }",
+            "}",
+            *precontracted,
+            *coefficients,
+            *(line.replace("* tile_size + lane", "* size + index") for line in outputs),
+            "  }",
+            "}",
+            "}",
+        ]
+    )
 
 
 def _leg_variables(side: str, point: str) -> dict[str, str]:

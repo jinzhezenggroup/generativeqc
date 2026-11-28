@@ -10,6 +10,7 @@
 
 #include "core/types.hpp"
 #include "dft/ao_grid.hpp"
+#include "dft/contracted_coulomb.hpp"
 #include "dft/cuda_wb97mv_nuclear_jk.hpp"
 #include "integrals/coulomb_derivative_envelope.hpp"
 #include "molecule/basis.hpp"
@@ -77,8 +78,8 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
                     CudaWb97mvJkOutput output, bool expect_indexed = false) {
   using Failure = CudaWb97mvJkAdmissionFailure;
   const auto certificate = integrals::coulomb_derivative_omissions(
-      system, integrals::CoulombDerivativeOmissions::max_bound, 200);
-  require(!certificate.sources.empty(), "fixture requires certified omissions");
+      system, integrals::CoulombDerivativeOmissions::max_bound, 200, expect_indexed);
+  require(certificate.size() != 0, "fixture requires certified omissions");
   std::size_t bytes{};
   check(cuda_wb97mv_jk_workspace(shape, shells, options, bytes));
   CudaWb97mvNuclearJk exact;
@@ -96,7 +97,7 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   options.prefer_fresh_direction_batches = true;
   const auto pairs = shells.size() * (shells.size() + 1) / 2;
   const auto candidates = pairs * (pairs + 1) / 2;
-  const auto retained_sources = candidates - certificate.sources.size();
+  const auto retained_sources = candidates - certificate.size();
   auto replay_options = options;
   replay_options.max_source_groups = 1;
   replay_options.max_frozen_replay_candidates = retained_sources - 1;
@@ -105,6 +106,15 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
               !bytes && reason == Failure::canonical_source_limit,
           "replay admitted more individually visited groups than budgeted");
   replay_options.max_frozen_replay_candidates = retained_sources;
+  if (expect_indexed) {
+    require(!certificate.omitted_rank_words.empty(), "indexed fixture requires a rank bitmap");
+    auto malformed = certificate;
+    ++malformed.rank_count;
+    require(cuda_wb97mv_jk_workspace(shape, shells, replay_options, bytes, nullptr, &malformed) ==
+                    cudaErrorInvalidValue &&
+                !bytes,
+            "frozen replay accepted a bitmap for a different shell census");
+  }
   auto short_work = replay_options;
   short_work.max_primitive_component_evaluations = 1;
   require(cuda_wb97mv_jk_workspace(shape, shells, short_work, bytes, nullptr, &certificate) ==
@@ -163,9 +173,39 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
               replay_work.reduction_terms == retained_work.reduction_terms &&
               replay_work.source_groups == retained_work.source_groups,
           "bounded host replay changed the semantic work");
-  // Changing the window width changes the rounding boundaries of the
-  // translation folds but must not change the authenticated frozen table.
+  CudaWb97mvNuclearJk contracted;
+  bool contracted_supported{};
+  if (options.part == CudaWb97mvJkPart::coulomb) {
+    int shared_bytes{};
+    check(cudaDeviceGetAttribute(&shared_bytes, cudaDevAttrMaxSharedMemoryPerBlockOptin,
+                                 reference.device_id));
+    contracted_supported = shared_bytes >= hessian_aot::contracted::max_quartet_shared_bytes;
+  }
+  if (contracted_supported) {
+    auto contracted_options = replay_options;
+    contracted_options.contract_frozen_coulomb = true;
+    check(plan.build(shape, shells, contracted_options, nullptr, &certificate));
+    const auto contracted_bytes = plan.bytes();
+    check(contracted.prepare(plan, reference, storage.allocate(contracted_bytes / sizeof(double)),
+                             contracted_bytes));
+    require(
+        contracted.apply(motion, density, delta, output, storage.stream) == cudaErrorNotSupported,
+        "certified contraction published an arbitrary HVP");
+    require(sweep(contracted) == 0, "contracted table rejected valid fixed-density columns");
+    require(contracted.work().integral_source_builds == 1 &&
+                contracted.work().source_groups == retained_sources,
+            "contracted sweep did not visit the certified inventory once");
+    for (std::size_t entry = 0; const auto value : download(table, values))
+      require(std::abs(value - screened_values[entry++]) < 1e-13,
+              "contracted frozen source differs from the certified replay");
+    contracted_options.max_workspace_bytes = bytes;
+    check(plan.build(shape, shells, contracted_options, nullptr, &certificate));
+    require(plan.bytes() <= bytes, "contracted admission bypassed the caller's arena cap");
+  }
+  // Reordering and resizing certified windows changes the rounding boundaries
+  // of translation folds but must not change the authenticated frozen table.
   options.source_tile = candidates;
+  options.frozen_atom_block_size = 1;
   check(plan.build(shape, shells, options, nullptr, &certificate));
   CudaWb97mvNuclearJk wider;
   const auto wide_bytes = plan.bytes();
@@ -193,11 +233,15 @@ void screened_table(const core::System& system, const CudaWb97mvJkShape& shape,
   check(cudaMemcpyAsync(density, &outside, sizeof(double), cudaMemcpyHostToDevice, storage.stream));
   require(sweep(screened) != 0 && sweep(replayed) != 0,
           "screened table did not reject out-of-bound density");
+  if (contracted_supported)
+    require(sweep(contracted) != 0, "contracted table bypassed the certificate density bound");
   const double inside = 0.5;
   check(cudaMemcpyAsync(density, &inside, sizeof(double), cudaMemcpyHostToDevice, storage.stream));
   check(cudaMemcpyAsync(delta, &inside, sizeof(double), cudaMemcpyHostToDevice, storage.stream));
   require(sweep(screened) != 0 && sweep(replayed) != 0,
           "screened frozen table accepted nonzero density response");
+  if (contracted_supported)
+    require(sweep(contracted) != 0, "contracted frozen table accepted nonzero density response");
   std::cout << "{\"screened_table\":true}\n";
 }
 
@@ -264,12 +308,7 @@ void run(const char* source, const char* result, const std::string& cache_mode) 
   if (cache_mode == "fresh-retained" || cache_mode == "fresh-streamed") {
     options.max_resident_integral_bytes = 1;
     options.source_tile = 2;
-    if (cache_mode == "fresh-streamed") {
-      // Set the aggregate cap to the same plan without the optional tail.
-      std::size_t streamed{};
-      check(cuda_wb97mv_jk_workspace(shape, shells, options, streamed));
-      options.max_workspace_bytes = streamed;
-    }
+    if (cache_mode == "fresh-streamed") options.max_retained_window_source_bytes = 0;
     options.prefer_fresh_direction_batches = true;
   }
   if (cache_mode == "streamed") options.source_tile = 0;

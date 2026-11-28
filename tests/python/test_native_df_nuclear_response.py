@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from itertools import product
+from itertools import combinations_with_replacement, product
 from math import prod
 from typing import TYPE_CHECKING
 
@@ -33,9 +33,33 @@ def _fixture(
     if domain == "ss":
         orbital = [(0, 0, radial), (1, 0, [[0.9, 0.6], [0.31, 0.25]])]
         auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]]), (1, 0, [[0.75, 1.0]])]
-    elif domain == "sp":
+    elif domain == "sp-cross-window":
+        # More than 4,096 s/s/s groups, some inactive in the unit RHS. Also
+        # change angular closure so a packed submission must stop at its edge.
+        orbital = [
+            (atom, 0, [[1.5 - 0.07 * index, 1.0]])
+            for atom, count in ((0, 11), (1, 15))
+            for index in range(count)
+        ]
+        auxiliary = [
+            (atom, 0, [[1.1 - 0.08 * index, 1.0]])
+            for atom, count in ((0, 6), (1, 8))
+            for index in range(count)
+        ]
+        auxiliary.append((1, 1, [[0.65, 1.0]]))
+    elif domain in ("sp", "sp-multiwarp", "sp-contracted-sweep"):
         orbital = [(0, 0, radial), (1, 1, [[0.9, 0.6], [0.31, 0.25]])]
         auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]]), (1, 1, [[0.75, 1.0]])]
+        if domain == "sp-multiwarp":
+            contracted_p = [[1.5, 0.18], [0.9, 0.6], [0.31, -0.25], [0.13, 0.1]]
+            orbital[1] = (1, 1, contracted_p)
+            auxiliary[1] = (1, 1, contracted_p)
+        if domain == "sp-contracted-sweep":
+            orbital[1] = (1, 1, [[0.9, 0.6], [0.31, -0.2], [0.14, 0.36]])
+            auxiliary = [
+                (0, 1, [[1.2, 0.5], [0.39, 0.4], [0.15, -0.25]]),
+                (1, 0, radial),
+            ]
     elif domain == "df":
         orbital = [(0, 2, radial), (1, 3, [[0.7, 0.8], [0.22, -0.1]])]
         auxiliary = [(0, 0, [[0.6, 0.8], [0.19, -0.2]])]
@@ -112,6 +136,8 @@ def _native(
     tile: int = 64,
     reject: int = 0,
     retain_tape: bool = False,
+    batch_sp: bool = False,
+    contracted_sweep: bool = False,
 ) -> tuple:
     executable = os.environ.get("GENERATIVEQC_CUDA_DF_NUCLEAR_PROBE")
     if not executable:
@@ -125,9 +151,17 @@ def _native(
             executable,
             str(source),
             str(result),
-            *(["--retain-tape"] if retain_tape else []),
+            *(
+                ["--contracted-sweep"]
+                if contracted_sweep
+                else ["--batch-sp"]
+                if batch_sp
+                else ["--retain-tape"]
+                if retain_tape
+                else []
+            ),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=180,
@@ -138,6 +172,7 @@ def _native(
             "PYTHONPATH": "/nonexistent",
         },
     )
+    assert completed.returncode == 0, completed.stderr
     receipt = json.loads(completed.stdout)
     if reject:
         assert receipt == {"prepare_rejected": True} and not result.exists()
@@ -296,6 +331,38 @@ def test_raw_df_resident_directional_source(tmp_path: Path) -> None:
     _qualify_raw_df_source("ss", False, False, 64, tmp_path, retain_tape=True)
 
 
+@pytest.mark.parametrize("coordinate", (None, 0, 5))
+def test_raw_df_cartesian_sp_batch(coordinate: int | None, tmp_path: Path) -> None:
+    """Qualify mixed AOT closures and their directional tape against libcint."""
+    _qualify_raw_df_source(
+        "sp", False, False, 64, tmp_path, batch_sp=True, coordinate=coordinate
+    )
+
+
+def test_raw_df_cartesian_sp_batch_multichunk(tmp_path: Path) -> None:
+    """Fold all 64 signed radial products of a p/p/p tile across two chunks."""
+    _qualify_raw_df_source("sp-multiwarp", False, False, 64, tmp_path, batch_sp=True)
+
+
+def test_contracted_fitted_cartesian_sweep(tmp_path: Path) -> None:
+    """Match all frozen tables to the independently qualified per-column source."""
+    _qualify_raw_df_source(
+        "sp-contracted-sweep",
+        False,
+        False,
+        64,
+        tmp_path,
+        contracted_sweep=True,
+    )
+
+
+def test_raw_df_cartesian_sp_batch_cross_window(tmp_path: Path) -> None:
+    """Pack a unit JVP across source windows; reuse its tape in the pullback."""
+    _qualify_raw_df_source(
+        "sp-cross-window", False, False, 64, tmp_path, batch_sp=True, coordinate=0
+    )
+
+
 @pytest.mark.parametrize(
     "orbital_spherical,auxiliary_spherical",
     ((False, False), (False, True), (True, False), (True, True)),
@@ -330,12 +397,25 @@ def _qualify_raw_df_source(
     *,
     omega: float = 0,
     retain_tape: bool = False,
+    batch_sp: bool = False,
+    contracted_sweep: bool = False,
+    coordinate: int | None = None,
 ) -> None:
     """Share the independent source, fitted-response and exact semantic-work gates."""
     fixture = _fixture(domain, orbital_spherical, auxiliary_spherical)
     if omega:
         fixture["range_omega"] = omega
-    actual, receipt = _native(fixture, tmp_path, tile=tile, retain_tape=retain_tape)
+    if coordinate is not None:
+        fixture["direction"].fill(0)
+        fixture["direction"].flat[coordinate] = 1
+    actual, receipt = _native(
+        fixture,
+        tmp_path,
+        tile=tile,
+        retain_tape=retain_tape,
+        batch_sp=batch_sp,
+        contracted_sweep=contracted_sweep,
+    )
     oracle = DfOracle(fixture)
     reference = oracle.evaluate(fixture["centers"])
     for field in ("three_center", "metric"):
@@ -393,27 +473,30 @@ def _qualify_raw_df_source(
     for name in ("gradient", "hvp"):
         np.testing.assert_allclose(actual[name].sum(axis=0), 0, atol=2e-9)
 
-    def primitive_components(shells: list) -> int:
-        return sum(
-            len(radial) * (angular + 1) * (angular + 2) // 2
-            for _, angular, radial in shells
-        )
-
-    orbital_work = primitive_components(fixture["orbital"])
-    auxiliary_work = primitive_components(fixture["auxiliary"])
-    three_center_work = orbital_work**2 * auxiliary_work
-    metric_work = auxiliary_work**2
-    assert receipt["components_per_pass"] == three_center_work + metric_work
-    assert (
-        receipt["groups"]
-        == len(fixture["orbital"]) ** 2 * len(fixture["auxiliary"])
-        + len(fixture["auxiliary"]) ** 2
-    )
-    assert receipt["reduction_terms_bound"] >= 19 * three_center_work + 13 * metric_work
+    # Count the mathematical source domain, not the launch partition. A
+    # canonical s/p source owns both transposed incidences of distinct shells.
+    orbital = fixture["orbital"]
+    auxiliary = fixture["auxiliary"]
+    pairs = combinations_with_replacement if batch_sp else product
+    orbital_pairs = pairs(orbital, 2) if batch_sp else product(orbital, repeat=2)
+    metric_pairs = pairs(auxiliary, 2) if batch_sp else product(auxiliary, repeat=2)
     groups = [
-        *product(fixture["orbital"], fixture["orbital"], fixture["auxiliary"]),
-        *product(fixture["auxiliary"], repeat=2),
+        *((*pair, fitting) for pair, fitting in product(orbital_pairs, auxiliary)),
+        *metric_pairs,
     ]
+    components = [
+        prod(
+            len(radial) * (angular + 1) * (angular + 2) // 2
+            for _, angular, radial in group
+        )
+        for group in groups
+    ]
+    assert receipt["groups"] == len(groups)
+    assert receipt["components_per_pass"] == sum(components)
+    assert receipt["reduction_terms_bound"] >= sum(
+        (1 + 6 * len(group)) * work
+        for group, work in zip(groups, components, strict=True)
+    )
     # A linked leaf carries at most 16 public ABI components. More angular
     # components necessarily submit additional radial records, not new physics.
     minimum_records = sum(

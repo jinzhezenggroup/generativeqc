@@ -344,6 +344,7 @@ def _cuda_prepared_low_degree_source() -> str:
 
     functions = []
     for name, axes, split in (
+        ("scalar", (), 0),
         ("single", (0,), 1),
         ("same_pair", (0, 0), 2),
         ("different_pairs", (0, 0), 1),
@@ -391,8 +392,8 @@ def _cuda_prepared_low_degree_source() -> str:
         )
         functions.append(f"""
 __device__ __forceinline__ Jet<{max(5, 3 + degree)}> prepared_{name}(const Geometry& geometry,
-    const double* difference, const double* shift, const double* motion,
-    double first_inverse, [[maybe_unused]] double second_inverse) {{
+    const double* difference, [[maybe_unused]] const double* shift, const double* motion,
+    [[maybe_unused]] double first_inverse, [[maybe_unused]] double second_inverse) {{
   Jet<{max(5, 3 + degree)}> result{{}};
   {body}
   return result;
@@ -403,7 +404,7 @@ __device__ __forceinline__ Jet<{max(5, 3 + degree)}> prepared_{name}(const Geome
         + r"""
 template<unsigned degree, unsigned dimension>
 __device__ __forceinline__ void lift_prepared_partials(const Geometry& geometry,
-    const double* direction, const unsigned (&slots)[degree], const unsigned (&axes)[degree],
+    const double* direction, const unsigned* slots, const unsigned* axes,
     unsigned axis0, unsigned next, const Jet<dimension>& partials, double* output) {
   const auto prefactor=gaussian_prefactor(geometry,direction);
   output[0]=prefactor.value*partials.value;
@@ -429,6 +430,21 @@ __device__ __forceinline__ void lift_prepared_partials(const Geometry& geometry,
           prefactor.gradient[index]*partials.directional+prefactor.jvp[index]*partials.value;
     }
   }
+}
+
+__device__ __forceinline__ bool prepared_scalar_jet(const Geometry& geometry,
+    const double* direction, double* output) {
+  double motion[3];
+#pragma unroll
+  for (unsigned axis=0; axis<3; ++axis) {
+    motion[axis]=(geometry.product_scales[0]*direction[axis]+
+                  geometry.product_scales[1]*direction[3+axis])-
+                 (geometry.product_scales[2]*direction[6+axis]+
+                  geometry.product_scales[3]*direction[9+axis]);
+  }
+  const auto partials=prepared_scalar(geometry,geometry.difference,nullptr,motion,0,0);
+  lift_prepared_partials<0>(geometry,direction,nullptr,nullptr,0,1,partials,output);
+  return true;
 }
 
 template<unsigned degree>
@@ -510,7 +526,7 @@ __device__ __noinline__ bool prepared_low_degree(const Geometry& geometry, const
     else
       partials=prepared_triple_distinct(geometry,difference,shift,motion,first_inverse,second_inverse);
   }
-  lift_prepared_partials(geometry,direction,slots,axes,axis0,next,partials,output);
+  lift_prepared_partials<degree>(geometry,direction,slots,axes,axis0,next,partials,output);
   return true;
 }
 """
@@ -756,8 +772,8 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         if backend == "cpu"
         else (
             "Geometry,full_eri_sp ? sp_degree+2 : 14,0,full_eri_sp",
-            "Geometry,14,8",
-            "Geometry,14,10",
+            "Geometry,full_eri_sp ? sp_degree+2 : 14,8",
+            "Geometry,full_eri_sp ? sp_degree+2 : 14,10",
         )
     )
     geometry_target = "geometry" if backend == "cpu" else "local_geometry"
@@ -801,9 +817,9 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
             else ""
         )
         + (
-            "\ntemplate<unsigned sp_degree=5>\n"
+            "\ntemplate<unsigned sp_degree=5, unsigned FixedFamily=0>\n"
             if backend == "cpu"
-            else "\ntemplate<unsigned sp_degree=5, bool Prepared=false>\n"
+            else "\ntemplate<unsigned sp_degree=5, bool Prepared=false, unsigned FixedFamily=0>\n"
         )
         + "GQC_FACTOR_FUNCTION bool primitive(unsigned input_family, unsigned input_radial, const unsigned* angular, unsigned component, const double* record, const double* direction, double* output"
         + (
@@ -822,10 +838,10 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
         )
         + r"""
   constexpr bool full_eri_sp=sp_degree<=4;
-  const unsigned family=full_eri_sp ? 0 : input_family;
+  const unsigned family=full_eri_sp ? FixedFamily : input_family;
   const unsigned radial=full_eri_sp ? 0 : input_radial;
   if (family>2 || radial>2 || (family && radial==2) || !angular || !record || !direction || !output) return false;
-  if ((full_eri_sp && (input_family || input_radial)) ||
+  if ((full_eri_sp && (input_family!=FixedFamily || input_radial)) ||
       (prepared_record && !prepared_geometry)) return false;
   const unsigned centers=family==0 ? 4 : family==1 ? 3 : 2;
   unsigned orders[4]{}, incidence[4]{};
@@ -879,7 +895,7 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
             "  Geometry geometry{};\n"
             if backend == "cpu"
             else "  Geometry local_geometry{};\n"
-            "  static_assert(!Prepared || full_eri_sp);\n"
+            "  static_assert(!Prepared || (full_eri_sp && FixedFamily==0));\n"
             "  const auto& geometry=Prepared ? *prepared_geometry : local_geometry;\n"
         )
         + r"""
@@ -912,7 +928,7 @@ def emit_factorized_second(*, backend: str = "cpu", output: str = "full") -> str
   Jet<4> coefficients[full_eri_sp ? sp_degree+3 : 3*(max_axis_order+1)]{};
   unsigned axis_orders[3]{}, axis_offsets[3]{};
   if constexpr (sp_degree==0) {
-    // Admission above proved four s shells. Each Hermite pair polynomial
+    // Admission above proved all s shells. Each Hermite pair polynomial
     // consists only of its constant unit coefficient and has no motion.
     for (unsigned axis=0; axis<3; ++axis) {
       axis_offsets[axis]=axis;
@@ -1055,7 +1071,8 @@ struct FactorizedSelection {
   unsigned family, radial, angular[4], components[16], component_count, centers, stride, cache_stride;
   double omega;
 };
-template<unsigned sp_degree, bool paired=false, bool Prepared=false, bool Indexed=false>
+template<unsigned sp_degree, bool paired=false, bool Prepared=false, bool Indexed=false,
+    unsigned FixedFamily=0>
 __global__ void factorized_integral_kernel(FactorizedSelection selection, const double* records,
     size_t count, const long long* atoms, const double* molecular_direction,
     double* output, int* status, const FactorizedIntegralBatch* batches, long long frozen_atom,
@@ -1083,7 +1100,7 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
   if constexpr (!Indexed) if (!active_eri_centers(atoms,frozen_atom)) return;
   // Primitive producers write one row; adjacent output lanes then read the
   // same radial row without striding by a whole tile through shared banks.
-  constexpr unsigned unindexed_producers=paired ? 128 : 64;
+  constexpr unsigned unindexed_producers=paired ? 128 : FixedFamily ? 32 : 64;
   const unsigned producers=Indexed ? blockDim.x : unindexed_producers;
   __shared__ double fixed_terms[Indexed ? 1 : unindexed_producers][25];
   extern __shared__ double indexed_terms[][25];
@@ -1114,11 +1131,14 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
       }
       double values[25]{};
       const auto* geometry=Prepared ? prepared+(records-window_records)/5+begin+threadIdx.x : nullptr;
-      if constexpr (Indexed && sp_degree>=1 && sp_degree<=3) {
+      if constexpr (Indexed && sp_degree==0) {
+        valid=component==0 && !(angular[0]|angular[1]|angular[2]|angular[3]) &&
+            generativeqc::scf::factorized_second::prepared_scalar_jet(*geometry,direction,values);
+      } else if constexpr (Indexed && sp_degree<=3) {
         valid=generativeqc::scf::factorized_second::prepared_low_degree<sp_degree>(
             *geometry,angular,component,direction,values);
       } else {
-        valid=generativeqc::scf::factorized_second::primitive<sp_degree,Prepared>(selection.family,selection.radial,
+        valid=generativeqc::scf::factorized_second::primitive<sp_degree,Prepared,FixedFamily>(selection.family,selection.radial,
             angular,component,record,direction,values,selection.omega,geometry);
       }
       for (unsigned index=0; index<outputs; ++index) terms[threadIdx.x][index]=scale*values[index];
@@ -1160,6 +1180,28 @@ __global__ void factorized_integral_kernel(FactorizedSelection selection, const 
     output[blockIdx.x*outputs+threadIdx.x]=result;
   }
 }
+// DF uses the same bounded Cartesian jet as Direct, with the explicit
+// unit-Gaussian embedding supplied by the family. One warp folds each radial
+// chunk in the original order; larger contractions simply take more chunks.
+template<unsigned Family>
+void launch_fitted_sp(FactorizedSelection selection, dim3 grid, unsigned degree,
+    const FactorizedIntegralBatch* batches, const double* direction, int* status,
+    cudaStream_t stream) {
+#define GQC_FITTED_DEGREE(degree) \
+  case degree: factorized_integral_kernel<degree,false,false,false,Family><<<grid,32,0,stream>>>( \
+      selection,nullptr,0,nullptr,direction,nullptr,status,batches,-1); break
+  switch (degree) {
+    GQC_FITTED_DEGREE(0);
+    GQC_FITTED_DEGREE(1);
+    GQC_FITTED_DEGREE(2);
+    case 3:
+      if constexpr (Family==1)
+        factorized_integral_kernel<3,false,false,false,Family><<<grid,32,0,stream>>>(
+            selection,nullptr,0,nullptr,direction,nullptr,status,batches,-1);
+      break;
+  }
+#undef GQC_FITTED_DEGREE
+}
 }  // namespace
 int launch_factorized_integral(unsigned family, unsigned radial, double omega, const unsigned* angular,
     const std::uint32_t* components, size_t component_count, const double* records, size_t count,
@@ -1178,7 +1220,7 @@ int launch_factorized_integral(unsigned family, unsigned radial, double omega, c
   selection.stride=4*selection.centers+1;
   selection.component_count=static_cast<unsigned>(component_count);
   size_t size=1;
-  bool full_eri_sp=family==0 && radial==0;
+  bool full_eri_sp=radial==0;
   unsigned degree=0;
   for (unsigned center=0; center<selection.centers; ++center) {
     if (angular[center]>(family && (family==2 || center==2) ? 4u : 3u))
@@ -1196,7 +1238,12 @@ int launch_factorized_integral(unsigned family, unsigned radial, double omega, c
     selection.components[index]=components[index];
   }
   const dim3 grid(selection.component_count,batch_count);
-  switch (full_eri_sp ? degree : 5) {
+  if (full_eri_sp && family && batches) {
+    if (family==1) launch_fitted_sp<1>(selection,grid,degree,batches,direction,status,stream);
+    else launch_fitted_sp<2>(selection,grid,degree,batches,direction,status,stream);
+    return static_cast<int>(cudaGetLastError());
+  }
+  switch (full_eri_sp && !family ? degree : 5) {
 #define GQC_LAUNCH_DEGREE(degree) \
     case degree: factorized_integral_kernel<degree><<<grid,64,0,stream>>>( \
         selection,records,count,atoms,direction,output,status,batches,frozen_atom); break

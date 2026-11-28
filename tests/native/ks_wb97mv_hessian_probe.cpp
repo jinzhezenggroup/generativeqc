@@ -12,6 +12,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -70,9 +71,9 @@ void grid_topology(dft::CudaKsGridReference& grid, const char* offsets, const ch
   array(radii, download(geometry.atomic_radii, atoms));
 }
 
-void probe_response_pairs(bool include_exchange) {
+void probe_response_pairs(bool include_exchange, bool wide) {
   core::System system;
-  for (std::uint32_t atom = 0; atom < 8; ++atom) {
+  for (std::uint32_t atom = 0; atom < (wide ? 26U : 8U); ++atom) {
     const auto site = static_cast<double>(atom);
     system.atoms.push_back({1, {site * 1.1, 0.2 * (atom % 3), -0.3 * (atom % 2)}});
     system.shells.push_back({atom, 0, {{0.75, 1.0}}});
@@ -88,7 +89,7 @@ void probe_response_pairs(bool include_exchange) {
       raw_stream, cudaStreamDestroy);
   scf::CudaDirectJkPlan* raw_plan{};
   scf::CudaDirectJkDiagnostic shape;
-  constexpr auto budget = 64ULL << 20;
+  const auto budget = (wide ? 512ULL : 64ULL) << 20;
   require(scf::create_cuda_direct_jk_resident_plan_on_stream(device, {system}, 0, budget,
                                                              stream.get(), &raw_plan, shape,
                                                              detail) == GENERATIVEQC_STATUS_SUCCESS,
@@ -98,7 +99,8 @@ void probe_response_pairs(bool include_exchange) {
   require(scf::prepare_cuda_direct_jk_resident_values(plan.get(), budget, detail) ==
               GENERATIVEQC_STATUS_SUCCESS,
           detail);
-  const auto before = scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes;
+  const auto original = scf::cuda_direct_jk_plan_diagnostic(plan.get());
+  const auto before = original.device_bytes;
   std::size_t bytes{}, products{};
   require(
       scf::prepare_cuda_direct_jk_response_pairs(plan.get(), include_exchange, 1, SIZE_MAX, bytes,
@@ -111,12 +113,26 @@ void probe_response_pairs(bool include_exchange) {
                                                  products, detail) == GENERATIVEQC_STATUS_SUCCESS &&
           !bytes && !products,
       "response pair layout ignored product limit");
+  require(scf::retire_cuda_direct_jk_response_values(plan.get(), detail) !=
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes == before,
+          "refused response rows must leave the canonical source owned by the plan");
   require(scf::prepare_cuda_direct_jk_response_pairs(plan.get(), include_exchange, budget, SIZE_MAX,
                                                      bytes, products,
                                                      detail) == GENERATIVEQC_STATUS_SUCCESS &&
               bytes && products &&
               scf::cuda_direct_jk_plan_diagnostic(plan.get()).device_bytes == before + bytes,
           "response pair allocation not published: " + detail);
+  if (wide) {
+    require(scf::retire_cuda_direct_jk_response_values(plan.get(), detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    const auto retired = scf::cuda_direct_jk_plan_diagnostic(plan.get());
+    require(original.resident_value_bytes && !retired.resident_value_bytes &&
+                retired.device_bytes == before + bytes - original.resident_value_bytes &&
+                retired.resident_values_completed == original.resident_values_completed,
+            "retiring the redundant value table changed live bytes or lost completed work");
+  }
   const auto elements = shape.nbf * shape.nbf;
   Storage storage;
   auto* density_panel = storage.allocate(elements);
@@ -1069,9 +1085,9 @@ void run(bool unrestricted, const std::string& mode, bool full) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
-    if (argc == 2 &&
-        (std::string(argv[1]) == "coulomb-pairs" || std::string(argv[1]) == "hybrid-pairs")) {
-      probe_response_pairs(std::string(argv[1]) == "hybrid-pairs");
+    const auto mode = argc == 2 ? std::string_view(argv[1]) : std::string_view{};
+    if (mode == "coulomb-pairs" || mode == "hybrid-pairs" || mode == "coulomb-pairs-wide") {
+      probe_response_pairs(mode == "hybrid-pairs", mode == "coulomb-pairs-wide");
       return 0;
     }
     require(argc == 3 || argc == 4, "usage: probe rks|uks direct|df[-spherical][-ecp] [full]");

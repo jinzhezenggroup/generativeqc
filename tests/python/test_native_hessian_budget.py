@@ -33,6 +33,14 @@ def _translation_unit(source: str) -> str:
     audit = source[audit_start : source.index("\n};", audit_start) + 3]
     start = source.index("struct CudaKsWb97mvHessian::Impl {")
     owner = source[start : source.index("  cudaError_t authenticate()", start)]
+    guess_start = owner.index("  static cudaError_t guess_from_cpks_factor(")
+    guess_body = owner.index(" noexcept {", guess_start) + len(" noexcept {")
+    next_method = owner.index("  maps::Extents extents()", guess_body)
+    owner = (
+        owner[:guess_body]
+        + "\n    return cudaErrorNotSupported;\n  }\n"
+        + owner[next_method:]
+    )
     # Numerical methods are isolated; keep all real storage fields, construction,
     # destruction and resource accounting, then the entire unmodified prepare().
     owner += """

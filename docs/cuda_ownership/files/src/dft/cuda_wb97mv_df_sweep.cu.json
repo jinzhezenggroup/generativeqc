@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/cuda_wb97mv_df_sweep.cu",
+  "role": "runtime",
+  "subsystem": "xc",
+  "reason": "Bounded Cartesian fitted integral scheduling and stable owner reductions into private frozen Hessian and first-response tables. The linked compiler-generated Coulomb jets supply the derivatives; general fitted response retains the raw CUDA replay.",
+  "regions": []
+}

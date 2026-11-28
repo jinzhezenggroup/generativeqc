@@ -1,12 +1,14 @@
 #include <stdexcept>
 #include <vector>
 
+#include "dft/contracted_coulomb.hpp"
 #include "dft/cuda_ks_grid_reference.hpp"
 #include "dft/cuda_ks_wb97mv_model.hpp"
 #include "dft/cuda_ks_wb97mv_nuclear_jk.hpp"
 #include "dft/semilocal_family.hpp"
 #include "integrals/coulomb_derivative_envelope.hpp"
 #include "methods/dft_method.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/fock_prepared.hpp"
 
@@ -128,8 +130,16 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     require(primitive_begin == shape.primitives && ao_begin == shape.nao,
             "J/K topology differs from normalized native basis");
     const CudaWb97mvJkShape integral_shape{shape.atoms, shape.primitives, shape.nao, shape.spins};
+    runtime::cuda_trace::TraceOperation trace("hessian_exact_nuclear_prepare", candidate->stream,
+                                              {1, shape.nao, 0, true, screened_frozen});
     integrals::CoulombDerivativeOmissions omissions;
     if (screened_frozen) {
+      int shared_bytes{};
+      check(cudaDeviceGetAttribute(&shared_bytes, cudaDevAttrMaxSharedMemoryPerBlockOptin, device));
+      bound_options.contract_frozen_coulomb =
+          system.basis_representation != core::kSphericalBasis &&
+          shared_bytes >= hessian_aot::contracted::max_quartet_shared_bytes;
+      runtime::cuda_trace::TraceRegion certify("hessian_exact_certificate", candidate->stream);
       require(shape.spins == 1 && !bound_options.range_exchange &&
                   (bound_options.part == CudaWb97mvJkPart::coulomb ||
                    bound_options.part == CudaWb97mvJkPart::full_hybrid),
@@ -138,14 +148,18 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
                                                 ? bound_options.max_frozen_replay_candidates
                                                 : 200'000;
       omissions = integrals::coulomb_derivative_omissions(
-          system, integrals::CoulombDerivativeOmissions::max_bound, envelope_candidate_limit);
-      require(!omissions.sources.empty(), "no certified frozen sources within the census budget");
+          system, integrals::CoulombDerivativeOmissions::max_bound, envelope_candidate_limit,
+          bound_options.contract_frozen_coulomb);
+      require(omissions.size() != 0, "no certified frozen sources within the census budget");
+      runtime::cuda_trace::trace_counter("omitted_source_groups", omissions.size());
       bound_options.max_frozen_replay_candidates = envelope_candidate_limit;
     }
     const auto* certificate = screened_frozen ? &omissions : nullptr;
     CudaWb97mvNuclearJk::Plan plan;
     const auto admission =
-        plan.build(integral_shape, shells, bound_options, &detail, certificate, failure);
+        runtime::cuda_trace::trace_call("hessian_exact_window_inventory", candidate->stream, [&] {
+          return plan.build(integral_shape, shells, bound_options, &detail, certificate, failure);
+        });
     if (admission == cudaErrorInvalidValue)
       throw std::runtime_error("J/K workspace admission: " + detail);
     check(admission);
@@ -153,7 +167,9 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch& batch
     check(runtime::resource_cuda_malloc(&candidate->arena, bytes));
     const CudaWb97mvJkReference reference{lease.basis, device, candidate->stream,
                                           Impl::authenticate, candidate.get()};
-    check(candidate->response.prepare(plan, reference, candidate->arena, bytes));
+    check(runtime::cuda_trace::trace_call("hessian_exact_bind", candidate->stream, [&] {
+      return candidate->response.prepare(plan, reference, candidate->arena, bytes);
+    }));
     impl_ = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;

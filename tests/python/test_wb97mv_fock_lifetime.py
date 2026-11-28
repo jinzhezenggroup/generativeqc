@@ -22,6 +22,13 @@ FIXTURE = ROOT / "tests/native/fixtures/wb97mv_fock_queue"
 
 def _queued_cuda(source: str) -> str:
     """Queue launches by value, retaining the controller and scalar kernels."""
+    # Block-cooperative CUDA is outside this test double's execution contract.
+    source = re.sub(
+        r"(^__global__ void transpose_coulomb_window\([^{}]+\) \{).*?^}",
+        r'\1 throw std::logic_error("tiled kernel in scalar queue probe"); }',
+        source,
+        flags=re.MULTILINE | re.DOTALL,
+    )
 
     def launch(match: re.Match[str]) -> str:
         configuration = match[2].rsplit(",", 3)
@@ -63,16 +70,19 @@ def test_physical_fock_drains_failed_borrowed_work(
         "dft/cuda_ks_grid_reference.hpp",
         "dft/cuda_ks_final_state.hpp",
         "dft/cuda_wb97mv_grid.hpp",
+        "dft/cuda_xc_transition_integer.cuh",
         "dft/r2scan_rvv10_model.hpp",
         "dft/semilocal_family.hpp",
         "dft/split_hybrid_cuda_selection.hpp",
         "molecule/basis.hpp",
         "response/cuda_cpks.hpp",
+        "runtime/cuda_component_trace.hpp",
         "runtime/resource_cuda.cuh",
         "scf/cuda_density_fitting_basis.hpp",
         "scf/cuda_density_fitting_device.hpp",
         "scf/cuda_direct_jk_device.hpp",
         "scf/cuda_fock_execution.hpp",
+        "tensor/cuda_contraction.cuh",
         "tensor/cuda_dense_operations.hpp",
     )
     for name in shims:
