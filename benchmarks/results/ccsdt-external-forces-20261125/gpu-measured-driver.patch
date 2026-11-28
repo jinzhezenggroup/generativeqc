@@ -1,0 +1,188 @@
+--- run.py
++++ run.py
+@@ -3,2 +2,0 @@
+-from __future__ import annotations
+-
+@@ -16 +13,0 @@
+-import tarfile
+@@ -20 +16,0 @@
+-from contextlib import suppress
+@@ -24 +19,0 @@
+-from typing import TYPE_CHECKING, Any
+@@ -26,10 +20,0 @@
+-Record = dict[str, Any]
+-Atoms = list[tuple[int, list[float]]]
+-
+-if TYPE_CHECKING:
+-    from types import ModuleType
+-
+-    from numpy import ndarray
+-
+-    Endpoint = tuple[float, ndarray | None, float, Record]
+-
+@@ -42,3 +26,0 @@
+-NATIVE_SOURCE_IDENTITY = (
+-    "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2"
+-)
+@@ -48 +30 @@
+-def write(path: Path, value: Record) -> None:
++def write(path, value):
+@@ -54 +36 @@
+-def digest(path: Path) -> str:
++def digest(path):
+@@ -59 +41 @@
+-def basis_file(fixture: Record, role: str) -> Path:
++def basis_file(fixture, role):
+@@ -67,3 +49 @@
+-def native(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def native(atoms, fitted, forces, args, fixture):
+@@ -90 +70 @@
+-        correlation_memory_budget_bytes=args.correlation_budget_gib << 30,
++        correlation_memory_budget_bytes=32 << 30,
+@@ -107 +86,0 @@
+-            "correlation_budget_gib": args.correlation_budget_gib,
+@@ -119 +98 @@
+-def shells(fixture: Record, role: str) -> dict[str, list[Record]]:
++def shells(fixture, role):
+@@ -124,3 +103 @@
+-def psi4_basis(
+-    psi4: ModuleType, fixture: Record, role: str, name: str, option: str
+-) -> None:
++def psi4_basis(psi4, fixture, role, name, option):
+@@ -146 +123 @@
+-def pyscf_basis(fixture: Record) -> dict[str, list[list[int | list[float]]]]:
++def pyscf_basis(fixture):
+@@ -154,3 +131 @@
+-                        shell["exponents"],
+-                        zip(*shell["coefficients"], strict=True),
+-                        strict=True,
++                        shell["exponents"], zip(*shell["coefficients"]), strict=True
+@@ -166,3 +141 @@
+-def psi4_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def psi4_endpoint(atoms, fitted, forces, args, fixture):
+@@ -249,3 +222 @@
+-def pyscf_endpoint(
+-    atoms: Atoms, fitted: bool, forces: bool, args: argparse.Namespace, fixture: Record
+-) -> Endpoint:
++def pyscf_endpoint(atoms, fitted, forces, args, fixture):
+@@ -314,19 +285 @@
+-def source_revision(source: Path, archive: Path | None) -> str:
+-    if (source / ".git").exists():
+-        revision = subprocess.check_output(
+-            ["git", "-C", str(source), "rev-parse", "--verify", "HEAD"], text=True
+-        ).strip()
+-        if subprocess.run(
+-            ["git", "-C", str(source), "diff", "--quiet", "HEAD", "--"], check=False
+-        ).returncode:
+-            raise RuntimeError(f"Source checkout has tracked changes: {source}")
+-    else:
+-        archive = archive or source.parent / f"source-{REVISION[:5]}.tar.gz"
+-        with tarfile.open(archive) as staged:
+-            revision = staged.pax_headers.get("comment")
+-    if revision != REVISION:
+-        raise RuntimeError(f"Source revision differs: {revision} != {REVISION}")
+-    return revision
+-
+-
+-def native_provenance(source: Path, archive: Path | None) -> Record:
++def native_provenance(source):
+@@ -335 +287,0 @@
+-    revision = source_revision(source, archive)
+@@ -342,2 +293,0 @@
+-    if expected != NATIVE_SOURCE_IDENTITY:
+-        raise RuntimeError(f"Source inputs differ from pinned revision {revision}")
+@@ -352 +302 @@
+-        "source_revision": revision,
++        "source_revision": REVISION,
+@@ -359 +309 @@
+-def worker(args: argparse.Namespace, label: str) -> None:
++def worker(args, label):
+@@ -418 +368 @@
+-    except Exception as exc:  # noqa: BLE001 - retain worker failure details
++    except Exception as exc:
+@@ -433 +383 @@
+-def cpu_model() -> str:
++def cpu_model():
+@@ -440 +390 @@
+-def hardware(args: argparse.Namespace) -> Record:
++def hardware(args):
+@@ -483 +433 @@
+-        info.update(native_provenance(args.source, args.source_archive))
++        info.update(native_provenance(args.source))
+@@ -487 +437 @@
+-def run(args: argparse.Namespace) -> None:
++def run(args):
+@@ -539,32 +489,10 @@
+-        with (
+-            tempfile.TemporaryDirectory(
+-                prefix="gqc-3167-", dir=args.scratch
+-            ) as scratch,
+-            (args.output / (label + ".txt")).open("x") as log,
+-        ):
+-            process = subprocess.Popen(
+-                argv,
+-                env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
+-                stdout=log,
+-                stderr=subprocess.STDOUT,
+-                start_new_session=True,
+-            )
+-            timed_out = False
+-            try:
+-                process.wait(timeout=args.timeout)
+-            except subprocess.TimeoutExpired:
+-                timed_out = True
+-            finally:
+-                if process.returncode is None:
+-                    with suppress(ProcessLookupError):
+-                        os.killpg(process.pid, signal.SIGKILL)
+-                    process.wait()
+-            if timed_out:
+-                write(
+-                    record,
+-                    {
+-                        "status": "timeout",
+-                        "label": label,
+-                        "arm": args.arm,
+-                        "timeout_seconds": args.timeout,
+-                    },
++        with tempfile.TemporaryDirectory(
++            prefix="gqc-3167-", dir=args.scratch
++        ) as scratch:
++            with (args.output / (label + ".txt")).open("x") as log:
++                process = subprocess.Popen(
++                    argv,
++                    env={**env, "TMPDIR": scratch, "PYSCF_TMPDIR": scratch},
++                    stdout=log,
++                    stderr=subprocess.STDOUT,
++                    start_new_session=True,
+@@ -571,0 +500,14 @@
++                try:
++                    process.wait(timeout=args.timeout)
++                except subprocess.TimeoutExpired:
++                    os.killpg(process.pid, signal.SIGKILL)
++                    process.wait()
++                    write(
++                        record,
++                        {
++                            "status": "timeout",
++                            "label": label,
++                            "arm": args.arm,
++                            "timeout_seconds": args.timeout,
++                        },
++                    )
+@@ -595 +537 @@
+-def main() -> None:
++def main():
+@@ -601,3 +542,0 @@
+-    p.add_argument(
+-        "--correlation-budget-gib", type=int, choices=range(1, 81), default=32
+-    )
+@@ -611 +549,0 @@
+-    p.add_argument("--source-archive", type=Path)
+@@ -613 +551 @@
+-    p.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()))
++    p.add_argument("--scratch", type=Path, default=Path("/tmp"))

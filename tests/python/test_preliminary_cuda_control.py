@@ -52,6 +52,12 @@ HARNESS = r"""
 #include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/rks_cold_fock.hpp"
 #include "scf/target_fock_work.hpp"
+namespace generativeqc::scf {
+bool cpu_materialized_df_derivatives_requested() noexcept {
+  assert(false && "CUDA seed probe must not inspect CPU DF derivative mode");
+  return false;
+}
+}  // namespace generativeqc::scf
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
 namespace runtime {
@@ -268,6 +274,7 @@ struct Plan {
   bool preparation_skipped{};
   Plan() { policy->kind = initial_guess::PreliminaryKind::Minao; }
   const System& system() const { return system_; }
+  bool density_fitted_range_exchange() const noexcept { return false; }
   CudaKsPlan* cuda_plan() { return &cuda; }
   const auto& initial_guess_policy() const { return policy; }
   void invalidate_final_state() { cuda.invalidate_final_state(); }
@@ -322,6 +329,7 @@ struct Owner : PreparedBatch, BatchWarmStarts {
   std::vector<Item> items_{1};
   std::optional<scf::RksColdFockDamping> cold_damping_;
   bool warm_enabled_{true}, warm_updates_{true};
+  const bool require_streamed_cpu_df_{false};
   generativeqc_backend backend_{GENERATIVEQC_BACKEND_CUDA};
   ExecutionPlan execution_plan_;
   std::size_t size() const noexcept override { return items_.size(); }

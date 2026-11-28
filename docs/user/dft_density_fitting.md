@@ -6,6 +6,8 @@ KS calculations. `auto` follows the calculation backend; explicit
 `cpu`/`cuda` DF selections must match `device`. Omitting the auxiliary basis
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
+For the explicit mode and auxiliary-basis requirements of CPU PBE with scalar
+ECPs, see [public CPU semilocal ECP forces](ecp.md#public-cpu-semilocal-ecp-forces).
 
 CUDA HF/KS accepts orbital shells through f and full-range SCF fitting
 auxiliaries through h (`l=5`) for energies and first nuclear derivatives,
@@ -73,16 +75,18 @@ Native snapshots authenticate the actual LR approximation, so derivatives never
 infer it from the current environment.
 
 Default or explicit `auto` asks the native LR metric owner to admit its
-fixed-cutoff response before the first energy, independently of the requested
-properties. An unresolved cutoff, optional allocation refusal or unsupported
-native LR provider selects exact LR at this initial boundary only. Invalid
-controls, eigensolver failures and other CUDA errors still propagate. The
-resolved approximation is frozen per prepared batch item, including geometry
-rebuilding and retries: an initially fitted item fails if a later geometry has
-an unresolved cutoff, rather than silently changing its Hamiltonian. No trial
-force or reference eigensystem participates in this decision. Use explicit `df`
-or `direct` when reproducibility requires the same approximation across separate
-preparations with different initial geometries or resource availability.
+fixed-cutoff response when preparing each new geometry of an item that still
+uses fitted LR. If that cutoff is unresolved, the item prepares exact LR before
+its SCF, for every property request. The item keeps exact LR for subsequent
+geometries and replays. It can still use the previous geometry's density as a
+trial and builds a new Fock operator at the new geometry. The full-range fit,
+auxiliary basis and cutoff are unchanged.
+
+Optional allocation or capability refusal selects exact LR only during initial
+preparation. Invalid controls, eigensolver failures and other CUDA errors
+propagate. No trial force or reference eigensystem enters this decision. Use
+explicit `df` or `direct` to fix the LR approximation across the entire path.
+An explicit fit still rejects its analytic response at an unresolved cutoff.
 
 The native CUDA WB97M-V Hessian and HVP use the actual LR provider selected by
 SCF, including an erf-fitted provider with a separated, rank-truncated metric.
@@ -134,7 +138,7 @@ derivative compositions are qualified. This does not admit ECP or unsupported
 auxiliary/basis domains, nor does admission alone establish a successful
 source-matched independent CUDA qualification.
 
-For an initially exact fallback or explicit mixed mode, the CUDA force planner
+For an automatic exact fallback or explicit mixed mode, the CUDA force planner
 dry-queries the native LR derivative capacity under the live final-state token before AO/Becke tile
 admission. It charges that independent owner alongside the complete nonlocal/grid
 inventory, with the same conservative

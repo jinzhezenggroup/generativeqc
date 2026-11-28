@@ -58,9 +58,17 @@ def installed_force_probe(
 
 
 @pytest.mark.parametrize(
-    "device,representation,fitted,spin,method,functional,nonlocal_level,packed_bytes",
+    "device,representation,fitting,spin,method,functional,nonlocal_level,packed_bytes,range_fit",
     [
-        (device, representation, fitted, spin, *program, 0)
+        (
+            device,
+            representation,
+            device if fitted else "none",
+            spin,
+            *program,
+            0,
+            "direct",
+        )
         for device, representation, fitted, spin, program in product(
             ("cpu", "cuda"),
             ("cartesian", "spherical"),
@@ -74,36 +82,55 @@ def installed_force_probe(
         pytest.param(
             "cpu",
             "spherical",
-            False,
+            "none",
             spin,
             method,
             functional,
             0,
             48,
+            "direct",
             id=f"packed-{method}-{'uks' if spin else 'rks'}",
         )
         for method, functional in METHODS
         if method in ("pbe0", "b3lyp")
         for spin in (0, 1)
+    ]
+    + [
+        pytest.param(
+            "cpu",
+            representation,
+            "auto",
+            spin,
+            "wb97m-v",
+            "WB97M_V",
+            0,
+            0,
+            range_fit,
+            id=f"auto-cpu-wb97mv-{representation}-spin{spin}-{range_fit}",
+        )
+        for representation, spin, range_fit in product(
+            ("cartesian", "spherical"), (0, 1), ("direct", "df")
+        )
     ],
 )
 def test_installed_products_complete_forces_match_independent_oracle(
     installed_force_probe: tuple[Path, Path, Path, Path],
     device: str,
     representation: str,
-    fitted: bool,
+    fitting: str,
     spin: int,
     method: str,
     functional: str,
     nonlocal_level: int,
     packed_bytes: int,
+    range_fit: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No product may replace the native force with a Python diagnostic.
 
     The open-shell H2 cation also exercises an empty beta population. Its
     non-axis-aligned bond prevents a one-component-only force comparison.
-    WB97M-V uses the explicitly mixed DF/exact-LR Hamiltonian in every product.
+    CPU Auto wB97M-V covers both the exact and fitted long-range providers.
     """
     require_backend(device)
     if device == "cpu" and method in {"m06-2x", "mn15"}:
@@ -111,11 +138,11 @@ def test_installed_products_complete_forces_match_independent_oracle(
     if device == "cuda" and method == "pbe50":
         pytest.skip("PBE50 SCF has a CPU provider only")
     pytest.importorskip("pyscf")
+    fitted = fitting != "none"
     if fitted and method == "wb97m-v":
-        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", "direct")
+        monkeypatch.setenv("GENERATIVEQC_DF_RANGE_EXCHANGE", range_fit)
     forbid_python_force(monkeypatch)
     executable, cli, molecule, empty_path = installed_force_probe
-    fitting = device if fitted else "none"
     completed = subprocess.run(
         [
             str(executable),
@@ -239,6 +266,7 @@ def test_installed_products_complete_forces_match_independent_oracle(
             grid_level=0,
             nonlocal_level=nonlocal_level,
             atom_values=H2,
+            fitted_range=range_fit == "df",
         )
     backend = (
         _native.BACKEND_CUDA if device == "cuda" else _native.BACKEND_CPU_REFERENCE

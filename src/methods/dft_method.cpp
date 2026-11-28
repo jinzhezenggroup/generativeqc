@@ -36,6 +36,7 @@
 #include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "integrals/ecp.hpp"
 #include "methods/batch_capabilities.hpp"
 #include "methods/dft_method_owner_port.hpp"
 #include "methods/dft_method_preparation.hpp"
@@ -74,7 +75,7 @@
 namespace generativeqc::methods::detail {
 namespace {
 
-/** Initial automatic LR admission only; never escapes a prepared batch item. */
+/** Automatic LR preparation refused before any energy was evaluated. */
 struct AutomaticLrFitRefused final : std::exception {};
 
 /** Resolve the public capacity once. Replay keeps the same reduction and
@@ -619,7 +620,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
                   generativeqc_backend backend, int device,
                   const std::optional<core::System>& auxiliary,
                   const runtime::DeviceCapacityReservation* capacity,
-                  std::optional<scf::CpuPackedEriPreparation> packed_eri)
+                  std::optional<scf::CpuPackedEriPreparation> packed_eri, bool initial_geometry)
       : capabilities_(capabilities),
         system_(std::move(system)),
         execution_plan_(execution_plan),
@@ -656,7 +657,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     scf::initial_guess::resolve_automatic_preliminary_guess(system_, fock_.strategy(), options_);
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA && options_.certify_ks_export;
     options_.certify_ks_export = options_.retain_ks_state;
-    if (execution_plan_.range_exchange) prepare_range_exchange(device);
+    if (execution_plan_.range_exchange) prepare_range_exchange(device, initial_geometry);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
         (!range_strategy_ ||
@@ -780,7 +781,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
     return options_.preliminary_guess;
   }
 
-  /** The admitted approximation survives replacement of this geometry owner. */
+  /** The actual approximation chosen before SCF on this geometry. */
   [[nodiscard]] bool density_fitted_range_exchange() const noexcept {
     return execution_plan_.density_fitted_range_exchange;
   }
@@ -819,9 +820,19 @@ class KsPreparedState final : public KsSingleOwnerPort {
                       !range_strategy_ || !nonlocal_ ||
                       execution_plan_.range_omega != scf::native_range_force_omega))
       return false;
+    // For qualified all-electron wB97M-V, Auto and explicit CPU resolve to
+    // the same fitted provider. Authenticate that provider below rather than
+    // using the request spelling to exclude its native derivative consumer.
+    const auto& strategy = fock_.strategy();
+    const bool automatic_cpu_fit =
+        composite && options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_AUTO &&
+        strategy.backend == scf::FockBackend::Cpu && system_.ecp_terms.empty() &&
+        std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
     if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
-         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
+         options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
+         !automatic_cpu_fit) ||
         execution_plan_.generated_split_hybrid)
       return false;
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
@@ -829,7 +840,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
          std::any_of(system_.shells.begin(), system_.shells.end(),
                      [](const auto& shell) { return shell.angular_momentum > 3; })))
       return false;
-    const auto& spec = fock_.strategy().spec;
+    const auto& spec = strategy.spec;
     if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
       return false;
     const auto approximation = options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
@@ -3031,7 +3042,7 @@ class KsPreparedState final : public KsSingleOwnerPort {
   }
 
  private:
-  void prepare_range_exchange(int device) {
+  void prepare_range_exchange(int device, bool initial_geometry) {
     const auto spin = ks_is_unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted
                                                           : scf::FockSpin::Restricted;
     const auto fock_backend =
@@ -3068,16 +3079,15 @@ class KsPreparedState final : public KsSingleOwnerPort {
       return;
     }
 
-    // The batch owns the optional transaction, including the primary's split
-    // budget. Refuse before SCF/property selection and retire this whole state
-    // before its one exact retry. Never catch invalid controls or solver errors.
+    // Recheck a displaced automatic fit before SCF, even for energy-only
+    // requests. Capability refusal can fall back only at initial preparation.
     try {
       prepare();
     } catch (const generativeqc::Error& error) {
-      if (error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
+      if (!initial_geometry || error.status() != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) throw;
       throw AutomaticLrFitRefused{};
     }
-    if (!range_correction_ || !range_correction_->density_fitting_response_valid())
+    if (range_correction_ ? !range_correction_->density_fitting_response_valid() : initial_geometry)
       throw AutomaticLrFitRefused{};
     execution_plan_.automatic_density_fitted_range_exchange = false;
   }
@@ -3247,7 +3257,7 @@ class KsPreparedBatch final : public PreparedBatch,
                   NativeKsExecutionPlan execution_plan, scf::ScfOptions options, dft::GridSpec grid,
                   generativeqc_backend backend, int device, bool warm_enabled,
                   std::optional<core::System> auxiliary, std::uint64_t cpu_packed_eri_bytes,
-                  const scf::RksColdFockDamping* cold_damping)
+                  const scf::RksColdFockDamping* cold_damping, bool require_streamed_cpu_df)
       : PreparedBatch(backend, device),
         capabilities_(capabilities),
         systems_(std::move(systems)),
@@ -3260,6 +3270,7 @@ class KsPreparedBatch final : public PreparedBatch,
         auxiliary_(std::move(auxiliary)),
         packed_eri_(packed_eri_request(cpu_packed_eri_bytes)),
         cold_damping_(cold_damping ? std::optional(*cold_damping) : std::nullopt),
+        require_streamed_cpu_df_(require_streamed_cpu_df),
         items_(systems_.size()) {
     // Prepared KS plans are retained together. Geometry replay retires its
     // old plan first and does not alter the AO count, so preflight the entire
@@ -3312,6 +3323,11 @@ class KsPreparedBatch final : public PreparedBatch,
   std::vector<BatchItemResult> execute_items(const Coordinates& coordinates, bool compute_forces,
                                              std::span<const std::uint8_t> selected_forces) {
     runtime::DeviceCapacityScope capacity_scope(capacity_.get());
+    // A geometry replacement must not re-read the diagnostic switch and
+    // instantiate unqualified dense derivative tensors instead of streaming.
+    if (require_streamed_cpu_df_ && scf::cpu_materialized_df_derivatives_requested())
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "prepared CPU DF KS ECP requires streamed fitted derivatives");
     const auto wants_forces = [&](std::size_t index) {
       return selected_forces.empty() ? compute_forces : selected_forces[index] != 0;
     };
@@ -3344,6 +3360,9 @@ class KsPreparedBatch final : public PreparedBatch,
     std::vector<scf::CoulombExchangeWork> target_coulomb_exchange_work(
         size(), scf::CoulombExchangeWork::empty());
     std::vector<bool> ready(size(), false);
+#if GENERATIVEQC_HAS_CUDA
+    std::vector<bool> moved_batch_seed(size(), false);
+#endif
     std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
     std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
     std::vector<bool> preliminary_requested(size(), false);
@@ -3361,13 +3380,19 @@ class KsPreparedBatch final : public PreparedBatch,
           // explicit rebuild download is never part of routine SCF iterations.
           materialize_warm(i);
 #if GENERATIVEQC_HAS_CUDA
-          if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr)
+          if (auto* cuda = item.plan ? item.plan->cuda_plan() : nullptr) {
+            // A resident seed belongs to a successful solve in this batch.
+            // Imported checkpoints and failed geometry rebuilds have no such lease.
+            moved_batch_seed[i] = item.resident_warm && item.warm &&
+                                  item.warm->coordinates != candidates[i].coordinates;
             add_transfers(item.retired_transfers, cuda->transfers());
+          }
 #endif
           item.plan.reset();
           item.resident_warm = false;
           item.plan = make_plan(target, item.stationary_device_allowance,
                                 item.density_fitted_range_exchange);
+          item.density_fitted_range_exchange = item.plan->density_fitted_range_exchange();
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
 #if GENERATIVEQC_HAS_CUDA
@@ -3460,10 +3485,12 @@ class KsPreparedBatch final : public PreparedBatch,
             result.target_fock_work->begin_attempt();
             item.plan->set_following_force_memory(wants_forces(i));
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i],
-                        !attempt && !reuse && preliminary_seeds[i]
-                            ? dft::CudaKsSeedOrigin::NativeColdGuess
-                            : dft::CudaKsSeedOrigin::External);
+            auto origin = dft::CudaKsSeedOrigin::External;
+            if (!attempt && !reuse && preliminary_seeds[i])
+              origin = dft::CudaKsSeedOrigin::NativeColdGuess;
+            else if (reuse && seed && moved_batch_seed[i])
+              origin = dft::CudaKsSeedOrigin::MovedBatchDensity;
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i], origin);
             running[i] = true;
             continue;
           }
@@ -3964,8 +3991,8 @@ class KsPreparedBatch final : public PreparedBatch,
   }
 
   struct Item {
-    // Scientific admission belongs to the item, not its replaceable plan. In
-    // particular an exact fallback cannot become fitted after a failed rebuild.
+    // Once automatic admission selects exact LR, later plans keep it.
+    // A fitted automatic owner rechecks its metric when geometry changes.
     bool density_fitted_range_exchange{};
     // Admission belongs to the immutable prepared model/basis/backend, not a
     // replaceable geometry owner. A failed rebuild must not revoke it and
@@ -3989,22 +4016,25 @@ class KsPreparedBatch final : public PreparedBatch,
       std::optional<bool> density_fitted_range_exchange = {}) const {
     runtime::DeviceCapacityScope capacity_scope(capacity_.get());
     auto execution_plan = execution_plan_;
-    if (density_fitted_range_exchange) {
+    const bool initial_geometry = !density_fitted_range_exchange.has_value();
+    if (density_fitted_range_exchange)
       execution_plan.density_fitted_range_exchange = *density_fitted_range_exchange;
-      execution_plan.automatic_density_fitted_range_exchange = false;
-    }
+    execution_plan.automatic_density_fitted_range_exchange =
+        execution_plan.automatic_density_fitted_range_exchange &&
+        execution_plan.density_fitted_range_exchange;
     const auto prepare = [&] {
-      return std::make_unique<KsPreparedState>(
-          capabilities_, system, execution_plan, options_, grid_spec_, backend_, device_,
-          ks_auxiliary_for_system(system, auxiliary_), capacity_.get(), packed_eri_);
+      return std::make_unique<KsPreparedState>(capabilities_, system, execution_plan, options_,
+                                               grid_spec_, backend_, device_,
+                                               ks_auxiliary_for_system(system, auxiliary_),
+                                               capacity_.get(), packed_eri_, initial_geometry);
     };
     std::unique_ptr<KsPreparedState> plan;
     try {
       plan = prepare();
     } catch (const AutomaticLrFitRefused&) {
-      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+      // The partially built fitted owner has unwound before the exact retry.
     } catch (const std::bad_alloc&) {
-      if (!execution_plan.automatic_density_fitted_range_exchange) throw;
+      if (!initial_geometry || !execution_plan.automatic_density_fitted_range_exchange) throw;
 #if GENERATIVEQC_HAS_CUDA
       if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
         const auto pending = cudaGetLastError();
@@ -4014,9 +4044,8 @@ class KsPreparedBatch final : public PreparedBatch,
 #endif
     }
     if (!plan) {
-      // This covers primary split-budget refusal too. All candidate providers
-      // have retired, so the original explicit total cap can be used by exact
-      // preparation without overlapping owners or borrowing an extra budget.
+      // All fitted candidate providers have retired. Exact preparation can
+      // use the original explicit total DF cap without overlapping owners.
       execution_plan.density_fitted_range_exchange = false;
       execution_plan.automatic_density_fitted_range_exchange = false;
       plan = prepare();
@@ -4045,6 +4074,7 @@ class KsPreparedBatch final : public PreparedBatch,
   std::optional<core::System> auxiliary_;
   const std::optional<scf::CpuPackedEriPreparation> packed_eri_;
   const std::optional<scf::RksColdFockDamping> cold_damping_;
+  const bool require_streamed_cpu_df_;
   // Declared before items: their allocations retire while the promise is open.
   std::unique_ptr<runtime::DeviceCapacityReservation> capacity_;
   std::vector<Item> items_;
@@ -4224,6 +4254,26 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
       execution_plan.long_range_exchange <= 1;
   const bool revised_nonlocal = execution_plan.semilocal_family == dft::SemilocalFamily::R2scan &&
                                 execution_plan.nonlocal_correlation;
+  // The explicit auxiliary fit supplies only J. The existing CPU one-electron
+  // owner retains the scalar ECP in H and H'; it does not fit the residual.
+  const auto supports_fitted_angular = [](const core::System& system) {
+    return std::ranges::all_of(system.shells,
+                               [](const auto& shell) { return shell.angular_momentum <= 3; });
+  };
+  const bool cpu_pbe_df_ecp =
+      context.requested_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE &&
+      options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
+      options.precision_mode == GENERATIVEQC_PRECISION_FP64 && auxiliary && !has_ecp(*auxiliary) &&
+      supports_fitted_angular(*auxiliary) &&
+      (!options.preliminary_guess || options.preliminary_guess->automatic_cpu) &&
+      !cpu_packed_eri_bytes && !scf::cpu_materialized_df_derivatives_requested() &&
+      !execution_plan.range_exchange && !execution_plan.nonlocal_correlation && !dispersion &&
+      !execution_plan.d4_correction && !execution_plan.automatic_program &&
+      !execution_plan.generated_split_hybrid &&
+      execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
+      execution_plan.full_range_exchange == 0 && options.semilocal_exchange_scale == 1 &&
+      options.semilocal_correlation_scale == 1;
+  bool require_streamed_cpu_df = false;
   for (const auto& system : systems) {
     validate_ks_spin_state(execution_plan, system, context.requested_backend);
     if (!has_ecp(system)) continue;
@@ -4268,15 +4318,24 @@ std::unique_ptr<KsPreparedBatch> prepare_ks_batch(
     }
     if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
         execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv && !cuda_canonical_df_ecp &&
-        !cuda_range_pbe_df_ecp && !revised_nonlocal && !split_hybrid_df_ecp)
+        !cuda_range_pbe_df_ecp && !revised_nonlocal && !split_hybrid_df_ecp &&
+        !(cpu_pbe_df_ecp && supports_fitted_angular(system)))
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "DFT ECP density fitting is not qualified");
+    // Check the incremental ECP builder before constructing any prepared Fock
+    // providers. This bounds ECP setup, not aggregate host usage: explicit
+    // shared CPU DF host promises still exclude ECP until their inventory does.
+    if (cpu_pbe_df_ecp &&
+        integrals::ecp_workspace_capacity(system) > dft::cpu_stationary_force_source_bytes)
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                        "CPU DF KS ECP preparation exceeds its source budget");
+    require_streamed_cpu_df |= cpu_pbe_df_ecp;
   }
-  return std::make_unique<KsPreparedBatch>(capabilities, std::move(systems), execution_plan,
-                                           std::move(options), std::move(grid),
-                                           context.requested_backend, context.device_id,
-                                           (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
-                                           auxiliary, cpu_packed_eri_bytes, cold_damping);
+  return std::make_unique<KsPreparedBatch>(
+      capabilities, std::move(systems), execution_plan, std::move(options), std::move(grid),
+      context.requested_backend, context.device_id,
+      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0, auxiliary, cpu_packed_eri_bytes,
+      cold_damping, require_streamed_cpu_df);
 }
 
 /** Single-system ABI/SDK view of the same native scheduler used by Python.

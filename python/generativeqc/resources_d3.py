@@ -1,8 +1,8 @@
 """ResourcePlan adapter for the production two-body D3(BJ) owner.
 
-The discovered native query shares src/dft/dispersion/d3_runtime.cpp with the
-production owner. Old libraries and library-free dry runs retain an explicit
-portable layout. Neither path creates a context, correction batch or GPU state.
+The native query shares src/dft/dispersion/d3_runtime.cpp with the production
+owner. Library-free dry runs and older CUDA libraries retain a portable layout.
+Neither path creates a context, correction batch or GPU state.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ _D3_ELEMENT_COUNT = 86
 _D3_PAIR_COUNT = 86 * 87 // 2
 _D3_REFERENCE_CN_COUNT = 237
 _D3_REFERENCE_C6_COUNT = 28455
+_D3_LAYOUT_SYMBOL = "generativeqc_resource_d3_layout_v1"
 
 
 class _ElementData(ctypes.Structure):
@@ -114,7 +115,7 @@ def _d3_inventory(
     counts: tuple[int, ...], backend: str, library: typing.Any
 ) -> dict[str, int]:
     """Query already-loaded native capacity without discovering a provider."""
-    query = getattr(library, "generativeqc_resource_d3_layout_v1", None)
+    query = getattr(library, _D3_LAYOUT_SYMBOL, None)
     if query is None:
         return _portable_d3_inventory(counts, backend)
     query.argtypes = (
@@ -238,9 +239,10 @@ def d3_resource_request(
 ) -> ResourceRequest:
     """Describe the retained production D3(BJ) owner without allocating it.
 
-    An already-loaded ``library`` supplies native sizing when its additive
-    query exists. No library is loaded here; absent symbols retain portable
-    metadata sizing, while discovered native failures are authoritative.
+    A selected CPU ``library`` must supply the standalone layout query unless
+    the complete KS owner supplies its own inventory. No provider is loaded
+    here. Library-free estimates and older CUDA libraries retain the portable
+    model; native rejections do not retry it.
     The selected complete KS program uses its distinct per-item native query;
     its equal-share local cap is checked independently of global live storage.
     """
@@ -261,6 +263,8 @@ def d3_resource_request(
     counts = tuple(len(system) for system in atomic_numbers)
     total_atoms = checked_bytes(sum(counts), "D3 total atom count")
     maximum_atoms = max(counts)
+    native_layout_available = getattr(library, _D3_LAYOUT_SYMBOL, None) is not None
+    require_native_layout = backend == "cpu" and library is not None and not _native_ks
 
     controls = {
         "correction_identity": spec.identity,
@@ -270,7 +274,7 @@ def d3_resource_request(
             "native-ks-d3-layout-v1"
             if _native_ks
             else "native-d3-layout-v1"
-            if getattr(library, "generativeqc_resource_d3_layout_v1", None) is not None
+            if native_layout_available or require_native_layout
             else "portable-d3-layout-v1"
         ),
         "maximum_bytes": maximum_bytes,
@@ -308,6 +312,10 @@ def d3_resource_request(
         )
     elif len(counts) > 2**32 - 1 or total_atoms > 2**32 - 1:
         unsupported = "production D3(BJ) ragged offsets require uint32 atom counts"
+    elif require_native_layout and not native_layout_available:
+        unsupported = (
+            f"selected CPU library lacks the D3 layout query {_D3_LAYOUT_SYMBOL}"
+        )
     if unsupported is not None:
         return ResourceRequest(
             name,

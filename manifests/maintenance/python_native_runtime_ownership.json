@@ -1696,8 +1696,8 @@
       "python_sites": [
         {
           "path": "python/generativeqc/initial_guess.py",
-          "symbol": "supports_automatic_minao",
-          "classification": "compatibility"
+          "symbol": "automatic_initial_guess_candidate",
+          "classification": "wrapper"
         },
         {
           "path": "python/generativeqc/batch.py",
@@ -1710,8 +1710,17 @@
         "src/api/c_api_batch.cpp"
       ],
       "native_callers": [],
+      "retired_python_sites": [
+        {
+          "path": "python/generativeqc/initial_guess.py",
+          "symbols": ["supports_automatic_minao", "supports_automatic_huckel", "_automatic_minao_model_eligible"],
+          "last_present_source_sha": "9e86e35238758939285821612e477be77ab3c610",
+          "replacement": "src/api/c_api_calculation.cpp",
+          "reason": "The required combined native query replaces Python provider and Hcore selection for missing automatic-seed policy ABIs."
+        }
+      ],
       "remaining_python_runtime": [
-        "Keep older-library Hcore and separately qualified stationary-force behavior until native per-prepared admission is positively available.",
+        "Automatic initial guesses require the native policy; a missing symbol no longer selects Hcore in Python. Separately qualified stationary-force compatibility retains its prepared admission rule.",
         "Missing prepared-resource symbols select the older Python observation/binding adapter. A partial ABI or a refused native create/prepare never retries unbudgeted preparation; frontend handle closure cannot detach an admitted native owner."
       ],
       "tests": [

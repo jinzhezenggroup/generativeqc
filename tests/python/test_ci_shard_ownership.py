@@ -356,7 +356,7 @@ raise SystemExit(pytest.main(["--collect-only", "-q", *sys.argv[2:]], plugins=[P
     assert set(rows) == {
         (device, route, *case)
         for device, route in (
-            ("cpu", "reference"),
+            ("cpu", "compatibility"),
             ("cuda", "native"),
             ("cuda", "compatibility"),
         )
@@ -918,6 +918,7 @@ def _assert_timed_diagnostics_contract(source: str) -> None:
                 "compiler-heavy",
                 "runtime-heavy",
             }
+            extended = extended or (event == "merge_group" and shard == "core-a")
             context = {"matrix.shard": shard, "github.event_name": event}
             assert expression(job_limit[1], context) == (100 if full else 60)
             assert expression(test_limit[1], context) == (
@@ -1006,7 +1007,7 @@ def test_timed_diagnostics_contract_accepts_equivalent_timeout_expressions() -> 
     )
     alternatives = {
         4: "${{ github.event_name == 'pull_request' && 60 || github.event_name == 'push' && 60 || github.event_name == 'merge_group' && 60 || 100 }}",
-        8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || 30 }}}}",
+        8: f"${{{{ {full} && 90 || {extended} && 35 || matrix.shard == 'core-b' && 35 || (matrix.shard == 'core-a' && github.event_name == 'merge_group') && 35 || 30 }}}}",
     }
     for indent, budget in alternatives.items():
         start = source.index("\n  python:\n")

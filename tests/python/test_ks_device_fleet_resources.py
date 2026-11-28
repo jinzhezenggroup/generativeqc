@@ -553,6 +553,7 @@ def test_public_candidate_and_exact_budget_preserve_legacy_bounds(
     )
     common = {
         "generativeqc_ks_options_version": lambda: 1,
+        "generativeqc_resource_compose_v1": library.generativeqc_resource_compose_v1,
         "generativeqc_ks_resource_inventory_version_v1": lambda: 1,
     }
     native_library = SimpleNamespace(

@@ -1,0 +1,597 @@
+{
+  "source_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
+  "library_sha256": "f6cb1d381f9fb97009f963cc51944084cbd15574745f3f358cf67337e40a6003",
+  "source_archive_sha256": "f0fbd2298cb3465d7393413afb3d38c48c2b9ed075b7db6dca5716c7e3de122a",
+  "remote_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126",
+  "stage_archive": {
+    "path": "raw/c7-addendum/stage.tar.gz",
+    "bytes": 17961,
+    "sha256": "a09cf8e446e25ad6932eb3c385a297a650792844c50faa45f9d1d6c62ba46f00"
+  },
+  "accounting": "Worker Scheduled event through terminal/release. H200 quota is 1 point per card-hour. CPU HPC quota is zero points. CPU core-hours exclude controller resources.",
+  "jobs": {
+    "gqc-3167-c7-fd-h1m-check-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h1m-check-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:32",
+        "finished_at": "2026-11-27 01:03:52"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h1m-check-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h1m-check-1126-a.tar.gz",
+        "bytes": 9440,
+        "sha256": "5c913857f55cb0001307f58137111b8d76a7ff6665693f78ffb4cab9176ba67d"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "674b6ea4282679babd2af47ecf78d2c593816d411a8cc6dc66a7d2602c0842b1"
+      },
+      "events_receipt": {
+        "bytes": 10539,
+        "sha256": "c2a22a48418d2e573ef8e1446a2d99273fbb6eb99af30d6435765fe49eed3a4f"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:29:55",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): 0/1350 nodes are unavailable: 1096 Insufficient cpu, 112 Insufficient memory, 116 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 08:37:51",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-174, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:38:02",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 103 node(s) didn't match Pod's node affinity/selector, 1109 Insufficient cpu, 112 Insufficient memory, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:44:02+00:00",
+      "released_utc": "2026-11-26T17:03:52+00:00",
+      "allocated_core_hours": 6.611111111111111,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h1m-check-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h1m-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h1m-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:25",
+        "finished_at": "2026-11-27 00:53:47"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h1m-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h1m-tight-1126-a.tar.gz",
+        "bytes": 9384,
+        "sha256": "53749316252bb1b013c8741893ce5b1e3a1f975f79c032bb9e627f0196f8d12a"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "4eb1cca3596fbbc75af6132fecb1cbb4d9840034b25872a16ec3b6d30dc656ba"
+      },
+      "events_receipt": {
+        "bytes": 9215,
+        "sha256": "902b0188c596ad6e5ab14bed2ccf898ffb088d297bc857c661fb5392fc8686b5"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:21:45",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-316, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:29:44",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-335, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:29:54",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1096 Insufficient cpu, 112 Insufficient memory, 116 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:37:09+00:00",
+      "released_utc": "2026-11-26T16:53:47+00:00",
+      "allocated_core_hours": 5.544444444444444,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h1m-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h1p-check-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h1p-check-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:28",
+        "finished_at": "2026-11-27 01:04:08"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h1p-check-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h1p-check-1126-a.tar.gz",
+        "bytes": 9438,
+        "sha256": "804cf0d88a1bd5228ad87f4a91ae3155b6a93a8eff291499ce5dbf511a8d8373"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "669cecb92ba4fbe87cf21157b0870b9af495b2590703746fe3ddee716804cde5"
+      },
+      "events_receipt": {
+        "bytes": 10794,
+        "sha256": "d806679588263552819618e5e36fcab13b360bc18fe6545a3091c47a5c99176f"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:29:56",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 1096 Insufficient cpu, 112 Insufficient memory, 116 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 08:37:51",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-437, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:38:02",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 103 node(s) didn't match Pod's node affinity/selector, 1109 Insufficient cpu, 112 Insufficient memory, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:44:02+00:00",
+      "released_utc": "2026-11-26T17:04:08+00:00",
+      "allocated_core_hours": 6.7,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h1p-check-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h1p-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h1p-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:22",
+        "finished_at": "2026-11-27 00:43:56"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h1p-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h1p-tight-1126-a.tar.gz",
+        "bytes": 9463,
+        "sha256": "b722e8234bf4369cfd0bb420324da1383d8ff6200e263aa92ebb32a51a337be8"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "577f0d9c9aa078e4ce4c56f70145dc30adb73eaee948655f76d429bf1f36cd95"
+      },
+      "events_receipt": {
+        "bytes": 8610,
+        "sha256": "fd98fe2741581f959f596a9dd83ff5304de121ec0985a5a6e4da8b8e13d80732"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:14:42",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 106 node(s) didn't match Pod's node affinity/selector, 107 Insufficient memory, 1111 Insufficient cpu, 26 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 08:21:45",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-292, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:21:45",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): 0/1350 nodes are unavailable: 110 Insufficient memory, 1103 Insufficient cpu, 111 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:25:18+00:00",
+      "released_utc": "2026-11-26T16:43:56+00:00",
+      "allocated_core_hours": 6.21111111111111,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h1p-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h2m-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h2m-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:18",
+        "finished_at": "2026-11-27 00:43:53"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h2m-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h2m-tight-1126-a.tar.gz",
+        "bytes": 9401,
+        "sha256": "9ac5b4c02c63c9f19cf71d2ca4063c3c8f574c8d49caa9f55a268a47d7f6ca69"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "cce46457be2459d2c9cdf1951fab2ccbacd305ca871c1d594382d34be8270ab0"
+      },
+      "events_receipt": {
+        "bytes": 9470,
+        "sha256": "b433dd47a0d2caf0590a59dcb30d51d6b5b94237361a0152adea06399fb79129"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:14:32",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 103 node(s) didn't match Pod's node affinity/selector, 110 Insufficient memory, 1111 Insufficient cpu, 26 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 08:21:34",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-174, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:21:45",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): 0/1350 nodes are unavailable: 110 Insufficient memory, 1103 Insufficient cpu, 111 node(s) didn't match Pod's node affinity/selector, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:24:44+00:00",
+      "released_utc": "2026-11-26T16:43:53+00:00",
+      "allocated_core_hours": 6.383333333333333,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h2m-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h2p-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h2p-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:14",
+        "finished_at": "2026-11-27 00:37:03"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h2p-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h2p-tight-1126-a.tar.gz",
+        "bytes": 9468,
+        "sha256": "25ebf1ec03b07d0ebd4954467801e8c9a96c3a168ac77a1495eb4b544ae86c08"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "d70ec9686eaa63703802e0fceacd61a44f42510edb4c57394fe3ac9a34692444"
+      },
+      "events_receipt": {
+        "bytes": 9248,
+        "sha256": "aefca56cd8dd50849a68054bfbfd1fd821247dc4bab28c52f8d5a6a11d2084df"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:13:37",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-201, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:13:59",
+          "reason": "FailedScheduling",
+          "message": "0/1350 nodes are unavailable: 104 node(s) didn't match Pod's node affinity/selector, 110 Insufficient memory, 1110 Insufficient cpu, 26 node(s) were unschedulable."
+        },
+        {
+          "time": "2026-11-26 08:14:21",
+          "reason": "FailedScheduling",
+          "message": "(combined from similar events): 0/1350 nodes are unavailable: 104 node(s) didn't match Pod's node affinity/selector, 109 Insufficient memory, 1111 Insufficient cpu, 26 node(s) were unschedulable."
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:19:27+00:00",
+      "released_utc": "2026-11-26T16:37:03+00:00",
+      "allocated_core_hours": 5.866666666666667,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h2p-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h4m-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h4m-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:10",
+        "finished_at": "2026-11-27 00:25:10"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h4m-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h4m-tight-1126-a.tar.gz",
+        "bytes": 9463,
+        "sha256": "735fc89ab0a3be63aef87a6e045c9f121b9999baca96bf134da0111d065f35ff"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "d906d89b0837543b0997353752b3f72bc68f9857078cdaab32a18fdc84ceef9d"
+      },
+      "events_receipt": {
+        "bytes": 3973,
+        "sha256": "72f5b6d1308af2341969e23b7e3cf2e3872c798f92078be84731a9f77a7858de"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:05:28",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-559, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:05:28",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to cpu-nat-413, once resource is released and minAvailable is satisfied"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:05:32+00:00",
+      "released_utc": "2026-11-26T16:25:10+00:00",
+      "allocated_core_hours": 6.544444444444445,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h4m-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-fd-h4p-tight-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-fd-h4p-tight-1126-a",
+        "status": "SUCCEEDED",
+        "steps": "1/1",
+        "project": "cq-nex-chem",
+        "compute_group": "CPU\u8d44\u6e90-2",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 100,
+          "gpu": 0,
+          "nodes": 1,
+          "gpu_type": "CPU"
+        },
+        "priority": 35,
+        "priority_level": "HIGH",
+        "created_at": "2026-11-27 00:05:05",
+        "finished_at": "2026-11-27 00:24:37"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-fd-h4p-tight-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-fd-h4p-tight-1126-a.tar.gz",
+        "bytes": 9371,
+        "sha256": "a8e395921a393c953f9229b73ba46163ebd107bdd57c6e6c96fdb483b6131999"
+      },
+      "terminal_status_receipt": {
+        "bytes": 339,
+        "sha256": "0269dfe2ee2e0192c84f8def4809af286cc45dc454286f02e4aacad702235aef"
+      },
+      "events_receipt": {
+        "bytes": 3973,
+        "sha256": "3788824da6ea96a51df89bb5b5e4e3dcf77f2e8060acdb5d89350113919fc848"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:05:18",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmctld-0 can possibly be assigned to cpu-nat-174, once minAvailable is satisfied"
+        },
+        {
+          "time": "2026-11-26 08:05:18",
+          "reason": "FailedScheduling",
+          "message": "Pod cq-nex-chem/<redacted>-cluster-slurmd-0 can possibly be assigned to cpu-nat-413, once resource is released and minAvailable is satisfied"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:05:21+00:00",
+      "released_utc": "2026-11-26T16:24:37+00:00",
+      "allocated_core_hours": 6.4222222222222225,
+      "estimated_points": 0.0,
+      "cleanup": {
+        "name": "gqc-3167-c7-fd-h4p-tight-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-h200-0-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-h200-0-1126-a",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H200-3\u53f7\u673a\u623f",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H200 (141GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795709122000",
+        "finished_at": "1795733581000"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-h200-0-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-h200-0-1126-a.tar.gz",
+        "bytes": 82771,
+        "sha256": "9415306ae76c316622694a35114f9601db8cef70d71b689bd6305c2ca2cc192f"
+      },
+      "terminal_status_receipt": {
+        "bytes": 388,
+        "sha256": "537fe841e6c5bd9868c4d3088ca98342e130be62057b96c18fbbad5ca66986ec"
+      },
+      "events_receipt": {
+        "bytes": 5526,
+        "sha256": "2cf13d9bc06bf77e06e1855eb4050aefdfa37d8252c87f1a73cf178484f60ff8"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:06:34",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 Insufficient rdma/hca_shared_devices, 6 node(s) were unschedulable, 665 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 08:06:49",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 25 Insufficient rdma/hca_shared_devices, 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 node(s) were unschedulable, 646 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 14:53:01",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:06:53+00:00",
+      "released_utc": "2026-11-26T22:53:01+00:00",
+      "allocated_card_hours": 6.768888888888889,
+      "estimated_points": 6.768888888888889,
+      "cleanup": {
+        "name": "gqc-3167-c7-h200-0-1126-a",
+        "status": "deleted"
+      }
+    },
+    "gqc-3167-c7-h200-1-1126-a": {
+      "platform": {
+        "name": "gqc-3167-c7-h200-1-1126-a",
+        "status": "SUCCEEDED",
+        "project": "CQ-NexChem",
+        "compute_group": "\u5f00\u53d1\u533a-H200-3\u53f7\u673a\u623f",
+        "resource": {
+          "cpu": 20,
+          "memory_gib": 200,
+          "gpu": 1,
+          "nodes": 1,
+          "shared_memory_gib": 16,
+          "gpu_type": "NVIDIA H200 (141GB)"
+        },
+        "priority": 20,
+        "priority_level": "NORMAL",
+        "public_path_mount_mode": 0,
+        "created_at": "1795709141000",
+        "finished_at": "1795733646000"
+      },
+      "remote_output": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3167-c7-addendum-20261126/output/gqc-3167-c7-h200-1-1126-a",
+      "local_archive": {
+        "path": "raw/c7-addendum/gqc-3167-c7-h200-1-1126-a.tar.gz",
+        "bytes": 81648,
+        "sha256": "894b3b1527b981be5764278e66b6f6dc869fc72f004c0845b9da826227709a29"
+      },
+      "terminal_status_receipt": {
+        "bytes": 388,
+        "sha256": "7feda481aa5739060149bc0d350a3dcc5187167928a820c733ba9a331f989e69"
+      },
+      "events_receipt": {
+        "bytes": 4540,
+        "sha256": "39bbebf1929ab36bcee93049b7ba7159e6e60e1af271fbc7a1440050cdac3459"
+      },
+      "scheduling_diagnostics": [
+        {
+          "time": "2026-11-26 08:06:49",
+          "reason": "FailedScheduling",
+          "message": "0/1488 nodes are unavailable: 26 Insufficient rdma/hca_shared_devices, 292 Insufficient memory, 35 node(s) didn't match Pod's node affinity/selector, 484 Insufficient cpu, 6 node(s) were unschedulable, 645 Insufficient nvidia.com/gpu."
+        },
+        {
+          "time": "2026-11-26 14:54:06",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        },
+        {
+          "time": "2026-11-26 14:54:11",
+          "reason": "JobTerminated",
+          "message": "Job has been terminated. Deleting PodGroup"
+        }
+      ],
+      "scheduled_utc": "2026-11-26T16:06:53+00:00",
+      "released_utc": "2026-11-26T22:54:06+00:00",
+      "allocated_card_hours": 6.786944444444444,
+      "estimated_points": 6.786944444444444,
+      "cleanup": {
+        "name": "gqc-3167-c7-h200-1-1126-a",
+        "status": "deleted"
+      }
+    }
+  }
+}

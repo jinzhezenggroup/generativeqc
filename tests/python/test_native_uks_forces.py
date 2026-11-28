@@ -252,13 +252,15 @@ def test_native_uks_orbital_g_keeps_existing_ao_jet_boundary(method: str) -> Non
 @pytest.mark.parametrize("method", ["pbe-uks", "pbe0-uks"])
 @pytest.mark.parametrize("fitting", ["none", "cpu"])
 def test_native_uks_ecp_force_admission(method: str, fitting: str) -> None:
-    """Direct ECP shares the complete owner; unsupported DF energy stays closed."""
+    """Direct ECP shares the owner; the native DF path requires a qualified fit."""
     from test_ecp import fixture
 
     atoms, record, reference = fixture(spin=1)
     calc = calculator(method, basis=record, density_fitting=fitting)
     if fitting == "cpu":
-        with pytest.raises(NotImplementedError, match="ECP density-fitting"):
+        with pytest.raises(
+            NotImplementedError, match="DFT ECP density fitting is not qualified"
+        ):
             calc.prepare_batch(
                 [atoms], charges=[reference.charge], multiplicities=[reference.spin + 1]
             )

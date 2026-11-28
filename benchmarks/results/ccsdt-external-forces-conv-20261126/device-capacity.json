@@ -1,0 +1,34 @@
+{
+  "measured_commit": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
+  "source": "src/cc/lambda_response_cuda.cu, CudaHamiltonianResponseOwner::Impl single-device layout",
+  "method": "Replayed 256-byte-aligned reservations using the generated arena sizes from the pinned native build.",
+  "source_receipts": {
+    "estimator_source_sha256": "a9ad2513a67e5198247d36c7975e3495541430adce995d1a4fd82cc23c21d5d2",
+    "generated_functions_sha256": "9ae4e4e6ac444f9a56a358dea0421a883aff9af1dd35cf4f748ae7d867624075"
+  },
+  "h100_total_mib": 81559,
+  "h100_total_bytes": 85520809984,
+  "cases": {
+    "C5": {
+      "nao": 130,
+      "occupied": 21,
+      "workspace_bytes": 28765660560,
+      "single_cuda_allocation_bytes": 32533547008,
+      "over_reported_total": false
+    },
+    "C6": {
+      "nao": 154,
+      "occupied": 25,
+      "workspace_bytes": 56640171280,
+      "single_cuda_allocation_bytes": 64054462464,
+      "over_reported_total": false
+    },
+    "C7": {
+      "nao": 178,
+      "occupied": 29,
+      "workspace_bytes": 101083108496,
+      "single_cuda_allocation_bytes": 114308959488,
+      "over_reported_total": true
+    }
+  }
+}

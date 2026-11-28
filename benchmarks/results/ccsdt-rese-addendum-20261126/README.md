@@ -1,6 +1,6 @@
 # CCSD(T) equilibrium-geometry addendum
 
-This local addendum extends #3166 and the fixed cohort in #3178. Its
+This addendum completes the equilibrium-geometry cohort from #3166 and #3178. Its
 scientific revision is `22f72d0692a760c2892cd7791022584d9ae1c3e5`. The
 baseline evidence and literature audit come from `99dfcb803c8c176891bc5da951f89d4307cfe54e`
 under `benchmarks/results/ccsdt-rese-20261125/`.
@@ -74,7 +74,9 @@ geometry on the projected electronic energy surface.
 
 ## Combined results
 
-The fixed cohort has **22/22** converged DF geometries, **22** complete curvature checks and **22** verified DF minima.
+All **22/22** DF geometries converged and passed the independent curvature
+checks. This addendum computes 19 curvature checks and reuses the three
+hash-matched DF checks for HF, H₂O and CO from #3178.
 
 | Comparison | Parameters | MAE | Maximum absolute error | Largest deviation |
 | --- | ---: | ---: | ---: | --- |
@@ -193,17 +195,19 @@ plus 1.403 allocated CPU-hours at zero points.
 
 ## Replay
 
-Use Python 3.10 or newer. Point the replay tool at the immutable baseline benchmark directory. When
-it is absent in this checkout, use `git archive` on `99dfcb803` to extract
-the original directory to scratch or use the original worktree.
+Use Python 3.10 or newer and run from the repository root. The replay
+reads the [audited baseline](../ccsdt-rese-20261125/README.md) and the
+archives in this directory.
 
 ```sh
 python3 benchmarks/results/ccsdt-rese-addendum-20261126/replay_addendum.py \
-  --baseline /path/to/benchmarks/results/ccsdt-rese-20261125 \
+  --baseline benchmarks/results/ccsdt-rese-20261125 \
   --output /tmp/rese-addendum-summary.json
+cmp /tmp/rese-addendum-summary.json benchmarks/results/ccsdt-rese-addendum-20261126/summary.json
 ```
 
-Raw traces and curvature samples are stored in compressed JSON in this
-directory. The byte-exact qz transfers are in the local, Git-ignored
-`raw/` directory. Their SHA-256 digests, scheduler receipts and persistent
-remote output paths are listed in `provenance.json`.
+The compressed JSON archives contain the native traces and PySCF
+displacement records used in replay. The original scheduler receipts
+and transfers are listed by SHA-256 in `provenance.json`. Paths beginning
+with `${GQC_SHARED}` are relative to the campaign's qz shared project
+directory. The byte-exact transfer archives are retained separately.

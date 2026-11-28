@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -23,10 +22,6 @@ from generativeqc import (
     Shell,
     _native,
 )
-from generativeqc.initial_guess import (
-    initial_guess_for_systems,
-    with_initial_guess_resources,
-)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,34 +39,6 @@ def native() -> None:
     library = _native.load_library(device="cpu")
     if not hasattr(library, "generativeqc_initial_guess_options_version"):
         pytest.skip("MINAO native build required")
-
-
-@pytest.mark.parametrize("systems", [[WATER], [HEAVY], [WATER, HEAVY]])
-def test_batch_element_admission_is_conservative(systems: list) -> None:
-    policy = InitialGuessSpec("minao")
-    calc = SimpleNamespace(
-        _initial_guess=policy, _automatic_initial_guess=True, _basis="sto-3g"
-    )
-    assert initial_guess_for_systems(calc, systems) is (
-        policy if systems == [WATER] else None
-    )
-    if systems != [WATER]:
-        target = object()
-        assert with_initial_guess_resources(target, calc, systems, None, None) is target
-    calc._automatic_initial_guess = False
-    assert initial_guess_for_systems(calc, systems) is policy
-
-
-def test_automatic_ecp_admission_keeps_hcore(monkeypatch: pytest.MonkeyPatch) -> None:
-    from generativeqc import ecp
-
-    monkeypatch.setattr(ecp, "resolve_ecp", lambda basis, atoms: ((2, 0, 0), ()))
-    calc = SimpleNamespace(
-        _initial_guess=InitialGuessSpec("minao"),
-        _automatic_initial_guess=True,
-        _basis="sto-3g",
-    )
-    assert initial_guess_for_systems(calc, [WATER]) is None
 
 
 @pytest.mark.parametrize("method", ["rhf", "pbe-rks", "pbe0-rks"])
@@ -247,7 +214,7 @@ def test_all_ineligible_default_keeps_target_inventory(native: None) -> None:
 
 @pytest.mark.parametrize("method", ["rhf", "pbe-rks", "pbe0-rks"])
 def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
-    native: None, method: str, monkeypatch: pytest.MonkeyPatch
+    native: None, method: str
 ) -> None:
     """Unused ECP metadata is not a model-wide veto on a per-system policy."""
     potential = {
@@ -307,24 +274,6 @@ def test_mixed_ecp_basis_does_not_disable_an_all_electron_neighbor(
             initial_guess=InitialGuessSpec("minao"),
             **options,
         )
-
-    class LegacyGuessLibrary:
-        @staticmethod
-        def generativeqc_initial_guess_capabilities_v1() -> int:
-            return _native.INITIAL_GUESS_CAPABILITY_MINAO
-
-        def __getattr__(self, name: str) -> object:
-            if name == "generativeqc_initial_guess_default_kind_v1":
-                raise AttributeError(name)
-            return getattr(automatic._library, name)
-
-    legacy_library = LegacyGuessLibrary()
-    monkeypatch.setattr(_native, "load_library", lambda *args, **kwargs: legacy_library)
-    legacy = Calculator(method, basis, device="cpu", **options)
-    assert legacy.initial_guess == InitialGuessSpec("minao")
-    assert initial_guess_for_systems(legacy, systems[:1]) == legacy.initial_guess
-    assert initial_guess_for_systems(legacy, systems[1:]) is None
-    assert initial_guess_for_systems(legacy, systems) is None
 
 
 def test_default_checkpoint_density_skips_preparation(

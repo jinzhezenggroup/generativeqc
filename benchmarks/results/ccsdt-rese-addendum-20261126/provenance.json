@@ -4,7 +4,7 @@
     "sha256": "252352df105a1495e8aae614080401ed387d4e6346af0913b4a8dfe3cf537716"
   },
   "schema": "generativeqc.ccsdt-rese-addendum.v1",
-  "scope": "Local experiment addendum to #3166 and #3178.",
+  "scope": "Equilibrium-geometry and independent projected-curvature addendum to #3166 and #3178.",
   "scientific_revision": "22f72d0692a760c2892cd7791022584d9ae1c3e5",
   "native_source_identity": "3f4f4a5ff958ee10dd67138eba54369fecc55563f07147fc3b2def229c984eb2",
   "baseline_commit": "99dfcb803c8c176891bc5da951f89d4307cfe54e",
@@ -15,8 +15,8 @@
     "check_df_minima.py": "8066588b8a75d4be3dcd5addfc35efac4ec776932fe4cec56f367f18b28faa6d",
     "replay.py": "5cd5e602798c1e1c4cbc74c2f63a7cb6233fb38cab2c8f8528293a21b0a23060"
   },
-  "remote_root": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126",
-  "remote_native_baseline": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f",
+  "remote_root": "${GQC_SHARED}/issue-3166-rese-addendum-20261126",
+  "remote_native_baseline": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f",
   "deployment_sha256": {
     "cpu-payload.sha256": "d51bbeaa715b2f1477ee60be5fe8a244bb40336fe17e07b8587e6534d8bf2b6b",
     "launch-cpu-v2.sh": "4486e43abafba7082fcd2a08b08b6f3facbc5344caf3513d0b32b7bcbcb49dcb",
@@ -71,7 +71,7 @@
         "finished_at": "1795664415000"
       },
       "platform_type": "gpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-aziridine",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/gpu-aziridine",
       "entrypoint_utc": "2026-11-26T01:56:47Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T03:40:07Z",
@@ -105,7 +105,7 @@
       "hardware": {
         "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
         "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
-        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-aziridine/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  ${GQC_SHARED}/issue-3166-rese-addendum-20261126/gpu-aziridine/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
       },
       "raw_outputs": {
         "relink.log": "660b1d6c4368ef03a882a2f38aef769f83a3d92d88484a11bb97142e72c61b21",
@@ -139,7 +139,7 @@
         "created_at": "2026-11-26 11:40:25"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-aziridine",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-aziridine",
       "entrypoint_utc": null,
       "stop_request_utc": "2026-11-26T04:06:06Z",
       "exit_utc": null,
@@ -195,7 +195,7 @@
         "created_at": "2026-11-26 10:20:49"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro-resume",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-difluoro-resume",
       "entrypoint_utc": null,
       "stop_request_utc": "2026-11-26T02:30:42Z",
       "exit_utc": null,
@@ -258,7 +258,7 @@
         "finished_at": "2026-11-26 16:00:10"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro-resume40",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-difluoro-resume40",
       "entrypoint_utc": "2026-11-26T03:28:36Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T07:59:50Z",
@@ -340,7 +340,7 @@
         "created_at": "2026-11-26 09:57:05"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-difluoro",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-difluoro",
       "entrypoint_utc": "2026-11-26T01:57:40Z",
       "stop_request_utc": "2026-11-26T02:20:49Z",
       "exit_utc": null,
@@ -402,7 +402,7 @@
         "created_at": "2026-11-26 10:18:49"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic-resume",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-formic-resume",
       "entrypoint_utc": null,
       "stop_request_utc": "2026-11-26T02:30:27Z",
       "exit_utc": null,
@@ -467,7 +467,7 @@
         "finished_at": "2026-11-26 14:54:29"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic-resume40",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-formic-resume40",
       "entrypoint_utc": "2026-11-26T02:31:07Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T06:54:03Z",
@@ -534,7 +534,7 @@
         "created_at": "2026-11-26 09:57:06"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-formic",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-formic",
       "entrypoint_utc": "2026-11-26T01:57:40Z",
       "stop_request_utc": "2026-11-26T02:18:48Z",
       "exit_utc": null,
@@ -597,7 +597,7 @@
         "created_at": "2026-11-26 10:15:49"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-medium-resume",
       "entrypoint_utc": null,
       "stop_request_utc": "2026-11-26T02:25:51Z",
       "exit_utc": null,
@@ -659,7 +659,7 @@
         "created_at": "2026-11-26 10:25:53"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume40",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-medium-resume40",
       "entrypoint_utc": "2026-11-26T02:26:29Z",
       "stop_request_utc": "2026-11-26T02:30:01Z",
       "exit_utc": null,
@@ -722,7 +722,7 @@
         "finished_at": "2026-11-26 15:48:40"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium-resume40b",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-medium-resume40b",
       "entrypoint_utc": "2026-11-26T02:31:06Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T07:48:12Z",
@@ -790,7 +790,7 @@
         "created_at": "2026-11-26 09:57:02"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-medium",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-medium",
       "entrypoint_utc": "2026-11-26T01:58:10Z",
       "stop_request_utc": "2026-11-26T02:15:49Z",
       "exit_utc": null,
@@ -854,7 +854,7 @@
         "finished_at": "2026-11-26 13:42:19"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-nox-resume",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-nox-resume",
       "entrypoint_utc": "2026-11-26T02:14:06Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T05:42:06Z",
@@ -922,7 +922,7 @@
         "created_at": "2026-11-26 09:57:02"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-nox",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-nox",
       "entrypoint_utc": "2026-11-26T01:58:10Z",
       "stop_request_utc": "2026-11-26T02:13:00Z",
       "exit_utc": null,
@@ -986,7 +986,7 @@
         "finished_at": "2026-11-26 14:08:38"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-small",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-small",
       "entrypoint_utc": "2026-11-26T01:57:39Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T06:08:11Z",
@@ -1055,7 +1055,7 @@
         "finished_at": "2026-11-26 13:30:11"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-syn-ethenol-fine",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-syn-ethenol-fine",
       "entrypoint_utc": null,
       "stop_request_utc": null,
       "exit_utc": null,
@@ -1134,7 +1134,7 @@
         "finished_at": "2026-11-27 00:24:49"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-syn-ethenol-fine2",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-syn-ethenol-fine2",
       "entrypoint_utc": "2026-11-26T05:42:54Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T16:24:36Z",
@@ -1221,7 +1221,7 @@
         "finished_at": "2026-11-27 00:25:02"
       },
       "platform_type": "cpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-syn-ethenol",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-syn-ethenol",
       "entrypoint_utc": "2026-11-26T03:55:00Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T16:24:41Z",
@@ -1307,7 +1307,7 @@
         "finished_at": "1795664254000"
       },
       "platform_type": "gpu",
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-syn-ethenol",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/gpu-syn-ethenol",
       "entrypoint_utc": "2026-11-26T01:56:22Z",
       "stop_request_utc": null,
       "exit_utc": "2026-11-26T03:37:26Z",
@@ -1344,7 +1344,7 @@
       "hardware": {
         "gpu.txt": "NVIDIA H100 80GB HBM3, 9.0, 595.58.03",
         "cpu.txt": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        46 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               192\nOn-line CPU(s) list:                  0-191\nVendor ID:                            GenuineIntel\nModel name:                           Intel(R) Xeon(R) Platinum 8468\nCPU family:                           6\nModel:                                143\nThread(s) per core:                   2\nCore(s) per socket:                   48\nSocket(s):                            2\nStepping:                             8\nBogoMIPS:                             4200.00\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cat_l2 cdp_l3 invpcid_single cdp_l2 ssbd mba ibrs ibpb stibp ibrs_enhanced tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local split_lock_detect avx_vnni avx512_bf16 wbnoinvd dtherm ida arat pln pts avx512vbmi umip pku ospke waitpkg avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg tme avx512_vpopcntdq la57 rdpid bus_lock_detect cldemote movdiri movdir64b enqcmd fsrm md_clear serialize tsxldtrk pconfig arch_lbr amx_bf16 avx512_fp16 amx_tile amx_int8 flush_l1d arch_capabilities\nVirtualization:                       VT-x\nL1d cache:                            4.5 MiB (96 instances)\nL1i cache:                            3 MiB (96 instances)\nL2 cache:                             192 MiB (96 instances)\nL3 cache:                             210 MiB (2 instances)\nNUMA node(s):                         2\nNUMA node0 CPU(s):                    0-47,96-143\nNUMA node1 CPU(s):                    48-95,144-191\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Not affected\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl and seccomp\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS SW sequence; BHI Retpoline\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected",
-        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/gpu-syn-ethenol/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  /inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
+        "binaries.sha256": "5682d4273520f2a2e17e775b31f6e7058112fe94aa7bc048ab32b1ced97416e7  ${GQC_SHARED}/issue-3166-rese-addendum-20261126/gpu-syn-ethenol/bin/generativeqc\nac6c357ad285e0e61e88aa09dcc7a83e8993ddedf34595b4ef2ee6312ef156ee  ${GQC_SHARED}/issue-3166-rese-addendum-20261126/../issue-3166-20261125-master22f/c/build/libgenerativeqc.so"
       },
       "raw_outputs": {
         "relink.log": "229c54241ae5117c72663f2dada91974db539ddad167bfa32e3e18b7ab3000a1",
@@ -1381,7 +1381,7 @@
         "priority": "10",
         "priority_level": "HIGH"
       },
-      "output_path": "/inspire/hdd/global_user/czxs25220150/projects/GenerativeQC/issue-3166-rese-addendum-20261126/cpu-aziridine-notebook",
+      "output_path": "${GQC_SHARED}/issue-3166-rese-addendum-20261126/cpu-aziridine-notebook",
       "pid": 1566817,
       "worker_count": 32,
       "maximum_python_address_space_gib": 198,

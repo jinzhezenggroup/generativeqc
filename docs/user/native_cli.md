@@ -750,9 +750,12 @@ force plan covers s/p/d/f bases. The flag also plans forces for linked,
 all-electron FP64 CPU LDA/PBE RKS/UKS with a single full-range DF J provider.
 With `--cpu-packed-eri-budget-bytes`, planning charges the exact retained spherical
 ERI bytes across all `--batch` copies, separately from the modeled host peak.
-For a single supported CPU calculation (Direct RHF/KS or the semilocal DF-KS
-cases above), pass the same method, basis, fitting, initial-guess and force/packed flags
-to `run --host-bytes N` to check the modeled host peak before SCF preparation.
+For a single supported CPU calculation (Direct RHF/KS, all-electron Direct UHF,
+or the semilocal DF-KS cases above), pass the same method, basis, fitting,
+initial-guess and force/packed flags to `run --host-bytes N` to check the modeled
+host peak before SCF preparation. All-electron Direct UHF accepts this cap for
+energy or energy and forces, without an initial guess provider. Fitted HF and
+ECP UHF inventories remain planning-only for this flag.
 `--host-reserve-bytes` and `--headroom-fraction` reduce the available limit.
 `run --json` reports the modeled peak and effective limit in
 `resource_admission`. For CPU DF-KS, native preparation also checks the actual
