@@ -458,6 +458,7 @@
         "cublasDtrsm": 1,
         "cublasDtrsm_v2": 2,
         "cublasDtrsmBatched": 1,
+        "cublasGemmEx": 1,
         "cublasGetMathMode": 1,
         "cublasGetPointerMode": 1,
         "cublasGetPointerMode_v2": 2,

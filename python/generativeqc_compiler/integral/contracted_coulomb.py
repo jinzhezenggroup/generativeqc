@@ -441,7 +441,8 @@ def emit_quartet_jet(left: int, right: int, *, auxiliary_legs: int = 0) -> str:
     axes = tuple(tuple(int(coord == axis) for coord in range(3)) for axis in range(3))
 
     def lookup(*orders: tuple[int, ...]) -> int:
-        return state_ids[tuple(map(sum, zip(*orders, strict=True)))]
+        x_order, y_order, z_order = map(sum, zip(*orders, strict=True))
+        return state_ids[x_order, y_order, z_order]
 
     table = []
     for bra, ket in product(bras, kets):
