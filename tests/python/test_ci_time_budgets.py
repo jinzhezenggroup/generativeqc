@@ -352,7 +352,8 @@ def test_cold_python_setup_preserves_the_existing_test_deadline(
     assert job_limit and test_limit
     context = {"matrix.shard": shard, "github.event_name": event}
     full = event in {"schedule", "workflow_dispatch"}
-    assert expression(test_limit[1], context) == (90 if full else test_minutes)
+    expected = 35 if event == "merge_group" and shard == "core-a" else test_minutes
+    assert expression(test_limit[1], context) == (90 if full else expected)
     assert expression(job_limit[1], context) == (100 if full else job_minutes)
     assert_full_coverage_step(test_step)
     assert "continue-on-error:" not in test_step

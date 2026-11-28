@@ -1597,9 +1597,10 @@ jobs:
         # reached 99% before the 30-minute cancellation in 40833182012. The
         # runtime-heavy shard likewise reached 99% in 41152461345, then timed
         # out with no reported test failures. core-c reached 97% before its
-        # cancellation in 44009609078, losing the failure summary. Keep
+        # cancellation in 44009609078, losing the failure summary. Core-a
+        # reached 98–99% in merge-group runs 45677490008 and 45711126425. Keep
         # all tests and diagnostics, with ten further minutes for job cleanup.
-        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || ((matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30) }}
+        timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || (((github.event_name == 'merge_group' && matrix.shard == 'core-a') || matrix.shard == 'posthf' || matrix.shard == 'core-b' || matrix.shard == 'core-c' || matrix.shard == 'compiler-heavy' || matrix.shard == 'runtime-heavy') && 35 || 30) }}
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
