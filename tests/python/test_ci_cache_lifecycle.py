@@ -194,7 +194,8 @@ def test_python_test_timeout_leaves_finite_setup_headroom() -> None:
         ):
             context = {"matrix.shard": shard, "github.event_name": event}
             full = event in {"schedule", "workflow_dispatch"}
-            test_minutes = 90 if full else 35 if shard in extended else 30
+            longer = shard in extended or (event == "merge_group" and shard == "core-a")
+            test_minutes = 90 if full else 35 if longer else 30
             assert expression(test_limits[1], context) == test_minutes
             job_minutes = expression(job_limits[1], context)
             assert job_minutes == (100 if full else 60)
