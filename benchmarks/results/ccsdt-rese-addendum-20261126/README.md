@@ -28,7 +28,9 @@ energy-plus-force evaluation and one record per accepted state. Accepted
 records include the coordinates, energy, maximum atomic force and elapsed
 time since the preceding accepted state. The initial evaluation is timed
 separately. The patched CLI translation unit links to the same checksummed
-native library used by the baseline. The raw `reference_scf_iterations`
+native library used by the baseline. The archived H100 relink compiled that
+translation unit uncached. The published rebuild script checks and uses
+a compiler-cache launcher. The raw `reference_scf_iterations`
 label, as originally emitted, is misleading for DF-RCCSD(T). At the pinned
 revision the generic result count is the CCSD count in that path. The summary
 uses the dedicated CCSD diagnostic and leaves the reference SCF count

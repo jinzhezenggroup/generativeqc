@@ -29,7 +29,7 @@
     "resume-minima.patch": "1235fb1a6ee25aff555ebeac1930b6b52b4135d9ac4f51b1f8a3459d3647d2d6",
     "split_curvature.py": "5df97835fb9988dff31f6b712c68a3e8c790fb0e4268bdb8a2082083a7196e98"
   },
-  "published_relink_driver_note": "Formatting and import order match local lint. Parsed Python syntax is identical to the executed driver.",
+  "published_relink_driver_note": "The archived H100 runs relinked an uncached CLI translation unit. The published rebuild driver verifies and retains a compiler-cache launcher. The deployment and binary hashes record the original acquisition.",
   "cpu_payload_sha256": [
     "8066588b8a75d4be3dcd5addfc35efac4ec776932fe4cec56f367f18b28faa6d  ./check_df_minima.py",
     "3bd297264e6762e0ce1738b1e96b8f44c1e0029cfc4f11bc7235f5b79431e969  ./check_minima.py",
@@ -1490,7 +1490,7 @@
     "limit_notebook_cpu.py": "9de5a9e252f27a78340344495215206606e185d1409f15d3850666eaee35a276",
     "optimizer-trace.patch": "6a49c38aeca06f1c72798a3a3445ccd6f08d31fea9ce09145194931cab1a78b2",
     "parallel-minima.patch": "05e8c1ed5079bd05e205bc0c99492926056d55060efcfd12f35717d7a507013e",
-    "relink-trace.py": "eb9888db5c6bee5c681581d163e83af07751bf56fdb5f23211a90c4118123435",
+    "relink-trace.py": "9245238540d1d068e1ad2a2fa42dd6f81a6abb2c2a36659e1feef120a54d31e7",
     "replay_addendum.py": "b84461426142742e08defdd233b511a3ec93a9b17072909f2ae5728c00c08194",
     "resume-minima.patch": "1235fb1a6ee25aff555ebeac1930b6b52b4135d9ac4f51b1f8a3459d3647d2d6",
     "split_curvature.py": "5df97835fb9988dff31f6b712c68a3e8c790fb0e4268bdb8a2082083a7196e98",
