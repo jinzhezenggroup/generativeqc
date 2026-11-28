@@ -72,8 +72,11 @@ inline void configure_wide_dense_cuda_hessian(CudaKsWb97mvHessianOptions& option
   options.exact.max_reduction_terms = 1ULL << 33;
 }
 
-/** Select the storage contract at preparation, before any workspace is admitted. */
-enum class CudaKsWb97mvHessianMode { action_only, dense_and_action };
+/** Select the storage contract before any workspace is admitted.
+ * A dense-only owner may retain Cartesian-only providers; a combined owner
+ * must also support arbitrary nuclear directions.
+ */
+enum class CudaKsWb97mvHessianMode { action_only, dense_and_action, dense_only };
 
 enum class CudaKsWb97mvHessianStatus { failed, response_not_converged, converged };
 

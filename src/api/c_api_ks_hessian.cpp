@@ -214,7 +214,7 @@ extern "C" generativeqc_status generativeqc_ks_hessian_cuda_v2(
     generativeqc::dft::CudaKsWb97mvHessian endpoint;
     using Mode = generativeqc::dft::CudaKsWb97mvHessianMode;
     status = endpoint.prepare(*batch->plan, index, token,
-                              matrix ? Mode::dense_and_action : Mode::action_only, policy, detail);
+                              matrix ? Mode::dense_only : Mode::action_only, policy, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       return status;

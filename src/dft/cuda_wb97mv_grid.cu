@@ -1868,9 +1868,10 @@ cudaError_t CudaWb97mvGridResponse::retain_fixed_point_linearization(
 unsigned CudaWb97mvGridResponse::transition_axes() const noexcept {
   const auto code = options_.functional_code;
   if (code == semilocal_family_code(SemilocalFamily::R2scan)) return fixed_point_axes_ == 5 ? 5 : 0;
-  const auto family = semilocal_family_from_code(code);
-  return !uses_stationary_point(code) && fixed_point_axes_ == 4 &&
-                 (family == SemilocalFamily::Pbe || family == SemilocalFamily::B3lyp)
+  // Split hybrids can arrive here with a generated selector that is not a
+  // semilocal-family code. Only these explicit selectors have tiled kernels.
+  return fixed_point_axes_ == 4 && (code == semilocal_family_code(SemilocalFamily::Pbe) ||
+                                    code == semilocal_family_code(SemilocalFamily::B3lyp))
              ? 4
              : 0;
 }

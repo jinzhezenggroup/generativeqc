@@ -85,7 +85,7 @@ namespace core {constexpr int kCartesianBasis=1;}
 void symmetric(const double*,std::size_t,double,double,int*){
 q::pending.push_back({nullptr,[]{}});}
 enum class CudaKsWb97mvHessianStatus{failed,response_not_converged,converged};
-enum class CudaKsWb97mvHessianMode{dense_and_action};
+enum class CudaKsWb97mvHessianMode{action_only,dense_and_action,dense_only};
 struct CudaKsWb97mvHessianResult{
 CudaKsWb97mvHessianStatus status=CudaKsWb97mvHessianStatus::failed;
 const char* failure_check{};
@@ -194,6 +194,18 @@ q::require(q::pending.empty(),"child failure retained work");
 q::require(std::all_of(output,output+4,[](double x){return x==27;}),"rejected output changed");++controls;}
 q::reset();q::reject=true;q::require(run()==23&&q::fences==0&&q::calls==0,"admission queued work");++controls;
 }
+{
+q::reset();CudaKsWb97mvHessian owner;owner.impl_->stream=stream;
+double input[2]{1,2},output[4]{27,27,27,27};CudaKsWb97mvHessianResult result;
+owner.impl_->mode=CudaKsWb97mvHessianMode::dense_only;
+q::require(owner.apply(input,output,stream,result)==cudaErrorInvalidResourceHandle&&
+!result.converged()&&q::calls==0&&output[0]==27&&output[1]==27,"dense-only action admitted");
+q::require(owner.hessian(output,stream,result)==0&&result.converged(),"dense-only matrix refused");
+q::reset();owner.impl_->mode=CudaKsWb97mvHessianMode::action_only;
+q::require(owner.hessian(output,stream,result)==cudaErrorInvalidResourceHandle&&q::calls==0,
+"action-only matrix admitted");
+q::require(owner.apply(input,output,stream,result)==0&&result.converged(),"action-only HVP refused");
+}
 for(auto correction:{Correction::none,Correction::d3,Correction::d4}){
 q::reset();q::require(prepare_upload(stream,correction)==0,"valid upload");
 q::require(q::pending.empty()&&q::late_staging==0,"successful upload retained work");
@@ -259,3 +271,47 @@ def test_stationary_failure_paths_drain_borrows(
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "PASS queued lifetime controls=" in result.stdout
+
+
+def test_transition_projection_rejects_unsupported_selectors(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    source = (_ROOT / "src/dft/cuda_wb97mv_grid.cu").read_text()
+    start = source.index("unsigned CudaWb97mvGridResponse::transition_axes()")
+    end = source.index("\n}", start) + 2
+    fixture = tmp_path / "transition_axes.cpp"
+    fixture.write_text(
+        r"""
+#include <cassert>
+#include "dft/semilocal_family.hpp"
+using namespace generativeqc::dft;
+struct CudaWb97mvGridResponse {
+  struct { std::uint32_t functional_code; } options_;
+  unsigned fixed_point_axes_;
+  unsigned transition_axes() const noexcept;
+};
+"""
+        + source[start:end]
+        + r"""
+int main() {
+  const auto axes = [](std::uint32_t code, unsigned count) {
+    return CudaWb97mvGridResponse{{code}, count}.transition_axes();
+  };
+  // M06-2X uses a generated selector, not an entry in SemilocalFamily.
+  constexpr auto m06_2x = std::uint32_t{0x201c2};
+  assert(axes(m06_2x, 0) == 0 && axes(m06_2x, 5) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Lda), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Wb97mv), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::Pbe), 4) == 4);
+  assert(axes(semilocal_family_code(SemilocalFamily::B3lyp), 4) == 4);
+  assert(axes(semilocal_family_code(SemilocalFamily::R2scan), 4) == 0);
+  assert(axes(semilocal_family_code(SemilocalFamily::R2scan), 5) == 5);
+}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [fixture],
+        tmp_path / "transition_axes",
+        compile_args=("-std=c++20", "-O0", f"-I{_ROOT / 'src'}"),
+    )
+    subprocess.run([str(executable)], check=True, timeout=30)

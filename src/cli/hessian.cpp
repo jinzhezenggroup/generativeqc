@@ -676,7 +676,7 @@ Json execute_native(const RunOptions& options, const std::vector<generativeqc_at
   dft::CudaKsWb97mvHessian endpoint;
   using Mode = dft::CudaKsWb97mvHessianMode;
   const auto prepared = endpoint.prepare(
-      *batch, 0, token, hvp ? Mode::action_only : Mode::dense_and_action, policy, detail);
+      *batch, 0, token, hvp ? Mode::action_only : Mode::dense_only, policy, detail);
   if (prepared != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error("native Hessian preparation failed: " + detail);
   const auto hessian_prepared = std::chrono::steady_clock::now();

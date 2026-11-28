@@ -908,6 +908,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
                 options.symmetry_absolute_tolerance >= 0 &&
                 options.symmetry_relative_tolerance >= 0,
             "invalid stationary Hessian options");
+    const bool dense = mode != CudaKsWb97mvHessianMode::action_only;
     auto owner = std::make_unique<Impl>(batch, item, expected, options, mode);
     auto status = owner->grid_reference.prepare(detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
@@ -1054,8 +1055,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->options.grid.max_point_linearization_bytes = 0;
     auto grid_admission = cuda_wb97mv_grid_workspace(shape, owner->options.grid, owner->grid_bytes);
     if (grid_admission == cudaErrorInvalidValue && !separate && shape.spins == 1 &&
-        shape.nao > 64 && shape.nao <= 96 && !owner->options.grid.includes_nonlocal() &&
-        mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps) {
+        shape.nao > 64 && shape.nao <= 96 && !owner->options.grid.includes_nonlocal() && dense &&
+        options.grid.replay_nuclear_maps) {
       // The required adjoints are charged to the original shared grid arena.
       // They replace the over-work affine fallback, not other consumers' budgets.
       owner->options.grid.max_nuclear_adjoint_bytes = 512ULL << 20;
@@ -1127,7 +1128,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     owner->scratch_gradient = layout.reserve(product(2, coordinates));
     for (auto* offset : {&owner->direction, &owner->left, &owner->candidate})
       *offset = layout.reserve(coordinates);
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action) {
+    if (dense) {
       owner->complete = layout.reserve(product(coordinates, coordinates));
       owner->dense_audit_offset = layout.reserve(1, sizeof(DenseAssemblyAudit));
     }
@@ -1196,7 +1197,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const bool range = source == &owner->range_df;
       auto raw_options = options.raw_df;
       raw_options.range_omega = range ? owner->fock.correction->spec.exchange.omega : 0;
-      raw_options.retain_directional_source = mode == CudaKsWb97mvHessianMode::dense_and_action;
+      raw_options.retain_directional_source = dense;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
       status = source->nuclear.prepare(batch, item, expected, raw_options, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
@@ -1232,8 +1233,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     // revisiting the same right direction's primitive jets.
     const auto frozen_bytes = product(product(coordinates, panels + coordinates), sizeof(double));
     exact_options.prefer_fresh_direction_batches =
-        mode == CudaKsWb97mvHessianMode::dense_and_action &&
-        frozen_bytes <= options.max_frozen_exact_bytes;
+        dense && frozen_bytes <= options.max_frozen_exact_bytes;
     const auto& exchange = owner->fock.primary->strategy().spec.exchange;
     exact_options.full_exchange_fraction = 0;
     if (owner->fock.correction) {
@@ -1252,6 +1252,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
           owner->exact.prepare(batch, item, expected, exact_options, detail, false, &exact_failure);
       if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
           exact_failure == CudaWb97mvJkAdmissionFailure::canonical_source_limit &&
+          mode == CudaKsWb97mvHessianMode::dense_only &&
           exact_options.prefer_fresh_direction_batches && frozen_bytes < owner->remaining &&
           shape.spins == 1 && !owner->has_df && !owner->fock.correction) {
         // A derivative-only schedule is not a fallback for arbitrary HVPs.
@@ -1271,7 +1272,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     }
     const auto grid_reserved = owner->bytes - owner->grid_offset;
     owner->options.grid.replay_nuclear_maps = options.grid.replay_nuclear_maps;
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps) {
+    if (dense && options.grid.replay_nuclear_maps) {
       owner->options.grid.max_nuclear_adjoint_bytes =
           std::max<std::size_t>(owner->options.grid.max_nuclear_adjoint_bytes, 64ULL << 20);
       owner->options.grid.max_point_linearization_bytes = 16ULL << 20;
@@ -1291,7 +1292,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     // A dense sweep reuses the same packed batch for every coordinate. Bound
     // its task descriptors by the admitted job census, and let payload bytes
     // and primitive work decide whether the batch actually fits.
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action &&
+    if (dense &&
         core_options.max_parallel_tasks == integrals::CudaOneElectronOptions{}.max_parallel_tasks)
       core_options.max_parallel_tasks = core_options.max_jobs;
     core_options.max_workspace_bytes =
@@ -1383,7 +1384,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     }
     // Only the dense column loop consumes these caches. Do not size or charge
     // them on the directional path, including when providers compete for slack.
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action) {
+    if (dense) {
       std::size_t operator_bytes{};
       check(response::cuda_cpks_operator_workspace(owner->cpks_reference.shape(),
                                                    owner->options.cpks, operator_bytes));
@@ -1468,10 +1469,9 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       }
     }
     const auto induced_bytes = owner->induced.work().device_bytes;
-    status = owner->induced.retain_integrals(
-        owner->remaining, mode == CudaKsWb97mvHessianMode::dense_and_action, detail);
+    status = owner->induced.retain_integrals(owner->remaining, dense, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action && options.grid.replay_nuclear_maps &&
+    if (dense && options.grid.replay_nuclear_maps &&
         owner->remaining > owner->induced.work().device_bytes - induced_bytes) {
       const auto spare = owner->remaining - (owner->induced.work().device_bytes - induced_bytes);
       const auto point_lease = options.max_resident_cpks_bytes >= (64ULL << 20) ? 32ULL : 16ULL;
@@ -1497,8 +1497,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
     check(owner->sum_weights(lease.density, owner->at(owner->weights), owner->totals));
     check(owner->gate());
     check(owner->authenticate());
-    if (mode == CudaKsWb97mvHessianMode::dense_and_action && !separate &&
-        owner->grid.admits_cartesian_mixed(coordinates)) {
+    if (dense && !separate && owner->grid.admits_cartesian_mixed(coordinates)) {
       const auto* energy = owner->grid.private_becke_energy();
       const auto fold_bytes = owner->geometry.cartesian_weight_fold_workspace();
       const auto provider = owner->geometry.cartesian_weight_fold_provider_allowance();
@@ -1538,7 +1537,8 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
 cudaError_t CudaKsWb97mvHessian::apply(const double* direction, double* output, cudaStream_t stream,
                                        CudaKsWb97mvHessianResult& result) noexcept {
   result = {};
-  if (!impl_) return cudaErrorInvalidResourceHandle;
+  if (!impl_ || impl_->mode == CudaKsWb97mvHessianMode::dense_only)
+    return cudaErrorInvalidResourceHandle;
   try {
     auto& owner = *impl_;
     auto error = owner.admit(direction, output, false, stream);
@@ -1575,7 +1575,7 @@ cudaError_t CudaKsWb97mvHessian::apply(const double* direction, double* output, 
 cudaError_t CudaKsWb97mvHessian::hessian(double* output, cudaStream_t stream,
                                          CudaKsWb97mvHessianResult& result) noexcept {
   result = {};
-  if (!impl_ || impl_->mode != CudaKsWb97mvHessianMode::dense_and_action)
+  if (!impl_ || impl_->mode == CudaKsWb97mvHessianMode::action_only)
     return cudaErrorInvalidResourceHandle;
   try {
     auto& owner = *impl_;

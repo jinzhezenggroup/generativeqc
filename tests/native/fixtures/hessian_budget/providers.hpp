@@ -31,6 +31,8 @@ namespace stub {
 inline std::size_t points = 8;
 inline unsigned spins = 1;
 inline bool df = false, range_df = false;
+inline bool canonical_source_limit = false;
+inline std::size_t screened_exact_preparations = 0;
 enum class Provider { none, core, induced, exact, raw_df, fitted, raw_df_range, fitted_range, ecp };
 inline Provider reject_provider = Provider::none;
 inline std::size_t grid_scalar() { return 21600 + (points - 8) * 128; }
@@ -236,9 +238,16 @@ generativeqc_status CudaKsWb97mvNuclearJk::prepare(methods::PreparedBatch&, std:
                                                    const CudaWb97mvJkOptions& options, std::string&,
                                                    bool screened_frozen,
                                                    CudaWb97mvJkAdmissionFailure* failure) {
-  assert(!screened_frozen);
   if (failure) *failure = {};
+  if (stub::canonical_source_limit && !screened_frozen) {
+    if (failure) *failure = CudaWb97mvJkAdmissionFailure::canonical_source_limit;
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  assert(!screened_frozen ||
+         (stub::canonical_source_limit && options.prefer_fresh_direction_batches));
+  stub::screened_exact_preparations += screened_frozen;
   impl_ = std::make_unique<Impl>();
+  impl_->work.omitted_frozen_source_groups = screened_frozen ? 1 : 0;
   impl_->work.workspace_bytes = 1700;
   return impl_->allocate(1700, options.max_workspace_bytes, stub::Provider::exact);
 }

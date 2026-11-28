@@ -11,6 +11,27 @@ int main() {
     assert(stub::allocation_attempts == 0);
   }
   token.strict_physical_fock = true;
+  {
+    // A screened Cartesian provider can serve a dense matrix, but must not be
+    // published in an owner that promises arbitrary-direction actions.
+    std::string detail;
+    stub::canonical_source_limit = true;
+    for (const auto mode : {Mode::action_only, Mode::dense_and_action}) {
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, mode, {}, detail) ==
+             GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+      assert(stub::screened_exact_preparations == 0 && stub::live_bytes == 0);
+    }
+    {
+      dft::CudaKsWb97mvHessian owner;
+      assert(owner.prepare(batch, 0, token, Mode::dense_only, {}, detail) ==
+             GENERATIVEQC_STATUS_SUCCESS);
+      assert(stub::screened_exact_preparations == 1);
+      assert(owner.work().frozen_exact_bytes && owner.work().device_bytes == stub::live_bytes);
+    }
+    assert(stub::live_bytes == 0);
+    stub::canonical_source_limit = false;
+  }
   std::size_t controls{};
   for (const auto points : {8U, 32U, 256U})
     for (const auto spins : {1U, 2U})
