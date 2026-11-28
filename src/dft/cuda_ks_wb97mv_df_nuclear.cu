@@ -133,7 +133,9 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     };
     auto allocation = allocate();
     if (allocation == cudaErrorMemoryAllocation && admitted.retain_directional_source) {
-      // The optional tape must not turn a streamable request into OOM.
+      // A failed cudaMalloc can leave a sticky error that the first kernel
+      // check would otherwise mistake for a failure of the streamed retry.
+      if (cudaPeekAtLastError() == cudaErrorMemoryAllocation) (void)cudaGetLastError();
       admitted.retain_directional_source = false;
       allocation = allocate();
     }
