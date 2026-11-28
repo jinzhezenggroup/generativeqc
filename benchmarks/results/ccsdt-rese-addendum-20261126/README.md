@@ -71,8 +71,11 @@ with 6 GiB of address space per Python process. Including the coordinator,
 the limit is 198 GiB. PySCF also uses asynchronous I/O helpers. The
 running process session was capped at 40 logical CPUs across both CPU
 sockets, with the applied affinity recorded in the raw notebook output.
-Results apply locally to the accepted stationary
-geometry on the projected electronic energy surface.
+The reproduction drivers prepare a fresh notebook payload, preserve
+failed receipts when resuming, and wait for the coarse center before
+starting the fine grid. The provenance records the original deployment
+hashes. The curvature results apply to the accepted stationary geometries
+on the projected electronic energy surface.
 
 ## Combined results
 

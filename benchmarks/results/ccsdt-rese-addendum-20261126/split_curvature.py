@@ -53,6 +53,8 @@ def main() -> None:
         dest.mkdir(parents=True)
         center_energy = point_energy(case, xyz, orbital, auxiliary, center_path)
     else:
+        while not center_path.is_file():
+            sleep(30)
         center = json.loads(center_path.read_text())
         if center["coordinates_bohr"] != xyz.tolist():
             raise ValueError("center coordinates differ from the native geometry")

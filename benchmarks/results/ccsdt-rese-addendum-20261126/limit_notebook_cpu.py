@@ -5,7 +5,7 @@ import itertools
 import json
 import os
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -52,7 +52,7 @@ def main() -> None:
             continue
     receipt = {
         "session": sid,
-        "started_utc": datetime.now(UTC).isoformat(),
+        "started_utc": datetime.now(timezone.utc).isoformat(),
         "allowed_logical_cpus": sorted(selected),
         "tasks_updated": modified,
     }

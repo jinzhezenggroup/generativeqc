@@ -15,9 +15,10 @@ for control in cpu.max memory.max memory.current; do
 done > "$run/cgroup.txt"
 environment="$root/../issue-3166-20261125/cpu-env"
 cp "$environment/packages.txt" "$run/packages.txt"
-cp -r "$root/cpu-payload" "$run/payload"
+payload=$(mktemp -d "$run/payload.XXXXXXXX")
+cp -r "$root/cpu-payload/." "$payload/"
 (
-  cd "$run/payload"
+  cd "$payload"
   sha256sum -c "$root/cpu-payload.sha256"
   patch --batch -p1 -i "$root/parallel-minima.patch"
   patch --batch -p1 -i "$root/resume-minima.patch"
@@ -25,8 +26,8 @@ cp -r "$root/cpu-payload" "$run/payload"
 export OMP_NUM_THREADS=1 OMP_THREAD_LIMIT=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export BLIS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1
 prlimit --as="$per_process_bytes:$per_process_bytes" -- "$environment/venv/bin/python" -u \
-  "$run/payload/check_df_minima.py" "$run/payload" "$root/native" "$run/raw" \
-  --auxiliary "$run/payload/cc-pwcvtz-rifit.json" --molecule aziridine --workers "$workers" --resume &
+  "$payload/check_df_minima.py" "$payload" "$root/native" "$run/raw" \
+  --auxiliary "$payload/cc-pwcvtz-rifit.json" --molecule aziridine --workers "$workers" --resume &
 driver=$!
 printf 'Python coordinator PID: %s\n' "$driver" >> "$run/notebook-use.txt"
 wait "$driver"

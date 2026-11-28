@@ -21,7 +21,7 @@
              "python": platform.python_version(),
              "numpy": np.__version__,
              "pyscf": pyscf.__version__,
-@@ -229,25 +228,40 @@
+@@ -229,25 +228,42 @@
                  "curvature_floor": CURVATURE_FLOOR,
                  "curvature_stability": CURVATURE_STABILITY,
              },
@@ -43,21 +43,24 @@
 -        dest.mkdir()
 +        dest.mkdir(exist_ok=args.resume)
          tick = time.monotonic()
++        run = args.native / name / "df-cc-pcvtz"
++        check_file = dest / "check.json"
++        if args.resume and check_file.is_file():
++            history = json.loads(check_file.read_text())
++            if history["status"] in ("minimum_verified", "gate_failed"):
++                source = (run / "stdout.json").read_bytes()
++                if history["native_receipt_sha256"] != hashlib.sha256(source).hexdigest():
++                    raise ValueError("checkpoint is for a different native geometry")
++                print(name, "already checked", flush=True)
++            else:
++                print(name, "retaining previous check failure", flush=True)
++            continue
          try:
-             run = args.native / name / "df-cc-pcvtz"
+-            run = args.native / name / "df-cc-pcvtz"
              if json.loads((run / "receipt.json").read_text())["status"] != "converged":
                  raise ValueError("native geometry has not passed its optimizer gate")
              source = (run / "stdout.json").read_bytes()
 +            native_hash = hashlib.sha256(source).hexdigest()
-+            check_file = dest / "check.json"
-+            if args.resume and check_file.is_file():
-+                history = json.loads(check_file.read_text())
-+                if history["status"] in ("minimum_verified", "gate_failed"):
-+                    if history["native_receipt_sha256"] != native_hash:
-+                        raise ValueError("checkpoint is for a different native geometry")
-+                    print(name, "already checked", flush=True)
-+                    continue
-+                raise ValueError("checkpoint contains a previous failure")
              print(name, "starting", flush=True)
              with ProcessPoolExecutor(max_workers=args.workers) as pool:
                  result = check(cases[name], json.loads(source), orbital, auxiliary, dest, pool)

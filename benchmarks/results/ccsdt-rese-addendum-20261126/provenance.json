@@ -1486,19 +1486,20 @@
     "gpu-records.json.xz": "fa3e9e1224694cc8e7fed746bc441cd78801a643ec4aa04a0fe1c700a7735544",
     "launch-cpu.sh": "f0102ac619041c3625af8a5c9aad07a371067c694f8dd08dcaa41a4cfeeacea2",
     "launch-gpu.sh": "222b2a73f40e58599ce02fdd883a25aff24818edd48864b25a4e6a2cbf987509",
-    "launch-notebook.sh": "b61440dd5a5063678821413750639bd8c1ea003c1a062271d87711767a68f7a0",
-    "limit_notebook_cpu.py": "9de5a9e252f27a78340344495215206606e185d1409f15d3850666eaee35a276",
+    "launch-notebook.sh": "e296bcd1625158240148e421eef88997cfa0ae683584d70a995f439983970e54",
+    "limit_notebook_cpu.py": "c24017f92cef0ec62558d63fa915752f63baaf9fd84c70cff0df0834561d725e",
     "optimizer-trace.patch": "6a49c38aeca06f1c72798a3a3445ccd6f08d31fea9ce09145194931cab1a78b2",
     "parallel-minima.patch": "05e8c1ed5079bd05e205bc0c99492926056d55060efcfd12f35717d7a507013e",
     "relink-trace.py": "9245238540d1d068e1ad2a2fa42dd6f81a6abb2c2a36659e1feef120a54d31e7",
     "replay_addendum.py": "b84461426142742e08defdd233b511a3ec93a9b17072909f2ae5728c00c08194",
-    "resume-minima.patch": "1235fb1a6ee25aff555ebeac1930b6b52b4135d9ac4f51b1f8a3459d3647d2d6",
-    "split_curvature.py": "5df97835fb9988dff31f6b712c68a3e8c790fb0e4268bdb8a2082083a7196e98",
+    "resume-minima.patch": "1224d75112ff65d5b295de5ab10bcf81eaa0f6415fbb113a5d67bbc2d0d72af3",
+    "split_curvature.py": "77ef84ccac72a604e0e7aa03ea84269ed89a9f9a24070152a77c529cf174fc50",
     "summary.json": "9d38dd25288004b1c22d0c7e494e9c29680d1d06116d85e68999b8e4ccf10f62",
     "superseded-cpu-difluoro.json.xz": "7912018246d5d7f2848d62fe46904a0a24c4a6c163c41191aec4658c0705bfc6",
     "superseded-cpu-formic.json.xz": "36171f3e2beb68a694e2e46938165ecaf9d744891e5d97b32c65355dacb71b39",
     "superseded-cpu-medium-resume40.json.xz": "c33e53b8dc84cd7a98929d8932d92a7ca1c4daf91be795a5db971c58d6ce9ea8",
     "superseded-cpu-medium.json.xz": "9ce73defe7d942fa34c5a87797561c32d7702c516e239c803124b503660b45f2",
     "superseded-cpu-nox.json.xz": "6104fac26c56b885abdd51647caa38027c7b3cec81c7325af576edd5c1ab5e74"
-  }
+  },
+  "published_cpu_driver_note": "Published reproduction drivers use a fresh notebook payload for each launch, preserve failed check receipts on resume, and wait for the coarse center in the fine phase. Deployment and raw-output hashes refer to the original runs."
 }
