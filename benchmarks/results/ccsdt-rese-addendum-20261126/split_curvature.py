@@ -6,7 +6,8 @@ import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from time import sleep
+from tempfile import TemporaryDirectory
+from time import monotonic, sleep
 
 import numpy as np
 import pyscf
@@ -14,6 +15,15 @@ from check_df_minima import STEPS, differences, point_energy
 from check_df_minima import main as assemble
 from check_minima import load_canonical_basis, vibrational_basis
 from run import dump
+
+
+def wait_for(path: Path, timeout: int) -> None:
+    deadline = monotonic() + timeout
+    while not path.is_file():
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"timed out waiting for {path}")
+        sleep(min(30, remaining))
 
 
 def main() -> None:
@@ -24,7 +34,10 @@ def main() -> None:
     parser.add_argument("case")
     parser.add_argument("phase", choices=("coarse", "fine"))
     parser.add_argument("--workers", type=int, required=True)
+    parser.add_argument("--partner-timeout", type=int, default=16 * 3600)
     args = parser.parse_args()
+    if args.partner_timeout <= 0:
+        parser.error("--partner-timeout must be positive")
     pyscf.lib.num_threads(1)
     if pyscf.__version__ != "2.14.0":
         parser.error(f"expected PySCF 2.14.0, got {pyscf.__version__}")
@@ -53,8 +66,7 @@ def main() -> None:
         dest.mkdir(parents=True)
         center_energy = point_energy(case, xyz, orbital, auxiliary, center_path)
     else:
-        while not center_path.is_file():
-            sleep(30)
+        wait_for(center_path, args.partner_timeout)
         center = json.loads(center_path.read_text())
         if center["coordinates_bohr"] != xyz.tolist():
             raise ValueError("center coordinates differ from the native geometry")
@@ -68,12 +80,12 @@ def main() -> None:
     center_hash = hashlib.sha256(center_path.read_bytes()).hexdigest()
     identity = {"source": source_hash, "center": center_hash, "step": STEPS[1]}
     if args.phase == "fine":
-        partial = marker.with_suffix(".partial")
-        dump(partial, identity)
-        partial.replace(marker)
+        with TemporaryDirectory(dir=marker.parent, prefix="pending-fine.") as pending:
+            partial = Path(pending) / marker.name
+            dump(partial, identity)
+            partial.replace(marker)
         return
-    while not marker.is_file():
-        sleep(30)
+    wait_for(marker, args.partner_timeout)
     if json.loads(marker.read_text()) != identity:
         raise ValueError("fine displacement grid is for a different center")
     sys.argv = [

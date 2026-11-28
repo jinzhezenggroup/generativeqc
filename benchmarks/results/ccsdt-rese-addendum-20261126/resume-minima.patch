@@ -1,6 +1,35 @@
 --- a/check_df_minima.py
 +++ b/check_df_minima.py
-@@ -204,17 +204,16 @@
+@@ -3,11 +3,13 @@
+ import argparse
+ import hashlib
+ import json
++import os
+ import platform
+ import time
+ from concurrent.futures import ProcessPoolExecutor
+ from itertools import combinations, product
+ from pathlib import Path
++from tempfile import TemporaryDirectory, mkdtemp
+ 
+ import numpy as np
+ import pyscf
+@@ -196,6 +198,14 @@
+     }
+ 
+ 
++def publish_json(path: Path, value: object) -> None:
++    # Link a fully written file into place without replacing an existing receipt.
++    with TemporaryDirectory(dir=path.parent, prefix="pending-checkpoint.") as pending:
++        buffered = Path(pending) / path.name
++        dump(buffered, value)
++        os.link(buffered, path)
++
++
+ def main() -> None:
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument("payload", type=Path)
+@@ -204,17 +214,16 @@
      parser.add_argument("--auxiliary", type=Path, required=True)
      parser.add_argument("--molecule", action="append", required=True)
      parser.add_argument("--workers", type=int, default=1)
@@ -21,7 +50,7 @@
              "python": platform.python_version(),
              "numpy": np.__version__,
              "pyscf": pyscf.__version__,
-@@ -229,25 +228,42 @@
+@@ -229,29 +238,52 @@
                  "curvature_floor": CURVATURE_FLOOR,
                  "curvature_stability": CURVATURE_STABILITY,
              },
@@ -33,7 +62,7 @@
 +        if json.loads(provenance_file.read_text()) != provenance:
 +            raise ValueError("checkpoint environment or gates differ")
 +    else:
-+        dump(provenance_file, provenance)
++        publish_json(provenance_file, provenance)
      cohort = json.loads((args.payload / "cohort.json").read_text())
      cases = {case["id"]: case for case in cohort["molecules"]}
      orbital = load_canonical_basis(orbital_path)
@@ -46,15 +75,21 @@
 +        run = args.native / name / "df-cc-pcvtz"
 +        check_file = dest / "check.json"
 +        if args.resume and check_file.is_file():
-+            history = json.loads(check_file.read_text())
-+            if history["status"] in ("minimum_verified", "gate_failed"):
-+                source = (run / "stdout.json").read_bytes()
-+                if history["native_receipt_sha256"] != hashlib.sha256(source).hexdigest():
-+                    raise ValueError("checkpoint is for a different native geometry")
-+                print(name, "already checked", flush=True)
++            try:
++                history = json.loads(check_file.read_text())
++            except json.JSONDecodeError:
++                archive = Path(mkdtemp(dir=dest, prefix="interrupted-checkpoint."))
++                check_file.rename(archive / check_file.name)
++                print(name, "archived an interrupted check receipt", flush=True)
 +            else:
-+                print(name, "retaining previous check failure", flush=True)
-+            continue
++                if history["status"] in ("minimum_verified", "gate_failed"):
++                    source = (run / "stdout.json").read_bytes()
++                    if history["native_receipt_sha256"] != hashlib.sha256(source).hexdigest():
++                        raise ValueError("checkpoint is for a different native geometry")
++                    print(name, "already checked", flush=True)
++                else:
++                    print(name, "retaining previous check failure", flush=True)
++                continue
          try:
 -            run = args.native / name / "df-cc-pcvtz"
              if json.loads((run / "receipt.json").read_text())["status"] != "converged":
@@ -69,3 +104,8 @@
          except (OSError, TypeError, ValueError, RuntimeError) as error:
              result = {"status": "failed", "error": str(error)}
          result["seconds"] = time.monotonic() - tick
+-        dump(dest / "check.json", result)
++        publish_json(check_file, result)
+         print(name, result["status"], flush=True)
+ 
+ 

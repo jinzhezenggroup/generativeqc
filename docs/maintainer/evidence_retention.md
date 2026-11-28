@@ -280,9 +280,9 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-104,938,898 bytes. The
+104,941,457 bytes. The
 [CCSD(T) equilibrium-geometry addendum](../../benchmarks/results/ccsdt-rese-addendum-20261126/README.md)
-adds 1,256,452 bytes to the prior 103,682,446-byte limit. The
+adds 1,259,011 bytes to the prior 103,682,446-byte limit. The
 [conventional CCSD(T) force follow-up](../../benchmarks/results/ccsdt-external-forces-conv-20261126/README.md)
 adds 316,738 bytes to the prior 103,365,708-byte limit. PR #3174 raised the
 earlier 101,151,565-byte budget by 1,034,006 bytes for the

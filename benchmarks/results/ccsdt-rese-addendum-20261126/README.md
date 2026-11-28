@@ -71,10 +71,12 @@ with 6 GiB of address space per Python process. Including the coordinator,
 the limit is 198 GiB. PySCF also uses asynchronous I/O helpers. The
 running process session was capped at 40 logical CPUs across both CPU
 sockets, with the applied affinity recorded in the raw notebook output.
-The reproduction drivers prepare a fresh notebook payload, preserve
-failed receipts when resuming, and wait for the coarse center before
-starting the fine grid. The provenance records the original deployment
-hashes. The curvature results apply to the accepted stationary geometries
+The reproduction drivers prepare a fresh notebook payload, verify the
+session affinity, and write check receipts atomically. Resumption preserves
+failed receipts and archives interrupted writes. Each curvature phase
+waits up to 16 hours for its partner by default, configurable with
+`--partner-timeout` in seconds. The provenance records the original
+deployment hashes. The curvature results apply to the accepted stationary geometries
 on the projected electronic energy surface.
 
 ## Combined results

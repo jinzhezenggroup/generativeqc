@@ -72,8 +72,11 @@ def main() -> None:
     run(compile_args, cli_dir)
     run(link_args, cli_dir)
     for path in (work / "generativeqc", cli_dir / "libgenerativeqc.so"):
+        digest = hashlib.sha256()
         with path.open("rb") as stream:
-            print(hashlib.file_digest(stream, "sha256").hexdigest(), path.name)
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        print(digest.hexdigest(), path.name)
 
 
 if __name__ == "__main__":

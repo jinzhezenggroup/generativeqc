@@ -1487,13 +1487,13 @@
     "launch-cpu.sh": "f0102ac619041c3625af8a5c9aad07a371067c694f8dd08dcaa41a4cfeeacea2",
     "launch-gpu.sh": "222b2a73f40e58599ce02fdd883a25aff24818edd48864b25a4e6a2cbf987509",
     "launch-notebook.sh": "e296bcd1625158240148e421eef88997cfa0ae683584d70a995f439983970e54",
-    "limit_notebook_cpu.py": "c24017f92cef0ec62558d63fa915752f63baaf9fd84c70cff0df0834561d725e",
+    "limit_notebook_cpu.py": "1b32a64d9d6de40878098cbf8b1b9313821e494e8503fc8464dd5e16af4b2081",
     "optimizer-trace.patch": "6a49c38aeca06f1c72798a3a3445ccd6f08d31fea9ce09145194931cab1a78b2",
     "parallel-minima.patch": "05e8c1ed5079bd05e205bc0c99492926056d55060efcfd12f35717d7a507013e",
-    "relink-trace.py": "9245238540d1d068e1ad2a2fa42dd6f81a6abb2c2a36659e1feef120a54d31e7",
+    "relink-trace.py": "c5e5913581f3b765ddd07c6d728d8e57a19552760af8ede1a6b508d8df276230",
     "replay_addendum.py": "b84461426142742e08defdd233b511a3ec93a9b17072909f2ae5728c00c08194",
-    "resume-minima.patch": "1224d75112ff65d5b295de5ab10bcf81eaa0f6415fbb113a5d67bbc2d0d72af3",
-    "split_curvature.py": "77ef84ccac72a604e0e7aa03ea84269ed89a9f9a24070152a77c529cf174fc50",
+    "resume-minima.patch": "cfaafe9226ade5e84755b82de7c80b9fb3b98c289d190f0fe34fb1ccb3e2d21b",
+    "split_curvature.py": "f0b2a42d516cfd00d16ceb97be390a7241966b79760c2916eb1e89b6b6abdd36",
     "summary.json": "9d38dd25288004b1c22d0c7e494e9c29680d1d06116d85e68999b8e4ccf10f62",
     "superseded-cpu-difluoro.json.xz": "7912018246d5d7f2848d62fe46904a0a24c4a6c163c41191aec4658c0705bfc6",
     "superseded-cpu-formic.json.xz": "36171f3e2beb68a694e2e46938165ecaf9d744891e5d97b32c65355dacb71b39",
@@ -1501,5 +1501,5 @@
     "superseded-cpu-medium.json.xz": "9ce73defe7d942fa34c5a87797561c32d7702c516e239c803124b503660b45f2",
     "superseded-cpu-nox.json.xz": "6104fac26c56b885abdd51647caa38027c7b3cec81c7325af576edd5c1ab5e74"
   },
-  "published_cpu_driver_note": "Published reproduction drivers use a fresh notebook payload for each launch, preserve failed check receipts on resume, and wait for the coarse center in the fine phase. Deployment and raw-output hashes refer to the original runs."
+  "published_cpu_driver_note": "Published reproduction drivers prepare fresh notebook payloads, verify CPU affinity after updating session threads, publish final check receipts atomically, and bound waits between curvature phases. Deployment and raw-output hashes record the original runs."
 }

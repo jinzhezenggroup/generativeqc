@@ -39,17 +39,29 @@ def main() -> None:
             40,
         )
     )
-    tasks = subprocess.check_output(
-        ["ps", "-s", str(sid), "-L", "-o", "lwp="], text=True
-    ).split()
     modified = 0
-    for task in map(int, tasks):
-        try:
-            if os.getsid(task) == sid:
-                os.sched_setaffinity(task, selected)
-                modified += 1
-        except ProcessLookupError:
-            continue
+    for _ in range(8):
+        tasks = subprocess.check_output(
+            ["ps", "-s", str(sid), "-L", "-o", "lwp="], text=True
+        ).split()
+        updated = 0
+        for task in map(int, tasks):
+            try:
+                if (
+                    os.getsid(task) == sid
+                    and not os.sched_getaffinity(task) <= selected
+                ):
+                    os.sched_setaffinity(task, selected)
+                    updated += 1
+            except ProcessLookupError:
+                continue
+        if updated == 0:
+            break
+        modified += updated
+    else:
+        raise RuntimeError(
+            "could not verify the CPU limit for all notebook session threads"
+        )
     receipt = {
         "session": sid,
         "started_utc": datetime.now(timezone.utc).isoformat(),
