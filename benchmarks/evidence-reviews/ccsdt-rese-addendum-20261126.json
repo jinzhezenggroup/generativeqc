@@ -6,12 +6,28 @@
   "review_document": "benchmarks/results/ccsdt-rese-addendum-20261126/README.md",
   "files": [
     {
+      "bytes": 319592,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ccsdt-rese-addendum-20261126",
+      "path": "benchmarks/results/ccsdt-rese-addendum-20261126/cpu-aziridine-notebook.json.xz",
+      "role": "replayable-independent-curvature-records",
+      "sha256": "1632dd4a6dc3254ea24828fbd5ce2742f7060de775e1cc245fa5ff6bed69ed86"
+    },
+    {
       "bytes": 189916,
       "classification": "required-compact-accepted-evidence",
       "family": "ccsdt-rese-addendum-20261126",
       "path": "benchmarks/results/ccsdt-rese-addendum-20261126/cpu-medium-resume40b.json.xz",
       "role": "replayable-independent-curvature-records",
       "sha256": "8b76dfd5690fd5acb29a272dd76f5c4f25d44d6a5d9b7dc40ab6b07a81cba8bf"
+    },
+    {
+      "bytes": 227620,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ccsdt-rese-addendum-20261126",
+      "path": "benchmarks/results/ccsdt-rese-addendum-20261126/cpu-syn-ethenol.json.xz",
+      "role": "replayable-independent-curvature-records",
+      "sha256": "4e0fbcfc6333f451369c32622d346a51c3e9333d5a7d91680607c6708a23d80d"
     }
   ]
 }

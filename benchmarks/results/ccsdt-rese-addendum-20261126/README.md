@@ -49,9 +49,9 @@ evaluations over independent single-thread PySCF processes. It keeps the
 finite-difference summation order and applies five rigid modes to linear
 references, including linear polyatomics, or six to nonlinear references.
 HPC allocations require the Xeon CPU Max 9462 model before doing any
-calculation. Each seven-atom case generates 450 displacements per step
-size in the 15-dimensional vibrational space. For syn-ethenol, two
-allocations run the step sizes against the same checksummed PySCF
+calculation. Syn-ethenol has seven atoms and 15 vibrational modes,
+which require 450 displacements per step size. Its two allocations
+run the step sizes against the same checksummed PySCF
 center. The coarse job assembles the independent check after the fine
 job publishes its completion record. The assembled runtime for this
 case covers the final reduction. The raw receipts give each allocation
@@ -59,7 +59,9 @@ interval and displacement runtime.
 
 The aziridine HPC request remained queued under the personal 800-CPU
 quota and was stopped and deleted before allocation. Its check runs
-both step sizes in the existing `xshengrui` notebook on a verified Xeon
+both step sizes in the existing `xshengrui` notebook. Aziridine has
+eight atoms and 18 vibrational modes, which require 648 displacements
+per step size. The notebook runs on a verified Xeon
 Gold 6530 using the same PySCF environment, inputs and gates. The
 launcher records the detached process and coordinator PIDs, timestamps,
 hardware, and resource limits. It uses 32 single-threaded workers
@@ -72,13 +74,7 @@ geometry on the projected electronic energy surface.
 
 ## Combined results
 
-This local checkpoint includes the complete 22-molecule geometry
-comparison. The aziridine and syn-ethenol curvature calculations are
-still in progress. The settlement and usage table covers terminal jobs.
-The input centers and completed displacement receipts at snapshot time
-are recorded in `provenance.json` and the local `raw/` directory.
-
-The fixed cohort has **22/22** converged DF geometries, **20** complete curvature checks and **20** verified DF minima.
+The fixed cohort has **22/22** converged DF geometries, **22** complete curvature checks and **22** verified DF minima.
 
 | Comparison | Parameters | MAE | Maximum absolute error | Largest deviation |
 | --- | ---: | ---: | ---: | --- |
@@ -112,9 +108,9 @@ and a maximum of 0.9039° over the same angle parameters.
 | fno | converged | 8/9 | 885.26 | minimum_verified | 0.2006029 |
 | trans-hono | converged | 11/13 | 1687.81 | minimum_verified | 0.03740389 |
 | ch2f2 | converged | 6/7 | 1134.25 | minimum_verified | 0.1038985 |
-| syn-ethenol | converged | 20/23 | 6031.85 | unavailable | — |
+| syn-ethenol | converged | 20/23 | 6031.85 | minimum_verified | 0.01076969 |
 | trans-formic-acid | converged | 11/13 | 2180.44 | minimum_verified | 0.03867969 |
-| aziridine | converged | 17/21 | 6177.64 | unavailable | — |
+| aziridine | converged | 17/21 | 6177.64 | minimum_verified | 0.02498262 |
 
 Curvatures are unweighted Cartesian values in Eh/bohr². The original
 HF conventional minimum remains in the baseline and is outside the DF count.
@@ -175,9 +171,12 @@ Slurm quotas showed 0 points per hour. Invoice totals were unavailable.
 | `gqc-rese-add-1126-cpu-nox` | cq-nex-chem | STOPPED | 0.000 | 1.978 | 0.000 |
 | `gqc-rese-add-1126-cpu-small` | cq-nex-chem | SUCCEEDED | 0.000 | 33.404 | 0.000 |
 | `gqc-rese-add-1126-cpu-syn-ethenol-fine` | cq-nex-chem | FAILED | 0.000 | 0.189 | 0.000 |
+| `gqc-rese-add-1126-cpu-syn-ethenol-fine2` | cq-nex-chem | SUCCEEDED | 0.000 | 427.800 | 0.000 |
+| `gqc-rese-add-1126-cpu-syn-ethenol` | cq-nex-chem | SUCCEEDED | 0.000 | 499.789 | 0.000 |
 | `gqc-rese-add-1126-syn-ethenol` | CQ-NexChem | SUCCEEDED | 1.688 | — | 1.688 |
+| `xshengrui / aziridine curvature process` | CQ-NexChem | SUCCEEDED | 0.000 | — | 0.000 |
 
-Total documented use was 3.414 GPU card-hours, 752.4 allocated CPU-hours and an estimated 3.414 points. The aziridine notebook process accounting is pending.
+Total documented use was 3.414 GPU card-hours, 1680.0 allocated CPU-hours and an estimated 3.414 points. The aziridine notebook process used 43.975 h of elapsed time (1407.2 maximum worker-slot hours) at zero points.
 
 The initial eight-core allocations that projected beyond their eight-hour
 windows were stopped after preserving completed points. The restarted
