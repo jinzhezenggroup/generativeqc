@@ -79,6 +79,7 @@ void launch_assemble_rhf_fock_kernel(unsigned, unsigned, std::size_t, cudaStream
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <span>
 #include <stdexcept>
 #include <vector>
 #include "scf/cuda/rhf_resident_values.hpp"
@@ -202,7 +203,10 @@ std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsign
   return 2*spins*direct_dimension*direct_dimension;
 }
 generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
-                                                         std::size_t, std::string&) {
+                                                         std::size_t, std::string&,
+                                                         std::span<const double> certified_norms) {
+  // Ordinary RHF graph owners do not supply a Hessian screening certificate.
+  require(certified_norms.empty());
   if(mode==7 || mode==12) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   if(mode==16) { pending=999; return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
   if(mode==8) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;

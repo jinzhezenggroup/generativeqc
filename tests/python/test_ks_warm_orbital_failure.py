@@ -96,7 +96,7 @@ struct Owner {
     void observe_completed(std::uint64_t actions) { completed += actions; }
   };
   std::unique_ptr<Source> phase_source;
-  bool phase_source_range{};
+  bool phase_source_range{}, phase_source_hessian_reference{};
   double range_warm_energy{}, range_warm_energy_correction{};
   double phase_source_screening = 1e-8;
   bool range_source_active() const { return phase_source_range && bool(phase_source); }
