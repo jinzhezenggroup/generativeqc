@@ -30,11 +30,13 @@ struct CudaKsWb97mvDfNuclear::Impl {
   integrals::CudaDfNuclearShape shape{};
   integrals::CudaDfNuclearResponse response;
   void* arena{};
+  void* tape{};
   cudaStream_t stream{};
   Impl(methods::PreparedBatch& owner, std::size_t index, CudaKsFinalStateToken token)
       : batch(owner), item(index), expected(std::move(token)), grid(batch, item, expected) {}
   ~Impl() {
     if (stream) (void)cudaStreamSynchronize(stream);
+    if (tape) (void)runtime::resource_cuda_free(tape);
     if (arena) (void)runtime::resource_cuda_free(arena);
   }
   static cudaError_t authenticate(void* context) noexcept {
@@ -153,6 +155,19 @@ generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch& batch
     detail = error.what();
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+}
+cudaError_t CudaKsWb97mvDfNuclear::retain_directional_source(std::size_t available) {
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  auto& owner = *impl_;
+  const auto bytes = owner.response.directional_source_workspace();
+  if (!bytes || bytes > available) return cudaSuccess;
+  auto error = runtime::resource_cuda_malloc(&owner.tape, bytes);
+  if (error == cudaErrorMemoryAllocation) {
+    if (cudaPeekAtLastError() == cudaErrorMemoryAllocation) (void)cudaGetLastError();
+    return cudaSuccess;
+  }
+  if (error != cudaSuccess) return error;
+  return owner.response.bind_directional_source(owner.tape, bytes);
 }
 cudaError_t CudaKsWb97mvDfNuclear::values(const double* direction,
                                           const integrals::CudaDfNuclearValues& output,

@@ -113,6 +113,10 @@ class CudaDfNuclearResponse {
                       std::span<const CudaDfNuclearShell> auxiliary,
                       const CudaDfNuclearOptions& options, const CudaDfNuclearReference& reference,
                       void* workspace, std::size_t workspace_bytes) noexcept;
+  // Before the first action, an owner may supply disjoint optional storage
+  // after all mandatory allocations. The storage must outlive this consumer.
+  std::size_t directional_source_workspace() const noexcept;
+  cudaError_t bind_directional_source(void* workspace, std::size_t bytes) noexcept;
   cudaError_t values(const double* direction, const CudaDfNuclearValues& output,
                      cudaStream_t stream) noexcept;
   cudaError_t contract(const double* direction, const CudaDfNuclearWeights& weights,

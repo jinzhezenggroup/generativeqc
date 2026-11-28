@@ -75,6 +75,11 @@ struct Layout {
     return true;
   }
 };
+bool reserve_directional_tape(Layout& layout, std::size_t groups, std::size_t atoms) {
+  return layout.reserve(groups, 19 * sizeof(double), layout.retained_raw) &&
+         layout.reserve(atoms, 3 * sizeof(double), layout.retained_direction) &&
+         layout.reserve(2, sizeof(int), layout.direction_mismatch);
+}
 struct Schedule {
   Layout layout;
   std::vector<Group> groups;
@@ -278,9 +283,7 @@ cudaError_t schedule(const CudaDfNuclearShape& shape, std::span<const Shell> orb
   }
   if (plan.batch_width && options.retain_directional_source) {
     Layout trial = plan;
-    if (trial.reserve(groups, 19 * sizeof(double), trial.retained_raw) &&
-        trial.reserve(shape.atoms, 3 * sizeof(double), trial.retained_direction) &&
-        trial.reserve(2, sizeof(int), trial.direction_mismatch) &&
+    if (reserve_directional_tape(trial, groups, shape.atoms) &&
         trial.bytes <= options.max_workspace_bytes)
       plan = trial;
   }
@@ -619,6 +622,8 @@ struct CudaDfNuclearResponse::Impl {
   Schedule schedule;
   CudaDfNuclearWork receipt{};
   void* arena{};
+  void* tape_arena{};
+  Layout tape_layout{};
   bool ready{};
   bool retained_ready{};
   bool stationary_ready{};
@@ -626,6 +631,19 @@ struct CudaDfNuclearResponse::Impl {
   template <class Value>
   Value* at(std::size_t offset) const {
     return reinterpret_cast<Value*>(static_cast<char*>(arena) + offset);
+  }
+  template <class Value>
+  Value* tape_at(std::size_t offset) const {
+    return reinterpret_cast<Value*>(static_cast<char*>(tape_arena ? tape_arena : arena) + offset);
+  }
+  bool disjoint_workspaces(const void* pointer, std::size_t bytes) const {
+    return disjoint(arena, schedule.layout.bytes, pointer, bytes) &&
+           (!tape_arena || disjoint(tape_arena, tape_layout.bytes, pointer, bytes));
+  }
+  bool plan_tape(Layout& layout) const {
+    return schedule.layout.batch_width && !schedule.layout.retained_raw && !tape_arena &&
+           !receipt.attempted_passes &&
+           reserve_directional_tape(layout, schedule.groups.size(), shape.atoms);
   }
   cudaError_t authenticate(cudaStream_t stream) const {
     if (!ready || stream != reference.stream) return cudaErrorInvalidResourceHandle;
@@ -639,10 +657,9 @@ struct CudaDfNuclearResponse::Impl {
     return reference.authenticate(reference.owner);
   }
   cudaError_t buffers(std::span<const Range> inputs, std::span<const Range> outputs) const {
-    const auto& plan = schedule.layout;
     for (const auto& input : inputs) {
       if (!input.bytes) continue;
-      if (!disjoint(arena, plan.bytes, input.pointer, input.bytes) ||
+      if (!disjoint_workspaces(input.pointer, input.bytes) ||
           reinterpret_cast<std::uintptr_t>(input.pointer) % input.alignment)
         return cudaErrorInvalidValue;
       if (const auto error = device_buffer(input.pointer, reference.basis.device_id);
@@ -651,7 +668,7 @@ struct CudaDfNuclearResponse::Impl {
     }
     for (std::size_t index = 0; index < outputs.size(); ++index) {
       const auto& output = outputs[index];
-      if (!disjoint(arena, plan.bytes, output.pointer, output.bytes) ||
+      if (!disjoint_workspaces(output.pointer, output.bytes) ||
           reinterpret_cast<std::uintptr_t>(output.pointer) % alignof(double))
         return cudaErrorInvalidValue;
       if (const auto error = device_buffer(output.pointer, reference.basis.device_id);
@@ -683,7 +700,8 @@ struct CudaDfNuclearResponse::Impl {
     const bool check_retained = Contract && retained_ready;
     retained_ready = false;
     const auto& plan = schedule.layout;
-    const bool retain = !Contract && plan.batch_width && plan.retained_raw;
+    const auto& tape = tape_arena ? tape_layout : plan;
+    const bool retain = !Contract && plan.batch_width && (tape_arena || plan.retained_raw);
     const bool check_unit = retain && stationary_ready && shape.atoms <= INT_MAX / 3;
     if constexpr (!Contract) stationary_ready = false;
     if (receipt.attempted_passes == UINT64_MAX) return cudaErrorInvalidValue;
@@ -722,18 +740,18 @@ struct CudaDfNuclearResponse::Impl {
       }
     }
     if (check_retained && error == cudaSuccess) {
-      auto* flag = at<int>(plan.direction_mismatch);
+      auto* flag = tape_at<int>(tape.direction_mismatch);
       error = cudaMemsetAsync(flag, 0, sizeof(int), stream);
       if (error == cudaSuccess) {
         compare_direction<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
-            direction, at<double>(plan.retained_direction), 3 * shape.atoms, flag);
+            direction, tape_at<double>(tape.retained_direction), 3 * shape.atoms, flag);
         error = cudaGetLastError();
       }
       if (error == cudaSuccess)
         error = cudaMemcpyAsync(direction_audit, flag, sizeof(int), cudaMemcpyDeviceToHost, stream);
     }
     if (check_unit && error == cudaSuccess) {
-      auto* audit = at<int>(plan.direction_mismatch);
+      auto* audit = tape_at<int>(tape.direction_mismatch);
       error = cudaMemsetAsync(audit, 0, sizeof(direction_audit), stream);
       if (error == cudaSuccess) {
         identify_unit_direction<<<blocks(3 * shape.atoms), 128, 0, stream>>>(
@@ -780,7 +798,7 @@ struct CudaDfNuclearResponse::Impl {
         // submitted windows; an enqueue failure never counts the unseen tail.
         const auto coordinates = 3 * schedule.descriptors[first].centers;
         const auto fields = 1 + 2 * coordinates;
-        auto* raw_batch = retain || reuse ? at<double>(plan.retained_raw) + first * 19
+        auto* raw_batch = retain || reuse ? tape_at<double>(tape.retained_raw) + first * 19
                                           : at<double>(plan.batch_raw);
         if (!reuse && radials) {
           build_batch<<<count, 32, 0, stream>>>(groups + first, reference.basis,
@@ -885,7 +903,7 @@ struct CudaDfNuclearResponse::Impl {
     if (error != cudaSuccess) return drain(error, stream);
     if ((error = authenticate(stream)) != cudaSuccess) return error;
     if (retain) {
-      error = cudaMemcpyAsync(at<double>(plan.retained_direction), direction, inputs[10].bytes,
+      error = cudaMemcpyAsync(tape_at<double>(tape.retained_direction), direction, inputs[10].bytes,
                               cudaMemcpyDeviceToDevice, stream);
       if (error != cudaSuccess) return drain(error, stream);
     }
@@ -1030,6 +1048,32 @@ cudaError_t CudaDfNuclearResponse::prepare(const CudaDfNuclearShape& shape,
   } catch (...) {
     return cudaErrorUnknown;
   }
+}
+std::size_t CudaDfNuclearResponse::directional_source_workspace() const noexcept {
+  Layout layout;
+  return impl_ && impl_->plan_tape(layout) ? layout.bytes : 0;
+}
+cudaError_t CudaDfNuclearResponse::bind_directional_source(void* workspace,
+                                                           std::size_t bytes) noexcept {
+  if (!impl_) return cudaErrorInvalidResourceHandle;
+  auto& state = *impl_;
+  Layout layout;
+  if (!state.plan_tape(layout) || bytes < layout.bytes || !workspace ||
+      reinterpret_cast<std::uintptr_t>(workspace) % alignof(double) ||
+      !state.disjoint_workspaces(workspace, layout.bytes) ||
+      state.receipt.workspace_bytes > SIZE_MAX - layout.bytes)
+    return cudaErrorInvalidValue;
+  const auto& reference = state.reference;
+  if (auto error = state.authenticate(reference.stream); error != cudaSuccess) return error;
+  if (auto error = device_buffer(workspace, reference.basis.device_id); error != cudaSuccess)
+    return error;
+  for (const auto& input : basis_ranges(reference.basis))
+    if (input.bytes && !disjoint(workspace, layout.bytes, input.pointer, input.bytes))
+      return cudaErrorInvalidValue;
+  state.tape_layout = layout;
+  state.tape_arena = workspace;
+  state.receipt.workspace_bytes += layout.bytes;
+  return cudaSuccess;
 }
 cudaError_t CudaDfNuclearResponse::values(const double* direction,
                                           const CudaDfNuclearValues& output,

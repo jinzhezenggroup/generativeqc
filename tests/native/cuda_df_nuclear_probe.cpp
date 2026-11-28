@@ -201,7 +201,6 @@ void run(const char* source, const char* result, bool retain_tape) {
   CudaDfNuclearOptions options;
   options.radial_tile = header[5];
   options.range_omega = header[6] == 5 ? 0.3 : policy.range_omega;
-  options.retain_directional_source = retain_tape;
   std::size_t bytes{};
   check(cuda_df_nuclear_workspace(shape, orbital_shells, auxiliary_shells, options, bytes));
   auto* arena = storage.allocate((bytes + sizeof(double) - 1) / sizeof(double));
@@ -221,6 +220,16 @@ void run(const char* source, const char* result, bool retain_tape) {
     return;
   }
   check(prepared);
+  if (retain_tape) {
+    const auto tape_bytes = response.directional_source_workspace();
+    require(tape_bytes != 0, "all-s direction tape unavailable after streamed prepare");
+    auto* tape = storage.allocate((tape_bytes + sizeof(double) - 1) / sizeof(double));
+    require(response.bind_directional_source(tape, tape_bytes - 1) == cudaErrorInvalidValue,
+            "undersized direction tape was admitted");
+    check(response.bind_directional_source(tape, tape_bytes));
+    require(response.work().workspace_bytes == bytes + tape_bytes,
+            "separate direction tape missing from workspace receipt");
+  }
   auto* value_storage = storage.allocate(2 * (raw_count + metric_count));
   auto* vector_storage = storage.allocate(6 * shape.atoms);
   const CudaDfNuclearValues values{value_storage, value_storage + raw_count,

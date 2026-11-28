@@ -32,6 +32,8 @@ inline std::size_t points = 8;
 inline unsigned spins = 1;
 inline bool df = false, range_df = false;
 inline bool canonical_source_limit = false;
+inline bool retain_df_tape = false;
+inline constexpr std::size_t df_tape_bytes = 256;
 inline std::size_t screened_exact_preparations = 0;
 enum class Provider { none, core, induced, exact, raw_df, fitted, raw_df_range, fitted_range, ecp };
 inline Provider reject_provider = Provider::none;
@@ -266,9 +268,38 @@ const CudaWb97mvJkWork& CudaKsWb97mvNuclearJk::work() const noexcept { return im
     return impl_->allocate(BYTES, options.max_workspace_bytes, ID);                        \
   }                                                                                        \
   WORK REF CLASS::work() const noexcept { return impl_->work; }
-STUB_PROVIDER(CudaKsWb97mvDfNuclear, integrals::CudaDfNuclearOptions, integrals::CudaDfNuclearWork,
-              700, options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df,
-              const&)
+struct CudaKsWb97mvDfNuclear::Impl : stub::Storage {
+  integrals::CudaDfNuclearWork work;
+  void* tape{};
+  ~Impl() { cudaFree(tape); }
+};
+CudaKsWb97mvDfNuclear::CudaKsWb97mvDfNuclear() = default;
+CudaKsWb97mvDfNuclear::~CudaKsWb97mvDfNuclear() = default;
+generativeqc_status CudaKsWb97mvDfNuclear::prepare(methods::PreparedBatch&, std::size_t,
+                                                   const CudaKsFinalStateToken&,
+                                                   const integrals::CudaDfNuclearOptions& options,
+                                                   std::string&) {
+  impl_ = std::make_unique<Impl>();
+  // Model the real raw provider: an optional contiguous tape fits whenever it
+  // falls inside this provider's cap, even if the owner needs the bytes later.
+  const auto bytes = 700 + (stub::retain_df_tape && options.retain_directional_source &&
+                                    options.max_workspace_bytes >= 700 + stub::df_tape_bytes
+                                ? stub::df_tape_bytes
+                                : 0);
+  impl_->work.workspace_bytes = bytes;
+  return impl_->allocate(
+      bytes, options.max_workspace_bytes,
+      options.range_omega ? stub::Provider::raw_df_range : stub::Provider::raw_df);
+}
+cudaError_t CudaKsWb97mvDfNuclear::retain_directional_source(std::size_t available) {
+  if (!stub::retain_df_tape || available < stub::df_tape_bytes) return cudaSuccess;
+  const auto status = cudaMalloc(&impl_->tape, stub::df_tape_bytes);
+  if (status == cudaSuccess) impl_->work.workspace_bytes += stub::df_tape_bytes;
+  return status == cudaErrorMemoryAllocation ? cudaSuccess : status;
+}
+const integrals::CudaDfNuclearWork& CudaKsWb97mvDfNuclear::work() const noexcept {
+  return impl_->work;
+}
 STUB_PROVIDER(CudaKsWb97mvDfResponse, CudaWb97mvDfOptions, CudaWb97mvDfWork, 900,
               options.coulomb ? stub::Provider::fitted : stub::Provider::fitted_range, )
 STUB_PROVIDER(CudaKsWb97mvEcpNuclear, integrals::CudaEcpNuclearOptions,

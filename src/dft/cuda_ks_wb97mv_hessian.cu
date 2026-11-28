@@ -1197,7 +1197,7 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
       const bool range = source == &owner->range_df;
       auto raw_options = options.raw_df;
       raw_options.range_omega = range ? owner->fock.correction->spec.exchange.omega : 0;
-      raw_options.retain_directional_source = dense;
+      raw_options.retain_directional_source = false;
       raw_options.max_workspace_bytes = std::min(raw_options.max_workspace_bytes, owner->remaining);
       status = source->nuclear.prepare(batch, item, expected, raw_options, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) {
@@ -1516,6 +1516,21 @@ generativeqc_status CudaKsWb97mvHessian::prepare(methods::PreparedBatch& batch, 
           }
         } else {
           check(fold, "stationary Hessian frozen Becke weights");
+        }
+      }
+    }
+    if (dense) {
+      // Give both DF providers and all other mandatory consumers their full
+      // budget before adding the optional single-direction tape.
+      for (auto* source : {&owner->full_df, &owner->range_df}) {
+        if (!source->raw) continue;
+        const auto streamed = source->nuclear.work().workspace_bytes;
+        const auto raw_limit = options.raw_df.max_workspace_bytes;
+        if (streamed < raw_limit) {
+          check(source->nuclear.retain_directional_source(
+                    std::min(owner->remaining, raw_limit - streamed)),
+                "stationary Hessian optional DF directional source");
+          owner->charge(source->nuclear.work().workspace_bytes - streamed);
         }
       }
     }

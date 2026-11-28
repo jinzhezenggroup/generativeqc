@@ -36,6 +36,8 @@ class CudaKsWb97mvDfNuclear {
   generativeqc_status prepare(methods::PreparedBatch& batch, std::size_t item,
                               const CudaKsFinalStateToken& expected,
                               const integrals::CudaDfNuclearOptions& options, std::string& detail);
+  /** Optional setup before any action; no allocation when storage does not fit. */
+  cudaError_t retain_directional_source(std::size_t available);
   cudaError_t values(const double* direction, const integrals::CudaDfNuclearValues& output,
                      cudaStream_t stream) noexcept;
   cudaError_t contract(const double* direction, const integrals::CudaDfNuclearWeights& weights,
