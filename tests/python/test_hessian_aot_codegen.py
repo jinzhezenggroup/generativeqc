@@ -305,6 +305,7 @@ def test_native_leaf_target_preserves_configured_compile_pool(
         f'set(PROJECT_SOURCE_DIR "{ROOT}")\n'
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         "add_library(CUDA::cudart INTERFACE IMPORTED)\n"
+        "add_library(CUDA::cublas INTERFACE IMPORTED)\n"
         "function(generativeqc_register_generated_sources)\n"
         '  cmake_parse_arguments(G "" "GENERATOR" "OUTPUTS;DEPENDS;ARGS;COMMENT" ${ARGN})\n'
         "  set_source_files_properties(${G_OUTPUTS} PROPERTIES GENERATED TRUE LANGUAGE CXX)\n"

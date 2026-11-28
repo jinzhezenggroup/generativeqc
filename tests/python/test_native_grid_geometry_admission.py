@@ -16,6 +16,9 @@ def _translation_unit(source: str) -> str:
     host = source[: source.index("unsigned blocks(")]
     # The extracted helper is compiled with a host-only C++ compiler.
     host = host.replace("__host__ __device__ ", "")
+    # The layout/admission logic does not use these device contraction headers.
+    for header in ("cuda_contraction.cuh", "cuda_square_linalg.hpp"):
+        host = host.replace(f'#include "tensor/{header}"\n', "")
     # Only the generated jet's storage contributes to host layout. Keep the
     # production pair records and their size assertions, without CUDA codegen.
     host = host.replace(

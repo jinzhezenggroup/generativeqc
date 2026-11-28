@@ -129,6 +129,18 @@ cudaError_t cuda_wb97mv_grid_workspace(const CudaWb97mvGridShape&, const CudaWb9
   return cudaSuccess;
 }
 CudaWb97mvGridResponse::~CudaWb97mvGridResponse() = default;
+// Host resource doubles do not support the optional numerical weight fold.
+bool CudaWb97mvGridResponse::admits_cartesian_mixed(std::size_t) const noexcept { return false; }
+const double* CudaWb97mvGridResponse::private_becke_energy() const noexcept { return nullptr; }
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_workspace() const noexcept { return 0; }
+std::size_t CudaGridGeometryResponse::cartesian_weight_fold_provider_allowance() noexcept {
+  return 0;
+}
+cudaError_t CudaGridGeometryResponse::prepare_cartesian_weight_fold(const double*, void*,
+                                                                    std::size_t,
+                                                                    cudaStream_t) noexcept {
+  return cudaErrorNotSupported;
+}
 cudaError_t CudaWb97mvGridResponse::prepare(const CudaWb97mvGridShape& shape,
                                             const CudaWb97mvGridOptions& options,
                                             const CudaWb97mvGridReference&, void*,
