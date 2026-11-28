@@ -142,6 +142,7 @@ PREFIX = r"""
 #include <iostream>
 #include <limits>
 #include <new>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -160,13 +161,16 @@ enum generativeqc_status {
   GENERATIVEQC_STATUS_CUDA_ERROR,
   GENERATIVEQC_STATUS_INVALID_ARGUMENT
 };
-constexpr int cudaMemcpyDeviceToHost = 0;
+constexpr int cudaMemcpyDeviceToHost = 0, cudaMemcpyHostToDevice = 1;
 enum class DirectCoulombRange { Full, Short, Long };
 enum class FockOperator { FullRange, ShortRange, LongRange };
 struct CudaDirectJkPlan;
 // The extracted definition does not include the header's restricted-spin default.
 std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*, unsigned spins = 1);
 // Match the shared API defaults used by exact full-range retry consumers.
+generativeqc_status prepare_cuda_direct_jk_resident_values(
+    CudaDirectJkPlan*, std::size_t, std::string&, std::span<const double> = {});
+constexpr double cuda_direct_response_zero_bound = 0x1p-70;
 generativeqc_status prepare_cuda_direct_jk_mixed_resident_values(
     CudaDirectJkPlan*, std::size_t, std::string&,
     FockOperator = FockOperator::FullRange, double = 0.0,
@@ -271,7 +275,7 @@ struct Slots : std::vector<void*> {
   }
 };
 struct Diagnostic {
-  size_t batch_size{1}, device_bytes{16}, resident_value_count{}, resident_value_bytes{},
+  size_t batch_size{1}, nbf{64}, device_bytes{16}, resident_value_count{}, resident_value_bytes{},
       resident_values_submitted{}, resident_values_completed{}, host_bytes{}, host_preparation_bytes{};
 };
 struct CanonicalBatch {
@@ -308,6 +312,7 @@ struct CudaDirectJkPlan {
   int* numerical_failure{&numerical_value};
   CanonicalBatch canonical_batch, materialized_batch;
   int canonical_cartesian{};
+  const double* canonical_transform{};
   double* canonical_bounds{};
   Slots allocations;
   ~CudaDirectJkPlan() {
